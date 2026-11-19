@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Response, status
 from fastapi import File as FastAPIFile
 from fastapi import UploadFile as FastAPIUploadFile
@@ -16,7 +19,6 @@ from naas_abi.apps.nexus.apps.api.app.core.request_body import read_upload
 from naas_abi.apps.nexus.apps.api.app.core.user_content import user_content_headers
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__dependencies import (  # noqa: E501
     get_files_service,
-    workspace_setting,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__schemas import (  # noqa: E501
     CreateFileRequest,
@@ -24,6 +26,8 @@ from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__pri
     FileContent,
     FileInfo,
     FileListResponse,
+    FileView,
+    FileViewsResponse,
     RenameRequest,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.drives.scripts.legacy_storage_migration import (
@@ -36,6 +40,7 @@ from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots im
     SCOPE_PATTERN,
     SCOPE_PLATFORM_DRIVE,
     SCOPE_SYSTEM_DRIVE,
+    SCOPE_WORKSPACE,
     SYSTEM_DRIVE_ROOT,
     WORKSPACE_DRIVE_ROOT,
     my_drive_root,
@@ -66,15 +71,43 @@ class FilesFastAPIPrimaryAdapter:
         self.router = router
 
 
-# What a request does to a file, and the IAM action it needs on each kind of drive:
-# the workspace and platform drives, the system drive (admins), My drive, the
-# organization drive (decided at the organization).
-_ACTIONS: dict[str, tuple[str, str, str, str]] = {
-    "list": ("ListFiles", "ListSystemFiles", "ListMyFiles", "ListOrgFiles"),
-    "read": ("GetFile", "GetSystemFile", "GetMyFile", "GetOrgFile"),
-    "write": ("PutFile", "PutSystemFile", "PutMyFile", "PutOrgFile"),
-    "delete": ("DeleteFile", "DeleteSystemFile", "DeleteMyFile", "DeleteOrgFile"),
+# What a request does to a file, and the IAM action it needs in each view (the
+# ``scope`` of a request): Workspace Files, My Files, Organization Files (decided at
+# the organization), Platform Files and System Files (decided at the platform).
+_ACTIONS: dict[str, dict[str, str]] = {
+    "list": {
+        SCOPE_WORKSPACE: "ListFiles",
+        SCOPE_MY_DRIVE: "ListMyFiles",
+        SCOPE_ORGANIZATION_DRIVE: "ListOrgFiles",
+        SCOPE_PLATFORM_DRIVE: "ListPlatformFiles",
+        SCOPE_SYSTEM_DRIVE: "ListObjectStoreFiles",
+    },
+    "read": {
+        SCOPE_WORKSPACE: "GetFile",
+        SCOPE_MY_DRIVE: "GetMyFile",
+        SCOPE_ORGANIZATION_DRIVE: "GetOrgFile",
+        SCOPE_PLATFORM_DRIVE: "GetPlatformFile",
+        SCOPE_SYSTEM_DRIVE: "GetObjectStoreFile",
+    },
+    "write": {
+        SCOPE_WORKSPACE: "PutFile",
+        SCOPE_MY_DRIVE: "PutMyFile",
+        SCOPE_ORGANIZATION_DRIVE: "PutOrgFile",
+        SCOPE_PLATFORM_DRIVE: "PutPlatformFile",
+        SCOPE_SYSTEM_DRIVE: "PutObjectStoreFile",
+    },
+    "delete": {
+        SCOPE_WORKSPACE: "DeleteFile",
+        SCOPE_MY_DRIVE: "DeleteMyFile",
+        SCOPE_ORGANIZATION_DRIVE: "DeleteOrgFile",
+        SCOPE_PLATFORM_DRIVE: "DeletePlatformFile",
+        SCOPE_SYSTEM_DRIVE: "DeleteObjectStoreFile",
+    },
 }
+# The id of each view's root below its type (``file/workspace/...``,
+# ``platform_file/platform/...``): a path id has one segment at least.
+_PLATFORM_FILES_ROOT_ID = "platform"
+_SYSTEM_FILES_ROOT_ID = "system"
 
 
 # Office previews run a converter process; extraction decompresses and writes
@@ -86,7 +119,7 @@ _ARCHIVE_EXTRACT = BoundedWork("archive extractions", concurrent=2, per_user=10)
 
 def _declares(op: str) -> list:
     """The route authorizes inline, once the drive and the path are resolved."""
-    return [declares(name) for name in _ACTIONS[op]]
+    return [declares(name) for name in _ACTIONS[op].values()]
 
 
 def _below(storage_path: str, root: str) -> list[str]:
@@ -272,7 +305,7 @@ async def _authorize_workspace_path(
 ) -> str:
     resolved_workspace_id, resolved_path = _resolve_workspace_scoped_path(path, workspace_id)
     await authz.require(
-        _ACTIONS[op][0],
+        _ACTIONS[op][SCOPE_WORKSPACE],
         user=current_user,
         workspace=resolved_workspace_id,
         id=("workspace", *_below(resolved_path, workspace_drive_root(resolved_workspace_id))),
@@ -295,7 +328,7 @@ async def _authorize_my_drive_path(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     resolved = _resolve_my_drive_scoped_path(path=path, user_id=current_user.id)
     await authz.require(
-        _ACTIONS[op][2],
+        _ACTIONS[op][SCOPE_MY_DRIVE],
         user=current_user,
         id=(current_user.id, *_below(resolved, my_drive_root(current_user.id))),
     )
@@ -340,7 +373,7 @@ async def _authorize_organization_drive_path(
         )
     scoped = _resolve_organization_drive_scoped_path(path, organization_id)
     await authz.require(
-        _ACTIONS[op][3],
+        _ACTIONS[op][SCOPE_ORGANIZATION_DRIVE],
         user=current_user,
         org=organization_id,
         id=("organization", *_below(scoped, organization_drive_root(organization_id))),
@@ -350,66 +383,34 @@ async def _authorize_organization_drive_path(
     return scoped
 
 
-async def _authorize_platform_drive_path(
-    current_user: User,
-    path: str,
-    workspace_id: str | None,
-    op: str,
-) -> str:
-    if not workspace_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="workspace_id is required for platform drive access",
-        )
-    normalized_workspace = _normalize_workspace_id(workspace_id)
+async def _authorize_platform_drive_path(current_user: User, path: str, op: str) -> str:
+    """Platform Files, decided at the platform (``platform_file/platform/<path>``):
+    no role holds it, a policy at the platform grants it, whatever workspace the
+    request comes from."""
     scoped = _resolve_platform_drive_scoped_path(path)
     await authz.require(
-        _ACTIONS[op][0],
+        _ACTIONS[op][SCOPE_PLATFORM_DRIVE],
         user=current_user,
-        workspace=normalized_workspace,
-        id=("platform", *_below(scoped, PLATFORM_DRIVE_ROOT)),
+        id=(_PLATFORM_FILES_ROOT_ID, *_below(scoped, PLATFORM_DRIVE_ROOT)),
     )
-    # A workspace uses the shared drive only when it switched it on.
-    if not await workspace_setting(normalized_workspace, "platform_drive_enabled"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Platform drive is not enabled for this workspace",
-        )
     return scoped
 
 
-async def _authorize_system_drive_path(
-    current_user: User,
-    path: str,
-    workspace_id: str | None,
-    op: str,
-) -> str:
+async def _authorize_system_drive_path(current_user: User, path: str, op: str) -> str:
+    """System Files, the whole object storage, decided at the platform
+    (``system_file/system/<path>``): the platform admin's."""
     if viewing():
         # The system drive is the whole storage tree: it holds the person's My Drive
         # (``naas_abi/my-drive/<id>``), their ``users/<id>`` data and other workspaces' drives,
         # all of which the person's own rights reach. None of it is shown in a view.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    if not workspace_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="workspace_id is required for system drive access",
-        )
-    normalized_workspace = _normalize_workspace_id(workspace_id)
     scoped = _resolve_system_drive_scoped_path(path)
     await authz.require(
-        _ACTIONS[op][1],
+        _ACTIONS[op][SCOPE_SYSTEM_DRIVE],
         user=current_user,
-        workspace=normalized_workspace,
-        id=("system", *_below(scoped, SYSTEM_DRIVE_ROOT)),
-        denied="Workspace admin role required",
+        id=(_SYSTEM_FILES_ROOT_ID, *_below(scoped, SYSTEM_DRIVE_ROOT)),
+        denied="Platform admin role required",
     )
-    # The whole tree the workspace holds, only when it switched the drive on.
-    if not await workspace_setting(normalized_workspace, "system_drive_enabled"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="System drive is not enabled for this workspace",
-        )
-    await ensure_workspace_drive_placed(normalized_workspace)
     return scoped
 
 
@@ -436,19 +437,9 @@ async def _authorize_path(
             op=op,
         )
     if scope == SCOPE_PLATFORM_DRIVE:
-        return await _authorize_platform_drive_path(
-            current_user=current_user,
-            path=path,
-            workspace_id=workspace_id,
-            op=op,
-        )
+        return await _authorize_platform_drive_path(current_user=current_user, path=path, op=op)
     if scope == SCOPE_SYSTEM_DRIVE:
-        return await _authorize_system_drive_path(
-            current_user=current_user,
-            path=path,
-            workspace_id=workspace_id,
-            op=op,
-        )
+        return await _authorize_system_drive_path(current_user=current_user, path=path, op=op)
     return await _authorize_workspace_path(
         current_user=current_user,
         path=path,
@@ -456,6 +447,133 @@ async def _authorize_path(
         op=op,
         files_service=files_service,
     )
+
+
+# The drive every view is of: the object storage, the platform's file system.
+_FILE_SYSTEM = "file_system"
+
+
+async def _organization_files_view(current_user: User, workspace_id: str) -> FileView | None:
+    """Organization Files, as ``_authorize_organization_drive_path`` decides it: the
+    organization IAM registered the workspace in, the workspace's ``files`` feature,
+    then ``ListOrgFiles`` at the organization."""
+    container = await authz.AUTHZ.container_of(workspace_id)
+    organization_id = org_of(container) if container is not None else None
+    if organization_id is None:
+        return None
+    if not await authz.allowed("UseFeature", user=current_user, workspace=workspace_id, id="files"):
+        return None
+    if not await authz.allowed(
+        "ListOrgFiles", user=current_user, org=organization_id, id=("organization",)
+    ):
+        return None
+    return FileView(
+        id="organization_files",
+        label="Organization Files",
+        drive=_FILE_SYSTEM,
+        scope=SCOPE_ORGANIZATION_DRIVE,
+        root=organization_drive_root(organization_id),
+    )
+
+
+async def _view_if(allowed: Awaitable[bool], view: FileView) -> FileView | None:
+    return view if await allowed else None
+
+
+@router.get(
+    "/views",
+    response_model=FileViewsResponse,
+    dependencies=[
+        declares(_ACTIONS["list"][scope])
+        for scope in (
+            SCOPE_MY_DRIVE,
+            SCOPE_WORKSPACE,
+            SCOPE_ORGANIZATION_DRIVE,
+            SCOPE_PLATFORM_DRIVE,
+            SCOPE_SYSTEM_DRIVE,
+        )
+    ],
+)
+async def list_file_views(
+    workspace_id: str | None = Query(default=None, max_length=100),
+    current_user: User = Depends(get_current_user_required),
+) -> FileViewsResponse:
+    """The views of the file system the caller may open, from ``workspace_id``: IAM's
+    ``List*`` on each view's root, decided as the files routes decide them. Without a
+    workspace, the views that belong to none (My Files, Platform Files, System Files).
+    In a view of someone's workspace (``view_as``), My Files and System Files are not
+    listed, as the files routes refuse them there."""
+    user_id = current_user.id
+    in_view = viewing()
+    checks: list[Awaitable[FileView | None]] = []
+    if not in_view:
+        checks.append(
+            _view_if(
+                authz.allowed("ListMyFiles", user=current_user, id=(user_id,)),
+                FileView(
+                    id="my_files",
+                    label="My Files",
+                    drive=_FILE_SYSTEM,
+                    scope=SCOPE_MY_DRIVE,
+                    root=my_drive_root(_normalize_user_id(user_id)),
+                ),
+            )
+        )
+    if workspace_id:
+        workspace = _normalize_workspace_id(workspace_id)
+        checks.append(
+            _view_if(
+                authz.allowed(
+                    _ACTIONS["list"][SCOPE_WORKSPACE],
+                    user=current_user,
+                    workspace=workspace,
+                    id=("workspace",),
+                ),
+                FileView(
+                    id="workspace_files",
+                    label="Workspace Files",
+                    drive=_FILE_SYSTEM,
+                    scope=SCOPE_WORKSPACE,
+                    root=workspace_drive_root(workspace),
+                ),
+            )
+        )
+        checks.append(_organization_files_view(current_user, workspace))
+    checks.append(
+        _view_if(
+            authz.allowed(
+                _ACTIONS["list"][SCOPE_PLATFORM_DRIVE],
+                user=current_user,
+                id=(_PLATFORM_FILES_ROOT_ID,),
+            ),
+            FileView(
+                id="platform_files",
+                label="Platform Files",
+                drive=_FILE_SYSTEM,
+                scope=SCOPE_PLATFORM_DRIVE,
+                root=PLATFORM_DRIVE_ROOT,
+            ),
+        )
+    )
+    if not in_view:
+        checks.append(
+            _view_if(
+                authz.allowed(
+                    _ACTIONS["list"][SCOPE_SYSTEM_DRIVE],
+                    user=current_user,
+                    id=(_SYSTEM_FILES_ROOT_ID,),
+                ),
+                FileView(
+                    id="system_files",
+                    label="System Files",
+                    drive=_FILE_SYSTEM,
+                    scope=SCOPE_SYSTEM_DRIVE,
+                    root=SYSTEM_DRIVE_ROOT,
+                ),
+            )
+        )
+    found = await asyncio.gather(*checks)
+    return FileViewsResponse(views=[view for view in found if view is not None])
 
 
 @router.get("/", response_model=FileListResponse, dependencies=_declares("list"))

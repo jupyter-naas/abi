@@ -300,10 +300,6 @@ class WorkspaceModel(Base):
     # JSON catalog chosen at workspace create (agents, apps, ontologies, …).
     catalog_seed = Column(Text, nullable=True)
 
-    # Drive-scope feature flags
-    platform_drive_enabled = Column(Boolean, nullable=False, default=False)
-    system_drive_enabled = Column(Boolean, nullable=False, default=False)
-
     # Default git repo (owner/name) cloned for new coding workspaces here.
     coding_default_repo_id = Column(String, nullable=True)
     # Made by the configuration's seeding (core/org_seed.py): the only rows it updates,

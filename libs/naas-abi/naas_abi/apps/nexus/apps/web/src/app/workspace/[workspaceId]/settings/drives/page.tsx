@@ -58,8 +58,9 @@ export default function DrivesSettingsPage() {
   const canToggle = canToggleDrives(viewer);
   const drives = buildDriveRows({
     viewer,
-    platformOn: Boolean(workspace.platformDriveEnabled),
-    systemOn: Boolean(workspace.systemDriveEnabled),
+    // The workspace drive flags are gone (#1529): IAM opens these views. This page goes in #1531.
+    platformOn: false,
+    systemOn: false,
     syncedFolders,
     organization:
       workspace.organizationId && workspace.organizationDriveEnabled

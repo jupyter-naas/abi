@@ -178,8 +178,6 @@ export interface Workspace {
   updatedAt: Date;
   currentUserRole?: string;
   featureFlags?: WorkspaceFeatureFlags;
-  platformDriveEnabled?: boolean;
-  systemDriveEnabled?: boolean;
   isDemo?: boolean;
 }
 
@@ -1482,8 +1480,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         updatedAt: new Date(ws.updated_at || Date.now()),
         currentUserRole: ws.current_user_role,
         featureFlags: ws.feature_flags,
-        platformDriveEnabled: Boolean(ws.platform_drive_enabled),
-        systemDriveEnabled: Boolean(ws.system_drive_enabled),
       }));
 
       set({ workspaces });

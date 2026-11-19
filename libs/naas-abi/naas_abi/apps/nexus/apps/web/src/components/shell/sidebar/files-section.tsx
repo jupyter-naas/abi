@@ -20,6 +20,7 @@ import { useFilesStore, type FileInfo, type SyncedFolder } from '@/stores/files'
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getApiUrl } from '@/lib/config';
+import { fileViewsPath, hasFileView, parseFileViews, type FileView } from '@/lib/file-views';
 import { useConfirm, usePrompt } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
@@ -91,14 +92,29 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
-  const platformDriveEnabled = Boolean(currentWorkspace?.platformDriveEnabled);
+  // Platform Files and System Files are listed to who IAM lets open them (GET /api/files/views).
+  const [fileViews, setFileViews] = useState<FileView[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    setFileViews([]);
+    authFetch(fileViewsPath(currentWorkspaceId))
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => {
+        if (!cancelled) setFileViews(parseFileViews(body));
+      })
+      .catch(() => {
+        if (!cancelled) setFileViews([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWorkspaceId]);
+  const platformDriveEnabled = hasFileView(fileViews, 'platform_files');
   // The workspace's organization's drive, for who may open it (IAM, at the organization).
   const organizationId = currentWorkspace?.organizationId;
   const organizationDriveEnabled = Boolean(organizationId && currentWorkspace?.organizationDriveEnabled);
   const organizationDriveName = organizationDriveLabel(currentWorkspace?.organizationName);
-  const systemDriveEnabled = Boolean(currentWorkspace?.systemDriveEnabled);
-  const workspaceRole = currentWorkspace?.currentUserRole;
-  const isWorkspaceAdmin = workspaceRole === 'owner' || workspaceRole === 'admin';
+  const systemDriveEnabled = hasFileView(fileViews, 'system_files');
   const [starredExpanded, setStarredExpanded] = useState(true);
   const [expandedDirs, setExpandedDirs] = useState<string[]>([]);
   const [rawFolderCache, setFolderCache] = useState<Record<string, FileInfo[]>>({});
@@ -724,14 +740,14 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
             {2
               + (platformDriveEnabled ? 1 : 0)
               + (organizationDriveEnabled ? 1 : 0)
-              + (isWorkspaceAdmin && systemDriveEnabled ? 1 : 0)
+              + (systemDriveEnabled ? 1 : 0)
               + syncedFolders.length}
           </span>
         </button>
 
         {fileExpandedCategories.includes('local') && (
           <div className="ml-1 space-y-0.5">
-            {isWorkspaceAdmin && systemDriveEnabled
+            {systemDriveEnabled
               ? renderDriveRow(
                   'system-drive',
                   'System Drive',
@@ -739,7 +755,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                   () => {
                     void openRemoteDrive('system-drive');
                   },
-                  'Full object storage tree, visible to workspace owners and admins',
+                  'Full object storage tree, for platform admins',
                 )
               : null}
             {platformDriveEnabled
@@ -750,7 +766,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                   () => {
                     void openRemoteDrive('platform-drive');
                   },
-                  'Files shared across every workspace where platform drive is enabled',
+                  'Files shared across the platform, opened by an access policy',
                 )
               : null}
             {organizationDriveEnabled

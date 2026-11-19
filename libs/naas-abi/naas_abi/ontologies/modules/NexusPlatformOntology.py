@@ -526,14 +526,12 @@ class Workspace(GenericallyDependentContinuant, RDFEntity):
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "logo_emoji": "http://ontology.naas.ai/nexus/logo_emoji",
         "logo_url": "http://ontology.naas.ai/nexus/logo_url",
-        "platform_drive_enabled": "http://ontology.naas.ai/nexus/platform_drive_enabled",
         "primary_color": "http://ontology.naas.ai/nexus/primary_color",
         "seeded_agent": "http://ontology.naas.ai/nexus/seeded_agent",
         "seeded_app": "http://ontology.naas.ai/nexus/seeded_app",
         "seeded_ontology": "http://ontology.naas.ai/nexus/seeded_ontology",
         "sidebar_color": "http://ontology.naas.ai/nexus/sidebar_color",
         "slug": "http://ontology.naas.ai/nexus/slug",
-        "system_drive_enabled": "http://ontology.naas.ai/nexus/system_drive_enabled",
         "workspace_id": "http://ontology.naas.ai/nexus/workspace_id",
         "workspace_name": "http://ontology.naas.ai/nexus/workspace_name",
     }
@@ -559,8 +557,6 @@ class Workspace(GenericallyDependentContinuant, RDFEntity):
     background_image_url: Annotated[str, Field()] | None = None
     sidebar_color: Annotated[str, Field()] | None = None
     font_family: Annotated[str, Field()] | None = None
-    platform_drive_enabled: Annotated[bool, Field()] | None = None
-    system_drive_enabled: Annotated[bool, Field()] | None = None
     coding_default_repo_id: Annotated[str, Field()] | None = None
     default_agent: Annotated[str, Field()] | None = None
     seeded_agent: Annotated[str, Field(description="An agent reference the platform configuration makes available in this workspace.")] | None = None
