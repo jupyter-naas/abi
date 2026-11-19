@@ -10,6 +10,7 @@ resolves emails and workspace names at read time (events never store emails).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import Any
@@ -51,7 +52,6 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.port import (
     WorkspacesDirectoryEntry,
     WorkspacesResponse,
 )
-from naas_abi.apps.nexus.apps.api.app.services.analytics.service import _decorate_page_title
 
 TOP = 10
 RECENT_ACTIVITY = 25
@@ -60,6 +60,18 @@ CHATS_LIMIT = 500
 TOP_CHATS = 100
 USER_EVENTS = 200
 EVENTS_MAX = 500
+
+_CHAT_CONV_PATH_RE = re.compile(r"/chat/(conv-[^/?#]+)")
+
+
+def _decorate_page_title(title: str, path: str) -> str:
+    """Chat pages share the title "Chat": the conversation id from the path makes
+    each conversation its own row."""
+    m = _CHAT_CONV_PATH_RE.search(path or "")
+    if not m:
+        return title
+    conv = m.group(1)
+    return title if conv in title else f"{title} - {conv}"
 
 
 def iso(moment: datetime | None) -> str:

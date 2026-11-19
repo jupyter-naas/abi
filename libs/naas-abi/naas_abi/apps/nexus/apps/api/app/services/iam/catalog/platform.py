@@ -9,14 +9,22 @@ org-wide role). The messages of a conversation behind the figures are
 conversation's workspace: a policy grants it, no role holds it. The tracker's
 ingest is any signed-in user's (``POST /api/analytics/events``).
 
-``ReadAnalytics`` and ``WriteAnalytics`` on the platform singleton serve the
-platform-wide analytics app until its removal (#1536).
+``ReadAnalytics`` and ``WriteAnalytics`` on the platform singleton ``analytics``
+decided the platform-wide analytics app, removed with its routes (#1536). They stay
+declared, deprecated, since IAM refuses a catalog version dropping an action a
+policy still names (which would stop Nexus's start), and authorize nothing: no
+route asks for them.
 """
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import action, rtype
 
+_DEPRECATED = (
+    "Deprecated: authorizes nothing (the platform analytics app is removed; analytics "
+    "are read in Organization and Workspace settings)."
+)
+
 TYPES = (
-    rtype("analytics", id="singleton", platform=True),
+    rtype("analytics", id="singleton", platform=True, description=_DEPRECATED),
     rtype(
         "analytics_conversation",
         policy_only=True,
@@ -26,8 +34,10 @@ TYPES = (
 )
 
 ACTIONS = (
-    action("ReadAnalytics", "read", "analytics"),
-    action("WriteAnalytics", "admin", "analytics"),
+    # Deprecated (catalog 13): the platform analytics app is removed. Kept declared
+    # for the policies that may name them; no route asks for them.
+    action("ReadAnalytics", "read", "analytics", description=_DEPRECATED),
+    action("WriteAnalytics", "admin", "analytics", description=_DEPRECATED),
     action(
         "ReadOrganizationAnalytics",
         "admin",
