@@ -305,7 +305,18 @@ class JobDescriptor:
 
     ``input_schema`` and ``output_schema`` are JSON Schema objects as canonical
     strings (``schema_json``): at most 16 KiB each, and the whole descriptor at
-    most 64 KiB, because discovery's registry snapshot holds every module."""
+    most 64 KiB, because discovery's registry snapshot holds every module.
+
+    ``skip_if_running``: one run per input at a time. Before it starts, a run
+    claims its input (a document per job and input); a run whose input another
+    active run holds (``RUNNING``, or ``RETRYING``) ends ``SKIPPED`` at once,
+    naming that run, instead of redoing its work (a poller's next tick). Every
+    attempt checks, and a run always passes its own claim, so a retry never
+    skips itself. A finished holder's claim, or a holder whose heartbeats
+    stopped, is taken over. The run still takes a slot to start and skip, so
+    give the job ``max_concurrency`` of at least two per input that can
+    overlap. It is the hosting process's behaviour, not part of the descriptor
+    discovery publishes."""
 
     name: str
     description: str = ""
@@ -317,6 +328,7 @@ class JobDescriptor:
     kind: str = "job"
     input_schema: str = ""
     output_schema: str = ""
+    skip_if_running: bool = False
 
     def __post_init__(self) -> None:
         if not _NAME.fullmatch(self.name):
@@ -425,6 +437,7 @@ class JobSettings:
     timeout: timedelta | None = None
     max_attempts: int = 1
     max_concurrency: int = 1
+    skip_if_running: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "triggers", tuple(self.triggers))
@@ -439,6 +452,7 @@ class JobSettings:
             max_concurrency=self.max_concurrency,
             timeout=self.timeout,
             max_attempts=self.max_attempts,
+            skip_if_running=self.skip_if_running,
         )
 
 
@@ -473,8 +487,12 @@ def job(
     max_concurrency: int = 1,
     timeout: timedelta | None = None,
     max_attempts: int = 1,
+    skip_if_running: bool = False,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Declare and bind a job on a module method (``async def m(self, ctx)``).
+
+    ``skip_if_running`` skips a run while an earlier one with the same input is
+    active (``JobDescriptor``).
 
     SDK modules require async methods; core engine modules also accept sync ones
     (run in a worker thread). The module class checks this when it is defined.
@@ -489,6 +507,7 @@ def job(
             max_concurrency=max_concurrency,
             timeout=timeout,
             max_attempts=max_attempts,
+            skip_if_running=skip_if_running,
         )
         return method
 
@@ -621,6 +640,7 @@ class JobsMixin:
         max_concurrency: int = 1,
         timeout: timedelta | None = None,
         max_attempts: int = 1,
+        skip_if_running: bool = False,
     ) -> JobDescriptor:
         """``declare_job`` for a workflow: ``async handler(ctx, inp)``, with the
         schemas of ``input_type``/``output_type`` (pydantic v2 models, duck-typed)
@@ -640,6 +660,7 @@ class JobsMixin:
             max_concurrency=max_concurrency,
             timeout=timeout,
             max_attempts=max_attempts,
+            skip_if_running=skip_if_running,
         )
 
     def _seal_jobs(self) -> None:
@@ -907,6 +928,23 @@ def stream_name(project: str) -> str:
 
 def runs_collection(project: str) -> str:
     return f"job_runs_{_hash(project)[:16]}"
+
+
+def running_inputs_collection(project: str) -> str:
+    """The input claims of ``skip_if_running`` jobs: one document per job and
+    input, naming the run that holds it."""
+    return f"job_inputs_{_hash(project)[:16]}"
+
+
+def input_key(job_name: str, payload: Any) -> str:
+    """The claim id of ``payload`` for ``job_name``: equal inputs, equal ids."""
+    canonical = json.dumps(
+        payload if payload is not None else {},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return f"{job_name}:{_hash(job_name, canonical)[:40]}"
 
 
 @dataclass(frozen=True)

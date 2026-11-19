@@ -196,8 +196,8 @@ Notes:
     It is found where the code is, and moves with it when the code moves.
   - **In the module's `tests/`** for a test with no single natural neighbour — module-wide
     behaviour, or something defined in `__init__.py`. `tests/` also holds shared
-    `artifacts/` fixtures. Example: `applications/x/tests/XTweetSearchWorkflowConfiguration_test.py`,
-    which covers a config model declared in the module's `__init__.py`.
+    `artifacts/` fixtures. Example: `naas_abi_apps/linkedin/tests/module_test.py`
+    (in `libs/naas-abi-marketplace-modules`), which covers the module declared in its `__init__.py`.
 
 ## Architecture Guidelines
 

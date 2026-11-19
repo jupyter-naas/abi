@@ -80,6 +80,7 @@ def job(
     max_concurrency: int = 1,
     timeout: timedelta | None = None,
     max_attempts: int = 1,
+    skip_if_running: bool = False,  # nothing runs without NATS
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def decorate(method: Callable[..., Any]) -> Callable[..., Any]:
         method.__abi_job__ = JobDescriptor(  # type: ignore[attr-defined]

@@ -3,6 +3,25 @@
 #   docker build -f libs/naas-abi-marketplace-modules/Dockerfile \
 #     --build-arg APP=pennylane -t abi-app-pennylane libs
 # or from Compose with named contexts (abi_proto, abi_sdk) and this folder.
+
+# The X module's Recent Tweets app is a Next.js static export the module
+# publishes (build_app job) from /opt/x-app-web/out. Built for APP=x only; an
+# empty folder for every other application. src/lib/appConfig.generated.ts is
+# committed, so `next build` runs without the Python prebuild.
+FROM node:22-slim AS x_web
+ARG APP
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY naas_abi_apps/x/x_proxy/web /web
+RUN mkdir -p /out \
+    && if [ "$APP" = "x" ]; then \
+        cd /web \
+        && corepack enable \
+        && corepack prepare pnpm@8.15.9 --activate \
+        && pnpm install --frozen-lockfile \
+        && pnpm exec next build \
+        && cp -r out/. /out/; \
+    fi
+
 FROM python:3.12-slim
 
 ARG APP
@@ -35,6 +54,8 @@ RUN test -n "$APP" && test -f "/build/modules/requirements/${APP}.txt" \
 # cannot import without it.
 RUN python -c "import importlib.util, sys; sys.exit([m for m in ('naas_abi_core', 'naas_abi', 'naas_abi_marketplace') if importlib.util.find_spec(m)] or 0)"
 RUN python -c "import importlib, os; importlib.import_module('naas_abi_apps.' + os.environ['ABI_APP'] + '.__main__')"
+
+COPY --from=x_web /out /opt/x-app-web/out
 
 USER nobody
 ENTRYPOINT ["sh", "-c", "exec python -m naas_abi_apps.$ABI_APP"]

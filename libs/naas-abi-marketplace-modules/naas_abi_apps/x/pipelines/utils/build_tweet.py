@@ -1,0 +1,230 @@
+"""Map an X v2 ``Tweet``-shaped dict into RDF triples.
+
+Extracted from :class:`XTweetGraphBuilder` so the per-entity mapping lives
+in one focused module; the builder method ``build_tweet`` delegates here.
+The sub-entity helpers it relies on (``_build_user``, ``_build_metrics``,
+``_build_language``, ``_build_context_annotation``, ``_build_url_entity``)
+remain on the builder and are reached through *builder*.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from naas_abi_apps.x.ontologies.modules.XOntology import (
+    ReferencedTweet,
+    Tweet,
+)
+from naas_abi_apps.x.pipelines.utils._helpers import first, parse_dt
+from rdflib import Graph, URIRef
+from rdflib.namespace import RDF
+
+if TYPE_CHECKING:
+    from naas_abi_apps.x.ontologies.modules.XOntology import (
+        ContextAnnotation,
+        Media,
+        TweetURL,
+        XUser,
+    )
+    from naas_abi_apps.x.pipelines.utils._graph_builder import (
+        XTweetGraphBuilder,
+    )
+
+# Map of X v2 ``referenced_tweets[].type`` to the generated Tweet field that
+# carries the corresponding x:referencesTweet sub-property.
+_REFERENCE_FIELDS = {
+    "replied_to": "replies_to_tweet",
+    "quoted": "quotes_tweet",
+    "retweeted": "retweets_tweet",
+}
+
+
+def build_tweet(
+    builder: XTweetGraphBuilder,
+    record: dict,
+    source_set_uri: str | None = None,
+    *,
+    referenced: bool = False,
+) -> Graph:
+    """Return the RDF graph for a single tweet record.
+
+    *record* is an X v2 ``Tweet`` dict (``id``, ``text`` required;
+    everything else — ``author_id``, ``created_at``, ``public_metrics``,
+    ``lang``, ``entities``, ``context_annotations``, ``attachments``,
+    ``referenced_tweets``, flags — optional).
+
+    *source_set_uri* is the IRI of the ``SearchResultSet`` (or any
+    equivalent "batch of tweets" individual) the tweet belongs to.
+
+    *referenced* says which of the two populations of that result set the
+    record belongs to. ``False`` (the default) is a **match** of the query —
+    an entry of the X v2 ``data`` array — mapped as ``x:Tweet`` and linked by
+    ``x:isContainedInSearchResultSet``. ``True`` is a **referenced tweet** —
+    an ``includes.tweets`` entry absent from ``data``, pulled in by the
+    ``referenced_tweets.id`` expansion as the reply parent, quoted tweet or
+    retweeted original of a match. Those are mapped as ``x:ReferencedTweet``
+    and linked by ``x:isReferencedTweetOfSearchResultSet``, so they never
+    inflate the matched-tweet counts.
+    """
+    tweet_id = record["id"]
+    author_id = record.get("author_id", "")
+    tweet_label = f"Tweet {tweet_id}"
+    tweet_uri = builder.uri("Tweet", tweet_id)
+    tweet_cls = ReferencedTweet if referenced else Tweet
+
+    # X v2 truncates long tweets in ``text`` and exposes the untruncated
+    # content under ``note_tweet.text``. Carry the full content in
+    # ``full_text``: ``note_tweet.text`` when present, otherwise ``text``.
+    text = record.get("text")
+    note_tweet = record.get("note_tweet") or {}
+    full_text = note_tweet.get("text") or text
+
+    # The X v2 API does not return the tweet permalink; reconstruct the
+    # canonical URL as https://x.com/<author_id>/status/<id>. Skip when the
+    # author is unknown (e.g. some context tweets) to avoid a malformed URL.
+    url = f"https://x.com/{author_id}/status/{tweet_id}" if author_id else None
+
+    tweet = tweet_cls(
+        _uri=tweet_uri,
+        label=tweet_label,
+        tweet_id=tweet_id,
+        tweet_text=text,
+        full_text=full_text,
+        url=url,
+        tweet_created_at=parse_dt(record.get("created_at")),
+        edit_history_tweet_id=first(record.get("edit_history_tweet_ids")),
+        conversation_id=record.get("conversation_id"),
+        reply_settings=record.get("reply_settings"),
+        possibly_sensitive=record.get("possibly_sensitive"),
+        paid_partnership=record.get("paid_partnership"),
+        card_uri=record.get("card_uri"),
+    )
+
+    graph = Graph()
+    if author_id:
+        user, user_graph = builder._build_user(str(author_id))
+        tweet.is_authored_by = [URIRef(user._uri)]
+        graph += user_graph
+
+    metrics_payload = record.get("public_metrics") or {}
+    if metrics_payload:
+        metrics, metrics_graph = builder._build_metrics(str(tweet_id), metrics_payload)
+        tweet.has_public_metrics = [URIRef(metrics._uri)]
+        graph += metrics_graph
+
+    # in_reply_to_user_id → minimal XUser stub + x:inReplyToUser
+    reply_user_id = record.get("in_reply_to_user_id")
+    if reply_user_id:
+        reply_user, reply_user_graph = builder._build_user(str(reply_user_id))
+        tweet.in_reply_to_user = [URIRef(reply_user._uri)]
+        graph += reply_user_graph
+
+    # Long ("note") tweets carry their entities under ``note_tweet.entities``,
+    # whose offsets index ``note_tweet.text`` (the full_text we store), while
+    # the top-level ``entities`` indexes the truncated ``text``. Read both so
+    # mentions/urls living only in the note body are not lost, deduping since
+    # the two often overlap on short tweets.
+    entities = record.get("entities") or {}
+    note_entities = note_tweet.get("entities") or {}
+
+    # entities.mentions → XUser stubs + x:mentionsUser
+    mention_uris: list[XUser | URIRef | str] = []
+    seen_mentions: set[str] = set()
+    for mention in (note_entities.get("mentions") or []) + (
+        entities.get("mentions") or []
+    ):
+        mention_id = mention.get("id")
+        if not mention_id or str(mention_id) in seen_mentions:
+            continue
+        seen_mentions.add(str(mention_id))
+        mentioned, mentioned_graph = builder._build_user(
+            str(mention_id), username=mention.get("username")
+        )
+        mention_uris.append(URIRef(mentioned._uri))
+        graph += mentioned_graph
+    if mention_uris:
+        tweet.mentions_user = mention_uris
+
+    # entities.urls → TweetURL individuals + x:hasUrlEntity
+    url_uris: list[TweetURL | URIRef | str] = []
+    seen_urls: set[str] = set()
+    for url_payload in (note_entities.get("urls") or []) + (entities.get("urls") or []):
+        pair = builder._build_url_entity(url_payload)
+        if pair is None:
+            continue
+        url_entity, url_graph = pair
+        if url_entity._uri in seen_urls:
+            continue
+        seen_urls.add(url_entity._uri)
+        url_uris.append(URIRef(url_entity._uri))
+        graph += url_graph
+    if url_uris:
+        tweet.has_url_entity = url_uris
+
+    # context_annotations → ContextAnnotation individuals (shared across tweets)
+    annotation_uris: list[ContextAnnotation | URIRef | str] = []
+    seen_annotations: set[str] = set()
+    for annotation_payload in record.get("context_annotations") or []:
+        annotation_pair = builder._build_context_annotation(annotation_payload)
+        if annotation_pair is None:
+            continue
+        annotation, annotation_graph = annotation_pair
+        if annotation._uri in seen_annotations:
+            continue
+        seen_annotations.add(annotation._uri)
+        annotation_uris.append(URIRef(annotation._uri))
+        graph += annotation_graph
+    if annotation_uris:
+        tweet.has_context_annotation = annotation_uris
+
+    # attachments.media_keys → x:hasAttachedMedia (Media individuals are
+    # built by the pipeline from includes.media before tweets are mapped).
+    attachments = record.get("attachments") or {}
+    media_uris: list[Media | URIRef | str] = [
+        URIRef(builder.uri("Media", str(media_key)))
+        for media_key in attachments.get("media_keys") or []
+    ]
+    if media_uris:
+        tweet.has_attached_media = media_uris
+
+    # referenced_tweets → x:repliesToTweet / x:quotesTweet / x:retweetsTweet
+    for reference in record.get("referenced_tweets") or []:
+        field = _REFERENCE_FIELDS.get(reference.get("type", ""))
+        ref_id = reference.get("id")
+        if not field or not ref_id:
+            continue
+        existing = getattr(tweet, field) or []
+        existing.append(URIRef(builder.uri("Tweet", str(ref_id))))
+        setattr(tweet, field, existing)
+
+    # Dedup on x:Tweet regardless of which population this record belongs to:
+    # every tweet we emit carries that type, so one ASK settles whether this id
+    # is already in the graph as a match or as context.
+    if not builder.label_exists(tweet_label, Tweet._class_uri):
+        graph += tweet.rdf()
+        if referenced:
+            # x:ReferencedTweet is rdfs:subClassOf x:Tweet, but .rdf() asserts
+            # only the leaf class and nothing reasons over the store. Assert
+            # the superclass so `?t a x:Tweet` keeps counting every ingested
+            # post, with x:ReferencedTweet as the distinguishing subset.
+            graph.add((URIRef(tweet_uri), RDF.type, URIRef(Tweet._class_uri)))
+        builder.mark_existing(Tweet._class_uri, tweet_label)
+
+    # Result-set membership is asserted outside the dedup guard: a tweet first
+    # seen as context in an earlier run and matched by a later search must
+    # still gain its match link, or it would vanish from the matched counts.
+    # Re-asserting an identical triple is a no-op.
+    if source_set_uri:
+        membership = builder.prop(
+            "isReferencedTweetOfSearchResultSet"
+            if referenced
+            else "isContainedInSearchResultSet"
+        )
+        graph.add((URIRef(tweet_uri), membership, URIRef(source_set_uri)))
+
+    lang_pair = builder._build_language(record.get("lang"), tweet)
+    if lang_pair is not None:
+        _, lang_graph = lang_pair
+        graph += lang_graph
+
+    return graph

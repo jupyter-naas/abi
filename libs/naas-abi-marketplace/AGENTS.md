@@ -269,7 +269,6 @@ uv run pytest libs/naas-abi-marketplace
 
 # One module
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/ai/anthropic
-uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/x
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/signals/agents/software-engineer
 
 # A single agent test

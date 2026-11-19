@@ -1,0 +1,152 @@
+"""Materialized distinct ``tweet_id`` values that ever appear as ``kind = matched``."""
+
+from __future__ import annotations
+
+import contextvars
+import threading
+import time
+from typing import Any
+
+from naas_abi_apps.x.services import logger
+from naas_abi_apps.x.x_proxy.dataset.store import (
+    MATCHED_TWEET_IDS_V1,
+    POSTS_V1,
+    X_DATASET_NAMESPACE,
+    upsert_table,
+)
+
+_index_ready: bool | None = None
+_rebuild_lock = threading.Lock()
+_rebuild_started = False
+# When the last backfill failed (``time.monotonic()``), and how long before
+# another one starts.
+_rebuild_failed_at: float | None = None
+REBUILD_RETRY_SECONDS = 300.0
+
+
+def mark_matched_index_ready() -> None:
+    global _index_ready
+    _index_ready = True
+
+
+def matched_index_ready(dataset) -> bool:
+    """True when the materialized table has at least one row."""
+    global _index_ready
+    if _index_ready is True:
+        return True
+    result = dataset.query(
+        f"SELECT 1 AS ok FROM {MATCHED_TWEET_IDS_V1} LIMIT 1",  # nosec B608
+        namespace=X_DATASET_NAMESPACE,
+    )
+    _index_ready = bool(result.rows)
+    return _index_ready
+
+
+def upsert_matched_tweet_ids_from_posts(
+    dataset,
+    post_rows: list[dict[str, Any]],
+) -> int:
+    """Extend the matched-id index from rows written in a sync batch."""
+    ids = sorted(
+        {
+            str(row.get("tweet_id") or "").strip()
+            for row in post_rows
+            if str(row.get("kind") or "") == "matched"
+            and str(row.get("tweet_id") or "").strip()
+        }
+    )
+    if not ids:
+        return 0
+    written = upsert_table(
+        dataset, MATCHED_TWEET_IDS_V1, [{"tweet_id": tid} for tid in ids]
+    )
+    if written:
+        mark_matched_index_ready()
+    return written
+
+
+def rebuild_matched_tweet_ids(dataset, *, buckets: int = 64) -> int:
+    """Full rebuild from ``posts_v1`` (one-time migration / repair)."""
+    count = dataset.query(
+        f"SELECT COUNT(DISTINCT tweet_id) AS n FROM {POSTS_V1} "
+        f"WHERE kind = 'matched' AND tweet_id <> ''",  # nosec B608
+        namespace=X_DATASET_NAMESPACE,
+    )
+    expected = int(count.rows[0]["n"]) if count.rows else 0
+    if expected == 0:
+        return 0
+    dataset.write(
+        MATCHED_TWEET_IDS_V1, [], namespace=X_DATASET_NAMESPACE, mode="replace"
+    )
+    written = 0
+    for bucket in range(buckets):
+        result = dataset.query(
+            f"SELECT DISTINCT tweet_id FROM {POSTS_V1} "
+            f"WHERE kind = 'matched' AND tweet_id <> '' "
+            f"AND (hash(tweet_id) % {int(buckets)}) = {bucket}",  # nosec B608
+            namespace=X_DATASET_NAMESPACE,
+        )
+        rows = [
+            {"tweet_id": str(row["tweet_id"])}
+            for row in result.rows
+            if row.get("tweet_id")
+        ]
+        if rows:
+            written += upsert_table(dataset, MATCHED_TWEET_IDS_V1, rows)
+    mark_matched_index_ready()
+    logger.info(
+        f"rebuild_matched_tweet_ids: {written} tweet_ids (expected ~{expected})"
+    )
+    return written
+
+
+def _has_matched_posts(dataset) -> bool:
+    result = dataset.query(
+        f"SELECT 1 AS ok FROM {POSTS_V1} WHERE kind = 'matched' AND tweet_id <> '' LIMIT 1",  # nosec B608
+        namespace=X_DATASET_NAMESPACE,
+    )
+    return bool(result.rows)
+
+
+def _rebuild_worker(dataset) -> None:
+    global _rebuild_started, _rebuild_failed_at
+    try:
+        rebuild_matched_tweet_ids(dataset)
+        _rebuild_failed_at = None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"rebuild_matched_tweet_ids failed: {exc}")
+        _rebuild_failed_at = time.monotonic()
+    finally:
+        _rebuild_started = False
+
+
+def ensure_matched_tweet_ids_ready(dataset) -> bool:
+    """Kick off a background backfill when posts exist but the index is empty.
+
+    True once settled: the index has rows, or no post is matched yet (a sync
+    fills the index as it writes them). False while a backfill runs, or after
+    one failed: the caller asks again, and a failed backfill starts again
+    ``REBUILD_RETRY_SECONDS`` later. Raises what the dataset raises."""
+    global _rebuild_started
+    if matched_index_ready(dataset):
+        return True
+    if not _has_matched_posts(dataset):
+        return True
+    with _rebuild_lock:
+        if _rebuild_started:
+            return False
+        if matched_index_ready(dataset):
+            return True
+        failed_at = _rebuild_failed_at
+        if failed_at is not None and (
+            time.monotonic() - failed_at < REBUILD_RETRY_SECONDS
+        ):
+            return False
+        _rebuild_started = True
+        # The caller's identity goes with the backfill (a new thread has none).
+        thread = threading.Thread(
+            target=contextvars.copy_context().run,
+            args=(_rebuild_worker, dataset),
+            daemon=True,
+        )
+        thread.start()

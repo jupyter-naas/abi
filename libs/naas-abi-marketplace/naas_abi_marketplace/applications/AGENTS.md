@@ -22,10 +22,9 @@ In the table below: **A** = agent, **I** = integration wrapper, **W** = workflow
 | [`git/`](git/) | A | Local git operations | Runs `git`, `make` and `gh` in the CLI's working directory (`make commit`, `make pr`) |
 | [`bodo/`](bodo/) | A | Bodo distributed compute | Runs Python that imports `bodo.pandas` in the engine process |
 | [`naas/`](naas/) | IWO | Ontology YAML publishing to a Naas workspace | Workflows and triggers on the engine's triple store, used by `ontology_engineer` |
-| [`x/`](x/) | AIWPO | X (Twitter) search ingestion, x_proxy app | Port to a remote module tracked in sub-issues of #1423 |
 
 Every other application (GitHub, LinkedIn, Google Search, PostgreSQL,
-PowerPoint, Pennylane, Agicap, ArXiv, PubMed, SEC EDGAR, Sanax, Nebari, ...) is a
+PowerPoint, Pennylane, Agicap, ArXiv, PubMed, SEC EDGAR, Sanax, Nebari, X, ...) is a
 **remote module** in [`libs/naas-abi-marketplace-modules`](../../../naas-abi-marketplace-modules/README.md):
 its own process, reaching the engine over NATS. The in-engine versions were
 removed (jupyter-naas/abi#1423); `applications.openrouter` was replaced by
@@ -39,6 +38,31 @@ runs the remote module instead (`dev.modules`, or a container built from
 move from the module's `config:` to engine secrets named
 `<module id>/<NAME>` (e.g. `applications.pennylane/PENNYLANE_API_KEY`): the
 engine lets a module read only the secrets under its own id.
+
+**Migration of `applications.x`** (jupyter-naas/abi#1425–#1428). The remote
+module `naas_abi_apps.x` (id `applications.x`) replaces the in-engine module,
+its Dagster orchestrations and its CLI scripts:
+
+- **Configuration.** Copy the `naas_abi_marketplace.applications.x` entry of
+  `config.yaml` (its `config:` block, or the whole entry) into a YAML file and
+  point `X_CONFIG_FILE` at it; remove the entry from `modules:`. Its
+  `search_recent_tweets_workflow` entries become the triggers of the
+  `search_recent_tweets` workflow (one per entry, `{"filter": <name>}`), its
+  `search_recent_tweets_files` entries the triggers of
+  `reprocess_tweet_envelopes`; `count_recent_tweets_workflow` and `app` keep
+  their meaning. `search_recent_tweets_event` is not used (each search run maps
+  the envelopes it saved) and is only warned about. Delete `bearer_token`: the
+  token is the engine secret `applications.x/X_BEARER_TOKEN`.
+- **Dataset.** The tables move from the engine's `x` namespace to the module's
+  own dataset namespace. Run `reprocess_tweet_envelopes` once (System → Jobs,
+  with `force: true`) to rebuild them, and the graph mapping if needed, from
+  the envelopes in object storage (`x/search_recent_tweets/`, unchanged).
+- **App.** The Recent Tweets app is `remote/applications.x:x_proxy`, served by
+  the module through Nexus (`/app-remote/...`) instead of `/app-html/x/apps/x_proxy/`.
+- **Scripts and Dagster.** The orchestrations (`--without-nats` only) and the
+  scripts are gone: `search_recent_tweets`, `reprocess_tweet_envelopes`
+  (backfills, imports), `compact_dataset` and `build_app` are durable workflows
+  and jobs, launched from System → Jobs or on their schedules.
 
 ## Module shape (recap)
 
@@ -67,7 +91,7 @@ modules:
 
 A new third-party integration is a **remote module** in
 `libs/naas-abi-marketplace-modules` (see its `AGENTS.md`). Add one here only
-when it must run in the engine process, as the four above do:
+when it must run in the engine process, as the three above do:
 
 1. Scaffold `applications/<app>/` with `__init__.py` declaring:
    - `dependencies.modules` — usually one `ai.<provider>` module.
@@ -88,6 +112,5 @@ when it must run in the engine process, as the four above do:
 
 ```bash
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications
-uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/x
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/git/agents/GitAgent_test.py -v
 ```

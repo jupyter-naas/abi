@@ -4046,7 +4046,7 @@ requires-dist = [
     { name = "torch", marker = "extra == 'domains-document'", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", marker = "extra == 'domains-document'", index = "https://download.pytorch.org/whl/cpu" },
 ]
-provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-ollama", "ai-openrouter", "ai-perplexity", "ai-qwen", "applications-bodo", "applications-git", "applications-naas", "applications-x", "domains-support", "domains-ontology-engineer", "domains-document"]
+provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-ollama", "ai-openrouter", "ai-perplexity", "ai-qwen", "applications-bodo", "applications-git", "applications-naas", "domains-support", "domains-ontology-engineer", "domains-document"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -4176,7 +4176,6 @@ requires-dist = [
     { name = "naas-abi-marketplace", extras = ["ai-qwen"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-git"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-naas"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-x"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["domains-ontology-engineer"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["domains-support"], editable = "libs/naas-abi-marketplace" },
     { name = "openpyxl", specifier = ">=3.1.5,<4" },

@@ -126,7 +126,6 @@ applications-bodo = [
 ]
 applications-git = []
 applications-naas = []
-applications-x = []
 # GitHubIntegration (support) encrypts repository secrets with it.
 domains-support = [
     "pynacl>=1.5.0,<2"

@@ -7,20 +7,19 @@ A comprehensive marketplace of pre-built modules, agents, integrations, and work
 `naas-abi-marketplace` is a collection of modular components that extend the ABI framework with:
 
 - **AI Agent Modules**: Integration with major AI providers (ChatGPT, Claude, Gemini, Grok, Mistral, etc.)
-- **Application Modules**: four application modules run in-engine (listed below)
+- **Application Modules**: three application modules run in-engine (listed below)
 - **Domain Expert Modules**: specialized agents for professional roles (listed below)
 
 ### Application Modules
 
-Four application modules run in-engine:
+Three application modules run in-engine:
 
 - `applications.git` - Git operations and repository management (runs in the CLI's working directory)
 - `applications.bodo` - Bodo platform integration
 - `applications.naas` - ontology YAML publishing to a Naas workspace (for `ontology_engineer`)
-- `applications.x` - X (Twitter) recent-tweets ingestion and the Recent Tweets app
 
 The other applications (GitHub, LinkedIn, Google Search, PostgreSQL, PowerPoint,
-Pennylane, Agicap, ArXiv, PubMed, Sanax, SEC EDGAR, ...) are **remote modules**:
+Pennylane, Agicap, ArXiv, PubMed, Sanax, SEC EDGAR, X, ...) are **remote modules**:
 each runs in its own process and reaches the engine over NATS. They live in
 [`libs/naas-abi-marketplace-modules`](../naas-abi-marketplace-modules/README.md)
 (jupyter-naas/abi#1423). Their in-engine versions were removed: a configuration

@@ -218,6 +218,15 @@ class ABIModule(BaseModule):
   `OnEvent(event_type=..., filter={...})`.
 - `max_concurrency` (default 1: no overlap), `timeout` (sets `ctx.cancelled`),
   `max_attempts` (default 1).
+- `skip_if_running=True` (on `@job`, `@workflow`, `declare_workflow` and
+  `JobSettings`): one run per input at a time. A run claims its input before it
+  starts; one whose input another active run (`RUNNING` or `RETRYING`) holds
+  ends `SKIPPED`, naming that run, instead of queueing behind it (a poller's
+  next tick). A retry holds its own claim and never skips itself; the claim of
+  a finished run, or of one whose heartbeats stopped, is taken over. The
+  skipping run takes a slot to start, so set `max_concurrency` to at least two
+  per input that can overlap. A caller waiting on a skipped workflow gets no
+  output (`None`).
 - `self.trigger_job(name, payload, idempotency_key=...)` (sync) or
   `await self.atrigger_job(...)` triggers the module's own jobs; another
   module's: `await self.engine.modules[id].get_job(name)`, then

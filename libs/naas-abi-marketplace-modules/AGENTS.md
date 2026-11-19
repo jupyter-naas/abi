@@ -86,7 +86,8 @@ jupyter-naas/abi#1423.
 the 17 applications above and `applications.openrouter`, their extras, their
 `naas_abi` soft dependencies, their `make chat-*` targets and their generated
 reference docs. Kept in-engine: `git`, `bodo`, `naas` (its ontology YAML
-workflows and triggers; the agent is removed) and `x` (not ported yet).
+workflows and triggers; the agent is removed) and `x`, which was ported and
+removed in a later PR (decision on `x` below).
 In-engine code that used a removed client got its own copy:
 - `support` owns `GitHubIntegration` and `GitHubGraphqlIntegration`
   (`domains/operations/modules/support/integrations/`; `pynacl` in the
@@ -156,11 +157,46 @@ per application and one Dockerfile parametrized by `APP`. Module ids are
 - The 27 placeholder agents (no tools) are not ported: they were removed from
   the marketplace (#1423).
 
+## Decision (2026-11-17): x, synchronous bodies over a blocking bridge
+
+**Context.** `x` (24k lines, #1425–#1428) hosted its durable flows on core's
+in-engine workflow runtime (sync handlers, `SyncFlowContext`), skipped
+overlapping ticks by reading the job host's run records, kept its dataset in
+core's DuckLake service (namespace `x`, with engine-only catalog SQL), and its
+`x_proxy` app was served by the engine's FastAPI. Most of its code (graph
+mapping, dataset projection, app snapshots) is synchronous and CPU-bound, and
+well tested.
+
+**Decision.**
+- The synchronous bodies are kept. They run in worker threads
+  (`asyncio.to_thread`) and reach the engine through `x/services.py`
+  `SyncModule`: the SDK services with their own method names, each call
+  blocking until it finished on the module's loop (a call made on the loop
+  itself raises). The workflow handlers, the agent's tools and
+  `XIntegration` (httpx) are async.
+- Overlapping ticks: the SDK's new `skip_if_running` (a run whose input equals
+  an earlier active run's ends SKIPPED; first attempt only) replaces the guard
+  that read the host's run records.
+- Dataset: the SDK dataset service, in the module's own namespace. Only plain
+  `SELECT`s pass a module's query check, so the catalog SQL is gone: tables
+  are created from the current specs, compaction is `compact` and `flush` per
+  table, snapshot expiry and file cleanup are the engine's `dataset_cleanup`
+  job. The tables are rebuilt from the envelopes (`reprocess_tweet_envelopes`),
+  which stay where they were in object storage.
+- The Recent Tweets app is an ASGI app bound with `expose_app`
+  (`remote/applications.x:x_proxy`). Its Python code is the package
+  `x/x_proxy/`, outside the folder the app host serves (`apps/x_proxy/`, the
+  manifest only).
+- The Dagster orchestrations and the CLI scripts that booted an engine are
+  retired: the workflows and jobs cover them (#1428).
+
+**Consequences.** One process holds the agent, the flows and the app; heavy
+work never blocks the loop that serves them. A deployment migrating from the
+in-engine module runs one `reprocess_tweet_envelopes` to rebuild its dataset
+(migration note in `naas_abi_marketplace/applications/AGENTS.md`).
+
 ## Not ported yet
 
-- `x` (24k lines): its durable flows run on core's in-engine workflow host
-  and read its job records, its dataset is core's DuckLake service, and its
-  `x_proxy` app is served by the engine. Split into sub-issues of #1423.
 - Of `naas`, only the agent and the integration are ported; its ontology YAML
   workflows (core's `OntologyYaml`) stay in-engine with `ontology_engineer`.
 
