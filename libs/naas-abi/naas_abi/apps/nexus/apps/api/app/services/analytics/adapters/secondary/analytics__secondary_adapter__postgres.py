@@ -28,6 +28,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     AnalyticsEventModel,
     AnalyticsHourlyModel,
     AnalyticsJobModel,
+    AnalyticsLegacyReplayedModel,
     AnalyticsPageModel,
     AnalyticsSessionModel,
     AnalyticsUserHourlyModel,
@@ -131,22 +132,32 @@ class AnalyticsSecondaryAdapterPostgresEvents(AnalyticsEventPort):
         )
         return {ws: org for ws, org in rows.all() if org}
 
-    async def apply_events(self, events: list[RecordedEvent], *, not_before: datetime) -> int:
-        fresh: dict[str, RecordedEvent] = {}
+    @staticmethod
+    def _keyed(events: Iterable[RecordedEvent]) -> dict[str, RecordedEvent]:
+        """The events worth applying, one per raw-row key."""
+        keyed: dict[str, RecordedEvent] = {}
         for event in events:
-            if event.timestamp < not_before or not event.event_id or not event.event_name:
-                continue
-            fresh.setdefault(event_key(event.user_id, event.event_id), event)
-        if not fresh:
-            return 0
-        dialect = _Dialect(self.db)
+            if event.event_id and event.event_name:
+                keyed.setdefault(event_key(event.user_id, event.event_id), event)
+        return keyed
+
+    async def _organization(self, events: Iterable[RecordedEvent]):
+        """A function giving an event's organization: its own, else its workspace's."""
+        events = list(events)
         orgs = await self._organizations_of(
-            {e.workspace_id for e in fresh.values() if e.workspace_id and not e.organization_id}
+            {e.workspace_id for e in events if e.workspace_id and not e.organization_id}
         )
 
         def organization(event: RecordedEvent) -> str:
             return event.organization_id or orgs.get(event.workspace_id or "", "")
 
+        return organization
+
+    async def _store_raw(
+        self, dialect: _Dialect, keyed: dict[str, RecordedEvent], organization
+    ) -> list[RecordedEvent]:
+        """Insert the raw rows; the events whose row is new (``ON CONFLICT DO NOTHING
+        RETURNING``), which are the ones to count."""
         table = AnalyticsEventModel.__table__
         inserted: set[str] = set()
         rows = [
@@ -165,7 +176,7 @@ class AnalyticsSecondaryAdapterPostgresEvents(AnalyticsEventPort):
                     default=str,
                 ),
             }
-            for key, e in fresh.items()
+            for key, e in keyed.items()
         ]
         for chunk in _chunks(rows):
             statement = (
@@ -175,14 +186,64 @@ class AnalyticsSecondaryAdapterPostgresEvents(AnalyticsEventPort):
                 .returning(table.c.event_key)
             )
             inserted.update((await self.db.execute(statement)).scalars().all())
-        new = [fresh[key] for key in fresh if key in inserted]
+        return [keyed[key] for key in keyed if key in inserted]
+
+    async def _roll_up(self, dialect: _Dialect, new: list[RecordedEvent], organization) -> int:
         if not new:
             return 0
         await self._count(dialect, new, organization)
         await self._sessions(dialect, new, organization)
-        await self._titles(dialect, new)
+        await self._titles(dialect, new, organization)
         await self.db.flush()
         return len(new)
+
+    async def apply_events(self, events: list[RecordedEvent], *, not_before: datetime) -> int:
+        fresh = self._keyed(e for e in events if e.timestamp >= not_before)
+        if not fresh:
+            return 0
+        dialect = _Dialect(self.db)
+        organization = await self._organization(fresh.values())
+        new = await self._store_raw(dialect, fresh, organization)
+        return await self._roll_up(dialect, new, organization)
+
+    async def apply_legacy_events(self, events: list[RecordedEvent], *, raw_since: datetime) -> int:
+        keyed = self._keyed(events)
+        if not keyed:
+            return 0
+        dialect = _Dialect(self.db)
+        organization = await self._organization(keyed.values())
+        # Every replayed event is marked; those marked by an earlier replay are skipped.
+        marks = AnalyticsLegacyReplayedModel.__table__
+        unmarked: set[str] = set()
+        for chunk in _chunks([{"event_key": key} for key in keyed]):
+            statement = (
+                dialect.insert(marks)
+                .values(list(chunk))
+                .on_conflict_do_nothing(index_elements=["event_key"])
+                .returning(marks.c.event_key)
+            )
+            unmarked.update((await self.db.execute(statement)).scalars().all())
+        recent = {k: e for k, e in keyed.items() if e.timestamp >= raw_since}
+        # Within retention the raw row tells what was counted (the log may hold the event
+        # too). Past it, the mark does, unless a raw row not purged yet still holds it.
+        new = await self._store_raw(dialect, recent, organization)
+        old = {k: e for k, e in keyed.items() if k in unmarked and k not in recent}
+        if old:
+            counted: set[str] = set()
+            for chunk in _chunks(list(old)):
+                counted.update(
+                    (
+                        await self.db.execute(
+                            select(AnalyticsEventModel.event_key).where(
+                                AnalyticsEventModel.event_key.in_(chunk)
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+            new += [e for k, e in old.items() if k not in counted]
+        return await self._roll_up(dialect, new, organization)
 
     async def _count(self, dialect: _Dialect, events: list[RecordedEvent], organization) -> None:
         counts: dict[tuple[datetime, str, str, str, str, str], int] = defaultdict(int)
@@ -284,19 +345,24 @@ class AnalyticsSecondaryAdapterPostgresEvents(AnalyticsEventPort):
             )
             await self.db.execute(statement)
 
-    async def _titles(self, dialect: _Dialect, events: list[RecordedEvent]) -> None:
-        titles: dict[str, str] = {}
+    async def _titles(self, dialect: _Dialect, events: list[RecordedEvent], organization) -> None:
+        titles: dict[tuple[str, str, str], str] = {}
         for e in sorted(events, key=lambda e: e.timestamp):
             if e.event_name == PAGE_VIEWED and e.page_path and e.page_title:
-                titles[_clip(e.page_path, 512)] = _clip(e.page_title, 512)
+                key = (organization(e), e.workspace_id or "", _clip(e.page_path, 512))
+                titles[key] = _clip(e.page_title, 512)
         if not titles:
             return
         table = AnalyticsPageModel.__table__
-        rows = [{"page_path": path, "page_title": title} for path, title in titles.items()]
+        columns = ("organization_id", "workspace_id", "page_path")
+        rows = [
+            {**dict(zip(columns, key, strict=True)), "page_title": title}
+            for key, title in titles.items()
+        ]
         for chunk in _chunks(rows):
             statement = dialect.insert(table).values(list(chunk))
             statement = statement.on_conflict_do_update(
-                index_elements=["page_path"],
+                index_elements=list(columns),
                 set_={"page_title": statement.excluded.page_title},
             )
             await self.db.execute(statement)
@@ -623,7 +689,14 @@ class AnalyticsSecondaryAdapterPostgresQueries(AnalyticsQueryPort):
                 func.count(distinct(h.user_id)),
                 func.max(AnalyticsPageModel.page_title),
             )
-            .outerjoin(AnalyticsPageModel, AnalyticsPageModel.page_path == h.page_path)
+            .outerjoin(
+                AnalyticsPageModel,
+                and_(
+                    AnalyticsPageModel.organization_id == h.organization_id,
+                    AnalyticsPageModel.workspace_id == h.workspace_id,
+                    AnalyticsPageModel.page_path == h.page_path,
+                ),
+            )
             .where(*self._hourly(scope, window), h.event_name == PAGE_VIEWED, h.page_path != "")
             .group_by(h.page_path)
             .order_by(views.desc(), h.page_path)

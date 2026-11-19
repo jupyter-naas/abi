@@ -1,4 +1,5 @@
-"""The removed analytics app's object-storage files: read as data, then all deleted."""
+"""The removed analytics app's object-storage files: read as data, deleted once replayed,
+the others set aside."""
 
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.legacy_storage import (
     EVENTS_PREFIX,
     LEGACY_FILES,
     OUTPUT_DIR,
+    UNREADABLE_PREFIX,
     LegacyAnalyticsStorage,
 )
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
@@ -36,6 +38,7 @@ class MemoryStorage:
     def __init__(self) -> None:
         self.objects: dict[str, bytes] = {}
         self.reachable = True
+        self.writable = True
 
     def _check(self) -> None:
         if not self.reachable:
@@ -54,6 +57,12 @@ class MemoryStorage:
             return self.objects[f"{prefix}/{key}"]
         except KeyError:
             raise Exceptions.ObjectNotFound(key) from None
+
+    def put_object(self, prefix: str, key: str, content: bytes) -> None:
+        self._check()
+        if not self.writable:
+            raise PermissionError("read-only")
+        self.objects[f"{prefix}/{key}"] = content
 
     def delete_object(self, prefix: str, key: str) -> None:
         self._check()
@@ -94,10 +103,17 @@ def test_json_and_pickled_events_are_read_as_plain_data(storage) -> None:
     storage.objects[f"{EVENTS_PREFIX}/notes.txt"] = b"ignored"
     before = dict(storage.objects)
 
-    events = LegacyAnalyticsStorage(storage).list_events()
+    events = dict(LegacyAnalyticsStorage(storage).list_events())
 
     assert CALLS == []  # never read as code
-    assert sorted(e["event_id"] for e in events) == ["json", "pickled"]
+    assert sorted(e["event_id"] for e in events.values() if e) == ["json", "pickled"]
+    # The others are named, as unreadable: never skipped silently.
+    assert {name for name, e in events.items() if e is None} == {
+        "runs.pkl",
+        "nested.pkl",
+        "broken.json",
+        "notes.txt",
+    }
     assert storage.objects == before  # reading converts or deletes nothing
 
 
@@ -108,17 +124,22 @@ def test_an_unreachable_storage_raises(storage) -> None:
         LegacyAnalyticsStorage(storage).list_events()
 
 
-def test_every_aggregate_and_raw_event_is_deleted(storage) -> None:
+def test_the_aggregates_and_the_replayed_raw_events_are_deleted(storage) -> None:
     for name in LEGACY_FILES:
         storage.objects[f"{OUTPUT_DIR}/{name}"] = b"{}"
     storage.objects[f"{EVENTS_PREFIX}/a.json"] = json.dumps(_event()).encode()
     storage.objects[f"{EVENTS_PREFIX}/b.pkl"] = pickle.dumps(_event("b"))
+    storage.objects[f"{EVENTS_PREFIX}/c.json"] = json.dumps(_event("c")).encode()
     storage.objects["naas_abi/nexus/other/kept.json"] = b"{}"
 
-    deleted = LegacyAnalyticsStorage(storage).delete_all()
+    deleted = LegacyAnalyticsStorage(storage).delete_replayed(["a.json", "b.pkl"])
 
     assert deleted == len(LEGACY_FILES) + 2
-    assert list(storage.objects) == ["naas_abi/nexus/other/kept.json"]
+    # c.json was not replayed: kept.
+    assert sorted(storage.objects) == [
+        f"{EVENTS_PREFIX}/c.json",
+        "naas_abi/nexus/other/kept.json",
+    ]
     assert {
         "events.json",
         "overview.json",
@@ -140,5 +161,27 @@ def test_every_aggregate_and_raw_event_is_deleted(storage) -> None:
 def test_deleting_what_is_already_gone_is_not_an_error(storage) -> None:
     storage.objects[f"{OUTPUT_DIR}/overview.json"] = b"{}"
     legacy = LegacyAnalyticsStorage(storage)
-    assert legacy.delete_all() == 1
-    assert legacy.delete_all() == 0
+    assert legacy.delete_replayed(["gone.json"]) == 1
+    assert legacy.delete_replayed(["gone.json"]) == 0
+
+
+def test_unreadable_events_are_moved_aside_never_deleted(storage) -> None:
+    storage.objects[f"{EVENTS_PREFIX}/broken.json"] = b"{not json"
+    storage.objects[f"{EVENTS_PREFIX}/runs.pkl"] = b"\x80\x04junk"
+    legacy = LegacyAnalyticsStorage(storage)
+
+    assert legacy.set_aside(["broken.json", "runs.pkl", "gone.json"]) == 2
+
+    assert storage.objects == {
+        f"{UNREADABLE_PREFIX}/broken.json": b"{not json",
+        f"{UNREADABLE_PREFIX}/runs.pkl": b"\x80\x04junk",
+    }
+
+
+def test_an_event_that_cannot_be_copied_aside_stays_where_it_is(storage) -> None:
+    storage.objects[f"{EVENTS_PREFIX}/broken.json"] = b"{not json"
+    storage.writable = False
+
+    assert LegacyAnalyticsStorage(storage).set_aside(["broken.json"]) == 0
+
+    assert storage.objects == {f"{EVENTS_PREFIX}/broken.json": b"{not json"}

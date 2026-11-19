@@ -567,6 +567,14 @@ class AnalyticsEventPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def apply_legacy_events(self, events: list[RecordedEvent], *, raw_since: datetime) -> int:
+        """Count the removed analytics app's events whatever their age: the raw row
+        only for those since ``raw_since`` (naive UTC), the rollups for all. An event
+        is counted once however many times it is replayed, and not at all if it was
+        counted already (its raw row). Returns how many were new."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def purge_events(self, before: datetime) -> int:
         """Delete the raw events older than ``before`` (naive UTC); the rollups stay."""
         raise NotImplementedError

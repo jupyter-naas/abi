@@ -2,9 +2,12 @@
 
 Open to every signed-in user: the identity comes from the token, a
 ``workspace_id`` stays only for a member of the workspace, and the server stamps
-its ``organization_id``. The event is appended to the EventService log, whose
-consumer feeds the rollups (``analytics/jobs.py``); a deploy with no log applies
-it to the rollups at once.
+its ``organization_id``. The event is client data: its ``timestamp`` must be ISO-8601
+within [now - 45 days, now + 1 day] (422 otherwise: the raw events' retention, and a
+client clock a day ahead at most) and control characters (NUL included) are removed
+from every string. The event is appended to the EventService log, whose consumer
+feeds the rollups (``analytics/jobs.py``); a deploy with no log applies it to the
+rollups at once.
 
 The analytics are read in Organization and Workspace settings
 (``analytics__primary_adapter__scoped``).
@@ -14,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,8 +34,13 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.port import (
     IngestResponse,
 )
 from naas_abi.apps.nexus.apps.api.app.services.analytics.rollups import (
+    FUTURE_TOLERANCE,
+    RETENTION_DAYS,
     AnalyticsRollups,
+    event_time_accepted,
+    parse_timestamp,
     recorded_from_event,
+    strip_control,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_current_user_required,
@@ -114,7 +123,7 @@ async def stamp_event(event: AnalyticsEvent, user: Any) -> AnalyticsEvent:
         member, organization_id = await _membership(user, workspace_id)
         if not member:
             workspace_id, organization_id = None, None
-    data = event.model_dump()
+    data = strip_control(event.model_dump())
     data.update(
         user_id=authz_module.Authz.user_id(user),
         user_email=None,
@@ -136,6 +145,14 @@ async def ingest_event(
         # Any signed-in user may post: what one event may hold is bounded (it is kept
         # in the log, in the raw table and served back to admins).
         raise HTTPException(status_code=413, detail="Analytics event too large")
+    if not event_time_accepted(parse_timestamp(event.timestamp), datetime.now(UTC)):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "timestamp must be an ISO-8601 date within the last "
+                f"{RETENTION_DAYS} days and at most {FUTURE_TOLERANCE.days} day ahead"
+            ),
+        )
     stamped = await stamp_event(event, user)
 
     if log is not None:

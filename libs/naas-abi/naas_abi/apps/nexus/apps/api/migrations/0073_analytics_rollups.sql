@@ -62,9 +62,24 @@ CREATE TABLE IF NOT EXISTS analytics_session (
 CREATE INDEX IF NOT EXISTS idx_analytics_session_org_started ON analytics_session (organization_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_analytics_session_ws_started ON analytics_session (workspace_id, started_at);
 
-CREATE TABLE IF NOT EXISTS analytics_pages (
-    page_path VARCHAR(512) PRIMARY KEY,
-    page_title VARCHAR(512) NOT NULL DEFAULT ''
+-- The last title seen for a page, per organization and workspace like the hourly counts:
+-- a title any user sends shows only in the scope it was recorded in. (An earlier draft
+-- of this migration keyed titles by path alone in analytics_pages: dropped, titles are
+-- seen again with the next page views.)
+DROP TABLE IF EXISTS analytics_pages;
+CREATE TABLE IF NOT EXISTS analytics_page_titles (
+    organization_id VARCHAR NOT NULL DEFAULT '',
+    workspace_id VARCHAR NOT NULL DEFAULT '',
+    page_path VARCHAR(512) NOT NULL,
+    page_title VARCHAR(512) NOT NULL DEFAULT '',
+    PRIMARY KEY (organization_id, workspace_id, page_path)
+);
+
+-- The removed analytics app's events a legacy replay counted (analytics_events.event_key):
+-- every one of them goes to the rollups whatever its age, and those past the 45 days of
+-- raw rows have no other trace, so a second replay (before the files are deleted) skips them.
+CREATE TABLE IF NOT EXISTS analytics_legacy_replayed (
+    event_key VARCHAR(64) PRIMARY KEY
 );
 
 CREATE TABLE IF NOT EXISTS analytics_jobs (

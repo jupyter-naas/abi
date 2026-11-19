@@ -1,12 +1,16 @@
 """The rollups' background work: the log's consumer, the one-time backfill, the purge.
 
-A real EventService on SQLite holds the log; the rollups are SQLite tables.
+A real EventService on SQLite holds the log; the rollups are SQLite tables, and
+PostgreSQL ones too when a database is given (it is emptied):
+ANALYTICS_TEST_POSTGRES_DSN=postgresql+asyncpg://user:pass@host:5432/db
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import os
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -15,7 +19,11 @@ from naas_abi.apps.nexus.apps.api.app.core.database import Base
 from naas_abi.apps.nexus.apps.api.app.models import (
     AnalyticsEventModel,
     AnalyticsHourlyModel,
+    AnalyticsPageModel,
     AnalyticsSessionModel,
+    ConversationModel,
+    MessageModel,
+    MessageToolModel,
     UserModel,
     WorkspaceModel,
 )
@@ -34,6 +42,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 NOW = datetime.now(UTC).replace(microsecond=0)
+POSTGRES_DSN = os.environ.get("ANALYTICS_TEST_POSTGRES_DSN")
 
 
 def _iso(moment: datetime) -> str:
@@ -69,28 +78,54 @@ def publish(events: EventService, data: dict, *, organization: str | None = None
 
 
 class FakeLegacy:
-    """The removed app's object-storage files: its raw events, and whether they went."""
+    """The removed app's object-storage files: its raw events by file name (None for
+    an unreadable one), which were deleted and which set aside."""
 
-    def __init__(self, found: list[dict], *, readable: bool = True) -> None:
-        self.found = found
+    def __init__(self, found: list[dict | None], *, readable: bool = True) -> None:
+        self.files: dict[str, dict | None] = {f"f{i}.json": e for i, e in enumerate(found)}
         self.readable = readable
         self.deleted = 0
+        self.gone: list[str] = []
+        self.aside: list[str] = []
 
-    def list_events(self) -> list[dict]:
+    @property
+    def found(self) -> list[dict | None]:
+        return list(self.files.values())
+
+    def add(self, name: str, event: dict | None) -> None:
+        self.files[name] = event
+
+    def list_events(self) -> list[tuple[str, dict | None]]:
         if not self.readable:
             raise ConnectionError("object storage unreachable")
-        return [dict(e) for e in self.found]
+        return [(n, dict(e) if e is not None else None) for n, e in self.files.items()]
 
-    def delete_all(self) -> int:
+    def delete_replayed(self, names: list[str]) -> int:
         self.deleted += 1
-        gone, self.found = len(self.found), []
-        return gone
+        for name in names:
+            self.files.pop(name, None)
+        self.gone += names
+        return len(names)
+
+    def set_aside(self, names: list[str]) -> int:
+        for name in names:
+            self.files.pop(name, None)
+        self.aside += names
+        return len(names)
 
 
-@pytest_asyncio.fixture
-async def sessions(tmp_path):
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'nexus.sqlite'}")
+@pytest_asyncio.fixture(params=["sqlite", "postgresql"])
+async def sessions(request, tmp_path):
+    if request.param == "postgresql" and not POSTGRES_DSN:
+        pytest.skip("ANALYTICS_TEST_POSTGRES_DSN is not set")
+    url = (
+        f"sqlite+aiosqlite:///{tmp_path / 'nexus.sqlite'}"
+        if request.param == "sqlite"
+        else POSTGRES_DSN
+    )
+    engine = create_async_engine(url)
     async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as db:
@@ -142,37 +177,51 @@ async def test_a_batch_whose_write_fails_is_read_again(sessions, events, monkeyp
     async def broken(self, payloads):
         raise RuntimeError("database down")
 
+    async def silent() -> bool:
+        return False
+
     monkeypatch.setattr(jobs_module.AnalyticsRollups, "apply", broken)
-    with pytest.raises(RuntimeError):
+    monkeypatch.setattr(jobs, "_database_answers", silent)
+    with pytest.raises(jobs_module.Unavailable):
         await jobs.drain()
     monkeypatch.setattr(jobs_module.AnalyticsRollups, "apply", original)
+    monkeypatch.undo()
     assert await jobs.drain() == 2
     assert await _hourly_total(sessions) == 2
 
 
 @pytest.mark.asyncio
-async def test_the_backfill_replays_45_days_of_the_log_and_the_legacy_events_once(
+async def test_the_backfill_replays_45_days_of_the_log_and_every_legacy_event_once(
     sessions, events
 ) -> None:
     # Two consumers' worth: what was logged before the rollups existed.
     publish(events, payload("logged"))
+    publish(events, payload("logged-too-old", at=NOW - timedelta(days=50)))
     legacy = [
         {**payload("legacy"), "user_email": "alice@example.com"},
-        payload("too-old", at=NOW - timedelta(days=50)),
+        payload("legacy-old", at=NOW - timedelta(days=60)),
+        payload("legacy-ancient", at=NOW - timedelta(days=800)),
         {**payload("logged")},  # also in the log: counted once
         {"not": "an event"},
     ]
     jobs = AnalyticsJobs(sessions, events=events, legacy=FakeLegacy(legacy))
-    assert await jobs.backfill() == 2
+    assert await jobs.backfill() == 4
     assert await jobs.backfill() is None  # recorded as done
 
     async with sessions() as db:
         rows = (await db.execute(select(AnalyticsEventModel))).scalars().all()
+    # Raw rows within retention only; past it the legacy events are in the rollups.
     assert sorted(json.loads(r.payload)["event_id"] for r in rows) == ["legacy", "logged"]
     assert all("alice@example.com" not in r.payload for r in rows)
-    # The consumer then reads the same log: nothing is counted twice.
-    assert await jobs.drain() == 1
-    assert await _hourly_total(sessions) == 2
+    assert await _hourly_total(sessions) == 4
+    async with sessions() as db:
+        hours = (await db.execute(select(AnalyticsHourlyModel.bucket_hour))).scalars().all()
+    oldest = min(hours)
+    assert oldest < (NOW - timedelta(days=799)).replace(tzinfo=None)
+    # The consumer then reads the same log: nothing is counted twice (the log's own
+    # event past retention is not counted: the log is replayed for 45 days).
+    assert await jobs.drain() == 2
+    assert await _hourly_total(sessions) == 4
 
 
 @pytest.mark.asyncio
@@ -263,6 +312,10 @@ async def test_a_failed_batch_is_handed_back_off_the_event_loop(
     def slow_rewind(records) -> None:
         clock.sleep(0.5)
 
+    async def silent() -> bool:
+        return False
+
+    monkeypatch.setattr(jobs, "_database_answers", silent)
     monkeypatch.setattr(jobs_module.AnalyticsRollups, "apply", broken)
     monkeypatch.setattr(jobs, "_rewind", slow_rewind)
     ticked = []
@@ -272,7 +325,7 @@ async def test_a_failed_batch_is_handed_back_off_the_event_loop(
         ticked.append(clock.monotonic())
 
     ticker = asyncio.create_task(tick())
-    with pytest.raises(RuntimeError):
+    with pytest.raises(jobs_module.Unavailable):
         await jobs.drain()
     done = clock.monotonic()
     await ticker
@@ -392,3 +445,269 @@ async def test_without_object_storage_there_is_nothing_to_clean(sessions, events
     jobs = AnalyticsJobs(sessions, events=events)
     assert await jobs.backfill() == 0
     assert await jobs.clean_legacy_storage() is None
+
+
+# -- poison events --------------------------------------------------------------
+
+
+async def _event_ids(sessions) -> list[str]:
+    async with sessions() as db:
+        rows = (await db.execute(select(AnalyticsEventModel))).scalars().all()
+    return sorted(json.loads(r.payload)["event_id"] for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_one_malformed_event_never_stalls_the_consumer(sessions, events) -> None:
+    """The audit's repro: an offset timestamp whose UTC value overflows (accepted by
+    the log), then a NUL in a text column (refused by PostgreSQL), then valid events:
+    one drain applies the valid ones, the cursor moves on, the heal works."""
+    jobs = AnalyticsJobs(sessions, events=events)
+    bad = payload("evil")
+    bad["timestamp"] = "9999-12-31T23:30:00-05:00"
+    publish(events, bad)
+    nul = payload("nul")
+    nul["event_name"] = "page\u0000viewed"
+    nul["page_path"] = "/workspace/ws-1/\u0000home"
+    publish(events, nul)
+    for i in range(3):
+        publish(events, payload(f"good-{i}", at=NOW - timedelta(minutes=i)))
+
+    assert await jobs.drain() == 5
+    assert await _event_ids(sessions) == ["good-0", "good-1", "good-2", "nul"]
+    async with sessions() as db:
+        paths = (await db.execute(select(AnalyticsEventModel.page_path))).scalars().all()
+    assert "/workspace/ws-1/home" in paths and all("\x00" not in p for p in paths)
+    assert await jobs.drain() == 0  # nothing left behind the cursor
+    assert await jobs.heal() == 0  # replays the same events without failing
+
+
+@pytest.mark.asyncio
+async def test_an_event_the_rollups_refuse_is_skipped_and_the_rest_applied(
+    sessions, events, monkeypatch, caplog
+) -> None:
+    """Whatever makes one event fail while the database answers: the batch is applied
+    one event at a time, that event is skipped (and logged), the others are kept, in
+    the consumer, the heal and the backfill alike."""
+    monkeypatch.setattr(jobs_module, "BATCH", 3)
+    original = jobs_module.AnalyticsSecondaryAdapterPostgresEvents.apply_events
+
+    async def refuse_poison(self, recorded, *, not_before):
+        if any(r.event_id == "poison" for r in recorded):
+            raise ValueError("the rollups refuse it")
+        return await original(self, recorded, not_before=not_before)
+
+    monkeypatch.setattr(
+        jobs_module.AnalyticsSecondaryAdapterPostgresEvents, "apply_events", refuse_poison
+    )
+    jobs = AnalyticsJobs(sessions, events=events, legacy=FakeLegacy([]))
+    publish(events, payload("a"))
+    publish(events, payload("poison"))
+    publish(events, payload("b"))
+    publish(events, payload("c"))
+    with caplog.at_level(logging.WARNING, logger=jobs_module.logger.name):
+        assert await jobs.drain() == 4
+    assert await _event_ids(sessions) == ["a", "b", "c"]
+    assert "1 event(s) skipped, the rollups refuse them: 'poison'" in caplog.text
+    assert jobs.skipped_events == 1
+    assert await jobs.heal() == 0
+    assert await jobs.backfill() == 0  # done, not stuck on the same event
+    async with sessions() as db:
+        port = jobs_module.AnalyticsSecondaryAdapterPostgresEvents(db)
+        assert await port.job_last_run(BACKFILL_JOB) is not None
+
+
+@pytest.mark.asyncio
+async def test_events_past_tomorrow_are_not_applied(sessions, events) -> None:
+    jobs = AnalyticsJobs(sessions, events=events)
+    publish(events, payload("future", at=NOW + timedelta(days=2)))
+    publish(events, payload("soon", at=NOW + timedelta(hours=2)))
+    assert await jobs.drain() == 2
+    assert await _event_ids(sessions) == ["soon"]
+
+
+@pytest.mark.asyncio
+async def test_a_step_that_keeps_failing_keeps_being_logged(sessions, monkeypatch, caplog) -> None:
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(jobs_module.time, "monotonic", lambda: clock["t"])
+    jobs = AnalyticsJobs(sessions)
+
+    async def broken() -> None:
+        raise RuntimeError("down")
+
+    async def works() -> None:
+        return None
+
+    with caplog.at_level(logging.INFO, logger=jobs_module.logger.name):
+        for _ in range(3):  # every 5 s: said once
+            await jobs._step("rollups", broken)
+            clock["t"] += 5
+        assert caplog.text.count("rollups failed") == 1
+        assert "still failing" not in caplog.text
+        clock["t"] += jobs_module.FAILING_LOG_SECONDS
+        await jobs._step("rollups", broken)
+        assert "rollups still failing (4 times in a row)" in caplog.text
+        await jobs._step("rollups", works)
+        assert "rollups works again" in caplog.text
+
+
+# -- legacy history ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_nothing_is_deleted_that_was_not_replayed(sessions, events) -> None:
+    """Every legacy event goes to the rollups whatever its age before its file is
+    deleted; one that cannot be replayed is set aside, never deleted; replaying twice
+    (backfill, then cleanup) counts each once; files an old process wrote after the
+    backfill are replayed by the cleanup before it deletes them."""
+    clock = {"now": NOW}
+    old = payload("old", at=NOW - timedelta(days=60))
+    legacy = FakeLegacy([payload("recent"), old, None, {"not": "an event"}])
+    jobs = AnalyticsJobs(sessions, events=events, legacy=legacy, now=lambda: clock["now"])
+    assert await jobs.backfill() == 2
+    assert await _hourly_total(sessions) == 2
+    assert await _event_ids(sessions) == ["recent"]  # "old" is past the raw retention
+
+    # A rolling deploy's old process writes one more event after the backfill.
+    legacy.add("late.json", payload("late", at=NOW + timedelta(minutes=5)))
+    clock["now"] = NOW + jobs_module.LEGACY_CLEANUP_DELAY
+    assert await jobs.clean_legacy_storage() == 3
+    assert sorted(legacy.gone) == ["f0.json", "f1.json", "late.json"]
+    assert sorted(legacy.aside) == ["f2.json", "f3.json"]
+    assert legacy.files == {}
+    assert await _hourly_total(sessions) == 3  # old and recent once, late too
+    assert await _event_ids(sessions) == ["late", "recent"]
+
+
+@pytest.mark.asyncio
+async def test_a_legacy_event_refused_by_the_rollups_is_set_aside(
+    sessions, events, monkeypatch
+) -> None:
+    original = jobs_module.AnalyticsSecondaryAdapterPostgresEvents.apply_legacy_events
+
+    async def refuse_poison(self, recorded, *, raw_since):
+        if any(r.event_id == "poison" for r in recorded):
+            raise ValueError("the rollups refuse it")
+        return await original(self, recorded, raw_since=raw_since)
+
+    monkeypatch.setattr(
+        jobs_module.AnalyticsSecondaryAdapterPostgresEvents,
+        "apply_legacy_events",
+        refuse_poison,
+    )
+    clock = {"now": NOW}
+    legacy = FakeLegacy([payload("a"), payload("poison"), payload("b")])
+    jobs = AnalyticsJobs(sessions, events=events, legacy=legacy, now=lambda: clock["now"])
+    assert await jobs.backfill() == 2
+    clock["now"] = NOW + jobs_module.LEGACY_CLEANUP_DELAY
+    assert await jobs.clean_legacy_storage() == 2
+    assert legacy.aside == ["f1.json"]
+    assert sorted(legacy.gone) == ["f0.json", "f2.json"]
+
+
+@pytest.mark.asyncio
+async def test_a_database_outage_skips_nothing_and_deletes_nothing(
+    sessions, events, monkeypatch
+) -> None:
+    clock = {"now": NOW}
+    legacy = FakeLegacy([payload("a")])
+    jobs = AnalyticsJobs(sessions, events=events, legacy=legacy, now=lambda: clock["now"])
+    assert await jobs.backfill() == 1
+    clock["now"] = NOW + jobs_module.LEGACY_CLEANUP_DELAY
+    legacy.add("b.json", payload("b"))
+
+    async def broken(self, payloads):
+        raise RuntimeError("database down")
+
+    async def silent() -> bool:
+        return False
+
+    monkeypatch.setattr(jobs_module.AnalyticsRollups, "apply_legacy", broken)
+    monkeypatch.setattr(jobs, "_database_answers", silent)
+    with pytest.raises(jobs_module.Unavailable):
+        await jobs.clean_legacy_storage()
+    assert legacy.deleted == 0 and legacy.aside == []
+    async with sessions() as db:
+        port = jobs_module.AnalyticsSecondaryAdapterPostgresEvents(db)
+        assert await port.job_last_run(jobs_module.LEGACY_CLEANUP_JOB) is None
+
+
+# -- message facts written by a rolling deploy's old processes ----------------------
+
+
+@pytest.mark.asyncio
+async def test_messages_written_after_the_first_pass_get_their_facts(sessions) -> None:
+    clock = {"now": NOW}
+    jobs = AnalyticsJobs(sessions, now=lambda: clock["now"])
+    assert await jobs.index_messages() == 0
+    assert await jobs.recheck_messages() is None  # not due yet
+
+    # An old process (no facts kept) writes a message after the first pass.
+    later = (NOW + timedelta(minutes=10)).replace(tzinfo=None)
+    async with sessions() as db:
+        db.add(
+            ConversationModel(
+                id="conv-1",
+                workspace_id="ws-1",
+                user_id="alice",
+                title="T",
+                agent="aia",
+                created_at=later,
+                updated_at=later,
+            )
+        )
+        await db.flush()
+        db.add(
+            MessageModel(
+                id="m-1",
+                conversation_id="conv-1",
+                role="assistant",
+                content="hi",
+                created_at=later,
+                metadata_=json.dumps({"steps": [{"tool_name": "search"}], "feedback": "like"}),
+            )
+        )
+        await db.commit()
+
+    clock["now"] = NOW + jobs_module.MESSAGE_FACTS_RECHECK_DELAY
+    assert await jobs.recheck_messages() == 1
+    assert await jobs.recheck_messages() is None  # once
+    async with sessions() as db:
+        tools = (await db.execute(select(MessageToolModel.tool_name))).scalars().all()
+        feedback = (await db.execute(select(MessageModel.feedback))).scalars().all()
+    assert tools == ["search"] and feedback == ["like"]
+
+
+# -- page titles ------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_page_title_is_kept_per_organization_and_workspace(sessions) -> None:
+    async with sessions() as db:
+        from naas_abi.apps.nexus.apps.api.app.services.analytics.rollups import AnalyticsRollups
+
+        rollups = AnalyticsRollups(
+            jobs_module.AnalyticsSecondaryAdapterPostgresEvents(db), now=lambda: NOW
+        )
+        mine = {**payload("mine"), "page_title": "Home", "organization_id": "org-a"}
+        spoof = {
+            **payload("spoof"),
+            "page_title": "Session expired, sign in at evil.example",
+            "workspace_id": "ws-other",
+            "organization_id": "org-b",
+            "user_id": "mallory",
+        }
+        await rollups.apply([mine, spoof])
+        await db.commit()
+        rows = (
+            await db.execute(
+                select(
+                    AnalyticsPageModel.organization_id,
+                    AnalyticsPageModel.workspace_id,
+                    AnalyticsPageModel.page_title,
+                )
+            )
+        ).all()
+    assert sorted(rows) == [
+        ("org-a", "ws-1", "Home"),
+        ("org-b", "ws-other", "Session expired, sign in at evil.example"),
+    ]

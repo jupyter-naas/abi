@@ -64,7 +64,13 @@ the removal of the app and its object-storage files #1536.
    member of it (IAM `GetWorkspace`, cached a minute) and stamps `organization_id` from
    the workspace's IAM container. It is written as `api` once the caller is
    authorized: a member's own rights never reach the log. `AnalyticsEventRecorded` gains
-   the projected `organization_id`.
+   the projected `organization_id`. The event is client data: its `timestamp` must be
+   ISO-8601 within [now − 45 days, now + 1 day] (422 otherwise: the raw events'
+   retention, and a client clock a day ahead at most), and control characters (NUL
+   included, which PostgreSQL refuses in text) are removed from every string. No
+   per-user rate limit: the repository's limiter (`services/rate_limit.py`) writes a
+   database row per attempt, which would double the database writes of the busiest
+   route and put them back on a path the log keeps off the database.
 
 6. **Rollups in the Nexus database** (`0073_analytics_rollups.sql`), on PostgreSQL in
    production and SQLite in `abi dev`, through one SQLAlchemy adapter pair
@@ -79,7 +85,10 @@ the removal of the app and its object-storage files #1536.
      figures that count users, workspaces and totals;
    - `analytics_session(session_id, workspace_id, organization_id, user_id, started_at, ended_at, page_views, events, device, browser)`,
      one row per session and workspace so each scope counts its part;
-   - `analytics_pages` (last title per path), `analytics_jobs` (job runs).
+   - `analytics_page_titles(organization_id, workspace_id, page_path, page_title)`: the
+     last title seen, keyed like the hourly counts, so a title any user sends shows only
+     in the scope it was recorded in; `analytics_jobs` (job runs);
+     `analytics_legacy_replayed` (the legacy events a replay counted, see 9).
 
    An event is counted only when its raw row is new (`INSERT ... ON CONFLICT DO NOTHING
    RETURNING`), so applying is idempotent. One consumer cursor of the EventService log
@@ -92,6 +101,15 @@ the removal of the app and its object-storage files #1536.
    hours, e.g. the Nexus database down that long). A deploy with no event log applies
    each ingest directly. An ingested event is at most 16 KB (413 beyond; checked once
    parsed, the API's 64 MiB body limit bounds the parsing).
+
+   **No event can stall the consumer.** Reading is defensive (an unparseable or
+   overflowing timestamp makes the event unreadable, skipped; control characters are
+   removed from what is stored; nothing more than a day ahead is applied). And a batch
+   that fails while the database answers (`SELECT 1`) is applied again event by event,
+   each alone retried once: the events that still fail are skipped and logged, the
+   others applied, and the cursor moves on. Only when the database does not answer is
+   the batch handed out again. The heal and the backfill apply the same way. A step
+   that keeps failing is logged when it starts, then every ten minutes with the count.
 
 7. **Reads** are one `GROUP BY` per figure over the rollups with
    `workspace_id IN (:scope) AND user_id IN (:members) AND bucket_hour/started_at in the period`
@@ -107,14 +125,20 @@ the removal of the app and its object-storage files #1536.
    `0073_message_facts.sql`); nothing parses `metadata` at read time.
 
 9. **Backfill and retention.** Once (`analytics_jobs` `backfill_v1`, claimed for an
-   hour so one process runs it): the log's and the legacy object-storage events of the
-   last 45 days are applied, the organization stamped from the workspace; then the
-   messages of the last 45 days get their facts (`message_facts_v1`, also claimed). Both are
-   asked at every upkeep (five minutes) until recorded as done, so a failed run is retried
-   once its claim lapses, without waiting for a restart. Daily, across
-   processes (`claim_job`): raw `analytics_events` older than 45 days are deleted; the
-   rollups stay. Thirty minutes after the backfill, once (`legacy_storage_cleanup_v1`,
-   claimed), the removed app's object-storage files are deleted (#1536, see Consequences).
+   hour so one process runs it): every legacy object-storage event, whatever its age,
+   then the log's last 45 days are applied, the organization stamped from the workspace.
+   A legacy event older than 45 days gets no raw row, only the rollups (kept forever);
+   `analytics_legacy_replayed` records each legacy event a replay counted, so replaying
+   them again counts none twice (within 45 days the raw row tells, as for the log). Then
+   the messages of the last 45 days get their facts (`message_facts_v1`, also claimed),
+   and thirty minutes after that run the messages written since it started get them again
+   (`message_facts_v2`: a rolling deploy's old processes write messages without their
+   facts until they stop). Each is asked at every upkeep (five minutes) until recorded
+   as done, so a failed run is retried once its claim lapses, without waiting for a
+   restart. Daily, across processes (`claim_job`): raw `analytics_events` older than 45
+   days are deleted; the rollups stay. Thirty minutes after the backfill, once
+   (`legacy_storage_cleanup_v1`, claimed), the legacy events are replayed again and the
+   removed app's object-storage files are deleted (#1536, see Consequences).
 
 ## Consequences
 
@@ -136,10 +160,20 @@ the removal of the app and its object-storage files #1536.
   IAM refuses a catalog dropping an action a policy may still name. Thirty minutes after
   the backfill (so that a rolling deploy's old processes have stopped rewriting the
   aggregates), one process (claimed, `legacy_storage_cleanup_v1`) deletes the app's files
-  under `naas_abi/nexus/analytics/` (`analytics/legacy_storage.py`): the aggregates,
-  the `ref-*.json` directories, `metadata.json` and the raw `events/*`. The backfill
-  reads those events first and is not recorded as done if the storage cannot be read,
-  so nothing is deleted that was not replayed.
+  under `naas_abi/nexus/analytics/` (`analytics/legacy_storage.py`). It first replays
+  every raw `events/*` file again (idempotent: what old processes wrote since the
+  backfill is counted too), then deletes the aggregates, the `ref-*.json` directories,
+  `metadata.json` and each raw event file that was replayed. A file that could not be
+  (unreadable, not an event, refused by the rollups) is never deleted: it is moved to
+  `naas_abi/nexus/analytics/unreadable/` and logged (left in place if it cannot be
+  copied). If the storage cannot be read or the database does not answer, the replay
+  raises and nothing is deleted (the cleanup is retried an hour later). So nothing is
+  deleted that was not replayed, whatever its age (`jobs_test.py`,
+  `test_nothing_is_deleted_that_was_not_replayed`).
+- Migrations re-run on every start. The runner skips an `ALTER TABLE ... ADD COLUMN`
+  whose columns all exist (PostgreSQL takes the table's ACCESS EXCLUSIVE lock before
+  it checks `IF NOT EXISTS`), so `0073_message_facts.sql` locks `messages` once, on
+  the upgrade, and never again at a start.
 - The EventService log stays the source of truth and keeps its own retention (the
   PostgreSQL adapter archives after 7 days); the 45-day window is the Nexus raw table's.
   The backfill cannot replay what the log already archived.

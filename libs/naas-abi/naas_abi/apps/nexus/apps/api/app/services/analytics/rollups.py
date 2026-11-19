@@ -4,15 +4,23 @@ The tracker's events are recorded once in the EventService log
 (``AnalyticsEventRecorded``). One consumer cursor (``CONSUMER_ID``) reads each new
 event and hands it here: its raw row (kept ``RETENTION_DAYS``), its hourly count
 and its session are written by ``AnalyticsEventPort.apply_events``, which skips
-an event it has already applied. The backfill replays, once, what the log and
-the legacy object-storage events hold within the retention window; the purge
-deletes, daily, the raw rows past it (the rollups stay).
+an event it has already applied. The backfill replays, once, what the log holds
+within the retention window and every legacy object-storage event whatever its age
+(``apply_legacy``: rollups only for those past retention); the purge deletes, daily,
+the raw rows past it (the rollups stay).
+
+Events are client data: their strings lose control characters (PostgreSQL refuses a
+NUL in text) and their timestamps are read defensively (``parse_timestamp``), so no
+event can make a whole batch fail. The ingest accepts timestamps within
+[now - ``RETENTION_DAYS``, now + ``FUTURE_TOLERANCE``] (``event_time_accepted``), and
+nothing later than ``FUTURE_TOLERANCE`` from now is applied.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterable, Awaitable, Callable, Iterable
+import re
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -23,6 +31,8 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.port import (
 )
 
 RETENTION_DAYS = 45
+# How far ahead of the server's clock an event may be (a client's clock drift).
+FUTURE_TOLERANCE = timedelta(days=1)
 # The single cursor of the log's analytics events, shared by every API process:
 # each batch it reads is one process's alone.
 CONSUMER_ID = "nexus.analytics.rollups"
@@ -31,24 +41,56 @@ PURGE_JOB = "purge_raw_events"
 PURGE_EVERY_SECONDS = 24 * 3600.0
 
 
+# C0 controls (NUL included), DEL and lone UTF-16 surrogates: none is wanted in an
+# analytics string, PostgreSQL refuses a NUL in text and UTF-8 has no surrogate.
+_CONTROL = re.compile(r"[\x00-\x1f\x7f\ud800-\udfff]")
+
+
 def parse_timestamp(value: Any) -> datetime | None:
-    """A tracker timestamp (ISO-8601, ``Z`` or an offset) as naive UTC; None if unreadable."""
+    """A tracker timestamp (ISO-8601, ``Z`` or an offset) as naive UTC; None if unreadable
+    (including one whose UTC value falls outside the years 1-9999)."""
     if isinstance(value, datetime):
         moment = value
     elif isinstance(value, str) and value:
         try:
             moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
+        except (ValueError, OverflowError):
             return None
     else:
         return None
     if moment.tzinfo is not None:
-        moment = moment.astimezone(UTC).replace(tzinfo=None)
+        try:
+            moment = moment.astimezone(UTC).replace(tzinfo=None)
+        except (ValueError, OverflowError, OSError):
+            return None
     return moment
 
 
+def event_time_accepted(moment: datetime | None, now: datetime) -> bool:
+    """Whether the ingest takes an event of ``moment`` (naive UTC) at ``now``: within
+    the raw events' retention and at most ``FUTURE_TOLERANCE`` ahead."""
+    if moment is None:
+        return False
+    current = now.astimezone(UTC).replace(tzinfo=None) if now.tzinfo else now
+    return current - timedelta(days=RETENTION_DAYS) <= moment <= current + FUTURE_TOLERANCE
+
+
+def strip_control(value: Any) -> Any:
+    """``value`` with the control characters removed from every string in it (dict
+    keys, lists and nested values included)."""
+    if isinstance(value, str):
+        return _CONTROL.sub("", value)
+    if isinstance(value, dict):
+        return {strip_control(k): strip_control(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [strip_control(v) for v in value]
+    return value
+
+
 def _text(value: Any) -> str | None:
-    return value if isinstance(value, str) and value else None
+    if not isinstance(value, str):
+        return None
+    return _CONTROL.sub("", value) or None
 
 
 def recorded_from_payload(payload: dict[str, Any]) -> RecordedEvent | None:
@@ -74,12 +116,20 @@ def recorded_from_payload(payload: dict[str, Any]) -> RecordedEvent | None:
         page_title=_text(payload.get("page_title")),
         device=_text(payload.get("device")),
         browser=_text(payload.get("browser")),
-        payload={k: v for k, v in payload.items() if k != "user_email"},
+        payload=strip_control({k: v for k, v in payload.items() if k != "user_email"}),
     )
 
 
 def recorded_from_event(event: AnalyticsEvent) -> RecordedEvent | None:
     return recorded_from_payload(event.model_dump(exclude_none=True))
+
+
+def applicable(payload: Any, now: datetime) -> bool:
+    """Whether the rollups apply ``payload`` at ``now`` (whatever its age): an event
+    with what every event has, not later than ``FUTURE_TOLERANCE`` ahead."""
+    recorded = recorded_from_payload(payload)
+    current = now.astimezone(UTC).replace(tzinfo=None) if now.tzinfo else now
+    return recorded is not None and recorded.timestamp <= current + FUTURE_TOLERANCE
 
 
 def payload_of_log_event(record: Any) -> dict[str, Any] | None:
@@ -115,14 +165,36 @@ class AnalyticsRollups:
     def retention_cutoff(self) -> datetime:
         return self._naive_now() - timedelta(days=RETENTION_DAYS)
 
+    def _not_after(self) -> datetime:
+        return self._naive_now() + FUTURE_TOLERANCE
+
+    def _applicable(self, payloads: Iterable[dict[str, Any]]) -> list[RecordedEvent]:
+        latest = self._not_after()
+        return [
+            r
+            for r in map(recorded_from_payload, payloads)
+            if r is not None and r.timestamp <= latest
+        ]
+
     async def apply(self, payloads: Iterable[dict[str, Any]]) -> int:
         """Apply tracker payloads (new ones only, within retention): how many were new."""
-        recorded = [r for r in map(recorded_from_payload, payloads) if r is not None]
+        recorded = self._applicable(payloads)
         if not recorded:
             return 0
         return await self.events.apply_events(recorded, not_before=self.retention_cutoff())
 
+    async def apply_legacy(self, payloads: Iterable[dict[str, Any]]) -> int:
+        """Apply the removed app's events whatever their age: the raw row only for those
+        within retention, the rollups for all. Each is counted once, however many
+        times it is replayed."""
+        recorded = self._applicable(payloads)
+        if not recorded:
+            return 0
+        return await self.events.apply_legacy_events(recorded, raw_since=self.retention_cutoff())
+
     async def apply_recorded(self, events: list[RecordedEvent]) -> int:
+        latest = self._not_after()
+        events = [e for e in events if e.timestamp <= latest]
         if not events:
             return 0
         return await self.events.apply_events(events, not_before=self.retention_cutoff())
@@ -138,23 +210,6 @@ class AnalyticsRollups:
         return await self.events.claim_job(
             f"{BACKFILL_JOB}.running", now=self._naive_now(), every=3600.0
         )
-
-    async def backfill(
-        self,
-        batches: AsyncIterable[list[dict[str, Any]]],
-        *,
-        commit: Callable[[], Awaitable[Any]] | None = None,
-    ) -> int:
-        """Replay batches of tracker payloads (the log's, the legacy object-storage
-        events) into the rollups, then record the job as done. Safe to run twice:
-        events already applied are skipped."""
-        applied = 0
-        async for batch in batches:
-            applied += await self.apply(batch)
-            if commit is not None:
-                await commit()
-        await self.events.record_job_run(BACKFILL_JOB, self._naive_now())
-        return applied
 
     async def purge(self) -> int | None:
         """Once a day across processes: delete the raw events past retention. None

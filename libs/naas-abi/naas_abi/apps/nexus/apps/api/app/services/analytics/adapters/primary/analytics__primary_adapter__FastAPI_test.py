@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -19,6 +20,14 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.adapters.primary import
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_required,
 )
+
+
+def _iso(moment: datetime) -> str:
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# Within the window the ingest takes, whenever the tests run.
+RECENTLY = _iso(datetime.now(UTC) - timedelta(minutes=2))
 
 
 async def _no_db() -> AsyncIterator[None]:
@@ -102,7 +111,7 @@ async def test_a_slow_ingestion_does_not_hold_the_event_loop(team) -> None:
 
     event = {
         "event_id": "e-1",
-        "timestamp": "2026-11-18T10:28:00Z",
+        "timestamp": RECENTLY,
         "session_id": "s-1",
         "event_name": "page_view",
     }
@@ -154,7 +163,7 @@ def _ingest_as(user: str) -> tuple[TestClient, _Recording]:
 
 TRACKED = {
     "event_id": "e-1",
-    "timestamp": "2026-11-18T10:28:00Z",
+    "timestamp": RECENTLY,
     "session_id": "s-1",
     "event_name": "page_viewed",
     "page_path": "/workspace/ws-1/home",
@@ -228,10 +237,7 @@ async def test_with_no_event_log_the_ingest_feeds_the_rollups_at_once(
         id="member", email="member@example.com"
     )
     analytics._memberships.clear()
-    from datetime import UTC, datetime
-
-    # Within the 45 days kept, whenever the test runs.
-    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = RECENTLY
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         for _ in range(2):  # a retried POST is counted once
@@ -265,3 +271,58 @@ def test_with_neither_log_nor_database_the_ingest_is_unavailable(team, monkeypat
     app.dependency_overrides[get_db] = _no_db
     app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(id="member")
     assert TestClient(app).post("/api/analytics/events", json=TRACKED).status_code == 503
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        "9999-12-31T23:30:00-05:00",  # overflows once in UTC
+        "0001-01-01T00:10:00+01:00",
+        "not a date",
+        "",
+        _iso(datetime.now(UTC) - timedelta(days=46)),  # past the raw events' retention
+        _iso(datetime.now(UTC) + timedelta(days=2)),  # a client clock far ahead
+    ],
+)
+def test_a_timestamp_outside_the_window_is_refused(team, timestamp: str) -> None:
+    client, recording = _ingest_as("member")
+    response = client.post("/api/analytics/events", json={**TRACKED, "timestamp": timestamp})
+    assert response.status_code == 422
+    assert "timestamp" in response.json()["detail"]
+    assert recording.events == []
+
+
+def test_the_window_s_edges_are_accepted(team) -> None:
+    client, recording = _ingest_as("member")
+    for moment in (
+        datetime.now(UTC) - timedelta(days=44, hours=23),
+        datetime.now(UTC) + timedelta(hours=23),
+        datetime.now(UTC).astimezone(),  # with an offset
+    ):
+        body = {**TRACKED, "timestamp": moment.isoformat()}
+        assert client.post("/api/analytics/events", json=body).status_code == 200
+    assert len(recording.events) == 3
+
+
+def test_control_characters_are_removed_from_every_string(team) -> None:
+    client, recording = _ingest_as("member")
+    response = client.post(
+        "/api/analytics/events",
+        json={
+            **TRACKED,
+            "event_name": "page\u0000viewed",
+            "page_path": "/workspace/ws-1/\u0000home\n",
+            "page_title": "Ho\u0007me\u007f",
+            "browser": "Fire\u0000fox",
+            "properties": {"k\u0000ey": ["v\u0000al", {"n": "x\u001by"}]},
+        },
+    )
+    assert response.status_code == 200
+    (event, _context) = recording.events[0]
+    assert (event.event_name, event.page_path, event.page_title, event.browser) == (
+        "pageviewed",
+        "/workspace/ws-1/home",
+        "Home",
+        "Firefox",
+    )
+    assert event.properties == {"key": ["val", {"n": "xy"}]}

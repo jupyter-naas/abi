@@ -236,11 +236,20 @@ _ENTRIES: list[PlatformTableEntry] = [
             "Events and page views per hour, organization, workspace and user.",
         ),
         ("analytics_session", "Analytics sessions", "Usage sessions per workspace."),
-        ("analytics_pages", "Analytics page titles", "The latest title seen for each page."),
+        (
+            "analytics_page_titles",
+            "Analytics page titles",
+            "The latest title seen for each page, per organization and workspace.",
+        ),
         (
             "analytics_jobs",
             "Analytics jobs",
             "When the analytics backfill, message indexing and purge last ran.",
+        ),
+        (
+            "analytics_legacy_replayed",
+            "Analytics legacy replay",
+            "The removed analytics app's events already counted by the rollups.",
         ),
     ),
     *_section(

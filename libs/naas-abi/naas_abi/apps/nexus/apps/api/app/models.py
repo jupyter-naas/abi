@@ -1242,12 +1242,25 @@ class AnalyticsSessionModel(Base):
 
 
 class AnalyticsPageModel(Base):
-    """The latest title seen for a page path (the rollups key pages by path)."""
+    """The latest title seen for a page path in a workspace (keyed like the hourly
+    counts, so a title sent from one organization never shows in another's)."""
 
-    __tablename__ = "analytics_pages"
+    __tablename__ = "analytics_page_titles"
+    __table_args__ = (PrimaryKeyConstraint("organization_id", "workspace_id", "page_path"),)
 
-    page_path = Column(String(512), primary_key=True)
+    organization_id = Column(String, nullable=False, default="")
+    workspace_id = Column(String, nullable=False, default="")
+    page_path = Column(String(512), nullable=False)
     page_title = Column(String(512), nullable=False, default="")
+
+
+class AnalyticsLegacyReplayedModel(Base):
+    """The removed analytics app's events already counted by a legacy replay (by
+    ``analytics_events.event_key``): those past retention have no raw row to tell."""
+
+    __tablename__ = "analytics_legacy_replayed"
+
+    event_key = Column(String(64), primary_key=True)
 
 
 class AnalyticsJobModel(Base):

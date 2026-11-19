@@ -205,6 +205,96 @@ async def test_the_purge_deletes_raw_events_and_keeps_the_rollups(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_legacy_events_are_counted_whatever_their_age_and_once(db) -> None:
+    """Past retention a legacy event has no raw row, only rollups; replayed again
+    (the cleanup's replay) nothing is counted twice, nor an event the log counted."""
+    port = AnalyticsSecondaryAdapterPostgresEvents(db)
+    raw_since = T0 - timedelta(days=45)
+    assert await port.apply_events([event("logged")], not_before=raw_since) == 1
+    legacy = [
+        event("recent", at=T0 - timedelta(days=1)),
+        event("old", at=T0 - timedelta(days=60)),
+        event("ancient", at=LONG_AGO - timedelta(days=700)),
+        event("logged"),
+    ]
+    assert await port.apply_legacy_events(legacy, raw_since=raw_since) == 3
+    assert await port.apply_legacy_events(legacy, raw_since=raw_since) == 0
+    # A day later "recent" is still within retention, "old" long past it.
+    assert await port.apply_legacy_events(legacy, raw_since=raw_since + timedelta(days=30)) == 0
+    assert await _count(db, AnalyticsEventModel) == 2  # logged, recent
+    total = (await db.execute(select(func.sum(AnalyticsHourlyModel.count)))).scalar_one()
+    assert total == 4
+    assert (await db.execute(select(func.sum(AnalyticsUserHourlyModel.events)))).scalar_one() == 4
+
+
+@pytest.mark.asyncio
+async def test_a_page_title_shows_only_in_the_scope_it_was_recorded_in(db) -> None:
+    """A user of org-b sends a page_viewed for a path org-a's members visit, with a
+    misleading title: org-a's pages keep their own."""
+    port = AnalyticsSecondaryAdapterPostgresEvents(db)
+    await port.apply_events([event("a1", title="Home")], not_before=LONG_AGO)
+    await port.apply_events(
+        [
+            event(
+                "spoof",
+                at=T0 + timedelta(minutes=5),
+                user="eve",
+                workspace="ws-x",
+                path="/workspace/ws-1/home",
+                title="Session expired, sign in at evil.example",
+            ),
+            event(
+                "nobody",
+                at=T0 + timedelta(minutes=6),
+                user="eve",
+                workspace=None,
+                path="/workspace/ws-1/home",
+                title="Also evil",
+            ),
+        ],
+        not_before=LONG_AGO,
+    )
+    queries = AnalyticsSecondaryAdapterPostgresQueries(db)
+    pages = await queries.pages(ORG_A, TODAY)
+    assert [(p.page_path, p.page_title) for p in pages] == [("/workspace/ws-1/home", "Home")]
+    org_b = AnalyticsScope("organization", "org-b", ("ws-x",), ("eve",))
+    assert [p.page_title for p in await queries.pages(org_b, TODAY)] == [
+        "Session expired, sign in at evil.example"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_control_characters_never_reach_a_text_column(db) -> None:
+    """PostgreSQL refuses a NUL in text: an event read from the log or the legacy
+    storage with one is applied without it, not refused with its whole batch."""
+    from naas_abi.apps.nexus.apps.api.app.services.analytics.rollups import (
+        recorded_from_payload,
+    )
+
+    recorded = recorded_from_payload(
+        {
+            "event_id": "e-\u0000nul",
+            "timestamp": T0.isoformat() + "Z",
+            "session_id": "s-\u00001",
+            "event_name": "page\u0000viewed",
+            "user_id": "alice",
+            "workspace_id": "ws-1",
+            "page_path": "/workspace/ws-1/\u0000home",
+            "page_title": "Ho\u0000me",
+            "browser": "fire\u0000fox",
+            "properties": {"k\u0000": "v\u0000"},
+        }
+    )
+    assert recorded is not None
+    port = AnalyticsSecondaryAdapterPostgresEvents(db)
+    assert await port.apply_events([recorded, event("ok")], not_before=LONG_AGO) == 2
+    await db.commit()
+    rows = (await db.execute(select(AnalyticsEventModel))).scalars().all()
+    assert sorted(r.event_name for r in rows) == ["page_viewed", "pageviewed"]
+    assert all("\x00" not in r.page_path and "\\u0000" not in r.payload for r in rows)
+
+
+@pytest.mark.asyncio
 async def test_a_periodic_job_is_claimed_once_per_period(db) -> None:
     port = AnalyticsSecondaryAdapterPostgresEvents(db)
     assert await port.claim_job("purge", now=T0, every=3600)

@@ -122,8 +122,9 @@ def test_registry_lists_every_nexus_table_by_section() -> None:
         ("Analytics", "analytics_hourly"),
         ("Analytics", "analytics_user_hourly"),
         ("Analytics", "analytics_session"),
-        ("Analytics", "analytics_pages"),
+        ("Analytics", "analytics_page_titles"),
         ("Analytics", "analytics_jobs"),
+        ("Analytics", "analytics_legacy_replayed"),
         ("Search", "search_settings"),
         ("Search", "search_topics"),
     ]
@@ -181,6 +182,7 @@ _NOT_SECRET: dict[tuple[str, str], str] = {
     ("secrets", "key"): "the secret's name, not its value",
     ("ontology_icons", "target_key"): "the class or resource an icon is for",
     ("analytics_events", "event_key"): "a sha256 of the user and the tracker's event id",
+    ("analytics_legacy_replayed", "event_key"): "analytics_events.event_key, a sha256",
 }
 
 
