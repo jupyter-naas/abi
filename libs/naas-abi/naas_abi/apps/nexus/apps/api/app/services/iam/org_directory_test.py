@@ -79,3 +79,20 @@ async def test_every_directory_is_read_in_one_pass(world, monkeypatch) -> None:
         "org-1": {"ada", "ben", "cleo", "dan"},
         "org-2": {"eve"},
     }
+
+
+@pytest.mark.asyncio
+async def test_one_directory_resolves_only_the_organizations_people(world, monkeypatch) -> None:
+    """Naming a principal costs an IAM read: one org's directory names its own
+    people, never the platform's."""
+    named = []
+    original = MEMBERSHIPS._user_id
+
+    def counting(iam, principal_id):
+        named.append(principal_id)
+        return original(iam, principal_id)
+
+    monkeypatch.setattr(MEMBERSHIPS, "_user_id", counting)
+
+    assert {e.user_id for e in await MEMBERSHIPS.org_directory("org-2")} == {"eve"}
+    assert set(named) == {world.principal("eve")}

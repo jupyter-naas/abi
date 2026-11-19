@@ -285,18 +285,23 @@ class Memberships:
         """Who holds a role at ``scope``, each with the highest they hold."""
         return await self._run(lambda iam: self.members_by_scope(iam, scope).get(scope, []))
 
-    def members_by_scope(self, iam: Any, scope: str | None = None) -> dict[str, list[Member]]:
-        """Who holds a role at each container (at ``scope`` alone when given), each
-        with the highest they hold there, in one pass over the roles' attachments: the
-        one reading of who holds what, for ``members`` and the default groups
-        (``container_defaults``). A principal Nexus cannot name is left out. In IAM's
-        thread (``iam`` is the service)."""
+    def members_by_scope(
+        self, iam: Any, scope: str | None = None, *, org: str | None = None
+    ) -> dict[str, list[Member]]:
+        """Who holds a role at each container (at ``scope`` alone when given, at the
+        containers of ``org`` alone when given), each with the highest they hold
+        there, in one pass over the roles' attachments: the one reading of who holds
+        what, for ``members`` and the default groups (``container_defaults``). A
+        principal Nexus cannot name is left out. In IAM's thread (``iam`` is the
+        service)."""
         held: dict[tuple[str, str], list[str]] = {}
         since: dict[tuple[str, str], datetime] = {}
         for role, policy in _POLICY_OF.items():
             for attachment in iam.list_attachments(policy_id=policy):
                 if attachment.scope is None or (scope is not None and attachment.scope != scope):
                     continue
+                if org is not None and org_of(attachment.scope) != org:
+                    continue  # named only for the org asked for: each name is a read
                 key = (attachment.scope, attachment.principal_id)
                 held.setdefault(key, []).append(role)
                 if attachment.created_at is not None:
@@ -325,8 +330,10 @@ class Memberships:
     async def org_directory(self, org_id: str) -> list[DirectoryEntry]:
         """The organization's directory (``DirectoryEntry``): its members, then the
         people who hold a role only in one of its workspaces. Derived from the
-        attachments, in one pass."""
-        return (await self.org_directories()).get(org_id, [])
+        attachments of the organization's containers, in one pass."""
+        return await self._run(
+            lambda iam: directories_of(self.members_by_scope(iam, org=org_id)).get(org_id, [])
+        )
 
     async def org_directories(self) -> dict[str, list[DirectoryEntry]]:
         """Every organization's directory, by org id, in one pass over the roles'
