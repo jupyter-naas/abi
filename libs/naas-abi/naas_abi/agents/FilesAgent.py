@@ -31,7 +31,7 @@ API:
 Engine: naas_abi_core/services/object_storage/ (ObjectStorageService; MinIO/S3 and local adapters).
 Agent: naas_abi/agents/FilesAgent.py and naas_abi/tools/files_tools.py."""
 
-FILES_CAPABILITIES = """- Browse drives: My drive (yours only), the workspace drive (every member), and the platform and system drives when the workspace enables them in Settings > Drives.
+FILES_CAPABILITIES = """- Browse drives: My drive (yours only), the workspace drive (every member), the organization drive (its people), the platform drive when an access policy grants it, and the system drive (platform admins).
 - Folders and files: create, upload, rename or move, delete, download a folder as a zip, preview PDFs and office files, edit text files.
 - Search names in a folder, sort by name, size, or modified, page long folders.
 - I can list folders, read text files, and create or overwrite text files in the workspace drive or My drive.

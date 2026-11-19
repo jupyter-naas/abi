@@ -1,7 +1,7 @@
 -- Migration: Add system_drive_enabled flag on workspaces
-
-ALTER TABLE workspaces
-    ADD COLUMN IF NOT EXISTS system_drive_enabled BOOLEAN NOT NULL DEFAULT FALSE;
-
-COMMENT ON COLUMN workspaces.system_drive_enabled IS
-    'When TRUE, workspace owners and admins can access the full object-storage tree (system drive). Both this flag and an admin/owner role are required.';
+--
+-- Retired (#1529). The flag let a workspace's admins reach the whole object
+-- storage. System Files is IAM's alone now (nexus:*ObjectStoreFile, the platform
+-- admin's); 0073_drop_drive_flags.sql drops the column where it exists. A new
+-- database never makes it. The file stays so migration numbers keep their
+-- meaning; it has no statement.

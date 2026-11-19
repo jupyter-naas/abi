@@ -1,5 +1,6 @@
-"""The files router decides with IAM: viewers read, members write, admins reach the
-system drive, and nobody leaves their workspace's drive.
+"""The files router decides with IAM alone: viewers read, members write, nobody leaves
+their workspace's drive, Platform Files is nobody's until a policy grants it and
+System Files is the platform admin's.
 
 The real router over a real IAM (``team``: ``ws-1`` of ``org-1`` with an owner, an
 admin, a member and a viewer, plus a stranger) and a filesystem object storage.
@@ -26,6 +27,8 @@ from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__pri
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
+from naas_abi_core.engine.call_context import as_service_account
+from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (  # noqa: E501
     ObjectStorageSecondaryAdapterFS,
 )
@@ -52,18 +55,6 @@ def storage(tmp_path) -> ObjectStorageService:
     return storage
 
 
-@pytest.fixture
-def drives(monkeypatch) -> dict[str, bool]:
-    """The workspace settings ``platform_drive_enabled`` and ``system_drive_enabled``."""
-    settings = {"platform_drive_enabled": True, "system_drive_enabled": True}
-
-    async def setting(workspace_id: str, name: str) -> bool:
-        return settings[name]
-
-    monkeypatch.setattr(files_api, "workspace_setting", setting)
-    return settings
-
-
 def _client_factory(storage: ObjectStorageService):
     app = FastAPI()
     register_service_exception_handlers(app)
@@ -82,7 +73,7 @@ def _client_factory(storage: ObjectStorageService):
 
 
 @pytest.fixture
-def client(team, storage, drives):
+def client(team, storage):
     return _client_factory(storage)
 
 
@@ -157,60 +148,125 @@ async def test_no_member_of_one_workspace_reaches_another_workspaces_drive(clien
         )
 
 
+ROLES = ("viewer", "member", "admin", "owner")
+
+
+def _platform_grant(team: NexusIam, user_id: str, actions: list[str], resources: list[str]) -> None:
+    """A policy attached to ``user_id`` at the platform: what a platform admin grants."""
+    with as_service_account("engine"):
+        principal = team.iam.ensure_user(LEGACY_NEXUS_ISSUER, user_id, provider="nexus")
+        policy = team.iam.create_policy(
+            f"platform-{user_id}-{len(actions)}",
+            {
+                "version": "2026-10-13",
+                "statements": [{"effect": "Allow", "actions": actions, "resources": resources}],
+            },
+        )
+        team.iam.attach_policy(policy.id, principal.id)
+
+
+PLATFORM_FILES = {"scope": "platform_drive"}
+
+
+def platform_body(path: str) -> dict[str, str]:
+    return {"path": path, "content": "x", "scope": "platform_drive"}
+
+
 @pytest.mark.asyncio
-async def test_the_system_drive_is_an_admins_and_needs_the_workspace_setting(
-    client, drives
-) -> None:
-    system = {"scope": "system_drive", "workspace_id": "ws-1"}
-    for user in ("viewer", "member", "stranger"):
+async def test_platform_files_are_refused_to_every_role(client) -> None:
+    """No role reaches Platform Files, owners included, through any workspace."""
+    for user in (*ROLES, "stranger"):
         async with client(user) as http:
-            assert (await http.get("/api/files/", params=system)).status_code == 403, user
-            assert (await http.get(f"/api/files/{WS1}/readme.md", params=system)).status_code == 403
-    async with client("admin") as http:
-        assert (await http.get(f"/api/files/{WS1}/readme.md", params=system)).status_code == 200
-        drives["system_drive_enabled"] = False
-        off = await http.get(f"/api/files/{WS1}/readme.md", params=system)
-        assert off.status_code == 403
-        assert "not enabled" in off.json()["detail"]
-    # An admin's write to the system drive is an admin action too.
-    drives["system_drive_enabled"] = True
+            for params in (PLATFORM_FILES, {**PLATFORM_FILES, "workspace_id": "ws-1"}):
+                assert (await http.get("/api/files/", params=params)).status_code == 403, user
+                read = await http.get("/api/files/shared.md", params=params)
+                assert read.status_code == 403, user
+            assert (await http.post("/api/files/", json=platform_body("x.md"))).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_policy_at_the_platform_opens_platform_files(client, team, storage) -> None:
+    """Granted at the platform, decided at the platform: no workspace is needed."""
+    _platform_grant(
+        team,
+        "viewer",
+        ["nexus:ListPlatformFiles", "nexus:GetPlatformFile"],
+        ["abi:nexus:platform_file/*"],
+    )
+    async with client("viewer") as http:
+        listing = await http.get("/api/files/", params=PLATFORM_FILES)
+        assert listing.status_code == 200
+        assert "shared.md" in {f["name"] for f in listing.json()["files"]}
+        read = await http.get("/api/files/shared.md", params=PLATFORM_FILES)
+        assert read.json()["content"] == "# shared"
+        # Reading is not writing.
+        assert (await http.post("/api/files/", json=platform_body("x.md"))).status_code == 403
+    _platform_grant(
+        team,
+        "member",
+        ["nexus:PutPlatformFile", "nexus:DeletePlatformFile"],
+        ["abi:nexus:platform_file/platform/shared/*"],
+    )
+    async with client("member") as http:
+        assert (
+            await http.post("/api/files/", json=platform_body("shared/new.md"))
+        ).status_code == 200
+        assert storage.get_object("naas_abi/platform-drive/shared", "new.md") == b"x"
+        # Only the folder it was granted.
+        assert (await http.post("/api/files/", json=platform_body("other.md"))).status_code == 403
+        # Writing is not reading.
+        assert (await http.get("/api/files/shared.md", params=PLATFORM_FILES)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_the_platform_admin_holds_platform_and_system_files(client, team, storage) -> None:
+    team.platform_admin("root")
+    async with client("root") as http:
+        read = await http.get("/api/files/shared.md", params=PLATFORM_FILES)
+        assert read.json()["content"] == "# shared"
+        assert (await http.post("/api/files/", json=platform_body("root.md"))).status_code == 200
+        system = {"scope": "system_drive"}
+        listing = await http.get("/api/files/", params=system)
+        assert listing.status_code == 200
+        assert "naas_abi" in {f["name"] for f in listing.json()["files"]}
+        assert (await http.get(f"/api/files/{WS2}/secret.md", params=system)).json()[
+            "content"
+        ] == "# two"
+        body = {"path": f"{WS1}/sys.md", "content": "x", "scope": "system_drive"}
+        assert (await http.post("/api/files/", json=body)).status_code == 200
+    assert storage.get_object(WS1, "sys.md") == b"x"
+
+
+@pytest.mark.asyncio
+async def test_system_files_are_refused_to_workspace_owners_and_admins(client) -> None:
+    system = {"scope": "system_drive", "workspace_id": "ws-1"}
     body = {
         "path": f"{WS1}/sys.md",
         "content": "x",
         "workspace_id": "ws-1",
         "scope": "system_drive",
     }
-    async with client("member") as http:
-        assert (await http.post("/api/files/", json=body)).status_code == 403
-    async with client("admin") as http:
-        assert (await http.post("/api/files/", json=body)).status_code == 200
+    for user in (*ROLES, "stranger"):
+        async with client(user) as http:
+            assert (await http.get("/api/files/", params=system)).status_code == 403, user
+            assert (await http.get(f"/api/files/{WS1}/readme.md", params=system)).status_code == 403
+            assert (await http.post("/api/files/", json=body)).status_code == 403, user
 
 
 @pytest.mark.asyncio
-async def test_the_platform_drive_is_read_by_viewers_written_by_members_when_enabled(
-    client, drives, storage
-) -> None:
-    platform = {"scope": "platform_drive", "workspace_id": "ws-1"}
-    async with client("viewer") as http:
-        assert (await http.get("/api/files/shared.md", params=platform)).json()[
-            "content"
-        ] == "# shared"
-        body = {"path": "x.md", "content": "x", "workspace_id": "ws-1", "scope": "platform_drive"}
-        assert (await http.post("/api/files/", json=body)).status_code == 403
-    async with client("member") as http:
-        assert (await http.post("/api/files/", json=body)).status_code == 200
-        drives["platform_drive_enabled"] = False
-        off = await http.get("/api/files/shared.md", params=platform)
-        assert off.status_code == 403
-        assert "Platform drive is not enabled" in off.json()["detail"]
-    async with client("stranger") as http:
-        drives["platform_drive_enabled"] = True
-        assert (await http.get("/api/files/shared.md", params=platform)).status_code == 403
-    # The platform drive needs a workspace to be reached through.
-    async with client("member") as http:
-        assert (
-            await http.get("/api/files/shared.md", params={"scope": "platform_drive"})
-        ).status_code == 400
+async def test_the_old_system_file_actions_authorize_nothing(client, team) -> None:
+    """``ListSystemFiles`` and its siblings stay declared (a policy may still name
+    them) but open nothing: System Files is decided at the platform."""
+    team.allow(
+        "admin",
+        ["nexus:ListSystemFiles", "nexus:GetSystemFile", "nexus:PutSystemFile"],
+        ["${scope}/nexus:file/system", "${scope}/nexus:file/system/*"],
+        team.workspace("org-1", "ws-1"),
+    )
+    system = {"scope": "system_drive", "workspace_id": "ws-1"}
+    async with client("admin") as http:
+        assert (await http.get("/api/files/", params=system)).status_code == 403
+        assert (await http.get(f"/api/files/{WS1}/readme.md", params=system)).status_code == 403
 
 
 @pytest.mark.asyncio
@@ -233,7 +289,7 @@ async def test_my_drive_is_the_callers_own(client, storage) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_role_without_the_files_feature_is_refused(storage, drives) -> None:
+async def test_a_role_without_the_files_feature_is_refused(storage) -> None:
     everything = list(KNOWN_FEATURE_KEYS)
     flags = FeatureFlagsConfig(
         enabled_features=everything,

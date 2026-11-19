@@ -143,49 +143,37 @@ async def test_authorize_path_my_drive_is_the_callers_own_and_names_no_workspace
 
 
 @pytest.mark.asyncio
-async def test_authorize_path_platform_drive_requires_workspace(team) -> None:
-    with pytest.raises(HTTPException) as exc_info:
-        await files_api._authorize_path(
-            current_user=SimpleNamespace(id="member"),
-            path="shared/readme.md",
-            workspace_id=None,
-            scope="platform_drive",
-            op="read",
-        )
-
-    assert exc_info.value.status_code == 400
-
-
-@pytest.mark.asyncio
-async def test_authorize_path_platform_drive_checks_flag(team, monkeypatch) -> None:
-    enabled = {"platform_drive_enabled": True}
-
-    async def setting(workspace_id: str, name: str) -> bool:
-        assert workspace_id == "ws-1"
-        return enabled[name]
-
-    monkeypatch.setattr(files_api, "workspace_setting", setting)
-    user = SimpleNamespace(id="member")
-
+async def test_authorize_path_platform_drive_is_decided_at_the_platform(team) -> None:
+    """No workspace is needed, and none brings it: a workspace member is refused."""
+    team.platform_admin("root")
     scoped_path = await files_api._authorize_path(
-        current_user=user,
+        current_user=SimpleNamespace(id="root"),
         path="shared/readme.md",
-        workspace_id="ws-1",
+        workspace_id=None,
         scope="platform_drive",
         op="read",
     )
     assert scoped_path == "naas_abi/platform-drive/shared/readme.md"
 
-    enabled["platform_drive_enabled"] = False
-    with pytest.raises(HTTPException) as exc_info:
-        await files_api._authorize_path(
-            current_user=user,
-            path="shared/readme.md",
-            workspace_id="ws-1",
-            scope="platform_drive",
-            op="read",
-        )
-    assert exc_info.value.status_code == 403
+    for workspace_id in (None, "ws-1"):
+        with pytest.raises(HTTPException) as exc_info:
+            await files_api._authorize_path(
+                current_user=SimpleNamespace(id="owner"),
+                path="shared/readme.md",
+                workspace_id=workspace_id,
+                scope="platform_drive",
+                op="read",
+            )
+        assert exc_info.value.status_code == 403
+
+
+def test_the_files_api_reads_no_workspace_drive_flag() -> None:
+    import inspect
+
+    source = inspect.getsource(files_api)
+    assert "platform_drive_enabled" not in source
+    assert "system_drive_enabled" not in source
+    assert not hasattr(files_api, "workspace_setting")
 
 
 @pytest.mark.parametrize(

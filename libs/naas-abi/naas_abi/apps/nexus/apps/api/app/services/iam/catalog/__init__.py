@@ -46,7 +46,11 @@ SERVICE = "nexus"
 # 9: published by naas_abi (``publisher``).
 # 10: the platform's accounts (``user``: Platform Settings > Users).
 # 11: the organization drive (``ListOrgFiles``, ``GetOrgFile``, ``PutOrgFile``, ``DeleteOrgFile``).
-VERSION = 11
+# 12: Platform Files (``platform_file``: ``ListPlatformFiles``, ``GetPlatformFile``,
+#     ``PutPlatformFile``, ``DeletePlatformFile``) and System Files (``system_file``:
+#     ``ListObjectStoreFiles``, ``GetObjectStoreFile``, ``PutObjectStoreFile``,
+#     ``DeleteObjectStoreFile``), platform-level, no role's; ``*SystemFile`` deprecated.
+VERSION = 12
 
 _MODULES = (
     organizations,

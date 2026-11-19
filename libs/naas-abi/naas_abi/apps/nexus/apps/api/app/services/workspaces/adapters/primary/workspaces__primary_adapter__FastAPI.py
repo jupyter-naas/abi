@@ -159,8 +159,6 @@ class Workspace(BaseModel):
     font_family: str | None = None
     description: str | None = None
     workspace_group: str | None = None
-    platform_drive_enabled: bool = False
-    system_drive_enabled: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
     organization_name: str | None = None
@@ -213,8 +211,6 @@ class WorkspaceUpdate(BaseModel):
     font_family: str | None = None
     description: str | None = Field(default=None, max_length=200)
     workspace_group: str | None = Field(default=None, max_length=100)
-    platform_drive_enabled: bool | None = None
-    system_drive_enabled: bool | None = None
 
 
 class WorkspaceMember(BaseModel):
@@ -326,8 +322,6 @@ def _to_schema(
         font_family=record.font_family,
         description=record.description,
         workspace_group=record.workspace_group,
-        platform_drive_enabled=record.platform_drive_enabled,
-        system_drive_enabled=record.system_drive_enabled,
         created_at=record.created_at,
         updated_at=record.updated_at,
         organization_name=record.organization_name,
@@ -532,12 +526,6 @@ async def delete_workspace(
     return {"status": "deleted"}
 
 
-# Drives reach beyond the workspace: the system drive is the whole object store
-# and the platform drive is shared by every workspace. Anyone can create and own
-# a workspace, so only a platform superadmin may flip these.
-_DRIVE_FLAGS = frozenset({"platform_drive_enabled", "system_drive_enabled"})
-
-
 @router.patch(
     "/{workspace_id}",
     dependencies=[guard("UpdateWorkspace", denied="Only admins can update workspace settings")],
@@ -549,12 +537,9 @@ async def update_workspace(
     service: WorkspaceService = Depends(get_workspace_service),
     org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
+    # The drive flags of earlier versions are gone: Platform Files and System Files are
+    # IAM's (``GET /api/files/views``). An older client sending them is ignored.
     changes = updates.model_dump(exclude_unset=True)
-    if changes.keys() & _DRIVE_FLAGS and not current_user.is_superadmin:
-        raise HTTPException(
-            status_code=403,
-            detail="Only a platform superadmin can enable or disable workspace drives",
-        )
     role = await service.get_workspace_role(current_user.id, workspace_id)
 
     if "owner_id" in changes:
