@@ -1,14 +1,14 @@
 # ABI infrastructure
 
-Workspace Settings → Infrastructure maps the shared ABI Python codebase, one page
-per view: **Layers** (`/settings/infrastructure/layers`, the 3D map) and
-**Diagrams** (`/settings/infrastructure/diagrams`). `/settings/infrastructure`
-redirects to Layers. It inherits the existing workspace authentication and
-`settings.workspace` feature guard. It does not query workspace secrets, send
-source to a model, or represent a workspace's actual deployment.
+Console → System maps the shared ABI Python codebase, one page per view:
+**Layers** (`/settings/system/layers`, the 3D map) and **Diagrams**
+(`/settings/system/diagrams`). The code is the platform's, not a workspace's, so
+both pages need `nexus:ReadSystem`, like the rest of System. The former workspace
+URLs (`/workspace/<id>/settings/infrastructure[/layers|/diagrams]`) redirect here.
+It does not query secrets, send source to a model, or represent the actual deployment.
 
-- The settings list stays in the feature column; Architecture and Inspector are
-  the page's right-hand column (a disclosure on mobile).
+- The Console's list is the left column; Architecture and Inspector are the
+  page's right-hand column (a disclosure on mobile).
 - File exports the snapshot; View contains fit, zoom, decomposition and dependency controls.
 - Click a layer (in the map or the Architecture list) to isolate it and animate to a fitted,
   face-on view. Clicking it again restores framing after orbiting.
@@ -58,7 +58,7 @@ From Nexus:
 python3 -m unittest discover -s scripts -p '*_test.py'
 cd apps/web
 pnpm typecheck
-pnpm dlx vitest@3.2.4 run 'src/app/workspace/[workspaceId]/settings/infrastructure'
+pnpm dlx vitest@3.2.4 run src/app/settings/system/infrastructure
 ```
 
 Camera tests check that both plane dimensions fit across portrait/landscape
@@ -67,7 +67,7 @@ metrics, and exclusion of inferred, unresolved and self dependencies.
 
 ## Layers and Diagrams
 
-Open either from Settings → Infrastructure. The selection (layer, component) is
+Open either from Console → System. The selection (layer, component) is
 kept when moving between them. The diagram always shows
 all components and directed dependencies; selecting a component highlights its
 neighborhood without hiding cross-layer connections. Drag to pan and scroll to

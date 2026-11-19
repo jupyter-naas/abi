@@ -22,7 +22,6 @@ export function InfrastructureMenu({ view }: { view: InfrastructureView }) {
     const a = document.createElement('a'); a.href = url; a.download = 'abi-architecture.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   return <div className="infrastructure-menu" ref={root}>
-    <span className="infrastructure-menu-title">Infrastructure</span>
     <details onToggle={e => { if (e.currentTarget.open) root.current?.querySelectorAll('details').forEach(d => { if (d !== e.currentTarget) d.open = false; }); }}><summary>File</summary><div className="infrastructure-menu-popup"><button onClick={() => run(download)}>Export architecture…</button></div></details>
     <details onToggle={e => { if (e.currentTarget.open) root.current?.querySelectorAll('details').forEach(d => { if (d !== e.currentTarget) d.open = false; }); }}><summary>View</summary><div className="infrastructure-menu-popup">
       <button onClick={() => run(reset)}>Entire system</button><button onClick={() => run(() => move())}>Fit view</button><button onClick={() => run(() => move('in'))}>Zoom in</button><button onClick={() => run(() => move('out'))}>Zoom out</button><hr />

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  rememberSettingsScopePath,
+  isWorkspaceSettingsPath,
+  rememberSettingsPath,
+  settingsReturnPath,
   settingsScopeFromPathname,
-  settingsScopeReturnPath,
-  scopeKeysEqual,
 } from './settings-scope-path';
 
 describe('settingsScopeFromPathname', () => {
@@ -22,47 +22,33 @@ describe('settingsScopeFromPathname', () => {
       kind: 'workspace',
       workspaceId: 'ws-1',
     });
+    expect(isWorkspaceSettingsPath('/workspace/ws-1/settings/general')).toBe(true);
+    expect(isWorkspaceSettingsPath('/workspace/ws-1/chat')).toBe(false);
   });
 });
 
-describe('rememberSettingsScopePath', () => {
+describe('the last Settings and Console pages', () => {
   afterEach(() => {
     sessionStorage.clear();
   });
 
-  it('remembers and restores per scope', () => {
-    rememberSettingsScopePath({ kind: 'account' }, '/account/appearance');
-    rememberSettingsScopePath({ kind: 'platform' }, '/settings/roles');
-    rememberSettingsScopePath({ kind: 'organization', orgId: 'acme' }, '/organizations/acme/settings/users');
-
-    expect(settingsScopeReturnPath({ kind: 'account' }, '/account/profile')).toBe('/account/appearance');
-    expect(settingsScopeReturnPath({ kind: 'platform' }, '/settings')).toBe('/settings/roles');
-    expect(settingsScopeReturnPath({ kind: 'organization', orgId: 'acme' }, '/organizations/acme/settings')).toBe(
-      '/organizations/acme/settings/users'
-    );
+  it('reopens the last Settings page, whatever its level', () => {
+    rememberSettingsPath('settings', '/account/appearance');
+    rememberSettingsPath('settings', '/organizations/acme/settings/users');
+    expect(settingsReturnPath('settings', '/account/profile')).toBe('/organizations/acme/settings/users');
   });
 
-  it('rejects paths outside the scope', () => {
-    rememberSettingsScopePath({ kind: 'account' }, '/settings/users');
-    expect(settingsScopeReturnPath({ kind: 'account' }, '/account/profile')).toBe('/account/profile');
+  it('keeps the Console apart', () => {
+    rememberSettingsPath('settings', '/workspace/ws-1/settings/agents');
+    rememberSettingsPath('console', '/settings/system/jobs');
+    expect(settingsReturnPath('settings', '/account/profile')).toBe('/workspace/ws-1/settings/agents');
+    expect(settingsReturnPath('console', '/settings/system')).toBe('/settings/system/jobs');
   });
 
-  it('keeps organization paths separate per org', () => {
-    rememberSettingsScopePath({ kind: 'organization', orgId: 'a' }, '/organizations/a/settings/general');
-    rememberSettingsScopePath({ kind: 'organization', orgId: 'b' }, '/organizations/b/settings/users');
-    expect(settingsScopeReturnPath({ kind: 'organization', orgId: 'b' }, '/organizations/b/settings')).toBe(
-      '/organizations/b/settings/users'
-    );
-  });
-});
-
-describe('scopeKeysEqual', () => {
-  it('compares organization ids', () => {
-    expect(
-      scopeKeysEqual({ kind: 'organization', orgId: 'x' }, { kind: 'organization', orgId: 'x' })
-    ).toBe(true);
-    expect(
-      scopeKeysEqual({ kind: 'organization', orgId: 'x' }, { kind: 'organization', orgId: 'y' })
-    ).toBe(false);
+  it('falls back when nothing was visited, or the stored path is not a settings page', () => {
+    expect(settingsReturnPath('settings', '/account/profile')).toBe('/account/profile');
+    rememberSettingsPath('settings', '/workspace/ws-1/chat');
+    rememberSettingsPath('settings', '//evil.example/account');
+    expect(settingsReturnPath('settings', '/account/profile')).toBe('/account/profile');
   });
 });

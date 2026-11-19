@@ -68,10 +68,6 @@ const AppsSection = dynamic(() => import('./apps-section').then((m) => m.AppsSec
   ssr: false,
   loading: sectionLoading,
 });
-const SettingsSection = dynamic(() => import('./settings-section').then((m) => m.SettingsSection), {
-  ssr: false,
-  loading: sectionLoading,
-});
 const WorkspacesSection = dynamic(
   () => import('./workspaces-section').then((m) => m.WorkspacesSection),
   { ssr: false, loading: sectionLoading },
@@ -93,7 +89,6 @@ const SECTION_CHUNK: Partial<Record<SidebarSection, () => Promise<unknown>>> = {
   tasks: () => import('./tasks-section'),
   marketplace: () => import('./marketplace-section'),
   apps: () => import('./apps-section'),
-  settings: () => import('./settings-section'),
   workspaces: () => import('./workspaces-section'),
 };
 
@@ -102,7 +97,6 @@ export function prefetchSectionPanel(section: SidebarSection) {
 }
 
 function SectionContent({ section }: { section: SidebarSection }) {
-  const canSettings = useFeature('settings.workspace');
   const canMaps = useFeature('maps');
   const canChat = useFeature('chat');
   const canFiles = useFeature('files');
@@ -130,7 +124,6 @@ function SectionContent({ section }: { section: SidebarSection }) {
   if (section === 'tasks' && canTasks) return <TasksSection collapsed={false} detailOnly />;
   if (section === 'apps') return <AppsSection collapsed={false} detailOnly />;
   if (section === 'marketplace' && canMarketplace) return <MarketplaceSection collapsed={false} detailOnly />;
-  if (section === 'settings') return <SettingsSection collapsed={false} detailOnly />;
   // Opened by the workspace mark (workspace-switcher.tsx).
   if (section === 'workspaces') return <WorkspacesSection />;
   return null;

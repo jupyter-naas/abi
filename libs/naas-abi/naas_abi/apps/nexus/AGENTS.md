@@ -696,9 +696,21 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
 
 - Migrate `chat-interface.tsx` to semantic CSS
 
-## Platform Settings
+## Settings and the Console
 
-`/settings` (account menu → Platform Settings), outside any organization or workspace: `apps/web/src/app/settings/`, on the shared settings shell (`components/settings/`).
+One rule: **Settings is what you set, the Console is what you watch.**
+
+- **Settings**: one place, opened by the dock's Settings and the avatar menu's Settings alike, at the last settings page visited (`settingsReturnPath('settings')`, else the workspace's settings, else `/account/profile`). Every level is in one column, from the narrowest to the widest, as what a change there touches: **Account** (you), **Workspace** (this workspace), **Organization** (all of its workspaces), **Platform** (the instance: Administration). The column is `SettingsLevelsNav` (`components/settings/`), from the pure `settingsLevels` (`settings-levels.ts`) fed by `useSettingsLevels` (`hooks/`), each level read with its own pages' rule (`accountSettingsNavVisible`; `useWorkspaceSettingsAccess` and `visibleSettingsGroups`; `orgSettingsNavForRole` with the caller's role and IAM access; `visibleAdministrationItems`). A level the caller opens nothing in is left out: a member sees Account and Workspace. With several organizations the level reads "Organization · <name>" with the others linked under it. The four layouts (`app/account/`, `app/workspace/[workspaceId]/settings/`, `app/organizations/[orgId]/settings/`, `app/settings/` for Administration) share the shell, its header titled Settings; the workspace's chrome steps aside on its settings (`WorkspaceLayout`, `isWorkspaceSettingsPath`). People of a level are its **Members** (workspace, organization); the platform's accounts are **Users**.
+- **Console** (`app/settings/`, header Console): System (with Layers and Diagrams, the map of the ABI code: `system/infrastructure/`), Activity, Resources and Data (`consoleGroups` in `lib/nav.ts`), for whoever holds `nexus:ReadSystem`. The avatar menu offers it to them (`settingsReturnPath('console')`). `/settings/console` is its index: a computer opens the first page, a phone lists it.
+
+Decisions:
+
+- **One Settings, four levels.** Decision: the per-level doors (workspace settings in the dock, Account / Organization / Platform in the avatar menu, a scope switcher in each shell) became one Settings with the levels as headings. Consequences: the dock's settings column and the scope switcher are gone (`settings` is a retired panel section); the dock's Settings is offered to everyone (Account at least); each level's URLs are unchanged.
+- **Monitoring is not settings.** Decision: Platform Settings' System, Activity, Resources and Data are the Console; the Platform level of Settings is Administration alone. Consequences: the platform layout picks its column by the page (`isConsolePath`); Infrastructure moved from Workspace settings to Console › System (`/settings/system/layers`, `/settings/system/diagrams`, `nexus:ReadSystem`), its former workspace URLs redirect there, and `scripts/build_abi_architecture.py` writes the snapshot to its new folder.
+
+### Platform (Administration and Console pages)
+
+`/settings`, outside any organization or workspace: `apps/web/src/app/settings/`, on the shared settings shell (`components/settings/`).
 
 - **Sidebar** (`lib/nav.ts`): a Database group (Nexus tables); a System group (Overview, Services, Data, Jobs, Agents, Modules, NATS, Live traffic, Traces, Events); a Tenancy group (Organizations, Users); an Access group (Roles & permissions). Every group has a heading, shown on the desktop sidebar and the phone index alike; a group with nothing the caller holds is left out, heading included. Each item declares what it needs: `nexus:ReadSystem` for the tables, System and Organizations, `nexus:ListUsers` for Users, any platform-level `iam:` action for Roles & permissions. The shell reads the caller's actions from `GET /api/iam/admin/access` (`hooks/use-platform-settings-access.ts`), shows the items they hold and a 403 page when there are none or for a page they do not hold. Callers at the same time share one request; a failed one keeps the user's last answer, and with none shows an error with Try again (the account menu asks again when it next opens). The account menu shows Platform Settings whenever an item is available. The API checks every call itself (`require_superadmin`: `ReadSystem` to read, `ManageSystem` to change; the Users routes their `nexus:*User` action, then IAM's and the provider's own as the caller: `services/accounts`; IAM's own `iam:*` checks).
 - **Nexus tables** (`tables/`): the table of tables (sections, counts, search, facets, inline schema, Export all as JSON or xlsx), then `/settings/tables/<name>` (grid, Export CSV/xlsx, a close button beside it that returns to Nexus tables as it was left: `lib/tables-view.ts`), then `/settings/tables/<name>/<row id>` (back link; on `users`, the superadmin toggle for whoever holds `ManageSystem`). The list, labels and sections come from the API (`GET /api/admin/tables`, the registry `api/app/core/platform_tables.py`); the web app keeps no copy.
@@ -823,6 +835,8 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 |---|---|---|---|---|
 | Maps | `/workspace/{id}/maps` | `/workspace/{id}/maps/{datasetId}` | `MapsSection` (Public / Private; Custom when populated) | Dataset canvas (Public SA layers, presence) |
 | Chat | `/workspace/{id}/chat` | `/workspace/{id}/chat/{id\|new}` | `ChatSection` (conversations) | Chat thread page |
+| Settings (any level) | `/account`, `/workspace/{id}/settings`, `/organizations/{orgId}/settings`, `/settings` | The level's page | `SettingsLevelsNav`: every level the caller opens | Section page; back to the level's list URL |
+| Console | `/settings/console` | `/settings/{system,activity,resources,data,tables}/...` | Console groups (`settings/lib/nav.ts`), the items the caller holds | Item page; a table closes to Nexus tables |
 | Account | `/account` | `/account/{section}` | Settings nav (`lib/nav.ts`) | Section page |
 | Files | `/workspace/{id}/files` | `/workspace/{id}/files/browse` | `FilesSection` (Drive and View pickers, search, Starred, then the views' tree) | File browser page |
 | Org settings | `/organizations/{orgId}/settings` | `/organizations/{orgId}/settings/{section}` | Settings nav (`lib/nav.ts`) | Section page |

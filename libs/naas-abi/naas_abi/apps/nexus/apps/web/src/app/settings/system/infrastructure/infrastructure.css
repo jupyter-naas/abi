@@ -49,13 +49,12 @@
 .infrastructure-about p { margin-top:8px; font-size:10px; line-height:1.7; }
 .infrastructure-files code { display:block; font-size:10px; overflow-wrap:anywhere; padding:8px 0; }
 .infrastructure-menu { display:flex; align-items:center; gap:4px; color:var(--foreground-hex); font-size:12px; }
-.infrastructure-menu-title { margin-right:4px; font-size:12px; font-weight:600; color:var(--foreground-hex); }
 .infrastructure-menu details { position:relative; }
 .infrastructure-menu summary { list-style:none; padding:6px 8px; cursor:pointer; border-radius:0; }
 .infrastructure-menu summary::-webkit-details-marker { display:none; }
 /* Same highlight as every TopNav app menu bar: grey bg-muted, no accent ring. */
 .infrastructure-menu details[open]>summary,.infrastructure-menu summary:hover { background:hsl(var(--muted)); }
-.infrastructure-menu-popup { position:absolute; left:0; top:100%; min-width:200px; padding:4px; border:1px solid var(--border-hex); border-radius:0; background:var(--background-hex); box-shadow:0 8px 24px #00000020; z-index:210; }
+.infrastructure-menu-popup { position:absolute; right:0; top:100%; min-width:200px; padding:4px; border:1px solid var(--border-hex); border-radius:0; background:var(--background-hex); box-shadow:0 8px 24px #00000020; z-index:210; }
 .infrastructure-menu-popup button { width:100%; padding:8px 10px; text-align:left; display:flex; justify-content:space-between; font-size:12px; }
 .infrastructure-menu-popup button:hover,.infrastructure-menu-popup button:focus-visible { background:hsl(var(--muted)); }
 .infrastructure-menu-popup hr { border-color:var(--border-hex); margin:4px 0; }

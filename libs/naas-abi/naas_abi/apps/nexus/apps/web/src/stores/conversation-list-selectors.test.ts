@@ -169,7 +169,6 @@ describe('shell components use narrow selectors', () => {
     'components/shell/sidebar/apps-section.tsx',
     'components/shell/sidebar/files-section.tsx',
     'components/shell/sidebar/ontology-section.tsx',
-    'components/shell/sidebar/settings-section.tsx',
     'components/shell/sidebar/search-section.tsx',
     'components/shell/sidebar/marketplace-section.tsx',
     'components/shell/context-panel.tsx',

@@ -28,7 +28,7 @@ export const orgSettingsNav: OrgSettingsNavItem[] = [
   { slug: 'general', label: 'General', icon: Globe }, // Platform › General's icon
   { slug: 'branding', label: 'Branding', icon: Paintbrush, adminOnly: true },
   { slug: 'workspaces', label: 'Workspaces', icon: FolderKanban },
-  { slug: 'users', label: 'Users', icon: Users, adminOnly: true },
+  { slug: 'users', label: 'Members', icon: Users, adminOnly: true },
   // IAM decides (the access of the organization's scope), not the membership role.
   { slug: 'roles', label: 'Roles & permissions', icon: KeyRound, needs: 'iam' },
   // The API decides (`ReadOrganizationAnalytics`, its owners and admins by default).

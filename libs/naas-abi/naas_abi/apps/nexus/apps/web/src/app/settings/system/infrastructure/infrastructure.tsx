@@ -2,7 +2,7 @@
 import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
 import { Focus, Minus, Plus, RotateCcw } from 'lucide-react';
-import { Header } from '@/components/shell/header';
+import { SystemFrame } from '../system-frame';
 import { architecture } from './architecture-model';
 import { useInfrastructure } from './infrastructure-store';
 import { InfrastructureMenu } from './infrastructure-menu';
@@ -11,7 +11,7 @@ import './infrastructure.css';
 const ArchitectureScene = dynamic(() => import('./architecture-scene'), { ssr: false, loading: () => <div className="infrastructure-scene-error">Loading architecture…</div> });
 const ArchitectureGraph = dynamic(() => import('./architecture-graph'), { ssr: false });
 
-/** The settings page open: Layers (the 3D planes) or Diagrams (the 2D graph). */
+/** The Console page open: Layers (the 3D planes) or Diagrams (the 2D graph). */
 export type InfrastructureView = 'layers' | 'diagrams';
 
 export default function Infrastructure({ view }: { view: InfrastructureView }) {
@@ -19,9 +19,13 @@ export default function Infrastructure({ view }: { view: InfrastructureView }) {
   const menu = useMemo(() => <InfrastructureMenu view={view} />, [view]);
   const layer = architecture.layers.find(l => l.id === layerId);
   const diagrams = view === 'diagrams';
-  return <section className="infrastructure-page" aria-label="ABI infrastructure">
-    <Header title="Infrastructure" subtitle={diagrams ? 'Diagrams' : 'Layers'} nav={menu} />
-    <div className="infrastructure-mobile-nav"><InfrastructureMenu view={view} /><details><summary>Architecture & inspector</summary><InfrastructureSection /></details></div>
+  return <SystemFrame
+    title={diagrams ? 'Diagrams' : 'Layers'}
+    subtitle={diagrams ? 'The ABI code as a graph of its components and dependencies.' : 'The ABI code as layered planes, from the kernel to the apps.'}
+    actions={menu}
+    flush
+  ><section className="infrastructure-page" aria-label="ABI infrastructure">
+    <div className="infrastructure-mobile-nav"><details><summary>Architecture & inspector</summary><InfrastructureSection /></details></div>
     <div className="infrastructure-body">
       <div className="infrastructure-viewport">
         <div className="infrastructure-view-heading"><button onClick={reset}>ABI</button><span>/</span><span>{layer?.label ?? 'Entire system'}</span>{layer && <button className="infrastructure-exit" onClick={reset}>Exit focus</button>}</div>
@@ -31,5 +35,5 @@ export default function Infrastructure({ view }: { view: InfrastructureView }) {
       </div>
       <aside className="infrastructure-aside" aria-label="Architecture and inspector"><InfrastructureSection /></aside>
     </div>
-  </section>;
+  </section></SystemFrame>;
 }

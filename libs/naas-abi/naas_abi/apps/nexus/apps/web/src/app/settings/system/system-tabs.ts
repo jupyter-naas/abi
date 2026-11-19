@@ -22,6 +22,10 @@ export const ACTIVITY_PATH = SECTION_PATHS.activity;
 /** Roles & permissions, which was System's Access tab. */
 export const ROLES_PATH = '/settings/roles';
 
+/** The map of the ABI code, one page per view (System, in the Console). */
+export const INFRASTRUCTURE_LAYERS_PATH = `${SYSTEM_PATH}/layers`;
+export const INFRASTRUCTURE_DIAGRAMS_PATH = `${SYSTEM_PATH}/diagrams`;
+
 export const SYSTEM_VIEWS: { id: SystemView; label: string; description: string }[] = [
   { id: 'overview', label: 'Overview', description: 'Health of the kernel services, modules and the NATS network' },
   { id: 'services', label: 'Services', description: 'Kernel services and their adapters' },

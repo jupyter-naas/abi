@@ -1,76 +1,62 @@
 'use client';
 
-import { orgSettingsIndexPath } from '@/app/organizations/[orgId]/settings/lib/nav';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
-import { firstPlatformSettingsPath, PLATFORM_SETTINGS_INDEX, visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
-import { settingsScopeReturnPath } from '@/lib/settings-scope-path';
+import { useWorkspaceSettingsAccess } from '@/hooks/use-workspace-settings-access';
+import { CONSOLE_PATH, firstConsolePath, visibleConsoleGroups } from '@/app/settings/lib/nav';
+import { settingsLandingPath } from '@/components/shell/settings-nav';
+import { isWorkspaceSettingsPath, settingsReturnPath } from '@/lib/settings-scope-path';
 
 export type AvatarSettingsLink = { label: string; href: string };
 
-/** A scope whose access is still being read shows as `loading`; refused, it is null. */
+/** An entry whose access is still being read shows as `loading`; refused, it is null. */
 export type AvatarSettingsEntry = AvatarSettingsLink | 'loading' | null;
 
 export type AvatarSettingsLinks = {
-  account: AvatarSettingsLink;
-  organization: AvatarSettingsEntry;
-  platform: AvatarSettingsEntry;
+  settings: AvatarSettingsLink;
+  console: AvatarSettingsEntry;
 };
 
 /**
- * Avatar menu destinations: Account, Organization, Platform, at the same remembered
- * paths as the settings scope switcher. Both access reads are shared stores, so opening
- * the menu again asks nothing new; mounting the avatar button warms them
- * (`useWarmAvatarSettingsLinks`).
+ * Where Settings opens: the last settings page, at any level, else this workspace's
+ * settings when the caller opens them, else their account. A page of another
+ * workspace's settings is not reopened from this one.
+ */
+export function useSettingsHref(): string {
+  const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const access = useWorkspaceSettingsAccess();
+  const opensWorkspace = !!workspaceId && (access === 'all' || access === 'iam');
+  const fallback = opensWorkspace ? `/workspace/${workspaceId}${settingsLandingPath(access)}` : '/account/profile';
+  const remembered = settingsReturnPath('settings', fallback);
+  const elsewhere = isWorkspaceSettingsPath(remembered) && !remembered.startsWith(`/workspace/${workspaceId}/`);
+  return elsewhere ? fallback : remembered;
+}
+
+/**
+ * The avatar menu's two doors: Settings (every level, `settingsLevels`) and the Console
+ * (what the platform runs), the latter for whoever may watch something there. The access
+ * reads are shared stores, so opening the menu again asks nothing new; mounting the avatar
+ * button warms them (`useWarmAvatarSettingsLinks`).
  */
 export function useAvatarSettingsLinks(): AvatarSettingsLinks {
-  const organizations = useOpenableOrganizations();
-  const platformSettings = usePlatformSettingsAccess();
-  const workspaceOrgId = useWorkspaceStore((s) =>
-    s.workspaces.find((w) => w.id === s.currentWorkspaceId)?.organizationId
-  );
+  const settingsHref = useSettingsHref();
+  const platform = usePlatformSettingsAccess();
 
-  let organization: AvatarSettingsEntry = null;
-  if (organizations.status === 'checking') {
-    organization = 'loading';
-  } else {
-    const open = organizations.orgs;
-    const pick =
-      (workspaceOrgId && open.find((o) => o.id === workspaceOrgId)) ||
-      (open.length === 1 ? open[0] : null);
-    if (pick) {
-      organization = {
-        label: 'Organization',
-        href: settingsScopeReturnPath({ kind: 'organization', orgId: pick.id }, orgSettingsIndexPath(pick.id)),
-      };
-    }
-  }
-
-  let platform: AvatarSettingsEntry = null;
-  if (platformSettings.status === 'checking') {
-    platform = 'loading';
-  } else if (
-    platformSettings.status === 'ready' &&
-    visiblePlatformSettingsGroups(platformSettings.actions).length > 0
-  ) {
-    platform = {
-      label: 'Platform',
-      href: settingsScopeReturnPath(
-        { kind: 'platform' },
-        firstPlatformSettingsPath(platformSettings.actions) ?? PLATFORM_SETTINGS_INDEX
-      ),
+  let consoleEntry: AvatarSettingsEntry = null;
+  if (platform.status === 'checking') {
+    consoleEntry = 'loading';
+  } else if (platform.status === 'ready' && visibleConsoleGroups(platform.actions).length > 0) {
+    consoleEntry = {
+      label: 'Console',
+      href: settingsReturnPath('console', firstConsolePath(platform.actions) ?? CONSOLE_PATH),
     };
   }
 
-  return {
-    account: { label: 'Account', href: settingsScopeReturnPath({ kind: 'account' }, '/account/profile') },
-    organization,
-    platform,
-  };
+  return { settings: { label: 'Settings', href: settingsHref }, console: consoleEntry };
 }
 
-/** Start both access reads when the avatar button mounts, before the menu opens. */
+/** Start the access reads when the avatar button mounts, before the menu opens. */
 export function useWarmAvatarSettingsLinks(): void {
   useOpenableOrganizations();
   usePlatformSettingsAccess();

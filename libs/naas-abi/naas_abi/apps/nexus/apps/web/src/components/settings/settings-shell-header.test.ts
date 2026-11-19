@@ -3,8 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
 import { escapeLeavesSettings, SettingsShellHeader } from './settings-shell-header';
 
-vi.mock('./settings-scope-switcher', () => ({ SettingsScopeSwitcher: () => null }));
-
 function escapeFrom(target: EventTarget): KeyboardEvent {
   const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
   target.dispatchEvent(event);
@@ -58,14 +56,21 @@ describe('escapeLeavesSettings', () => {
 });
 
 describe('SettingsShellHeader', () => {
-  async function header(onBack: () => void) {
+  async function header(onBack: () => void, props: { title?: string; detailTitle?: string } = {}) {
     mounted = await mount(SettingsShellHeader, {
-      scopeTitle: 'Platform Settings',
-      showScopeSwitcher: false,
+      ...props,
       onBack,
       backAriaLabel: 'Back to workspace',
     });
   }
+
+  it('reads Settings at every level, and the page on a phone', async () => {
+    await header(() => undefined);
+    expect(mounted?.host.querySelector('h1')?.textContent).toBe('Settings');
+    await mounted?.unmount();
+    await header(() => undefined, { detailTitle: 'Members' });
+    expect(mounted?.host.querySelector('h1')?.textContent).toBe('Members');
+  });
 
   it('goes back on Esc', async () => {
     const onBack = vi.fn();

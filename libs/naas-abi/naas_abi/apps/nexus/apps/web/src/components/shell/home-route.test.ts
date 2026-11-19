@@ -54,12 +54,12 @@ describe('panelFromPathChange', () => {
     expect(
       panelFromPathChange({
         previousPath: null,
-        pathname: '/workspace/ws-1/settings/infrastructure/layers',
-        urlSection: 'settings',
+        pathname: files,
+        urlSection: 'files',
         keepPanelClosed: false,
         currentPanel: 'chat',
       }),
-    ).toBe('settings');
+    ).toBe('files');
   });
 
   it('opens the new section when navigating after the first paint', () => {

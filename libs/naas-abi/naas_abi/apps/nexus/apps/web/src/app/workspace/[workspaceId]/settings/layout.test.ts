@@ -7,14 +7,20 @@ const state = vi.hoisted(() => ({
   settingsByRole: false,
   access: null as null | { actions: Record<string, boolean> },
   replaced: [] as string[],
+  mobile: false,
 }));
 
 vi.mock('next/navigation', () => ({
   usePathname: () => state.path,
   useParams: () => ({ workspaceId: 'ws-1' }),
-  useRouter: () => ({ replace: (to: string) => state.replaced.push(to), push: () => undefined }),
+  useRouter: () => ({
+    replace: (to: string) => state.replaced.push(to),
+    push: () => undefined,
+    prefetch: () => undefined,
+  }),
 }));
-vi.mock('@/components/shell/header', () => ({ Header: () => null }));
+vi.mock('@/components/settings/settings-levels-nav', () => ({ SettingsLevelsNav: () => 'SETTINGS COLUMN' }));
+vi.mock('@/hooks/use-is-mobile', () => ({ useIsMobile: () => state.mobile }));
 vi.mock('@/hooks/use-dev-route-warmup', () => ({ useDevRouteWarmup: () => undefined }));
 vi.mock('@/hooks/use-workspace-resources', () => ({
   useWorkspaceResources: () => ({ resources: null }),
@@ -41,6 +47,8 @@ afterEach(async () => {
   await mounted?.unmount();
   mounted = null;
   state.replaced = [];
+  state.mobile = false;
+  state.path = '/workspace/ws-1/settings/general';
 });
 
 async function render(): Promise<string> {
@@ -50,10 +58,29 @@ async function render(): Promise<string> {
 }
 
 describe('workspace settings by URL (UJ-W1)', () => {
-  it('show the page to an owner or admin (the role brings the settings)', async () => {
+  it('show the page to an owner or admin (the role brings the settings), beside the Settings column', async () => {
     state.settingsByRole = true;
     state.access = null;
-    expect(await render()).toContain('GENERAL PAGE');
+    const text = await render();
+    expect(text).toContain('GENERAL PAGE');
+    expect(text).toContain('SETTINGS COLUMN');
+    expect(text).toContain('Settings');
+  });
+
+  it('list Settings on a phone at the index, and open one page at a time', async () => {
+    state.settingsByRole = true;
+    state.mobile = true;
+    state.path = '/workspace/ws-1/settings';
+    const list = await render();
+    expect(list).toContain('SETTINGS COLUMN');
+    expect(list).not.toContain('GENERAL PAGE');
+    await mounted?.unmount();
+    state.path = '/workspace/ws-1/settings/general';
+    const page = await render();
+    expect(page).not.toContain('SETTINGS COLUMN');
+    expect(page).toContain('GENERAL PAGE');
+    expect(page).toContain('General');
+    state.mobile = false;
   });
 
   it('refuse a member with no settings and no iam: right there (Dave)', async () => {
