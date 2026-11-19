@@ -3,14 +3,17 @@ import { listOnSourceChange, startNavigation } from './files-navigation';
 
 describe('startNavigation', () => {
   // A sidebar tree click in the open view changes no source: nothing would list it later.
-  it('lists the folder now when the view does not change', () => {
-    expect(startNavigation('my-files', 'my-files', 'documents')).toEqual({ listNow: 'documents', pending: null });
+  it('lists the folder now when the view does not change, and remembers it listed it', () => {
+    expect(startNavigation('my-files', 'my-files', 'documents')).toEqual({
+      listNow: 'documents',
+      pending: { source: 'my-files', path: 'documents', listed: true },
+    });
   });
 
   it('waits for the view to open when it changes', () => {
     expect(startNavigation('all', 'my-files', 'documents')).toEqual({
       listNow: null,
-      pending: { source: 'my-files', path: 'documents' },
+      pending: { source: 'my-files', path: 'documents', listed: false },
     });
   });
 });
@@ -28,18 +31,25 @@ describe('listOnSourceChange', () => {
   });
 
   it('lists the navigation folder once its view is the rendered one', () => {
-    const pending = { source: 'my-files' as const, path: 'documents' };
+    const pending = { source: 'my-files' as const, path: 'documents', listed: false };
     expect(listOnSourceChange(pending, 'my-files', 'my-files')).toEqual({ list: 'documents', pending: null });
+  });
+
+  // Was (audit, 2nd pass): Back to /files?source=workspace-files&path=finance while
+  // Workspace Files was open: the folder was listed, then the mount run listed the root.
+  it('does not list again what a same-view navigation listed (mount run)', () => {
+    const { pending } = startNavigation('workspace-files', 'workspace-files', 'finance');
+    expect(listOnSourceChange(pending, 'workspace-files', 'workspace-files')).toEqual({ list: null, pending: null });
   });
 
   // Was: a deep link in a fresh tab opened the view root (the mount run used the flag).
   it('waits while the render is behind the store (fresh tab deep link)', () => {
-    const pending = { source: 'my-files' as const, path: 'documents' };
+    const pending = { source: 'my-files' as const, path: 'documents', listed: false };
     expect(listOnSourceChange(pending, 'all', 'my-files')).toEqual({ list: null, pending });
   });
 
   it('drops a navigation another change overrode (fallback to All Views)', () => {
-    const pending = { source: 'system-files' as const, path: 'x' };
+    const pending = { source: 'system-files' as const, path: 'x', listed: false };
     expect(listOnSourceChange(pending, 'all', 'all')).toEqual({ list: '', pending: null });
   });
 });

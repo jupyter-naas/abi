@@ -405,7 +405,8 @@ function FilesBrowser() {
   // (a sidebar link to a bare /files) to put the state back. Never a passing state: not
   // while a navigation waits for its view or a listing loads. Other parameters are kept.
   useEffect(() => {
-    if (!deepLinkConsumedRef.current || pendingNavRef.current) return;
+    // A navigation waiting for its view has not listed its folder yet.
+    if (!deepLinkConsumedRef.current || (pendingNavRef.current && !pendingNavRef.current.listed)) return;
     const state = useFilesStore.getState();
     if (state.loading) return;
     const search = filesUrlSearch(window.location.search, {
