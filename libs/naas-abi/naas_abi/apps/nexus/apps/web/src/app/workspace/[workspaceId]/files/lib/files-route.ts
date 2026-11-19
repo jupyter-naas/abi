@@ -7,8 +7,29 @@
  * Query params stay inside the authenticated Files UI. Storage keys are not
  * HTTP routes:
  *
- *   ?source=platform-drive&path=shared/docs/deck.pptx
+ *   ?source=platform-files&path=shared/docs/deck.pptx
+ *
+ * The page keeps its state in the URL (`filesStateFromUrl`, `filesUrlQuery`):
+ *
+ *   ?drive=all&view=all&source=workspace-files&path=finance/q3
+ *
+ * `drive` is the Drive picker, `view` the View picker, `source` the open view and
+ * `path` its folder. A bare /files opens the default (All Views / Workspace Files).
+ *
+ * `source` is a view (`my-files`, `workspace-files`, `organization-files`,
+ * `platform-files`, `system-files`) or `all`; the old drive sources (`my-drive`,
+ * `workspace`, `organization-drive`, `platform-drive`, `system-drive`) still open
+ * the view they became.
  */
+
+import {
+  ALL_VIEWS,
+  FILES_ENTRY,
+  filesDriveFrom,
+  filesSourceFrom,
+  type FilesDrive,
+  type FilesSource,
+} from './drive-label';
 
 export const FILES_BROWSE_SLUG = 'browse';
 
@@ -54,7 +75,7 @@ export function filesBrowseHref(
 
 const STORAGE_ROOT_PREFIXES = ['naas_abi/platform-drive/', 'platform-drive/'];
 
-/** Strip storage-root prefixes so Files can fetch a drive-relative path. */
+/** Strip storage-root prefixes so Files can fetch a view-relative path. */
 export function stripPlatformDrivePrefix(path: string): string {
   let normalized = path.replace(/^\/+|\/+$/g, '');
   for (const prefix of STORAGE_ROOT_PREFIXES) {
@@ -67,15 +88,15 @@ export function stripPlatformDrivePrefix(path: string): string {
 }
 
 export interface FilesDeepLink {
-  source: string | null;
+  source: FilesSource | null;
   path: string | null;
 }
 
-/** Read `?source=&path=` from a Files URL (drive + path inside that drive). */
+/** Read `?source=&path=` from a Files URL (view + path inside that view). */
 export function parseFilesDeepLink(search: string | null | undefined): FilesDeepLink {
   if (!search) return { source: null, path: null };
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
-  const source = (params.get('source') ?? '').trim() || null;
+  const source = filesSourceFrom(params.get('source'));
   const rawPath = (params.get('path') ?? '').trim();
   const path = rawPath ? stripPlatformDrivePrefix(rawPath) : null;
   return { source, path };
@@ -88,7 +109,7 @@ export function hasFilesDeepLink(search: string | null | undefined): boolean {
 
 /**
  * Split a deep-link path into the folder to list and an optional file to preview.
- * `previewPath` stays drive-relative; the browse page matches listed FileInfo paths.
+ * `previewPath` stays view-relative; the browse page matches listed FileInfo paths.
  */
 export function filesDeepLinkFolderAndPreview(path: string): {
   folderPath: string;
@@ -106,7 +127,7 @@ export function filesDeepLinkFolderAndPreview(path: string): {
   };
 }
 
-/** Find a listed row for a drive-relative or storage-root preview path. */
+/** Find a listed row for a view-relative or storage-root preview path. */
 export function matchListedFile<T extends { path: string; name: string }>(
   files: T[],
   previewPath: string,
@@ -120,4 +141,74 @@ export function matchListedFile<T extends { path: string; name: string }>(
     if (file.path.endsWith(`/${normalized}`)) return true;
     return Boolean(name && file.name === name);
   });
+}
+
+/** The Files page's state, as its URL holds it. */
+export interface FilesUrlState {
+  drive: FilesDrive;
+  /** The View picker: All Views or one view. */
+  view: FilesSource;
+  /** The open view (All Views' root: `all`). */
+  source: FilesSource;
+  /** The open folder ('' for the view's root). */
+  path: string;
+}
+
+const FILES_URL_KEYS = ['drive', 'view', 'source', 'path'] as const;
+
+/**
+ * The state a Files URL opens. A URL naming none of `drive`, `view`, `source`, `path`
+ * opens the default (All Drives, "All Views / Workspace Files"); an old `?source=&path=`
+ * link opens its view inside All Views; unknown values read as the defaults.
+ */
+export function filesStateFromUrl(search: string | null | undefined): FilesUrlState {
+  const params = new URLSearchParams((search ?? '').replace(/^\?/, ''));
+  if (!FILES_URL_KEYS.some((key) => params.has(key))) {
+    return { drive: 'all', view: FILES_ENTRY.view, source: FILES_ENTRY.source, path: '' };
+  }
+  const drive = filesDriveFrom(params.get('drive') ?? 'all');
+  const view = filesSourceFrom(params.get('view')) ?? ALL_VIEWS;
+  const source = filesSourceFrom(params.get('source')) ?? (view !== ALL_VIEWS ? view : ALL_VIEWS);
+  const rawPath = (params.get('path') ?? '').trim();
+  return { drive, view, source, path: rawPath ? stripPlatformDrivePrefix(rawPath) : '' };
+}
+
+/** The query string of a Files page state (`source` left out at All Views' root, `path` at a view's root). */
+export function filesUrlQuery(state: FilesUrlState): string {
+  const params = new URLSearchParams();
+  params.set('drive', state.drive);
+  params.set('view', state.view);
+  if (state.source !== ALL_VIEWS) params.set('source', state.source);
+  if (state.path) params.set('path', state.path);
+  return params.toString();
+}
+
+/** `search` with the Files keys set to `state` (and dropped where `filesUrlQuery` drops them), other parameters kept. */
+export function filesUrlSearch(search: string, state: FilesUrlState): string {
+  const params = new URLSearchParams(search.replace(/^\?/, ''));
+  for (const key of FILES_URL_KEYS) params.delete(key);
+  for (const [key, value] of new URLSearchParams(filesUrlQuery(state))) params.set(key, value);
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+/**
+ * Where a Files URL leads: its state, the folder to list and the file to preview. A URL
+ * the page wrote (with `view` or `drive`) names folders in `path` (a dot in a folder name
+ * is no file extension) and a file to preview in `preview`; an old `?source=&path=` link
+ * whose path looks like a file still opens its folder and previews it.
+ */
+export function filesNavigationFromUrl(search: string | null | undefined): {
+  state: FilesUrlState;
+  folderPath: string;
+  previewPath: string | null;
+} {
+  const params = new URLSearchParams((search ?? '').replace(/^\?/, ''));
+  const state = filesStateFromUrl(search);
+  if (params.has('view') || params.has('drive')) {
+    const preview = (params.get('preview') ?? '').trim();
+    return { state, folderPath: state.path, previewPath: preview ? stripPlatformDrivePrefix(preview) : null };
+  }
+  const { folderPath, previewPath } = filesDeepLinkFolderAndPreview(state.path);
+  return { state, folderPath, previewPath: previewPath ?? null };
 }

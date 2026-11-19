@@ -139,6 +139,13 @@ describe('middleware auth redirects', () => {
     const response = middleware(requestFor('/settings/general', { 'nexus-auth-flag': 'true' }));
     expect(response.headers.get('location')).toBeNull();
   });
+
+  it('serves Platform Settings › Drives at /settings/drives, no longer a workspace link', () => {
+    process.env.NODE_ENV = 'production';
+
+    const response = middleware(requestFor('/settings/drives', { 'nexus-auth-flag': 'true' }));
+    expect(response.headers.get('location')).toBeNull();
+  });
 });
 
 describe('middleware: routes that fetch for a page', () => {

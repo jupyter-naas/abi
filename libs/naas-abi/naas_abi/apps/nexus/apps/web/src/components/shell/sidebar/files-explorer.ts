@@ -10,6 +10,40 @@ export function explorerDirKey(source: string, path: string): string {
 }
 
 /** Strip leading/trailing slashes so root is always `''`. */
+/**
+ * Whether the tree must ask for a folder's listing: not when it is already listed or a
+ * fetch for it is pending in the same load generation (the effects that open Files ask
+ * for the same root at once); always when forced (refresh, after a move).
+ */
+export function explorerDirNeedsLoad({
+  force = false,
+  cached,
+  inFlightGeneration,
+  generation,
+}: {
+  force?: boolean;
+  cached: boolean;
+  inFlightGeneration: number | undefined;
+  generation: number;
+}): boolean {
+  if (force) return true;
+  if (cached) return false;
+  return inFlightGeneration !== generation;
+}
+
+/**
+ * What a run of the tree's workspace effect means: `mount` (first run, nothing cached),
+ * `none` (effects re-ran for the same workspace, e.g. StrictMode), `switch` (another
+ * workspace: drop the cache). Only `switch` may invalidate listings already asked for.
+ */
+export function explorerWorkspaceChange(
+  previous: string | null | undefined,
+  current: string | null,
+): 'mount' | 'none' | 'switch' {
+  if (previous === undefined) return 'mount';
+  return previous === current ? 'none' : 'switch';
+}
+
 export function normalizeExplorerPath(path: string): string {
   return (path || '').replace(/^\/+|\/+$/g, '');
 }
@@ -159,7 +193,8 @@ export function explorerListQuery(
   const target = normalizeExplorerPath(path);
   const params = new URLSearchParams();
   params.set('path', target);
-  params.set('scope', scope);
+  // Only a view is listed: All Views is the views themselves.
+  if (scope) params.set('scope', scope);
   if (scope !== 'my_drive' && workspaceId) {
     params.set('workspace_id', workspaceId);
   }

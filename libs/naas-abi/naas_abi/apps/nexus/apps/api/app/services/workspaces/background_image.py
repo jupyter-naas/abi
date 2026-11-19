@@ -1,4 +1,4 @@
-"""Home desk wallpaper stored in the workspace drive.
+"""Home desk wallpaper stored in Workspace Files.
 
 An admin stages an image (uploaded, or downloaded from a URL) into
 ``.home/tmp/``, previews it, then commits it: the draft moves to
@@ -152,7 +152,7 @@ class WorkspaceBackgroundImage:
     ) -> None:
         self._files = files
         home = f"{workspace_drive_root(workspace_id)}/.home"
-        self._tmp = f"{home}/tmp"  # nosec B108 - workspace drive folder, not the system temp dir
+        self._tmp = f"{home}/tmp"  # nosec B108 - Workspace Files folder, not the system temp dir
         self._current = f"{home}/background-img"
         self._archives = f"{home}/archives"
         self._max_bytes = max_bytes

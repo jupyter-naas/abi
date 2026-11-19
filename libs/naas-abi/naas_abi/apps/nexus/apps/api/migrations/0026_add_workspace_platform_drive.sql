@@ -1,7 +1,7 @@
 -- Migration: Add platform_drive_enabled flag on workspaces
-
-ALTER TABLE workspaces
-    ADD COLUMN IF NOT EXISTS platform_drive_enabled BOOLEAN NOT NULL DEFAULT FALSE;
-
-COMMENT ON COLUMN workspaces.platform_drive_enabled IS
-    'When TRUE, members of this workspace can read/write the shared platform-drive tree under naas_abi/platform-drive.';
+--
+-- Retired (#1529). The flag let a workspace reach the shared platform drive.
+-- Platform Files is IAM's alone now (nexus:*PlatformFile, granted by a policy at
+-- the platform); 0073_drop_drive_flags.sql drops the column where it exists. A new
+-- database never makes it. The file stays so migration numbers keep their
+-- meaning; it has no statement.

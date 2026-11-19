@@ -241,7 +241,7 @@ export interface SheetsMenuBarProps {
   /** File → Save (git commit under the hood). Omit on index/new pages. */
   onCommit?: () => void;
   commitDisabled?: boolean;
-  /** File → Save to My Drive (MinIO copy). Omit when not on an open workbook. */
+  /** File → Save to My Files (MinIO copy). Omit when not on an open workbook. */
   onSaveToMyDrive?: () => void;
   saveToMyDriveDisabled?: boolean;
   /** File → Export to XLSX (server-side; formula strings preserved). */
@@ -334,7 +334,7 @@ export function SheetsMenuBar({
   if (onSaveToMyDrive) {
     saveItems.push({
       id: 'save-to-my-drive',
-      label: 'Save to My Drive',
+      label: 'Save to My Files',
       disabled: saveToMyDriveDisabled,
       onSelect: onSaveToMyDrive,
     });

@@ -22,7 +22,6 @@ from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary import (
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__iam_test import (  # noqa: E501
     WS1,
     _client_factory,
-    drives,  # noqa: F401 - fixture
     storage,  # noqa: F401 - fixture
     ws,
 )
@@ -31,7 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 
 
 @pytest.fixture
-def client(team, storage, drives):  # noqa: F811
+def client(team, storage):  # noqa: F811
     return _client_factory(storage)
 
 

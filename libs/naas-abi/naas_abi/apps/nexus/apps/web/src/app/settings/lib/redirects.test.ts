@@ -111,6 +111,7 @@ describe('PLATFORM_SETTINGS_SECTIONS', () => {
       'organizations',
       'users',
       'roles',
+      'drives',
     ]);
   });
 
@@ -124,6 +125,11 @@ describe('PLATFORM_SETTINGS_SECTIONS', () => {
     expect(platformSettingsRedirect('/settings/users')).toBeNull();
     expect(platformSettingsRedirect('/settings/users/')).toBeNull();
     expect(isPlatformSettingsPath('/settings/users')).toBe(true);
+  });
+
+  it('serves Drives, never sent to a workspace as a legacy link', () => {
+    expect(platformSettingsRedirect('/settings/drives')).toBeNull();
+    expect(isPlatformSettingsPath('/settings/drives')).toBe(true);
   });
 
   it('serves Organizations, never redirected to the organizations table', () => {

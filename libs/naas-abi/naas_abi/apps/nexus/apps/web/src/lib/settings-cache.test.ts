@@ -24,7 +24,7 @@ describe('isSettingsRoute', () => {
 
 describe('isCachedSettingsRoute', () => {
   it('matches the Components settings pages, Members and their detail pages', () => {
-    for (const page of ['agents', 'ontologies', 'graphs', 'search', 'skills', 'apps', 'models', 'drives', 'members']) {
+    for (const page of ['agents', 'ontologies', 'graphs', 'search', 'skills', 'apps', 'models', 'members']) {
       expect(isCachedSettingsRoute(`/workspace/ws-1/settings/${page}`)).toBe(true);
     }
     expect(isCachedSettingsRoute('/workspace/ws-1/settings/agents/a1')).toBe(true);

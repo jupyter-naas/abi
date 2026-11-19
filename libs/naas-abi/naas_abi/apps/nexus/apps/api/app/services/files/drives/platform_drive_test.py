@@ -1,4 +1,4 @@
-"""The platform drive receives the nine staff folders once, without touching existing files."""
+"""Platform Files receives the nine staff folders once, without touching existing files."""
 
 from __future__ import annotations
 

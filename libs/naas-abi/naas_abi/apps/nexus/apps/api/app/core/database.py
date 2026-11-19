@@ -20,6 +20,12 @@ _SQLITE_ADD_COLUMN_RE = re.compile(
     r"\bADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\b",
     re.IGNORECASE,
 )
+# SQLite has no ``DROP COLUMN IF EXISTS``: the runner drops ``IF EXISTS`` and skips
+# a column already gone (``_DROP_COLUMN_RE``).
+_SQLITE_DROP_COLUMN_RE = re.compile(
+    r"\bDROP\s+COLUMN\s+IF\s+EXISTS\b",
+    re.IGNORECASE,
+)
 
 # Postgres lets you stack multiple ADD COLUMN clauses in one ALTER TABLE.
 # SQLite requires one ALTER TABLE per column.
@@ -88,6 +94,8 @@ def _adapt_statement_for_dialect(statement: str, dialect: str) -> list[str]:
     SQLite, two Postgres-isms get rewritten:
       - `ADD COLUMN IF NOT EXISTS` → `ADD COLUMN` (duplicate errors are
         caught and skipped by the runner for idempotent re-runs).
+      - `DROP COLUMN IF EXISTS` → `DROP COLUMN` (a column already dropped is
+        skipped by the runner).
       - `ALTER TABLE t ADD COLUMN a, ADD COLUMN b` → two separate ALTERs.
     """
     if dialect != "sqlite":
@@ -106,6 +114,7 @@ def _adapt_statement_for_dialect(statement: str, dialect: str) -> list[str]:
         return []
 
     rewritten = _SQLITE_ADD_COLUMN_RE.sub("ADD COLUMN", statement)
+    rewritten = _SQLITE_DROP_COLUMN_RE.sub("DROP COLUMN", rewritten)
 
     # Detect "ALTER TABLE x ADD COLUMN ... , ADD COLUMN ..." and split.
     match = _ALTER_TABLE_PREFIX_RE.match(rewritten)

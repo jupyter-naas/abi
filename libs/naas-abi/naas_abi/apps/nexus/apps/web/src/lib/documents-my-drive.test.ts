@@ -15,7 +15,7 @@ import {
   myDriveSectionsDir,
 } from './documents-my-drive';
 
-describe('My Drive sections paths', () => {
+describe('My Files sections paths', () => {
   it('keeps a user-relative documents/<slug> tree', () => {
     expect(myDriveSectionsDir('industry-document')).toBe('documents/industry-document');
     expect(myDriveDocumentRelativePath('industry-document')).toBe('documents/industry-document/document.html');
@@ -28,12 +28,12 @@ describe('My Drive sections paths', () => {
 describe('myDriveCopyErrorMessage', () => {
   it('hides storage internals', () => {
     expect(myDriveCopyErrorMessage('MinIO endpoint refused', 502)).toBe(
-      'My Drive is unavailable.',
+      'My Files is unavailable.',
     );
     expect(myDriveCopyErrorMessage('could not connect to s3 bucket abi', 400)).toBe(
-      'Could not copy to My Drive.',
+      'Could not copy to My Files.',
     );
-    expect(myDriveCopyErrorMessage('nope', 413)).toBe('Document is too large for My Drive.');
+    expect(myDriveCopyErrorMessage('nope', 413)).toBe('Document is too large for My Files.');
   });
 });
 

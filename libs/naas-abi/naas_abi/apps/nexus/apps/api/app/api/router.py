@@ -39,6 +39,7 @@ from naas_abi.apps.nexus.apps.api.app.services.datasets.handlers import (
 from naas_abi.apps.nexus.apps.api.app.services.documents.handlers import (
     router as documents_router,
 )
+from naas_abi.apps.nexus.apps.api.app.services.drives.handlers import router as drives_router
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.handlers import (
     router as iam_admin_router,
@@ -122,6 +123,8 @@ api_router.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
 api_router.include_router(openai_gateway_router, prefix="/v1", tags=["openai"])
 api_router.include_router(code_review_router, prefix="/code-review", tags=["code-review"])
 api_router.include_router(platform_router, prefix="/platform", tags=["platform"])
+# Platform Settings > Drives: the storage backends, read-only.
+api_router.include_router(drives_router, prefix="/platform/drives", tags=["platform"])
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(ontology.router, prefix="/ontology", tags=["ontology"])
 api_router.include_router(graph.router, prefix="/graph", tags=["graph"])

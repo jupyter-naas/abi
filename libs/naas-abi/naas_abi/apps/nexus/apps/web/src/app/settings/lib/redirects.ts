@@ -10,6 +10,7 @@ import {
   legacySystemTabPath,
   systemViewPath,
 } from '../system/system-tabs';
+import { PLATFORM_DRIVES_PATH } from '../drives/drives-model';
 import { PLATFORM_GENERAL_PATH } from '../general/general-model';
 import { PLATFORM_ORGANIZATIONS_PATH } from '../organizations/organizations-model';
 import { NEW_USER_PATH, PLATFORM_USERS_PATH } from '../users/users-model';
@@ -34,6 +35,7 @@ export const PLATFORM_SETTINGS_SECTIONS: readonly string[] = [
   PLATFORM_ORGANIZATIONS_PATH,
   PLATFORM_USERS_PATH,
   ROLES_PATH,
+  PLATFORM_DRIVES_PATH,
 ].map((path) => path.split('/')[2]);
 
 // `/workspace/<id>/admin/...`, also behind an org's `/org/<slug>` prefix.

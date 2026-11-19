@@ -146,16 +146,18 @@ module per router family:
 | `workspaces.py` | `workspace` (a container with `platform_companions`: `CreateWorkspace` `creates`, `DeleteWorkspace` `deletes` and `owner_only`), `member`, `server`, `resource_access`; every user's personal `CreateWorkspace` is a `PLATFORM_ACCESS` row (`workspace/*`) |
 | `features.py` | `feature/<key>` (`UseFeature`), `policy_only`: no role holds it |
 | `chat.py`, `agents.py`, `apps.py`, `workflows.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` (`ListModuleScopes`); `workflow` (its settings: listed, deprecated switch) |
-| `files.py`, `datasets.py`, `office.py` | `file` (drive + path; the organization drive's `ListOrgFiles`, `GetOrgFile`, and admin-level `PutOrgFile`, `DeleteOrgFile` on `<org>/nexus:file/organization/<path>`), `my_file`, `user_storage`, `root_storage`; `dataset`; `project` (slides, documents, sheets) |
+| `files.py`, `datasets.py`, `office.py` | `file` (drive + path; Organization Files' `ListOrgFiles`, `GetOrgFile`, and admin-level `PutOrgFile`, `DeleteOrgFile` on `<org>/nexus:file/organization/<path>`), `my_file`, `user_storage`, `root_storage`, `platform_file` (Platform Files: `ListPlatformFiles`, `GetPlatformFile`, `PutPlatformFile`, `DeletePlatformFile`) and `system_file` (System Files: `ListObjectStoreFiles`, `GetObjectStoreFile`, `PutObjectStoreFile`, `DeleteObjectStoreFile`), both platform-level and `policy_only`; `dataset`; `project` (slides, documents, sheets) |
 | `knowledge.py`, `search.py` | `view`, `graph_cache`, `ontology`, `icon`, `layout`, `layer`, `feed_layer`, `basemap`, `maps_catalog`, `maps_access`; `search`, `topic`, `search_scope` |
 | `code.py`, `settings.py`, `platform.py`, `realtime.py` | `code`, `code_settings`; `secret`, `provider_model`, `abi_server`; `analytics`, `system`; `presence`, `speech` |
 | `users.py` | `user` (platform: the platform's accounts, Platform Settings › Users, `services/accounts`): `ListUsers`, `InviteUser`, `UpdateUser`, `SuspendUser`, `ResumeUser`, `DeleteUser`; no role reaches it, the platform admin holds it |
+| `drives.py` | `drive` (platform: the storage backends, Platform Settings › Drives, `services/drives`): `ListDrives`; no role reaches it, the platform admin holds it |
 
 The kernel services have catalogs of their own (core's `iam_catalog.py` of each service); a route that
 only forwards to the kernel declares the kernel action. Choices that differ from "viewers read, members
 write, admins administer" and are deliberate: the organization's directory, domains and billing are
-`admin` (not `list`/`read`), as are the organization drive's writes (`PutOrgFile`, `DeleteOrgFile`: members read it, a policy lets them write a folder), layout edits, ontology cache refreshes, `GetResourceAccess`, topic
-edits (`UpdateTopic`, `DeleteTopic`, `PreviewTopic`) and the system-drive files; `SyncAgents` is `write`
+`admin` (not `list`/`read`), as are Organization Files' writes (`PutOrgFile`, `DeleteOrgFile`: members read it, a policy lets them write a folder), layout edits, ontology cache refreshes, `GetResourceAccess` and topic
+edits (`UpdateTopic`, `DeleteTopic`, `PreviewTopic`); Platform Files and System Files are no role's at all
+(platform-level, `policy_only`: a policy grants Platform Files, the platform admin holds both); `SyncAgents` is `write`
 (every client sends it once per session); `GetPresence` and `Transcribe`/`Speak` are `read`. After editing
 a catalog, run the route matrix.
 
@@ -171,7 +173,7 @@ a catalog, run the route matrix.
   (`Memberships.drop_scope`, IAM's `delete_container`) deletes the policies and groups it owns, every
   attachment and placement at it, and everything below it (an org's workspaces).
 - **What the roles leave out is the catalog's to say** (core's `services/iam/AGENTS.md`, "Action catalogs"):
-  the `feature` type is `policy_only`, `DeleteWorkspace` and `DeleteOrganization` are `owner_only`, and the
+  the `feature`, `platform_file` and `system_file` types are `policy_only`, `DeleteWorkspace` and `DeleteOrganization` are `owner_only`, and the
   platform rows the roles' platform companions reach of Nexus (creating an organization, provider models, a
   user's own files and storage) are the catalog's `PLATFORM_ACCESS` (`catalog/organizations.py`,
   `settings.py`, `files.py`). Core's `roles.py` names no Nexus action or type.
@@ -216,6 +218,10 @@ a catalog, run the route matrix.
   `role_features` type) have no route and authorize nothing: IAM refuses a catalog version dropping an action a
   policy still names, which would stop Nexus's start, so they are kept, deprecated. `GET /access` reports
   neither.
+- **The workspace's system-file actions stay declared** (catalog 12). `ListSystemFiles`, `GetSystemFile`,
+  `PutSystemFile` and `DeleteSystemFile` (admin level, on `<workspace>/nexus:file/system/...`) decided System
+  Files in a workspace; System Files is `system_file` at the platform now. No route asks for them, so they
+  authorize nothing, and they stay for the same reason (their description says "Deprecated").
 
 ## Access policies and default groups
 
@@ -597,7 +603,7 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   a workspace made after the upgrade use what "<W> access" allows; those of an upgraded one keep what the move gave
   them until an administrator attaches it. #414 had left groups made with a workspace out of scope; the owner brought
   them in.
-- **The organization drive is decided at the organization.** *Decision* (#1511): `naas_abi/organization-drive/<org>`
+- **Organization Files is decided at the organization.** *Decision* (#1511): `naas_abi/organization-drive/<org>`
   is the organization's: its object storage is placed in the organization's container (`Placement.organization`,
   `files/placement.py`), and the files API decides on `<org>/nexus:file/organization/<path>` with its own actions,
   reached through a workspace of the organization (its `files` feature; the organization read from IAM's container
@@ -606,6 +612,21 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   nothing of it; who writes which folder (members writing `operations/`) or who does not read one is a policy at
   the organization, not a code change; the kernel's object storage check follows the organization's roles, so a
   policy widening a write past a viewer's role also grants `object_storage:PutObject` there.
+- **Every view of the file system is opened by IAM alone.** *Decision* (#1529, epic #1528): the workspace flags
+  `platform_drive_enabled` and `system_drive_enabled` are gone (columns dropped, `0073_drop_drive_flags.sql`).
+  Platform Files (`naas_abi/platform-drive`) is `platform_file`, platform-level and `policy_only`: no role holds it,
+  owners included; a policy at the platform grants it, the platform admin holds it. System Files (the whole object
+  storage) is `system_file`, likewise: the platform admin's alone, workspace admins lose it. Both are decided at the
+  platform, whatever workspace the request names, with no feature. The kernel's platform companions no longer reach
+  `object/naas_abi/platform-drive` (core's `roles.py`), so the object storage refuses it too until granted: a
+  Platform Files grant names both halves, the Nexus actions on `abi:nexus:platform_file/*` (or a folder,
+  `abi:nexus:platform_file/platform/<folder>/*`) and `object_storage:ListObjects`, `ListObjectsRecursive`,
+  `GetObject`, `GetObjectMetadata`, `GetObjectStream` (and `PutObject`, `PutObjectStream`, `DeleteObject` to write)
+  on `abi:object_storage:object/naas_abi/platform-drive` and `.../platform-drive/*`. `GET /api/files/views` lists the
+  views a caller may open (My, Workspace, Organization, Platform, System Files), IAM's `List*` on each root.
+  *Consequences:* no upgrade keeps the old access: whoever reached Platform Files through a flag loses it until
+  a platform admin grants Platform Files (the release notes say so); the catalog is version 12; ADR
+  `docs/adr/20261119_file_views_by_iam.md`.
 - **An organization with workspaces is not deleted.** *Decision:* `DELETE /api/organizations/{org}` refuses (409) one
   that still has workspaces, naming them, rather than deleting them with it. The issue left it open (UJ-P1); this is
   the default until the owner says otherwise. *Consequences:* its owners delete its workspaces first (`DeleteWorkspace`,

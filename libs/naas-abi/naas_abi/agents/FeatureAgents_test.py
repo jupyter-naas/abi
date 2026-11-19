@@ -147,7 +147,7 @@ def test_abi_skips_a_supervisor_that_delegates_to_it(monkeypatch) -> None:
 
 
 def test_sandbox_tools_are_hidden_without_a_coding_workspace() -> None:
-    """Abi listed "the workspace drive" with list_coding_dir (an error outside
+    """Abi listed "Workspace Files" with list_coding_dir (an error outside
     Code) and Files then invented the listing."""
     from naas_abi.tools.coding_tools import coding_tools
     from naas_abi_core.services.agent.Agent import Agent

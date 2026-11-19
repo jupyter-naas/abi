@@ -8,7 +8,7 @@ describe('resolveMobileTopBarTitle', () => {
       resolveMobileTopBarTitle({
         variant: 'top',
         titleOverride: 'Files',
-        pageTitle: 'Workspace Drive',
+        pageTitle: 'Workspace Files',
         workspaceName: 'Acme',
       })
     ).toBe('Files');
@@ -29,11 +29,11 @@ describe('resolveMobileTopBarTitle', () => {
     expect(
       resolveMobileTopBarTitle({
         variant: 'detail',
-        pageTitle: 'Workspace Drive',
+        pageTitle: 'Workspace Files',
         threadTitle: 'New chat',
         isChatThread: false,
       })
-    ).toBe('Workspace Drive');
+    ).toBe('Workspace Files');
   });
 
   it('does not fall back to stale chat titles on files browse detail', () => {
