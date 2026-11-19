@@ -898,7 +898,9 @@ def test_inlined_row_count_waits_for_a_write_on_a_sqlite_catalog(tmp_path):
     counts: list[int] = []
 
     with adapter._catalog_lock.exclusive():
-        reader = threading.Thread(target=lambda: counts.append(adapter.inlined_row_count("t")))
+        reader = threading.Thread(
+            target=lambda: counts.append(adapter.inlined_row_count("t"))
+        )
         reader.start()
         reader.join(timeout=0.3)
         assert reader.is_alive(), "inlined_row_count read the catalog during a write"
@@ -1052,7 +1054,10 @@ def _upserted_table(tmp_path, **options) -> DatasetSecondaryAdapterDuckLake:
     for day in range(6):
         adapter.write(
             "messages",
-            [{"id": n, "subject": f"day{day}-{n}"} for n in range(day * 10, day * 10 + 5)]
+            [
+                {"id": n, "subject": f"day{day}-{n}"}
+                for n in range(day * 10, day * 10 + 5)
+            ]
             + [{"id": 5000 + day, "subject": "new"}],
             mode="upsert",
         )
@@ -1099,7 +1104,9 @@ def test_clean_up_deletes_replaced_files_and_keeps_every_snapshot(
     adapter = _upserted_table(tmp_path)
     query = "SELECT count(*) AS n, max(subject) AS last FROM messages"
     history = {
-        snapshot.snapshot_id: adapter.query(query, snapshot_id=snapshot.snapshot_id).rows
+        snapshot.snapshot_id: adapter.query(
+            query, snapshot_id=snapshot.snapshot_id
+        ).rows
         for snapshot in adapter.list_snapshots()[2:]
     }
     adapter.compact("messages")
@@ -1152,7 +1159,10 @@ def test_clean_up_expires_snapshots_past_the_retention(tmp_path, monkeypatch):
 
 
 def test_maintenance_options_are_checked(tmp_path):
-    for options in ({"snapshot_retention_days": -1}, {"compaction_delete_threshold": 2}):
+    for options in (
+        {"snapshot_retention_days": -1},
+        {"compaction_delete_threshold": 2},
+    ):
         with pytest.raises(ValueError):
             DatasetSecondaryAdapterDuckLake(
                 catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",
