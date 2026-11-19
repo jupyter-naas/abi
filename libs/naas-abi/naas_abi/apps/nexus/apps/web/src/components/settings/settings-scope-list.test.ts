@@ -44,15 +44,48 @@ describe('buildSettingsScopeMenuEntries', () => {
     expect(alpha).toMatchObject({ current: false, href: '/organizations/alpha/settings' });
   });
 
-  it('never lists the workspace: settings scopes only', () => {
+  it('never lists the workspace: settings scopes only, narrowest first', () => {
     const entries = buildSettingsScopeMenuEntries({
       currentScope: { kind: 'platform' },
       showPlatform: true,
       platformActions: platformAdmin,
       organizations: [{ id: 'acme', name: 'Acme' }],
-      accountName: 'Bob',
     });
-    expect(entries.map((e) => e.id)).toEqual(['platform', 'account', 'orgs-sep', 'org:acme']);
+    expect(entries.map((e) => e.id)).toEqual(['account', 'org:acme', 'platform']);
+  });
+
+  it('names the scopes by what they are, the organization included when it is the only one', () => {
+    const entries = buildSettingsScopeMenuEntries({
+      currentScope: { kind: 'account' },
+      showPlatform: true,
+      platformActions: platformAdmin,
+      organizations: [{ id: 'acme', name: 'JOE Platform' }],
+    });
+    expect(entries.map((e) => (e.type === 'item' ? e.label : '—'))).toEqual([
+      'Account',
+      'Organization',
+      'Platform',
+    ]);
+  });
+
+  it('sets several organizations apart, by name', () => {
+    const entries = buildSettingsScopeMenuEntries({
+      currentScope: { kind: 'account' },
+      showPlatform: true,
+      platformActions: platformAdmin,
+      organizations: [
+        { id: 'alpha', name: 'Alpha Co' },
+        { id: 'beta', name: 'Beta Co' },
+      ],
+    });
+    expect(entries.map((e) => (e.type === 'item' ? e.label : '—'))).toEqual([
+      'Account',
+      '—',
+      'Organization · Alpha Co',
+      'Organization · Beta Co',
+      '—',
+      'Platform',
+    ]);
   });
 
   it('reuses remembered paths when switching', () => {
@@ -67,21 +100,6 @@ describe('buildSettingsScopeMenuEntries', () => {
     expect(platform).toMatchObject({ href: '/settings/roles' });
   });
 
-  it("labels Account with the signed-in user's name", () => {
-    const base = {
-      currentScope: { kind: 'account' } as const,
-      showPlatform: false,
-      platformActions: null,
-      organizations: [],
-    };
-    const named = buildSettingsScopeMenuEntries({ ...base, accountName: 'Olivia Martin' });
-    expect(named.find((e) => e.type === 'item' && e.id === 'account')).toMatchObject({
-      label: 'Olivia Martin',
-      current: true,
-    });
-    const unnamed = buildSettingsScopeMenuEntries({ ...base, accountName: '  ' });
-    expect(unnamed.find((e) => e.type === 'item' && e.id === 'account')).toMatchObject({ label: 'Account' });
-  });
 });
 
 describe('opensAnotherPage', () => {

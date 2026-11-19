@@ -18,60 +18,59 @@ export function opensAnotherPage(href: string, pathname: string | null | undefin
   return href.split(/[?#]/, 1)[0] !== pathname;
 }
 
-/** Pure list for the header scope switcher (Vitest covers access rules). */
+/**
+ * Pure list for the header scope switcher (Vitest covers access rules).
+ *
+ * Scopes go by what they are, from the narrowest to the widest, as in the avatar
+ * menu: Account, Organization, Platform. An organization's name shows only when
+ * several are listed: it is then what tells them apart.
+ */
 export function buildSettingsScopeMenuEntries({
   currentScope,
   showPlatform,
   platformActions,
   organizations,
-  accountName,
 }: {
   currentScope: SettingsScopeKey;
   showPlatform: boolean;
   platformActions: PlatformActions | null;
   organizations: OpenableOrganization[];
-  /** The signed-in user's name, the Account entry's label ("Account" without one). */
-  accountName?: string | null;
 }): SettingsScopeMenuEntry[] {
   const entries: SettingsScopeMenuEntry[] = [];
 
+  entries.push({
+    type: 'item',
+    id: 'account',
+    label: 'Account',
+    href: settingsScopeReturnPath({ kind: 'account' }, '/account/profile'),
+    current: currentScope.kind === 'account',
+  });
+
+  const several = organizations.length > 1;
+  if (several) entries.push({ type: 'separator', id: 'orgs-sep' });
+  for (const org of organizations) {
+    const scope: SettingsScopeKey = { kind: 'organization', orgId: org.id };
+    entries.push({
+      type: 'item',
+      id: `org:${org.id}`,
+      label: several ? `Organization · ${org.name}` : 'Organization',
+      href: settingsScopeReturnPath(scope, orgSettingsIndexPath(org.id)),
+      current: currentScope.kind === 'organization' && scopeKeysEqual(currentScope, scope),
+    });
+  }
+
   if (showPlatform) {
-    const href =
-      settingsScopeReturnPath(
-        { kind: 'platform' },
-        firstPlatformSettingsPath(platformActions) ?? PLATFORM_SETTINGS_INDEX
-      );
+    if (several) entries.push({ type: 'separator', id: 'platform-sep' });
     entries.push({
       type: 'item',
       id: 'platform',
       label: 'Platform',
-      href,
+      href: settingsScopeReturnPath(
+        { kind: 'platform' },
+        firstPlatformSettingsPath(platformActions) ?? PLATFORM_SETTINGS_INDEX
+      ),
       current: currentScope.kind === 'platform',
     });
-  }
-
-  const accountHref = settingsScopeReturnPath({ kind: 'account' }, '/account/profile');
-  entries.push({
-    type: 'item',
-    id: 'account',
-    label: accountName?.trim() || 'Account',
-    href: accountHref,
-    current: currentScope.kind === 'account',
-  });
-
-  if (organizations.length > 0) {
-    entries.push({ type: 'separator', id: 'orgs-sep' });
-    for (const org of organizations) {
-      const scope: SettingsScopeKey = { kind: 'organization', orgId: org.id };
-      const href = settingsScopeReturnPath(scope, orgSettingsIndexPath(org.id));
-      entries.push({
-        type: 'item',
-        id: `org:${org.id}`,
-        label: `Organization · ${org.name}`,
-        href,
-        current: currentScope.kind === 'organization' && scopeKeysEqual(currentScope, scope),
-      });
-    }
   }
 
   return entries;

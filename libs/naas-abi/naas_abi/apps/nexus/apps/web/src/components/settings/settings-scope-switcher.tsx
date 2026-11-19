@@ -6,7 +6,6 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronDown, Loader2, type LucideIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
-import { useAuthStore } from '@/stores/auth';
 import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
 import { settingsScopeFromPathname } from '@/lib/settings-scope-path';
@@ -22,7 +21,6 @@ export function SettingsScopeSwitcher({
 }) {
   const pathname = usePathname();
   const currentScope = useMemo(() => settingsScopeFromPathname(pathname), [pathname]);
-  const accountName = useAuthStore((s) => s.user?.name);
   const platformSettings = usePlatformSettingsAccess();
   const showPlatform =
     platformSettings.status === 'ready' &&
@@ -43,8 +41,10 @@ export function SettingsScopeSwitcher({
     showPlatform,
     platformActions: platformSettings.actions,
     organizations: organizations.map((o) => ({ id: o.id, name: o.name })),
-    accountName,
   });
+  // The button reads as the entry checked in its list.
+  const current = entries.find((entry) => entry.type === 'item' && entry.current);
+  const label = current?.type === 'item' ? current.label : title;
 
   if (entries.length <= 1) {
     return (
@@ -64,7 +64,7 @@ export function SettingsScopeSwitcher({
           aria-label="Switch settings scope"
           aria-busy={pendingHref ? true : undefined}
         >
-          <span className="settings-scope-switcher-title">{title}</span>
+          <span className="settings-scope-switcher-title">{label}</span>
           {pendingHref ? (
             <Loader2 size={16} className="settings-scope-switcher-chevron animate-spin" aria-hidden />
           ) : (

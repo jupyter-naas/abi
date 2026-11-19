@@ -52,18 +52,8 @@ function enabledItems(panel: HTMLElement | null): HTMLElement[] {
   return panel ? [...panel.querySelectorAll<HTMLElement>(ENABLED_ITEMS)] : [];
 }
 
-/** Label, then what the row opens (a workspace, an organization), muted on the right. */
-function ItemText({ label, detail }: { label: string; detail?: string | null }) {
-  return (
-    <>
-      <span className="account-menu-item-label">{label}</span>
-      {detail ? (
-        <span className="account-menu-item-detail" title={detail}>
-          {detail}
-        </span>
-      ) : null}
-    </>
-  );
+function ItemLabel({ label }: { label: string }) {
+  return <span className="account-menu-item-label">{label}</span>;
 }
 
 /** One settings scope of the menu: a link, a muted row while its access is read, or nothing. */
@@ -88,14 +78,14 @@ function SettingsScopeItem({
         className="account-menu-settings-item account-menu-settings-item-loading"
       >
         <Icon size={14} className="shrink-0 text-muted-foreground" />
-        <ItemText label={label} />
+        <ItemLabel label={label} />
       </span>
     );
   }
   return (
     <Link href={entry.href} role="menuitem" onClick={onClose} className="account-menu-settings-item">
       <Icon size={14} className="shrink-0 text-muted-foreground" />
-      <ItemText label={entry.label} detail={entry.detail} />
+      <ItemLabel label={entry.label} />
     </Link>
   );
 }
@@ -121,9 +111,6 @@ export function AccountMenuPanel({
   const logout = useAuthStore((s) => s.logout);
   const links = useAvatarSettingsLinks();
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
-  const workspaceName = useWorkspaceStore(
-    (s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId)?.name,
-  );
   const helpHref = getWorkspacePath(currentWorkspaceId, '/help');
   // The workspace's architecture: for those who open its settings, as the sidebar was.
   const showInfrastructure = useOpensWorkspaceSettings() && !!currentWorkspaceId;
@@ -179,12 +166,12 @@ export function AccountMenuPanel({
       <div className="account-menu-group" role="group" aria-label="Settings">
         <Link href={links.account.href} role="menuitem" onClick={onClose} className="account-menu-settings-item">
           <User size={14} className="shrink-0 text-muted-foreground" />
-          <ItemText label={links.account.label} />
+          <ItemLabel label={links.account.label} />
         </Link>
         {showInfrastructure && (
           <Link href={infrastructureHref} role="menuitem" onClick={onClose} className="account-menu-settings-item">
             <Blocks size={14} className="shrink-0 text-muted-foreground" />
-            <ItemText label="Infrastructure" detail={workspaceName} />
+            <ItemLabel label="Infrastructure" />
           </Link>
         )}
         <SettingsScopeItem entry={links.organization} label="Organization" icon={Building2} onClose={onClose} />
@@ -194,7 +181,7 @@ export function AccountMenuPanel({
       <div className="account-menu-group" role="group" aria-label="Session">
         <Link href={helpHref} role="menuitem" onClick={onClose} className="account-menu-settings-item">
           <HelpCircle size={14} className="shrink-0 text-muted-foreground" />
-          <ItemText label="Help" />
+          <ItemLabel label="Help" />
         </Link>
         <button
           type="button"
@@ -207,7 +194,7 @@ export function AccountMenuPanel({
           className="account-menu-item account-menu-logout w-full"
         >
           <LogOut size={14} className="shrink-0" />
-          <ItemText label="Log out" />
+          <ItemLabel label="Log out" />
         </button>
       </div>
     </div>

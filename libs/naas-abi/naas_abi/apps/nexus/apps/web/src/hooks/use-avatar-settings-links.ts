@@ -7,8 +7,7 @@ import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access'
 import { firstPlatformSettingsPath, PLATFORM_SETTINGS_INDEX, visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
 import { settingsScopeReturnPath } from '@/lib/settings-scope-path';
 
-/** ``detail``: what the link opens, when the label alone does not say (the organization's name). */
-export type AvatarSettingsLink = { label: string; href: string; detail?: string };
+export type AvatarSettingsLink = { label: string; href: string };
 
 /** A scope whose access is still being read shows as `loading`; refused, it is null. */
 export type AvatarSettingsEntry = AvatarSettingsLink | 'loading' | null;
@@ -44,7 +43,6 @@ export function useAvatarSettingsLinks(): AvatarSettingsLinks {
       organization = {
         label: 'Organization',
         href: settingsScopeReturnPath({ kind: 'organization', orgId: pick.id }, orgSettingsIndexPath(pick.id)),
-        detail: pick.name,
       };
     }
   }

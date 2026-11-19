@@ -110,22 +110,6 @@ describe('Infrastructure in the account menu', () => {
   });
 });
 
-describe('what a settings row opens', () => {
-  it('names the workspace and the organization', async () => {
-    useWorkspaceStore.setState({
-      currentWorkspaceId: 'ws-1',
-      workspaces: [{ id: 'ws-1', name: 'JOE', organizationId: 'acme' }] as never,
-    });
-    state.opensWorkspaceSettings = true;
-    const menu = await menuFor('olivia', 'admin');
-    const detail = (href: string) =>
-      menu.querySelector(`a[href${href}] .account-menu-item-detail`)?.textContent;
-    expect(detail('$="/settings/infrastructure"')).toBe('JOE');
-    expect(detail('^="/organizations/acme/settings"')).toBe('Acme');
-    useWorkspaceStore.setState({ workspaces: [] });
-  });
-});
-
 describe('the account menu from the keyboard', () => {
   function press(key: string) {
     document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
