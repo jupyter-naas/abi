@@ -194,7 +194,7 @@ smoke_nats() {
     local name=nats-smoke
     step "abi new project $name (NATS, sources from $REPO)"
     cd "$WORK"
-    abi new project "$name" --abi-source "$REPO" --domain localhost
+    abi new project "$name" --abi-source "$REPO" --domain localhost --admin-email admin@example.com
     cd "$WORK/$name"
     PROJECT="$PWD"
 
@@ -242,7 +242,7 @@ smoke_without_nats() {
     local name=classic-smoke
     step "abi new project $name --without-nats (legacy, sources from $REPO)"
     cd "$WORK"
-    abi new project "$name" --without-nats --abi-source "$REPO" --domain localhost
+    abi new project "$name" --without-nats --abi-source "$REPO" --domain localhost --admin-email admin@example.com
     cd "$WORK/$name"
     PROJECT="$PWD"
 

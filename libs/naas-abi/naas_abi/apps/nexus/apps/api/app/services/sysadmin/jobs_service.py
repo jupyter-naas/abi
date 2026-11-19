@@ -1,9 +1,13 @@
 """Use cases over module jobs: the overview, run history, and audited actions.
 
 The overview degrades per source (engine catalog, discovery, run store, queue)
-and reports ``sources``. Triggering and cancelling are audited like data
-changes (``run_audited``): a ``requested`` record first, nothing happens if it
-cannot be written, then ``succeeded`` or ``failed``.
+and reports ``sources``. It reads the run store once per module and the queue
+once per job, a few at a time, and is computed by one request at a time: callers
+that arrive meanwhile, or within ``OVERVIEW_TTL_SECONDS``, share its result.
+
+Triggering and cancelling are audited like data changes (``run_audited``): a
+``requested`` record first, nothing happens if it cannot be written, then
+``succeeded`` or ``failed``.
 """
 
 from __future__ import annotations
@@ -11,16 +15,15 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, TypeVar
 
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
     ACTIVE_STATUSES,
     FAILED_STATUSES,
     LISTED_STATUSES,
-    SKIPPED,
     Failures,
     InputValidator,
     InvalidInput,
@@ -33,6 +36,7 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
     JobRunStore,
     JobsOverview,
     JobView,
+    ModuleRuns,
     RunNotCancellable,
     RunNotFound,
     RunsPage,
@@ -69,6 +73,13 @@ KIND_TTL_SECONDS = 30.0
 # Failures read for the notification badge, and how far back by default.
 MAX_FAILURES = 200
 FAILURES_WINDOW = timedelta(days=1)
+# How long an overview answers again: a page polls every few seconds, and several
+# admins (or tabs) poll the same thing.
+OVERVIEW_TTL_SECONDS = 2.0
+# Run-store and queue reads one overview has in flight at once.
+OVERVIEW_CONCURRENCY = 8
+
+T = TypeVar("T")
 
 
 def _parse(value: str | None) -> datetime | None:
@@ -85,6 +96,17 @@ def _iso(value: datetime | None) -> str | None:
     return value.astimezone(UTC).isoformat() if value else None
 
 
+async def _bounded(calls: Iterable[Callable[[], Awaitable[T]]], limit: int) -> list[T]:
+    """The results of ``calls``, in their order, with at most ``limit`` running at once."""
+    gate = asyncio.Semaphore(limit)
+
+    async def one(call: Callable[[], Awaitable[T]]) -> T:
+        async with gate:
+            return await call()
+
+    return await asyncio.gather(*(one(c) for c in calls))
+
+
 class JobsAdminService:
     def __init__(
         self,
@@ -99,6 +121,7 @@ class JobsAdminService:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         steps: StepStore | SourceUnavailable | None = None,
         validator: InputValidator | None = None,
+        overview_ttl: float = OVERVIEW_TTL_SECONDS,
     ) -> None:
         self._catalogs = list(catalogs)
         self._runs = runs
@@ -112,6 +135,12 @@ class JobsAdminService:
         self._validator = validator
         # (module, job) -> (is a workflow, or None: no catalog lists it; expiry)
         self._kinds: dict[tuple[str, str], tuple[bool | None, float]] = {}
+        self._overview_ttl = overview_ttl
+        # The overview being computed (with the generation it started in), and the
+        # last one with when it expires. A trigger or cancel starts a generation.
+        self._overview_task: tuple[int, asyncio.Task[JobsOverview]] | None = None
+        self._overview_cache: tuple[float, JobsOverview] | None = None
+        self._overview_generation = 0
 
     # --- definitions ---------------------------------------------------------------------
 
@@ -178,6 +207,38 @@ class JobsAdminService:
         return tuple(views)
 
     async def overview(self) -> JobsOverview:
+        """Every job with its schedule, recent runs and queue. Concurrent callers
+        share one computation; its result answers for ``overview_ttl`` seconds."""
+        cached = self._overview_cache
+        if cached and cached[0] > time.monotonic():
+            return cached[1]
+        loop = asyncio.get_running_loop()
+        generation = self._overview_generation
+        current = self._overview_task
+        if (
+            current is None
+            or current[0] != generation
+            or current[1].done()
+            or current[1].get_loop() is not loop
+        ):
+            task = loop.create_task(self._compute_overview(generation))
+            # Retrieved here so a failure nobody waits for any more is not logged
+            # as never retrieved; the callers still waiting get it.
+            task.add_done_callback(lambda t: t.cancelled() or t.exception())
+            self._overview_task = (generation, task)
+        else:
+            task = current[1]
+        # Shielded: a caller that goes away (a closed tab) does not cancel the
+        # computation the others wait for.
+        return await asyncio.shield(task)
+
+    def _forget_overview(self) -> None:
+        """After a trigger or cancel: the next overview shows it, and one started
+        before is neither joined nor kept."""
+        self._overview_generation += 1
+        self._overview_cache = None
+
+    async def _compute_overview(self, generation: int) -> JobsOverview:
         sources: dict[str, SourceStatus] = {}
         definitions = await self._definitions(sources)
         now = self._clock()
@@ -189,31 +250,24 @@ class JobsAdminService:
             sources["runs"] = SourceStatus(False, self._runs.reason)
         else:
             store = self._runs
+            by_module: dict[str, list[str]] = {}
+            for d in definitions:
+                by_module.setdefault(d.module_id, []).append(d.name)
+
+            def read(module_id: str, jobs: list[str]) -> Callable[[], Awaitable[ModuleRuns]]:
+                return lambda: store.module_runs(module_id, jobs, recent=RECENT_RUNS)
+
             try:
-                recents = await asyncio.gather(
-                    *(
-                        store.list_runs(
-                            [d.module_id],
-                            job=d.name,
-                            statuses=list(LISTED_STATUSES),
-                            limit=RECENT_RUNS,
-                        )
-                        for d in definitions
-                    )
+                found_runs = await _bounded(
+                    (read(m, jobs) for m, jobs in by_module.items()), OVERVIEW_CONCURRENCY
                 )
-                lasts = await asyncio.gather(
-                    *(
-                        store.list_runs([d.module_id], job=d.name, statuses=[SKIPPED], limit=1)
-                        for d in definitions
-                    )
-                )
-                modules = sorted({d.module_id for d in definitions})
-                actives = await asyncio.gather(*(store.running(m) for m in modules))
-                for definition, runs, last in zip(definitions, recents, lasts, strict=True):
-                    recent[definition.key] = runs
-                    skipped[definition.key] = last[0] if last else None
-                for active in actives:
-                    for r in active:
+                for module_id, module in zip(by_module, found_runs, strict=True):
+                    for name, job_runs in module.jobs.items():
+                        key = f"{module_id}/{name}"
+                        if key in recent:
+                            recent[key] = list(job_runs.recent)
+                            skipped[key] = job_runs.last_skipped
+                    for r in module.running:
                         key = f"{r.module_id}/{r.job}"
                         if key in running:
                             running[key] += 1
@@ -221,16 +275,20 @@ class JobsAdminService:
             except SourceUnavailable as exc:
                 sources["runs"] = SourceStatus(False, exc.reason)
                 recent = {d.key: [] for d in definitions}
+                skipped = {d.key: None for d in definitions}
+                running = {d.key: 0 for d in definitions}
 
         depths: dict[str, tuple[int, int] | None] = {d.key: None for d in definitions}
         if isinstance(self._queue, SourceUnavailable):
             sources["queue"] = SourceStatus(False, self._queue.reason)
         else:
             queue = self._queue
+
+            def read_depth(d: JobDefinition) -> Callable[[], Awaitable[tuple[int, int] | None]]:
+                return lambda: queue.depth(d.module_id, d.name)
+
             try:
-                found = await asyncio.gather(
-                    *(queue.depth(d.module_id, d.name) for d in definitions)
-                )
+                found = await _bounded((read_depth(d) for d in definitions), OVERVIEW_CONCURRENCY)
                 depths = {d.key: depth for d, depth in zip(definitions, found, strict=True)}
                 sources["queue"] = SourceStatus(True)
             except SourceUnavailable as exc:
@@ -255,7 +313,10 @@ class JobsAdminService:
                     last_skipped=skipped[definition.key],
                 )
             )
-        return JobsOverview(self.project, tuple(views), sources)
+        overview = JobsOverview(self.project, tuple(views), sources)
+        if self._overview_ttl > 0 and generation == self._overview_generation:
+            self._overview_cache = (time.monotonic() + self._overview_ttl, overview)
+        return overview
 
     # --- runs ----------------------------------------------------------------------------
 
@@ -393,11 +454,14 @@ class JobsAdminService:
                 raise InvalidInput(issues)
         control = self._controller()
         action = AdminAction(actor_id, "jobs", "trigger", f"{module_id}/{job}", via=via)
-        return await run_audited(
-            self._audit,
-            action,
-            lambda: control.trigger(module_id, job, payload, idempotency_key),
-        )
+        try:
+            return await run_audited(
+                self._audit,
+                action,
+                lambda: control.trigger(module_id, job, payload, idempotency_key),
+            )
+        finally:
+            self._forget_overview()
 
     async def cancel(
         self,
@@ -415,7 +479,12 @@ class JobsAdminService:
             raise RunNotCancellable(run_id, found.status)
         control = self._controller()
         action = AdminAction(actor_id, "jobs", "cancel", f"{module_id}/{run_id}", via=via)
-        await run_audited(self._audit, action, lambda: control.cancel(module_id, found.job, run_id))
+        try:
+            await run_audited(
+                self._audit, action, lambda: control.cancel(module_id, found.job, run_id)
+            )
+        finally:
+            self._forget_overview()
 
 
 def preview_result(result: Any) -> Any:

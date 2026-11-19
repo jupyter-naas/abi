@@ -256,3 +256,134 @@ async def test_a_role_without_the_files_feature_is_refused(storage, drives) -> N
             assert "feature" in denied.json()["detail"]
         async with client("member") as http:
             assert (await http.get("/api/files/readme.md", params=ws())).status_code == 200
+
+
+# -- The organization drive ------------------------------------------------------
+
+ORG1 = "naas_abi/organization-drive/org-1"
+ORG2 = "naas_abi/organization-drive/org-2"
+
+
+@pytest.fixture
+def org_storage(storage) -> ObjectStorageService:
+    storage.put_object(ORG1, "policy.md", b"# org-1 policy")
+    storage.put_object(f"{ORG1}/operations", "plan.md", b"# ops")
+    storage.put_object(ORG2, "secret.md", b"# org-2")
+    return storage
+
+
+def org(**extra: str) -> dict[str, str]:
+    return {"scope": "organization_drive", "workspace_id": "ws-1", **extra}
+
+
+def org_body(path: str, workspace_id: str = "ws-1") -> dict[str, str]:
+    return {
+        "path": path,
+        "content": "x",
+        "workspace_id": workspace_id,
+        "scope": "organization_drive",
+    }
+
+
+@pytest.mark.asyncio
+async def test_the_organization_drive_is_read_by_its_people_and_written_by_its_admins(
+    client, org_storage
+) -> None:
+    for user in ("viewer", "member", "admin", "owner"):
+        async with client(user) as http:
+            listing = await http.get("/api/files/", params=org())
+            assert listing.status_code == 200, user
+            assert {f["name"] for f in listing.json()["files"]} >= {"policy.md", "operations"}
+            read = await http.get("/api/files/policy.md", params=org())
+            assert read.json()["content"] == "# org-1 policy", user
+    for user in ("viewer", "member"):
+        async with client(user) as http:
+            assert (await http.post("/api/files/", json=org_body("x.md"))).status_code == 403
+            assert (await http.delete("/api/files/policy.md", params=org())).status_code == 403
+    for user in ("admin", "owner"):
+        async with client(user) as http:
+            assert (await http.post("/api/files/", json=org_body(f"{user}.md"))).status_code == 200
+            assert org_storage.get_object(ORG1, f"{user}.md") == b"x"
+            assert (await http.delete(f"/api/files/{user}.md", params=org())).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_a_stranger_and_a_workspace_in_no_organization_reach_no_organization_drive(
+    client, team, org_storage
+) -> None:
+    async with client("stranger") as http:
+        assert (await http.get("/api/files/policy.md", params=org())).status_code == 403
+    solo = team.workspace(None, "ws-solo")
+    team.grant("member", "member", solo)
+    async with client("member") as http:
+        none = await http.get("/api/files/", params=org(workspace_id="ws-solo"))
+        assert none.status_code == 404
+        assert "no organization" in none.json()["detail"]
+        # The drive is reached through a workspace.
+        no_ws = await http.get("/api/files/", params={"scope": "organization_drive"})
+        assert no_ws.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_reaches_its_own_organizations_drive_alone(
+    client, team, org_storage
+) -> None:
+    other = team.workspace("org-2", "ws-2")
+    team.grant("other", "member", other)
+    team.grant("other", "member", team.org("org-2"))
+    async with client("other") as http:
+        # Its own organization's drive.
+        own = await http.get("/api/files/secret.md", params=org(workspace_id="ws-2"))
+        assert own.json()["content"] == "# org-2"
+        # Not org-1's, through org-1's workspace...
+        assert (await http.get("/api/files/policy.md", params=org())).status_code == 403
+        # ...nor by naming org-1's drive from its own workspace: the path stays inside org-2's.
+        named = await http.get(f"/api/files/{ORG1}/policy.md", params=org(workspace_id="ws-2"))
+        assert named.status_code == 404
+    async with client("owner") as http:
+        # An owner of org-1 holds nothing in org-2.
+        assert (
+            await http.get("/api/files/secret.md", params=org(workspace_id="ws-2"))
+        ).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_policy_at_the_organization_lets_members_write_one_folder(
+    client, team, org_storage
+) -> None:
+    team.allow(
+        "member",
+        ["nexus:PutOrgFile", "nexus:DeleteOrgFile"],
+        ["${scope}/nexus:file/organization/operations/*"],
+        team.org("org-1"),
+    )
+    async with client("member") as http:
+        assert (
+            await http.post("/api/files/", json=org_body("operations/new.md"))
+        ).status_code == 200
+        assert org_storage.get_object(f"{ORG1}/operations", "new.md") == b"x"
+        assert (await http.post("/api/files/", json=org_body("finance/x.md"))).status_code == 403
+        assert (await http.post("/api/files/", json=org_body("x.md"))).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_deny_at_the_organization_hides_a_folder(client, team, org_storage) -> None:
+    org_storage.put_object(f"{ORG1}/finance", "budget.md", b"# budget")
+    team.deny(
+        "member",
+        ["nexus:ListOrgFiles", "nexus:GetOrgFile"],
+        ["${scope}/nexus:file/organization/finance", "${scope}/nexus:file/organization/finance/*"],
+        team.org("org-1"),
+    )
+    async with client("member") as http:
+        assert (await http.get("/api/files/finance/budget.md", params=org())).status_code == 403
+        assert (await http.get("/api/files/", params=org(path="finance"))).status_code == 403
+        assert (await http.get("/api/files/policy.md", params=org())).status_code == 200
+    async with client("viewer") as http:
+        assert (await http.get("/api/files/finance/budget.md", params=org())).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_the_organization_drive_keeps_its_system_files_read_only(client, org_storage) -> None:
+    async with client("owner") as http:
+        assert (await http.post("/api/files/", json=org_body(".manifest.json"))).status_code == 403

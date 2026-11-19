@@ -20,7 +20,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from naas_abi_core.engine.call_context import CallContext
@@ -349,6 +349,69 @@ class NameRewriter(ABC):
     def resource(self, resource: str | None) -> str | None:
         """A resource a key is bound to; unchanged by default."""
         return resource
+
+    def merged(self, kind: str, dropped: str, kept: str) -> None:
+        """Told of each ``kind`` (``"attachment"``, ``"pending_grant"``) row the
+        rewrite dropped because its name, rewritten, was another's (``kept``):
+        the module moves what it records of ``dropped`` onto ``kept``. Nothing by
+        default."""
+
+
+@dataclass(frozen=True)
+class ScopedRow:
+    """An attachment or a pending grant as the rewrite of the names reads it:
+    ``key`` the rest of its unique key, ``scope`` None for none."""
+
+    id: str
+    key: tuple[str, ...]
+    scope: str | None
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ScopeRewrite:
+    """What the rewrite of the names does to attachments or pending grants:
+    the new scope of each row it rewrites, and the rows it drops, each onto the
+    row it is merged into."""
+
+    scopes: dict[str, str | None]
+    merged: dict[str, str]
+
+
+_EARLIEST = datetime.min.replace(tzinfo=UTC)
+
+
+def plan_scope_rewrite(
+    rows: Iterable[ScopedRow], rewrite: Callable[[str | None], str | None]
+) -> ScopeRewrite:
+    """Rewrite each row's scope with ``rewrite``; rows that end up with the same
+    unique key (one written in the new grammar while the rewrite waited, next to
+    its twin of the old one) are merged into the one made first, which keeps its
+    id, its date and its author: the others are dropped. Every store applies the
+    same plan (drops first, so the unique key holds at every step)."""
+    groups: dict[tuple[str, ...], list[tuple[ScopedRow, str | None]]] = {}
+    for row in rows:
+        scope = rewrite(row.scope) or None
+        groups.setdefault((*row.key, scope or ""), []).append((row, scope))
+    scopes: dict[str, str | None] = {}
+    merged: dict[str, str] = {}
+    for twins in groups.values():
+        twins.sort(key=_made_first)
+        (kept, scope), *dropped = twins
+        if scope != kept.scope:
+            scopes[kept.id] = scope
+        for row, _ in dropped:
+            merged[row.id] = kept.id
+    return ScopeRewrite(scopes, merged)
+
+
+def _made_first(twin: tuple[ScopedRow, str | None]) -> tuple[datetime, bool, str]:
+    """The row made first; on the same date, the one in the old grammar."""
+    row, scope = twin
+    made = row.created_at or _EARLIEST
+    if made.tzinfo is None:
+        made = made.replace(tzinfo=UTC)
+    return (made, scope == row.scope, row.id)
 
 
 @dataclass(frozen=True)
@@ -731,6 +794,11 @@ class IAMStore(ABC):
         """Create or replace the placement of ``(service, id_key)``."""
 
     @abstractmethod
+    def claim_placement(self, placement: Placement) -> Placement:
+        """Record ``placement`` unless ``(service, id_key)`` is already placed,
+        atomically; the placement that holds the key afterwards."""
+
+    @abstractmethod
     def delete_placement(self, service: str, id_key: str) -> bool: ...
 
     @abstractmethod
@@ -762,7 +830,13 @@ class IAMStore(ABC):
         """Rewrite every stored name with ``rewriter``, in one transaction:
         containers registered, policies (owner and document; managed ones too),
         groups' owners, attachments, pending grants, placements (the old form's
-        too), keys' narrowing statements, manifests. How many of each changed."""
+        too), keys' narrowing statements, manifests. How many of each changed.
+
+        Attachments or pending grants whose rewritten names are the same (one
+        written in the new grammar while the rewrite waited, next to its twin of
+        the old one) are merged into the one made first (``plan_scope_rewrite``):
+        the others are dropped, each told to ``rewriter.merged``, and counted in
+        ``attachments_merged`` and ``pending_grants_merged``."""
 
     # -- what an older version left ------------------------------------------
 
@@ -1448,6 +1522,21 @@ class IIAMService(ABC):
     def put_placement(
         self, service: str, id_key: str, container: str = PLATFORM_SCOPE
     ) -> Placement: ...
+
+    def claim_placement(
+        self, service: str, id_key: str, container: str = PLATFORM_SCOPE
+    ) -> Placement:
+        """Place ``id_key`` in ``container`` unless it is placed already: the
+        placement that holds it afterwards, the existing one when another
+        create placed it first (compare-and-set). ``IAMService`` does it in one
+        store write; this default, for clients without that operation, reads
+        then writes."""
+        held = next(
+            (p for p in self.list_placements(service) if p.id_key == id_key), None
+        )
+        if held is not None:
+            return held
+        return self.put_placement(service, id_key, container)
 
     @abstractmethod
     def delete_placement(self, service: str, id_key: str) -> bool: ...

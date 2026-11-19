@@ -85,8 +85,13 @@ def feed_layer_seeds(request: Request) -> list[MapsFeedLayer]:
 
 
 def _reserved(request: Request) -> set[str]:
+    """Built-in layout ids, graph layers registered by modules, and every seed id."""
     catalog = getattr(request.app.state, "maps_catalog", None)
-    return set(BUILTIN_LAYOUT_IDS) | set(getattr(catalog, "layers", {}) or {})
+    return (
+        set(BUILTIN_LAYOUT_IDS)
+        | set(getattr(catalog, "layers", {}) or {})
+        | maps_seed_registry(request.app).seed_ids()
+    )
 
 
 def _http_error(exc: Exception) -> HTTPException:

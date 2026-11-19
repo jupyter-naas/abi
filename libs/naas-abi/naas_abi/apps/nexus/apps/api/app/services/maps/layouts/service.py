@@ -439,6 +439,9 @@ class MapsLayoutService:
             )
         if layout.feed_type in (FEED_GEOJSON_URL, FEED_OBJECT_STORAGE):
             layout = replace(layout, query="", graphs=())
+        if existing is not None and existing.system:
+            # The workspace's copy of a seed keeps its seed's id.
+            reserved = frozenset(reserved) - {layout.id}
         errors = validate_layout(layout, reserved=reserved)
         if errors:
             raise MapsLayoutValidationError(errors)

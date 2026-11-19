@@ -189,6 +189,7 @@ async def set_basemap_visibility(
 async def save_basemap(
     basemap_id: str,
     body: BasemapIn,
+    request: Request,
     workspace_id: str = Query(..., min_length=1),
     current_user=Depends(get_current_user_required),
     service: MapsBasemapService = Depends(get_maps_basemap_service),
@@ -201,7 +202,12 @@ async def save_basemap(
         renderer=body.renderer,
     )
     try:
-        saved = await service.save(workspace_id, basemap, user_id=current_user.id)
+        saved = await service.save(
+            workspace_id,
+            basemap,
+            user_id=current_user.id,
+            reserved=maps_seed_registry(request.app).seed_ids(),
+        )
     except Exception as exc:
         raise _http_error(exc) from exc
     return saved.to_dict()

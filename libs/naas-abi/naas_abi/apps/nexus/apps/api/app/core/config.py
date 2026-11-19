@@ -10,7 +10,8 @@ from typing import Any, Literal
 
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from naas_abi.apps.nexus.user_seed_config import UserSeedConfig
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Namespace under which ABI serves the seed decks it ships. Reserved: a
@@ -25,6 +26,8 @@ class TenantConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # The site's name (Platform Settings > General); the tab title stands in without one.
+    name: str | None = None
     tab_title: str = "ABI Nexus | naas.ai"
     favicon_url: str | None = None
     logo_url: str | None = None
@@ -366,29 +369,6 @@ class FeatureFlagsConfig(BaseModel):
     organization_overrides: dict[str, dict[str, list[FeatureKey]]] = Field(default_factory=dict)
 
 
-class UserSeedConfig(BaseModel):
-    """User definition applied on startup (create by email if missing)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    email: EmailStr
-    name: str
-    avatar: str | None = None
-    organization: str | None = None
-    job_title: str | None = None
-    bio: str | None = None
-    is_superadmin: bool = False
-
-    @model_validator(mode="before")
-    @classmethod
-    def _ignore_the_stored_password_setting(cls, data: Any) -> Any:
-        """No password is made for a configured user any more (they sign in at the
-        built-in identity provider): the old setting is accepted and ignored."""
-        if isinstance(data, dict) and "store_credentials_in_secrets" in data:
-            data = {k: v for k, v in data.items() if k != "store_credentials_in_secrets"}
-        return data
-
-
 class OrganizationMemberSeedConfig(BaseModel):
     """Deprecated: organization members are managed in the platform."""
 
@@ -542,6 +522,24 @@ class Settings(BaseSettings):
     # Env: GRAPH_QUERY_CACHE_TTL_SECONDS. 0 disables caching (always live).
     graph_query_cache_ttl_seconds: int = 300
 
+    # The engine's dataset namespaces every workspace's viewers and members read (the
+    # platform's modules' shared data). None by default: a namespace is shared only
+    # by naming it here, so the engine's own (the event archive, what a kernel job
+    # writes) are never. Names only, no patterns.
+    shared_dataset_namespaces: list[str] = Field(default_factory=list)
+
+    @field_validator("shared_dataset_namespaces")
+    @classmethod
+    def _dataset_namespaces_are_names(cls, value: list[str]) -> list[str]:
+        import re
+
+        from naas_abi_core.services.dataset.DatasetPort import IDENTIFIER_PATTERN
+
+        for name in value:
+            if not re.match(IDENTIFIER_PATTERN, name):
+                raise ValueError(f"shared_dataset_namespaces: {name!r} is not a namespace name")
+        return list(dict.fromkeys(value))
+
     # Coding workspaces (Coder editor + Forgejo monorepo auto-clone). clone
     # host/scheme are what a *workspace container* uses to reach Forgejo (not the
     # admin API URL); docker_network is the network the workspace must join to
@@ -615,6 +613,8 @@ class Settings(BaseSettings):
     rate_limit_attempts: int = 5  # Max attempts per account (or inviting user) per window
     rate_limit_ip_attempts: int = 20  # Max attempts per client IP per window
     rate_limit_window_seconds: int = 300  # 5-minute window
+    # Invitation emails one organization (or a workspace in none) may send a day.
+    invitation_mails_per_day: int = 200
 
     # Sign-in through the engine's identity providers (``identity.providers``).
     # The session is an httpOnly, Secure cookie the API holds; "none" is for a
@@ -645,6 +645,10 @@ class Settings(BaseSettings):
         if not (self.environment == "development" or self.nexus_env == "local"):
             self.enable_ollama_autostart = False
 
+    # The largest request body /api/ reads (413 past it). Upload routes keep
+    # their own, smaller caps; remote apps (/app-remote/) set theirs.
+    max_request_body_bytes: int = 64 * 1024 * 1024
+
     # Security Headers
     enable_security_headers: bool = True
     content_security_policy: str | None = None  # Set in production
@@ -652,6 +656,12 @@ class Settings(BaseSettings):
     # ABI Engine
     abi_api_url: str = "http://localhost:8001"
     abi_api_key: str | None = None
+
+    # Origins (``host:port`` or a URL) of model servers on the deployment's own
+    # network: a workspace's ABI server, a model gateway. Chat providers reach
+    # public addresses only, plus these origins and, for Ollama calls, the
+    # platform Ollama's origin.
+    provider_allowed_origins: list[str] = Field(default_factory=list)
 
     # OpenAI (for embeddings/fallback)
     openai_api_key: str | None = None

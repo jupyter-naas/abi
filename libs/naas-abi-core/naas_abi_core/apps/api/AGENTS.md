@@ -26,6 +26,8 @@ Empty stubs do not appear in OpenAPI. A LangChain-only `BaseTool` stays agent-in
 
 `/workflows`, `/pipelines`, and `/tools` routers are included only when they have routes, so OpenAPI does not advertise dead tags.
 
+5. **Module routes**: each module's `api(app)` hook, through `module_routes.mount_module_apis`. Every route and mount a module adds there answers only a request with a credential the engine accepts (`ABI_API_KEY`, or one a registered validator vouches for: the `/app-html/` check), else 401. A module opts out explicitly (`BaseModule`): `api_checks_its_callers = True` when every route it mounts checks its caller itself (`naas_abi`, which mounts the Nexus API), or `unguarded_api_paths` for public files (logos, portraits) and routers with their own caller check (People, Personnel Cockpit). The guard finds the route a request reaches as the router does (same routes, same order, same scope; never the URL rebuilt from `Host`), and runs innermost, inside CORS. `/app-html/` keeps its own middleware.
+
 Discovery happens in `BaseModule.on_load` (class walk). Instantiation happens in `on_initialized` (services are up). See [module/AGENTS.md](../../module/AGENTS.md).
 
 ## Default `run()` POST
@@ -43,11 +45,16 @@ If `as_api` adds no routes, the kernel registers `POST /{class_slug}` only when:
 uv run pytest libs/naas-abi-core/naas_abi_core/utils/process_api_test.py -v
 uv run pytest libs/naas-abi-core/naas_abi_core/module/ModuleComponentLoader_test.py -v
 uv run pytest libs/naas-abi-core/naas_abi_core/apps/api/api_test.py -v
+uv run pytest libs/naas-abi-core/naas_abi_core/apps/api/api_docs_test.py -v
 ```
 
 `process_api_test.py` uses fixture workflows, pipelines, and tools. It does not invent customer agents.
 
 `api_test.py` boots the real engine. It needs a working local config. If ABI services are missing, report that rather than weakening the test.
+
+## API reference pages
+
+`/openapi.json`, `/docs` and `/redoc` are public only when `api_docs_enabled` is true: `api.docs_enabled` when the config sets it, otherwise on for local development (`ENV` unset, `local` or `dev`) and off for any other `ENV`. When they are off, `/docs` and `/redoc` are not mounted and `/openapi.json` asks for the API key.
 
 ## Local curl
 

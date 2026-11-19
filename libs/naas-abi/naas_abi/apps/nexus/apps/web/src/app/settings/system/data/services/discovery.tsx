@@ -201,7 +201,6 @@ export const discoveryView: ServiceView = {
   label: 'Discovery',
   description: 'Remote modules registered on the NATS network, their instances and leases.',
   icon: Radar,
-  group: 'Streams & logs',
   noun: { one: 'instance', many: 'instances' },
   entryIcon: (entry) => (entry.kind === 'container' ? Boxes : Server),
   nounFor: (entry) =>

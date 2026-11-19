@@ -1,17 +1,24 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ArrowLeft, ChevronRight } from 'lucide-react';
+import { User } from 'lucide-react';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useAuthStore } from '@/stores/auth';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useMounted } from '@/hooks/use-mounted';
+import { useRememberSettingsScope } from '@/hooks/use-remember-settings-scope';
 import { loadOrgBranding, resolveWorkspaceOrgId } from '@/lib/org-branding';
+import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
+import {
+  SettingsLayoutRoot,
+  SettingsNavItem,
+  useWorkspaceReturnPath,
+} from '@/components/settings/settings-shell';
+import { SettingsShellHeader } from '@/components/settings/settings-shell-header';
 import { accountSettingsNavVisible, type AccountSettingsNavItem } from './lib/nav';
 import { parseAccountRoute } from './lib/account-route';
-import './account-layout.css';
+import '@/app/organizations/[orgId]/settings/org-settings-layout.css';
 
 function NavItem({
   item,
@@ -25,20 +32,13 @@ function NavItem({
   const isActive = pathname === item.href;
   const Icon = item.icon;
   return (
-    <li>
-      <Link
-        href={item.href}
-        className={
-          isActive
-            ? 'account-nav-item account-nav-item-active'
-            : 'account-nav-item'
-        }
-      >
-        <Icon size={18} />
-        <span className="account-nav-item-label">{item.label}</span>
-        {mobileList && <ChevronRight size={18} className="account-nav-item-chevron" />}
-      </Link>
-    </li>
+    <SettingsNavItem
+      href={item.href}
+      label={item.label}
+      icon={Icon}
+      active={isActive}
+      chevron={mobileList}
+    />
   );
 }
 
@@ -58,20 +58,21 @@ export default function AccountLayout({
     (state) => state.workspaces.find((w) => w.id === state.currentWorkspaceId)?.organizationId,
   );
   const user = useAuthStore((state) => state.user);
-  // The saved login only exists in the browser: show the name after hydration.
   const mounted = useMounted();
-  const [orgBorderRadius, setOrgBorderRadius] = useState('0');
+  const [borderRadius, setBorderRadius] = useState('0');
+
+  useRememberSettingsScope(pathname);
 
   useEffect(() => {
     let cancelled = false;
     const fetchOrgBranding = async () => {
       if (!currentWorkspaceId) {
-        setOrgBorderRadius('0');
+        setBorderRadius('0');
         return;
       }
       const orgId = await resolveWorkspaceOrgId(currentWorkspaceId, workspaceOrgId);
       const branding = orgId ? await loadOrgBranding(orgId) : null;
-      if (!cancelled) setOrgBorderRadius(branding?.borderRadius ?? '0');
+      if (!cancelled) setBorderRadius(branding?.borderRadius ?? '0');
     };
 
     fetchOrgBranding();
@@ -87,81 +88,68 @@ export default function AccountLayout({
     };
   }, [currentWorkspaceId, workspaceOrgId]);
 
-  const themeStyles = {
-    '--org-border-radius': `${orgBorderRadius}px`,
-  } as React.CSSProperties;
+  const workspaceHref = useWorkspaceReturnPath(
+    currentWorkspaceId ? `/workspace/${currentWorkspaceId}/chat` : '/',
+    currentWorkspaceId
+  );
 
   const handleBack = () => {
     if (showMobileDetail) {
       router.push('/account');
       return;
     }
-    if (currentWorkspaceId) {
-      router.push(`/workspace/${currentWorkspaceId}/chat`);
-    } else {
-      router.push('/');
-    }
+    router.push(workspaceHref);
   };
 
-  const headerTitle = showMobileDetail
-    ? sectionLabel ?? 'Account'
-    : (mounted && user?.name) || 'Account';
+  const scopeTitle = (mounted && user?.name) || 'Account';
 
   const showNav = !showMobileDetail;
   const showMain = !showMobileList;
 
   return (
-    <div
-      className="account-layout-root"
-      data-org-branded="true"
-      style={themeStyles}
-    >
-      <header className="account-layout-header">
-        <button
-          type="button"
-          onClick={handleBack}
-          className="account-back-button"
-          aria-label={showMobileDetail ? 'Back to account settings' : 'Back to workspace'}
+    <SettingsLayoutRoot borderRadius={borderRadius}>
+      <div className="org-settings-layout-left">
+        <SettingsShellHeader
+          scopeTitle={scopeTitle}
+          detailTitle={sectionLabel}
+          showScopeSwitcher={!showMobileDetail}
+          icon={User}
+          onBack={handleBack}
+          backAriaLabel={showMobileDetail ? 'Back to account settings' : 'Back to workspace'}
+        />
+
+        <div
+          data-org-settings-body=""
+          className={
+            showMobileList
+              ? 'org-settings-layout-body org-settings-layout-body-mobile-list'
+              : showMobileDetail
+                ? 'org-settings-layout-body org-settings-layout-body-mobile-detail'
+                : 'org-settings-layout-body'
+          }
         >
-          <ArrowLeft size={20} />
-        </button>
-        <div>
-          <h1 className="account-layout-header-title">{headerTitle}</h1>
+          {showNav && (
+            <SettingsLayoutNav title="Account Settings" resizable={!showMobileList}>
+              <ul className="settings-layout-nav-list">
+                {accountSettingsNavVisible.map((item) => (
+                  <NavItem
+                    key={item.href}
+                    item={item}
+                    pathname={pathname ?? ''}
+                    mobileList={showMobileList}
+                  />
+                ))}
+              </ul>
+            </SettingsLayoutNav>
+          )}
+
+          {showMain && (
+            <div className="org-settings-layout-main">
+              <div className="org-settings-layout-content">{children}</div>
+            </div>
+          )}
         </div>
-      </header>
-
-      <div
-        className={
-          showMobileList
-            ? 'account-layout-body account-layout-body-mobile-list'
-            : showMobileDetail
-              ? 'account-layout-body account-layout-body-mobile-detail'
-              : 'account-layout-body'
-        }
-      >
-        {showNav && (
-          <nav className="account-layout-nav">
-            <h2 className="account-layout-nav-title">Account Settings</h2>
-            <div className="account-layout-nav-divider" />
-            <ul className="account-layout-nav-list">
-              {accountSettingsNavVisible.map((item) => (
-                <NavItem
-                  key={item.href}
-                  item={item}
-                  pathname={pathname}
-                  mobileList={showMobileList}
-                />
-              ))}
-            </ul>
-          </nav>
-        )}
-
-        {showMain && (
-          <div className="account-layout-main">
-            <div className="account-layout-content">{children}</div>
-          </div>
-        )}
       </div>
-    </div>
+    </SettingsLayoutRoot>
   );
 }

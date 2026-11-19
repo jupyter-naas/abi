@@ -24,6 +24,249 @@
 
 <!-- version list -->
 
+## v5.0.2 (2026-11-19)
+
+### Bug Fixes
+
+- **nexus**: A seeded user can set a company and a job title
+  ([`6ac4301`](https://github.com/jupyter-naas/abi/commit/6ac4301e661275948a268e2c87015c1759b4cd34))
+
+- **nexus**: Remove the placeholder two-factor card from Account > Security
+  ([`172022a`](https://github.com/jupyter-naas/abi/commit/172022a67b5936f16d76927c856dbba38301a381))
+
+- **nexus**: The move of the names finds a lost merge again, and seeds demote org-wide
+  ([`153dc09`](https://github.com/jupyter-naas/abi/commit/153dc09211a68c460a50df44b9fa55ddd1afa225))
+
+- **nexus**: The move of the names survives roles written while it waited
+  ([`0c0ca6c`](https://github.com/jupyter-naas/abi/commit/0c0ca6c5955dd7cfe75f8461cd66a9d78efb43f9))
+
+### Chores
+
+- **deps**: Bump zustand in /libs/naas-abi/naas_abi/apps/nexus
+  ([`3c1d56d`](https://github.com/jupyter-naas/abi/commit/3c1d56d31f8209178949bab11154bc26218ba114))
+
+### Code Style
+
+- Ruff format the naas_abi files this change touches
+  ([`1c638de`](https://github.com/jupyter-naas/abi/commit/1c638ded4f4afe60a433683127c3986d23cd83ca))
+
+
+## v5.0.1 (2026-11-19)
+
+### Bug Fixes
+
+- **settings**: A scope switch from Platform settings no longer looks like a no-op
+  ([`c042d18`](https://github.com/jupyter-naas/abi/commit/c042d18fda179d4899a3bf25b5a0425b599950aa))
+
+
+## v5.0.0 (2026-11-19)
+
+### Features
+
+- **marketplace**: X as a remote module, in-engine x removed (#1423, #1425-#1428)
+  ([`113b1e9`](https://github.com/jupyter-naas/abi/commit/113b1e9d232e4fd35960e15c69e91278cef8ac25))
+
+### Breaking Changes
+
+- **marketplace**: Naas_abi_marketplace.applications.x is removed. Run the remote module with
+  X_CONFIG_FILE (the old config: block, without bearer_token), and run reprocess_tweet_envelopes
+  once with force: true to rebuild the dataset in the module's namespace.
+
+
+## v4.3.1 (2026-11-18)
+
+### Bug Fixes
+
+- **iam**: A policy is held where it applies, not in every container
+  ([`1ab4725`](https://github.com/jupyter-naas/abi/commit/1ab4725dc3cd0a018928b6783396f376405f0dc3))
+
+- **invites**: An authorized invitation makes the account at the provider
+  ([`dc1943b`](https://github.com/jupyter-naas/abi/commit/dc1943bb482d77c2b887c75916fd1032f6ca93f2))
+
+
+## v4.3.0 (2026-11-18)
+
+### Features
+
+- **nexus**: A drive per organization, and the workspace list grouped by organization
+  ([#1511](https://github.com/jupyter-naas/abi/pull/1511),
+  [`a2b549a`](https://github.com/jupyter-naas/abi/commit/a2b549a8c490436be1bc5942e349d46c81fab7f1))
+
+
+## v4.2.1 (2026-11-18)
+
+### Bug Fixes
+
+- **nexus**: Sockets join their workspace and admin-events rooms
+  ([`99df7b2`](https://github.com/jupyter-naas/abi/commit/99df7b289686b945bc2f6bd7b4740a7fd1de642f))
+
+
+## v4.2.0 (2026-11-18)
+
+### Bug Fixes
+
+- **nexus**: Analytics routes run off the event loop
+  ([`1002ac2`](https://github.com/jupyter-naas/abi/commit/1002ac242f3be023b63eae69d8b5f9e8e080c657))
+
+- **nexus**: Avatar menu reads organizations once, shows pending entries
+  ([`f92bd66`](https://github.com/jupyter-naas/abi/commit/f92bd66e5e8466b0c5dc3a3de46b0db51b47b418))
+
+- **nexus**: Esc leaves settings only when nothing else takes it
+  ([#1493](https://github.com/jupyter-naas/abi/pull/1493),
+  [`9826c88`](https://github.com/jupyter-naas/abi/commit/9826c887dcdaad18a1bf8a1369cec8f1ff967691))
+
+- **nexus**: Platform General's refresh is the icon button of Organizations
+  ([`fc95897`](https://github.com/jupyter-naas/abi/commit/fc958975bc17bb59cfc3afb75a87cf4414cfdde8))
+
+- **nexus**: Platform Roles & permissions laid out like the organization's
+  ([`ca79048`](https://github.com/jupyter-naas/abi/commit/ca7904818a5732fb8c4f8109173d303a13dcfca0))
+
+- **nexus**: Platform Settings speak one design
+  ([`6895085`](https://github.com/jupyter-naas/abi/commit/689508593e42c816734da08036e8efb7aa2a6fc1))
+
+- **nexus**: Scope switcher reads Platform, the user's name, Organization · <name>
+  ([`fc28bae`](https://github.com/jupyter-naas/abi/commit/fc28bae1c74ac8604db2d6a6bec143b08ab3bbde))
+
+### Chores
+
+- **deps**: Bump @embedpdf/snippet
+  ([`b096bc3`](https://github.com/jupyter-naas/abi/commit/b096bc342ff222260d1140914446dbc21a15ded9))
+
+- **deps**: Bump @radix-ui/react-dropdown-menu
+  ([`13c1836`](https://github.com/jupyter-naas/abi/commit/13c1836fa4e17a56dca0f4b40c08a847b90bcf14))
+
+- **deps**: Bump @radix-ui/react-separator
+  ([`c7a3dc2`](https://github.com/jupyter-naas/abi/commit/c7a3dc2419454327731e3096fd77210f7073b6ed))
+
+- **deps**: Bump @radix-ui/react-slot
+  ([`c2032e9`](https://github.com/jupyter-naas/abi/commit/c2032e9f832b8743d46adef08287b73e78fd8e6a))
+
+- **deps**: Bump @radix-ui/react-tabs
+  ([`38ac04b`](https://github.com/jupyter-naas/abi/commit/38ac04b3e0b3f5972d4b2df9e7db5941d34d7a22))
+
+- **deps**: Bump three and @types/three
+  ([`10625a6`](https://github.com/jupyter-naas/abi/commit/10625a62a926af9f5c14f51eea49934f4b450de6))
+
+- **deps**: Bump vis-network in /libs/naas-abi/naas_abi/apps/nexus
+  ([`72777ee`](https://github.com/jupyter-naas/abi/commit/72777ee778ef40f1cd67f44904479ef0c5a0fbf0))
+
+- **deps-dev**: Bump autoprefixer in /libs/naas-abi/naas_abi/apps/nexus
+  ([`b473fc6`](https://github.com/jupyter-naas/abi/commit/b473fc6a3ab3a7a170c0b0332857dc154fbaa4d8))
+
+- **deps-dev**: Bump pytest
+  ([`a429045`](https://github.com/jupyter-naas/abi/commit/a42904591e384fa7cb6d3cd02a11d854d80b38c0))
+
+- **deps-dev**: Bump pytest-asyncio
+  ([`752e30d`](https://github.com/jupyter-naas/abi/commit/752e30d3c79f8e60448f0c6c27410dda87031314))
+
+- **deps-dev**: Bump ruff
+  ([`a20aefe`](https://github.com/jupyter-naas/abi/commit/a20aefeec97a90087a98a50ade866ce5c5838908))
+
+### Features
+
+- **nexus**: Infrastructure moves from the sidebar to the avatar menu
+  ([`b33fa28`](https://github.com/jupyter-naas/abi/commit/b33fa28abb1ee8d1ee8a588e4a3d62ee8d2d8b98))
+
+- **nexus**: Platform Create user and Create organization buttons, Nexus tables first
+  ([`cfffec7`](https://github.com/jupyter-naas/abi/commit/cfffec7fdf7373ffd32d19d8d6bdee16075770e3))
+
+- **nexus**: Platform General, organization identity, Organizations table
+  ([`da6e79f`](https://github.com/jupyter-naas/abi/commit/da6e79f225b31b4299817948d14b8b026db37191))
+
+
+## v4.1.2 (2026-11-18)
+
+### Bug Fixes
+
+- **nexus**: Mirror only each workspace's default agent into the identity graph
+  ([`9bd4d62`](https://github.com/jupyter-naas/abi/commit/9bd4d62ba0ae94f28b9625b286e4f1dc794df27f))
+
+- **nexus**: Rebuild the identity graph in batches of 2000 triples
+  ([`9f2460c`](https://github.com/jupyter-naas/abi/commit/9f2460cc286fed09431d4bd134d7e790688aebd0))
+
+
+## v4.1.1 (2026-11-17)
+
+### Bug Fixes
+
+- **nexus**: Jobs overview reads each module once, a few at a time
+  ([`3ba403b`](https://github.com/jupyter-naas/abi/commit/3ba403b530b6515083d7827b598357b72549c3ac))
+
+- **nexus**: System polls wait for the previous answer
+  ([`f474cf9`](https://github.com/jupyter-naas/abi/commit/f474cf9f7f70d367f4010dc9181c036396011765))
+
+
+## v4.1.0 (2026-11-17)
+
+### Chores
+
+- Maintenance across core, nexus, marketplace and deploy templates
+  ([`232291c`](https://github.com/jupyter-naas/abi/commit/232291c110f3961bfeabc00fbcc3db6c1dc72537))
+
+### Features
+
+- **idp**: Mail the code to login_hint at once, so the address is typed once
+  ([`11a41d2`](https://github.com/jupyter-naas/abi/commit/11a41d2a864cac600a9732f9c1b64c8c9e5d2385))
+
+
+## v4.0.0 (2026-11-16)
+
+### Refactoring
+
+- **marketplace**: Remove the 27 placeholder application agents
+  ([`18f7c65`](https://github.com/jupyter-naas/abi/commit/18f7c6540775c0212607a758ba4d99547de0d20c))
+
+- **marketplace**: Remove the in-engine applications that run as remote modules
+  ([`575677b`](https://github.com/jupyter-naas/abi/commit/575677b498ac191b68fbd5b4538046ebbd2bbe17))
+
+### Breaking Changes
+
+- **marketplace**: A configuration that loads one of the removed modules fails at load. Remove the
+  entry and run the remote module instead; credentials become engine secrets. See
+  naas_abi_marketplace/applications/AGENTS.md.
+
+
+## v3.9.0 (2026-11-16)
+
+### Bug Fixes
+
+- **nexus/home**: Never show a section column on Home
+  ([`39c919a`](https://github.com/jupyter-naas/abi/commit/39c919a48621ff63df5355e1193f64b60def3c36))
+
+### Features
+
+- **discovery**: Remote agents carry display name, avatar and suggestions
+  ([`d878002`](https://github.com/jupyter-naas/abi/commit/d87800209b387589148ef547ed101c9842d54090))
+
+- **discovery**: Remote apps carry their tile image (avatar_url)
+  ([`fe0947c`](https://github.com/jupyter-naas/abi/commit/fe0947c14e46ea9ab88dd5582f0823d7267f47c8))
+
+
+## v3.8.0 (2026-11-11)
+
+
+## v3.7.2 (2026-11-10)
+
+### Bug Fixes
+
+- **event**: The terminal author guards, labels identity events, and its limits are recorded
+  ([`67713af`](https://github.com/jupyter-naas/abi/commit/67713af455cf85c00f74dd30f4bfdfe0972f33e9))
+
+- **iam**: Platform grants survive a regeneration of the managed policies by any instance
+  ([`6ba1e4a`](https://github.com/jupyter-naas/abi/commit/6ba1e4a23c0c5132f7cb6713fa1ec473683ae75b))
+
+- **nexus**: A namespace policy also hides describe and preview of its datasets
+  ([`902366e`](https://github.com/jupyter-naas/abi/commit/902366e6184f2794cdfbebc6b81e0298804fa33a))
+
+- **nexus**: Datasets are platform-wide, and the profile email is read-only
+  ([`c580e09`](https://github.com/jupyter-naas/abi/commit/c580e0949b7e8ff96ccb13a39200e4a5666407be))
+
+### Testing
+
+- **nexus-web**: Make pnpm test green and run it on pull requests
+  ([`4c5b439`](https://github.com/jupyter-naas/abi/commit/4c5b439f920ae27cb782d04fe8e85574a3140d49))
+
+
 ## v3.7.1 (2026-11-09)
 
 ### Bug Fixes

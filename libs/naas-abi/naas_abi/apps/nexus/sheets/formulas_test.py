@@ -306,3 +306,43 @@ def test_workbook_budget_is_shared_and_resets_between_requests(monkeypatch):
     assert calculated.sheets[0].rows[0][0] == 3
     assert errors and "limit exceeded" in errors[-1]["error"]
     assert formulas.calculate_workbook(wb)[0].sheets[0].rows[0][0] == 3
+
+
+def test_if_conditions_keep_a_linear_cost() -> None:
+    """A condition's comparison is found in one pass, whatever its spacing."""
+    import time
+
+    padded = "A1" + " " * 4000 + "<" + " " * 10 + "B1"
+    rows = [["1", "2"] + [f'=IF({padded}, "lt", "ge")' for _ in range(200)]]
+    wb = SheetWorkbook(title="T", sheets=[SheetTab(name="S", rows=rows)])
+    started = time.process_time()
+    out = evaluate_workbook_formulas(wb)
+    assert time.process_time() - started < 2.0
+    assert out.sheets[0].rows[0][2] == "lt"
+
+
+def test_if_conditions_keep_their_comparisons() -> None:
+    cases = {
+        '=IF(A1>=2, "y", "n")': "y",
+        '=IF(A1<=1, "y", "n")': "n",
+        '=IF(A1<>2, "y", "n")': "n",
+        '=IF(A1=2, "y", "n")': "y",
+        '=IF((A1+1)>2, "y", "n")': "y",
+        '=IF(SUM(A1:B1)>4, "y", "n")': "y",
+        '=IF(B1="a=b", "y", "n")': "n",
+        '=IF(A1, "y", "n")': "y",
+    }
+    rows = [["2", "3", *cases]]
+    wb = SheetWorkbook(title="T", sheets=[SheetTab(name="S", rows=rows)])
+    out = evaluate_workbook_formulas(wb)
+    assert out.sheets[0].rows[0][2:] == list(cases.values())
+
+
+def test_a_calculation_keeps_its_deadline(monkeypatch) -> None:
+    from naas_abi.apps.nexus.sheets import formulas
+
+    monkeypatch.setattr(formulas, "MAX_EVALUATION_SECONDS", -1.0)
+    wb = SheetWorkbook(title="T", sheets=[SheetTab(name="S", rows=[["1", "=A1+1"]])])
+    out, errors = formulas.calculate_workbook(wb)
+    assert out.sheets[0].rows[0][1] == "#ERR"
+    assert "time limit" in errors[0]["error"]

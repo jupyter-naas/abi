@@ -105,7 +105,27 @@ read, and nothing writes it. `context.py`'s `event_actor_user_id`,
 `event_actor_container` and `event_triggered_via` (and
 `agent_user_id`/`agent_container`, the same objects) are views of that
 context with a ContextVar-like `get`/`set`/`reset`; setting the user sets
-`on_behalf_of`. There is no second source of identity.
+`on_behalf_of`. The one exception is `event_author_id`, a plain ContextVar the
+terminal sets (`bind_local_identity`, from the git author): it labels the events
+of a call that acts for no user and is never part of `CallContext`.
+
+Decision: attribution never bounds authorization. A terminal runs as `engine`
+for nobody; had the git author been set as `on_behalf_of`, IAM would bound the
+engine by that user, who holds nothing, and refuse every enforced read.
+
+Consequences:
+
+- `agent_user_id` is the same object as `event_actor_user_id`, so in `abi chat`
+  and `abi run script` it is `None` with a git email, as it already was without
+  one. Tools that guard on it (`slides_tools`, `documents_tools`,
+  `sheets_tools`, `sheets_workbook_storage`, `nexus_admin_tools`) take their
+  no-user path (an error, or no memo key) from the terminal.
+- Readers of the actor outside `EventService` that want the terminal author
+  read `event_actor_user_id.get() or event_author_id.get()` (Nexus identity
+  events do).
+- `event_author_id` is not in `CallContext`, so it does not travel over NATS:
+  events published by remote modules or bus handlers on behalf of a terminal
+  call do not name the git author.
 
 The Nexus System app (Data tab) browses the log read-only through these: event
 types as folders, events newest first. The log is append-only by design.
@@ -145,7 +165,12 @@ uses the `transfer.*` subjects.
 - A read with no type filters per type (an "all" call is filtered per item). `limit` applies after
   filtering; a type first appended after the types were listed is left out.
 - `subscribe` is checked once, when subscribing; live events are not checked one
-  by one.
+  by one, but an event whose `_class_uri` is not the subscribed type is dropped.
+- Live events (`evt.<type hash>`) are published by the engine only: `publish` and
+  `append_stored` (a module's append over NATS) broadcast after the append. A
+  module's connection subscribes to the live subject of a type only when its
+  policy reads that type in every container (`broker.live_event_types`): a live
+  subject carries every container's events of its type.
 - Over NATS, a streamed read first pins its snapshot with `max_seq`, so it also
   needs `MaxSeq` (every role grants both).
 - `emit(event)` is how a kernel service records its own audit event: stamped

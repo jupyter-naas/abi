@@ -186,21 +186,35 @@ class EngineNATSLoader:
             return []
         from naas_abi_core.engine.nats_auth_callout import AuthCallout
         from naas_abi_core.engine.nats_broker_control import BrokerControl
+        from naas_abi_core.engine.nats_connection_warden import (
+            Admissions,
+            ConnectionWarden,
+        )
 
         settings = nats_config.auth_callout
+        admissions = Admissions()
         callout = AuthCallout(
             services.iam,
             settings.issuer_seed,
             settings.nats_url,
-            user_ttl_seconds=settings.user_ttl_seconds,
+            admissions=admissions,
+        )
+        # Ends the module connections an IAM change affects: their passes
+        # last until their keys expire.
+        warden = ConnectionWarden(
+            services.iam,
+            admissions,
+            settings.system_url,
+            sweep_seconds=settings.sweep_seconds,
         )
         # The engine's own login creates the streams and consumers modules use.
         control = BrokerControl(
             services.iam, services.iam.verifier(), nats_config.nats_url
         )
         nats_runtime.run_coro(callout.start())
+        nats_runtime.run_coro(warden.start())
         nats_runtime.run_coro(control.start())
-        return [callout, control]
+        return [callout, warden, control]
 
     def expose_services(self, services: IEngine.Services) -> list[object]:
         """Start a NATS primary adapter for every loaded service that has one.

@@ -10,17 +10,19 @@ print(
 
 import asyncio
 import html
+import inspect
 import os
 import subprocess
+from collections.abc import Sequence
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from importlib.resources import files
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, params, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 # Authentication
 from fastapi.security import HTTPBearer
@@ -109,21 +111,31 @@ def _abandon_engine() -> None:
     try:
         runtime_engine.shutdown()
     except Exception as exc:  # noqa: BLE001 - the start failure is what to report
-        logger.warning(f"api: shutting down the engine of a failed start failed: {exc!r}")
+        logger.warning(
+            f"api: shutting down the engine of a failed start failed: {exc!r}"
+        )
+
+
+async def _run_handlers(handlers: list) -> None:
+    for handler in list(handlers):
+        result = handler()
+        if inspect.isawaitable(result):
+            await result
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    # Modules attach to this app with ``app.add_event_handler("startup"|
-    # "shutdown", ...)`` -- Nexus does, to run its migrations and seeds (see
+    # Modules attach start and stop hooks to this app's router
+    # (``app.router.on_startup`` / ``app.router.on_shutdown``) -- Nexus does, to
+    # run its migrations and seeds (see
     # naas_abi/apps/nexus/apps/api/app/main.py::_register_startup_handlers).
-    # Passing ``lifespan=`` to FastAPI replaces Starlette's ``_DefaultLifespan``,
-    # which is the ONLY thing that would otherwise run those handlers (and it
-    # does so silently: no warning is raised for handlers added after
-    # construction). So drive them explicitly here, and tear the engine down
-    # last: it is the dependency the modules' shutdown hooks may still need.
+    # Passing ``lifespan=`` to FastAPI replaces its default lifespan, which is
+    # the ONLY thing that would otherwise run those hooks (and it does so
+    # silently: no warning is raised for hooks added after construction). So
+    # run them explicitly here, and tear the engine down last: it is the
+    # dependency the modules' shutdown hooks may still need.
     try:
-        await app.router.startup()
+        await _run_handlers(app.router.on_startup)
     except BaseException:
         await asyncio.to_thread(_abandon_engine)
         raise
@@ -131,7 +143,7 @@ async def _lifespan(app: FastAPI):
         yield
     finally:
         try:
-            await app.router.shutdown()
+            await _run_handlers(app.router.on_shutdown)
         finally:
             await _shutdown_engine()
 
@@ -139,7 +151,15 @@ async def _lifespan(app: FastAPI):
 # Init API
 TITLE = api_runtime_configuration.title
 DESCRIPTION = api_runtime_configuration.description
-app = FastAPI(title=TITLE, docs_url=None, redoc_url=None, lifespan=_lifespan)
+# /openapi.json, /docs and /redoc are mounted below, according to
+# api_docs_enabled.
+app = FastAPI(
+    title=TITLE,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+    lifespan=_lifespan,
+)
 
 
 def resolve_branding_asset(configured: str) -> tuple[str, str | None]:
@@ -362,22 +382,58 @@ def custom_openapi():
 app.openapi = custom_openapi  # type: ignore[method-assign]
 
 
-@app.get("/docs", include_in_schema=False)
-def overridden_swagger():
-    return get_swagger_ui_html(
-        openapi_url="/openapi.json",
-        title=TITLE,
-        swagger_favicon_url=favicon_url,
-    )
+# ENV values of local development: the compose templates set ``local``, the
+# local image ``dev``, and a bare ``uv run`` or the test suite sets none.
+_LOCAL_DEVELOPMENT_ENVS = frozenset({"", "local", "dev"})
 
 
-@app.get("/redoc", include_in_schema=False)
-def overridden_redoc():
-    return get_redoc_html(
-        openapi_url="/openapi.json",
-        title=TITLE,
-        redoc_favicon_url=favicon_url,
-    )
+def api_docs_enabled(configuration: ApiConfiguration, env: str | None) -> bool:
+    """Whether the API serves ``/openapi.json``, ``/docs`` and ``/redoc``.
+
+    ``api.docs_enabled`` decides when it is set. Unset, the pages are served
+    for local development only: ENV unset, ``local`` or ``dev``.
+    """
+    if configuration.docs_enabled is not None:
+        return configuration.docs_enabled
+    return (env or "").strip().lower() in _LOCAL_DEVELOPMENT_ENVS
+
+
+def mount_openapi_schema(
+    target: FastAPI, *, dependencies: Sequence[params.Depends] | None = None
+) -> None:
+    """Serve ``target``'s OpenAPI schema at ``/openapi.json``."""
+
+    @target.get("/openapi.json", include_in_schema=False, dependencies=dependencies)
+    def openapi_schema():
+        return JSONResponse(target.openapi())
+
+
+def mount_api_docs(target: FastAPI, *, title: str, favicon_url: str) -> None:
+    """Serve the OpenAPI schema and its Swagger UI and ReDoc pages on ``target``."""
+    mount_openapi_schema(target)
+
+    @target.get("/docs", include_in_schema=False)
+    def overridden_swagger():
+        return get_swagger_ui_html(
+            openapi_url="/openapi.json",
+            title=title,
+            swagger_favicon_url=favicon_url,
+        )
+
+    @target.get("/redoc", include_in_schema=False)
+    def overridden_redoc():
+        return get_redoc_html(
+            openapi_url="/openapi.json",
+            title=title,
+            redoc_favicon_url=favicon_url,
+        )
+
+
+if api_docs_enabled(api_runtime_configuration, os.getenv("ENV")):
+    mount_api_docs(app, title=TITLE, favicon_url=favicon_url)
+else:
+    # No pages, but callers holding the API key still read the schema.
+    mount_openapi_schema(app, dependencies=[Depends(is_token_valid)])
 
 
 def render_landing_html(title: str, description: str, logo: str, favicon: str) -> str:
@@ -446,8 +502,11 @@ def _load_runtime_routes():
                 name=f"module-{module_url_path.replace('/', '-')}-public",
             )
 
-    for module in runtime_engine.modules.values():
-        module.api(app)
+    # What each module mounts answers only a request with a credential the
+    # engine accepts, unless the module lists the path in unguarded_api_paths.
+    from naas_abi_core.apps.api.module_routes import mount_module_apis
+
+    mount_module_apis(app, runtime_engine.modules.values())
 
     # Protect /app-html/ with ABI_API_KEY (same channels as /agents). Added last
     # so it runs outermost — before per-app object-storage middlewares.
@@ -472,8 +531,11 @@ def _load_runtime_routes():
 
 
 def get_app() -> FastAPI:
+    from naas_abi_core.apps.api.abi_api_key_auth import refuse_retired_abi_api_key
     from naas_abi_core.engine.call_context import as_service_account
 
+    # Before the engine loads: a retired key stops the start, it is not served.
+    refuse_retired_abi_api_key()
     try:
         # Still boot: agents resolve their models, modules seed data, and the
         # warmup thread starts here. The engine's own work, for no caller.
@@ -485,6 +547,46 @@ def get_app() -> FastAPI:
     return app
 
 
+# Uvicorn's levels (uvicorn.config.LOG_LEVELS), and loguru's names for them.
+_UVICORN_LOG_LEVELS = ("critical", "error", "warning", "info", "debug", "trace")
+_LOG_LEVEL_ALIASES = {"warn": "warning", "success": "info", "fatal": "critical"}
+
+
+def _uvicorn_log_level(configured: str | None) -> str:
+    """Uvicorn's log level: ``api.log_level``, else info.
+
+    Neither tied to reload nor to LOG_LEVEL (DEBUG in the local stacks): at
+    debug, uvicorn logs the WebSocket handshake's request headers, session
+    cookies included. Only an explicit ``api.log_level: debug`` does that.
+    """
+    if not configured or not configured.strip():
+        return "info"
+    level = configured.strip().lower()
+    level = _LOG_LEVEL_ALIASES.get(level, level)
+    if level in _UVICORN_LOG_LEVELS:
+        return level
+    logger.warning(
+        f"api: api.log_level={configured!r} is not a uvicorn log level "
+        f"({', '.join(_UVICORN_LOG_LEVELS)}); using info"
+    )
+    return "info"
+
+
+def _reload_enabled(configured: bool) -> bool:
+    """``ABI_API_RELOAD`` when set (``abi dev up`` sets it), else ``api.reload``."""
+    value = os.environ.get("ABI_API_RELOAD", "").strip().lower()
+    if value in ("1", "true", "yes", "on"):
+        return True
+    if value in ("0", "false", "no", "off"):
+        return False
+    if value:
+        logger.warning(
+            f"api: ABI_API_RELOAD={value!r} is neither true nor false; "
+            f"using api.reload ({configured})"
+        )
+    return configured
+
+
 def api():
     print(
         f"[abi-boot] api() entered, starting uvicorn (+{time.monotonic() - _BOOT_T0:.2f}s)",
@@ -493,7 +595,7 @@ def api():
     )
     import uvicorn
 
-    reload_enabled = api_runtime_configuration.reload
+    reload_enabled = _reload_enabled(api_runtime_configuration.reload)
     if _nats_mode and not reload_enabled:
         # NATS gone for good stops this process, so its supervisor restarts it,
         # instead of an engine that serves nothing (naas_abi_sdk.lifeline). Not
@@ -510,10 +612,14 @@ def api():
         "reload": reload_enabled,
         "proxy_headers": True,
         "forwarded_allow_ips": trusted_proxy_ips(),
-        "log_level": "debug" if reload_enabled else "info",
+        "log_level": _uvicorn_log_level(api_runtime_configuration.log_level),
     }
 
     if reload_enabled:
+        logger.warning(
+            "api: auto-reload is on (api.reload or ABI_API_RELOAD): uvicorn watches "
+            "src/ and restarts the engine on every change. For local development only."
+        )
         run_kwargs["app"] = "naas_abi_core.apps.api.api:get_app"
         run_kwargs["factory"] = True
         # Watch application Python under src only. `libs/naas-abi` is a symlink

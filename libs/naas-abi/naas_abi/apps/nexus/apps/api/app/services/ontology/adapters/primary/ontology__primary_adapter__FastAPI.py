@@ -40,6 +40,7 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import 
     OntologyFileNotFoundError,
     OntologyParseError,
     OntologyPathNotFoundError,
+    OntologyQueryError,
     OntologyServiceUnavailableError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_access import readable_paths
@@ -398,6 +399,8 @@ async def get_class_parents(
             ontology_path=ontology_path,
             catalog_refs=catalog_refs,
         )
+    except OntologyQueryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except OntologyServiceUnavailableError as exc:
@@ -427,6 +430,8 @@ async def get_subclassof_hierarchy(
             ontology_path=ontology_path,
             catalog_refs=catalog_refs,
         )
+    except OntologyQueryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except OntologyServiceUnavailableError as exc:

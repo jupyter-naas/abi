@@ -32,6 +32,16 @@ class OrganizationRecord:
     secondary_logo_url: str | None = None
     show_logo_separator: bool = False
     default_theme: str | None = None
+    legal_name: str | None = None
+    registration_number: str | None = None
+    vat_number: str | None = None
+    website: str | None = None
+    contact_email: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    country: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -63,6 +73,16 @@ class OrganizationCreateInput:
     secondary_logo_url: str | None = None
     show_logo_separator: bool = False
     default_theme: str | None = None
+    legal_name: str | None = None
+    registration_number: str | None = None
+    vat_number: str | None = None
+    website: str | None = None
+    contact_email: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    country: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -92,6 +112,16 @@ class OrganizationUpdateInput:
     secondary_logo_url: str | None = None
     show_logo_separator: bool | None = None
     default_theme: str | None = None
+    legal_name: str | None = None
+    registration_number: str | None = None
+    vat_number: str | None = None
+    website: str | None = None
+    contact_email: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    country: str | None = None
     updated_at: datetime | None = None
     set_fields: set[str] | None = None
 
@@ -307,6 +337,19 @@ class OrganizationPermissionPort(ABC):
 
     @abstractmethod
     async def domain_exists(self, domain: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_domain_by_name(self, domain: str) -> OrganizationDomainRecord | None:
+        """The claim of ``domain``, whichever organization holds it."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def claim_unverified_domain(
+        self, domain_id: str, org_id: str, verification_token: str, created_at: datetime
+    ) -> OrganizationDomainRecord | None:
+        """Give an unverified claim to ``org_id``, with its token and no route;
+        None when the claim was verified meanwhile."""
         raise NotImplementedError
 
     @abstractmethod

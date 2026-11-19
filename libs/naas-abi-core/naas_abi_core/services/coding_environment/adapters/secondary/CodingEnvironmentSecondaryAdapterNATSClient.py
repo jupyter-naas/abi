@@ -44,6 +44,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     AccessDeniedError,
     AgentNeverConnectedError,
     ICodingEnvironmentAdapter,
+    InvalidRequestError,
     ProvisionFailedError,
     ProvisionTimeoutError,
     QuotaExceededError,
@@ -121,6 +122,8 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
         raise QuotaExceededError(error.message, status=status)
     if error.code == "ACCESS_DENIED":
         raise AccessDeniedError(error.message, status=status)
+    if error.code == "INVALID_REQUEST":
+        raise InvalidRequestError(error.message, status=status)
     if error.code == "UNIMPLEMENTED":
         raise NotImplementedError(error.message)
     raise RuntimeError(

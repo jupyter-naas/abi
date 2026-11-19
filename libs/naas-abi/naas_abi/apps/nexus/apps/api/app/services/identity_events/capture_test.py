@@ -38,6 +38,7 @@ from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
 from naas_abi_core.services.event.context import (
     event_actor_container,
     event_actor_user_id,
+    event_author_id,
     event_triggered_via,
 )
 from naas_abi_core.services.event.EventService import EventService
@@ -131,6 +132,19 @@ async def test_the_actor_comes_from_the_request_context(env) -> None:
     [event] = _payloads(events)
     assert event["created_by"] == [str(person_iri("usr-admin"))]
     assert (event["actor_user_id"], event["triggered_via"]) == ("usr-admin", "api")
+
+
+@pytest.mark.asyncio
+async def test_a_terminal_author_is_the_actor_when_no_user_acts(env) -> None:
+    maker, events, _ = env
+    token = event_author_id.set("email-sha256:abc")
+    try:
+        await _seed_user(maker, "usr-9")
+    finally:
+        event_author_id.reset(token)
+
+    [event] = _payloads(events)
+    assert event["actor_user_id"] == "email-sha256:abc"
 
 
 @pytest.mark.asyncio

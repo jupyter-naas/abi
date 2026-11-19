@@ -6,6 +6,8 @@
 * ``GET  /callback``   the provider's redirect: the session cookie, then 302 to the web app.
 * ``GET  /session``    the signed-in user, the session's CSRF token and its view (or null).
 * ``POST /logout``     end the session (CSRF-checked like every cookie request).
+* ``POST /web-pass``   a pass for the web app's own server routes (``web_pass.py``), CSRF-checked.
+* ``GET  /web-pass``   whose pass ``X-Web-Pass`` is, while it is live (the pass is the credential).
 
 The session cookie is httpOnly, Secure (but on plain http on this machine) and SameSite; nothing the browser can
 read holds a token.
@@ -15,7 +17,7 @@ from __future__ import annotations
 
 from urllib.parse import urlencode, urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
@@ -31,6 +33,12 @@ from naas_abi.apps.nexus.apps.api.app.services.oidc import runtime
 from naas_abi.apps.nexus.apps.api.app.services.oidc.service import (
     OidcLoginError,
     csrf_token,
+)
+from naas_abi.apps.nexus.apps.api.app.services.oidc.web_pass import (
+    MAX_PASS_LENGTH,
+    WEB_PASS_HEADER,
+    mint_web_pass,
+    read_web_pass,
 )
 from naas_abi.apps.nexus.apps.api.app.services.view_as import runtime as view_as_runtime
 from naas_abi.apps.nexus.apps.api.app.services.view_as.views import view_json
@@ -189,13 +197,54 @@ async def get_session(request: Request, db: AsyncSession = Depends(get_db)) -> d
     }
 
 
+@router.post("/web-pass")
+async def create_web_pass(request: Request) -> dict:
+    """A pass for the web app's server routes, for the session cookie's user, ending
+    no later than the session. The web app keeps it in an httpOnly cookie of its own
+    host (``web_pass.py``)."""
+    if getattr(request.state, "nexus_csrf_failed", False):
+        raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
+    session = getattr(request.state, "nexus_session", None)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not signed in")
+    try:
+        value, expires_in = await mint_web_pass(
+            session.user_id, not_after=getattr(session, "expires_at", None)
+        )
+    except ValueError as exc:  # the session ends within the second
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not signed in"
+        ) from exc
+    except links.LinkLimitReached as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except links.LinksUnavailable as exc:
+        raise HTTPException(status_code=503, detail="Web passes are unavailable") from exc
+    return {"web_pass": value, "expires_in": expires_in}
+
+
+@router.get("/web-pass")
+async def check_web_pass(
+    web_pass: str | None = Header(default=None, alias=WEB_PASS_HEADER, max_length=MAX_PASS_LENGTH),
+) -> dict:
+    """Whose pass this is and how long it lasts; 401 for anything but a live pass."""
+    found = await read_web_pass(web_pass)
+    if found is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not signed in")
+    user_id, expires_in = found
+    return {"user_id": user_id, "expires_in": expires_in}
+
+
 async def _end_remote_app_grants(user_id: str) -> None:
-    """A remote app's grant ends with the sign-out, on every device; the sign-out
-    itself never fails for it."""
+    """A remote app's grant and a web pass end with the sign-out, on every device;
+    the sign-out itself never fails for them."""
     try:
         await links.arevoke_remote_app_links(user_id)
     except Exception as exc:  # noqa: BLE001 - the session is ended anyway
         logger.warning(f"Remote app grants of user {user_id} were not ended at logout: {exc}")
+    try:
+        await links.arevoke_web_passes(user_id)
+    except Exception as exc:  # noqa: BLE001 - the session is ended anyway
+        logger.warning(f"Web passes of user {user_id} were not ended at logout: {exc}")
 
 
 @router.post("/logout")

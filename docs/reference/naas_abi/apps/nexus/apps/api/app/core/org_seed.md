@@ -4,9 +4,13 @@
 Config-driven provisioning executed on startup to ensure baseline records exist in the database:
 
 - Users (create by email if missing)
-- Organizations (upsert by slug)
+- Organizations (upsert by slug, only the rows seeding made: `seeded`)
 - Organization members (ensure membership + role)
-- Workspaces (upsert by slug)
+- Workspaces (upsert by slug, only the rows seeding made: `seeded`)
+
+A configured slug held by an organization or workspace a person created is refused
+and logged, never taken over; the configured slugs are reserved at create and
+rename (`core/configured_slugs.py`).
 - Workspace members (ensure membership + role)
 - Optional mirroring of created user credentials into a Secret service
 

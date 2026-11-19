@@ -78,6 +78,37 @@ reaches it only through its owner, as `environment/${principal.id}/*`.
 ## Adapters
 
 CoderAdapter, CodeServerComposeAdapter, LocalDirectoryAdapter, InMemoryAdapter, plus `CodingEnvironmentSecondaryAdapterNATSClient`.
+
+- **Names.** `provision` takes an environment name of lowercase letters, digits
+  and `-` (`environment_name_ok`), whoever calls; anything else is
+  `InvalidRequestError` (422).
+- **`local_directory` is single-user development only.** It runs each workspace
+  on the engine host, as the engine's own OS user: no sandbox. It must be turned
+  on with `single_user_development: true` (the engine configuration and the
+  constructor refuse it otherwise), ABI's `config.yaml` does not select it, and
+  it serves one user (another user's `provision` is `AccessDeniedError`). Its
+  checkouts stay under `workspaces_root/<user>/<name>`, an existing directory is
+  never replaced, and it clones only the platform's forge: an `<owner>/<name>` of
+  the local git root (`repos_root`) or of `forge_url`. The sidecar and the
+  OpenCode harness start with an allow-listed environment
+  (`naas_abi_core.utils.process_environment`) and a home of their own under
+  `workspaces_root/<user>/.home/<name>`, never the engine's; the harness gets
+  its own provider credentials file there (`opencode.providers`).
+  Tests: `adapters/secondary/LocalDirectoryAdapter_test.py`.
+- **A failed provision leaves nothing.** Once `provision` has made the checkout,
+  any failure (port, clone, sidecar, harness, the record) stops what it started
+  and removes the checkout and the home, with the harness credentials in it: the
+  name provisions again.
+- **The harness's provider credentials come from `opencode.providers` only.**
+  The engine's environment (its provider keys included) does not reach the
+  harness. With no provider configured, the harness still starts and passes its
+  health check, but every prompt fails on provider authentication: the adapter
+  and `OpencodeAgent` log a warning when they start it without credentials.
+- **Network settings pass.** The allow-list keeps proxies (`HTTP(S)_PROXY`,
+  `ALL_PROXY`, `NO_PROXY`) and certificate authorities (`SSL_CERT_FILE`,
+  `SSL_CERT_DIR`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`).
+  Proxy URLs pass without their `user:password@`: a proxy that needs
+  credentials is configured for the runtime itself, never with the engine's.
 Unsupported methods must explicitly raise `NotImplementedError`.
 
 ## Factory

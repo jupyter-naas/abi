@@ -45,9 +45,9 @@ x-abi-template: &abi_template
     - QDRANT_HOST=qdrant
     - QDRANT_PORT=${QDRANT_PORT}
 {% if INCLUDE_CODING %}
-    # The network Coder attaches workspaces to (so they reach forgejo:3000 and
-    # coderd), and the public git base for clone URLs.
-    - CODING_WORKSPACE_DOCKER_NETWORK=${ABI_STACK_NAME}-abi-network
+    # The network Coder attaches workspaces to (Forgejo, coderd and this API,
+    # no data service), and the public git base for clone URLs.
+    - CODING_WORKSPACE_DOCKER_NETWORK=${ABI_STACK_NAME}-coding
     - CODING_GIT_PUBLIC_BASE=https://git.${PUBLIC_WEB_HOST}
 {% endif %}
   volumes:
@@ -162,12 +162,24 @@ services:
         aliases:
           - ${ABI_STACK_NAME}-abi
       dokploy-network: {}
+{% if NATS %}
+      # The broker's monitoring port (nats.monitoring_url): the engine only.
+      nats-monitor: {}
+{% endif %}
+{% if INCLUDE_CODING %}
+      # Workspaces reach the API here, and the API their exec sidecars.
+      coding: {}
+{% endif %}
 
   mcp-server:
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    # Not started by default: set COMPOSE_PROFILES=mcp to run it, with
+    # MCP_PUBLIC_URL, MCP_ALLOWED_HOSTS and MCP_ALLOWED_ORIGINS naming its
+    # public address (it refuses to start without MCP_PUBLIC_URL).
+    profiles: ["mcp"]
     depends_on:
       abi:
         condition: service_healthy
@@ -175,8 +187,8 @@ services:
       ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.mcp.mcp_server"]
     environment:
       - ABI_API_BASE=http://${ABI_STACK_NAME}-abi:9879
-      - ABI_API_KEY=${ABI_API_KEY}
       - MCP_TRANSPORT=http
+      - MCP_HOST=0.0.0.0
     networks:
       - abi-network
 
@@ -214,39 +226,72 @@ services:
     # Keep mem_limit above JVM_ARGS -Xmx: TDB2 memory-maps its files off-heap.
     mem_limit: 4g
     environment:
-      - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD}
+      - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD:-}
+      # The engine's own user (`abi`): the dataset's endpoints only, not the
+      # admin API. Optional: without it the engine uses `admin`.
+      - ENGINE_PASSWORD=${FUSEKI_ENGINE_PASSWORD:-}
       - JVM_ARGS=-Xmx2g
-    command: >-
-      bash -c '
-      mkdir -p /fuseki/configuration /fuseki/databases/ds &&
-      printf "@prefix :        <#> .
-      @prefix fuseki:  <http://jena.apache.org/fuseki#> .
-      @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-      @prefix ja:      <http://jena.hpl.hp.com/2005/11/Assembler#> .
-      @prefix tdb2:    <http://jena.apache.org/2016/tdb#> .
+    # The image's entrypoint keeps the first shiro.ini it wrote, which lets
+    # anyone read the dataset. This command writes the access rules and the
+    # dataset on every start, then runs the server.
+    entrypoint: ["/sbin/tini", "--"]
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        [ -n "$$ADMIN_PASSWORD" ] || { echo "FUSEKI_ADMIN_PASSWORD is empty: run abi deploy" >&2; exit 1; }
+        mkdir -p /fuseki/configuration /fuseki/databases/ds
+        # Every request needs a password, except the ping: the admin API and
+        # the web UI the `admin` role, the dataset the `engine` role.
+        umask 077
+        {
+          printf '[main]\n'
+          printf 'plainMatcher = org.apache.shiro.authc.credential.SimpleCredentialsMatcher\n'
+          printf 'iniRealm.credentialsMatcher = $$plainMatcher\n'
+          printf '[users]\n'
+          printf 'admin = %s, admin, engine\n' "$$ADMIN_PASSWORD"
+          if [ -n "$$ENGINE_PASSWORD" ]; then printf 'abi = %s, engine\n' "$$ENGINE_PASSWORD"; fi
+          printf '[roles]\nadmin = *\nengine = *\n'
+          printf '[urls]\n'
+          printf '/$$/ping = anon\n'
+          printf '/$$/** = authcBasic, roles[admin]\n'
+          printf '/ds/** = authcBasic, roles[engine]\n'
+          printf '/** = authcBasic, roles[admin]\n'
+        } > /fuseki/shiro.ini
+        # SPARQL query and update only (no graph store endpoints), and no
+        # SERVICE: the store never calls another server.
+        cat > /fuseki/configuration/ds.ttl <<'TTL'
+        @prefix :        <#> .
+        @prefix fuseki:  <http://jena.apache.org/fuseki#> .
+        @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+        @prefix ja:      <http://jena.hpl.hp.com/2005/11/Assembler#> .
+        @prefix tdb2:    <http://jena.apache.org/2016/tdb#> .
 
-      :service rdf:type fuseki:Service ;
-          fuseki:name \"ds\" ;
-          fuseki:endpoint [ fuseki:operation fuseki:query ;
-                            fuseki:name \"sparql\" ;
-                            ja:context [ ja:cxtName \"tdb:unionDefaultGraph\" ;
-                                         ja:cxtValue true ] ] ;
-          fuseki:endpoint [ fuseki:operation fuseki:query ;
-                            fuseki:name \"query\" ;
-                            ja:context [ ja:cxtName \"tdb:unionDefaultGraph\" ;
-                                         ja:cxtValue true ] ] ;
-          fuseki:endpoint [ fuseki:operation fuseki:update ;
-                            fuseki:name \"update\" ] ;
-          fuseki:endpoint [ fuseki:operation fuseki:gsp-r ;
-                            fuseki:name \"get\" ] ;
-          fuseki:endpoint [ fuseki:operation fuseki:gsp-rw ;
-                            fuseki:name \"data\" ] ;
-          fuseki:dataset :dataset .
+        :service rdf:type fuseki:Service ;
+            fuseki:name "ds" ;
+            fuseki:endpoint [ fuseki:operation fuseki:query ;
+                              fuseki:name "sparql" ;
+                              ja:context [ ja:cxtName "tdb:unionDefaultGraph" ;
+                                           ja:cxtValue true ] ;
+                              ja:context [ ja:cxtName "arq:httpServiceAllowed" ;
+                                           ja:cxtValue false ] ] ;
+            fuseki:endpoint [ fuseki:operation fuseki:query ;
+                              fuseki:name "query" ;
+                              ja:context [ ja:cxtName "tdb:unionDefaultGraph" ;
+                                           ja:cxtValue true ] ;
+                              ja:context [ ja:cxtName "arq:httpServiceAllowed" ;
+                                           ja:cxtValue false ] ] ;
+            fuseki:endpoint [ fuseki:operation fuseki:update ;
+                              fuseki:name "update" ] ;
+            fuseki:dataset :dataset .
 
-      :dataset rdf:type tdb2:DatasetTDB2 ;
-          tdb2:location \"/fuseki/databases/ds\" .
-      " > /fuseki/configuration/ds.ttl &&
-      /jena-fuseki/fuseki-server'
+        :dataset rdf:type tdb2:DatasetTDB2 ;
+            ja:context [ ja:cxtName "arq:httpServiceAllowed" ;
+                         ja:cxtValue false ] ;
+            tdb2:location "/fuseki/databases/ds" .
+        TTL
+        exec /jena-fuseki/fuseki-server
     healthcheck:
       # Probe the dataset, not the web root (see the local compose for details).
       test: ["CMD-SHELL", "curl -fsS -u admin:$$ADMIN_PASSWORD 'http://localhost:3030/ds/query?query=ASK%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D' >/dev/null || exit 1"]
@@ -373,19 +418,25 @@ services:
       # The broker's static users and its auth callout's trusted key (nats.conf).
       - NATS_ENGINE_PASSWORD=${NATS_ENGINE_PASSWORD:?run abi deploy dokploy}
       - NATS_AUTH_PASSWORD=${NATS_AUTH_PASSWORD:?run abi deploy dokploy}
+      - NATS_SYSTEM_PASSWORD=${NATS_SYSTEM_PASSWORD:?run abi deploy dokploy} # ggignore: a reference to .env, not a value
       - NATS_AUTH_CALLOUT_ISSUER=${NATS_AUTH_CALLOUT_ISSUER:?run abi deploy dokploy}
-    command: ["nats-server", "-c", "/etc/nats/nats.conf", "-js", "-sd", "/data", "-m", "8222"]
+    # The monitoring port (8222, no login) listens on the nats-monitor network
+    # only (nats.conf), which the engine joins and nothing else.
+    command: ["nats-server", "-c", "/etc/nats/nats.conf", "-js", "-sd", "/data"]
     volumes:
       - nats_data:/data
       - ./.deploy/docker/nats/nats.conf:/etc/nats/nats.conf:ro
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://nats-monitor:8222/healthz"]
       interval: 10s
       timeout: 5s
       start_period: 15s
       retries: 10
     networks:
-      - abi-network
+      abi-network: {}
+      # nats.conf binds the monitoring port to this alias.
+      nats-monitor:
+        aliases: [nats-monitor]
 
   # -----------------------------------------------------------------------------
   # idp - the built-in identity provider (naas-abi-idp)
@@ -456,11 +507,21 @@ services:
     image: redis:7-alpine
     pull_policy: always
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # redis-cli of the healthcheck reads it.
+      - REDISCLI_AUTH=${REDIS_PASSWORD:-}
+    # No password, no server: the image's default lets in every client.
+    command:
+      - sh
+      - -c
+      - |
+        [ -n "$$REDIS_PASSWORD" ] || { echo "REDIS_PASSWORD is empty: run abi deploy" >&2; exit 1; }
+        exec docker-entrypoint.sh redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -476,6 +537,14 @@ services:
     environment:
       - QDRANT__SERVICE__HTTP_PORT=6333
       - QDRANT__SERVICE__GRPC_PORT=6334
+      # Every request carries this key (the engine's `api_key`).
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-}
+    command:
+      - bash
+      - -c
+      - |
+        [ -n "$$QDRANT__SERVICE__API_KEY" ] || { echo "QDRANT_API_KEY is empty: run abi deploy" >&2; exit 1; }
+        exec ./entrypoint.sh
     healthcheck:
       test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
       interval: 10s
@@ -493,11 +562,17 @@ services:
     image: ghcr.io/coder/coder:v2.34.1
     pull_policy: always
     restart: unless-stopped
-    user: root
+    # Runs as its own user, with coder-docker as its Docker API, once
+    # coder-owner made its owner.
     depends_on:
       postgres:
         condition: service_healthy
+      coder-owner:
+        condition: service_completed_successfully
+      coder-docker:
+        condition: service_started
     environment:
+      DOCKER_HOST: "tcp://coder-docker:2375"
       CODER_PG_CONNECTION_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/coder?sslmode=disable"
       CODER_HTTP_ADDRESS: "0.0.0.0:7080"
       # Workspaces connect back through Traefik on the public host.
@@ -508,7 +583,6 @@ services:
       CODER_TELEMETRY_ENABLE: "false"
       CODER_MAX_ADMIN_TOKEN_LIFETIME: "8760h"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - coder_data:/home/coder
     labels:
       - traefik.enable=true
@@ -539,6 +613,87 @@ services:
         aliases:
           - ${ABI_STACK_NAME}-coder
       dokploy-network: {}
+      coding: {}
+      coder-docker: {}
+
+  # ---------------------------------------------------------------------------
+  # coder-owner - one-shot, before Coder starts. Coder makes whoever calls
+  # POST /api/v2/users/first its owner while it has no user: the first time,
+  # this runs coderd on its own loopback (the migrations run there, with no
+  # provisioner, so it never takes a workspace build), creates the owner from
+  # CODER_ADMIN_*, and leaves a marker in Coder's volume; later runs only check
+  # the marker. It also hands Coder's volume to the user Coder runs as (Coder
+  # ran as root before). Coder starts only once it succeeded.
+  # ---------------------------------------------------------------------------
+  coder-owner:
+    image: ghcr.io/coder/coder:v2.34.1
+    pull_policy: always
+    restart: "no"
+    user: "0:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CODER_PG_CONNECTION_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/coder?sslmode=disable"
+      CODER_TELEMETRY_ENABLE: "false"
+      CODER_PROVISIONER_DAEMONS: "0"
+      CODER_ADMIN_EMAIL: "${CODER_ADMIN_EMAIL:-}"
+      CODER_ADMIN_USERNAME: "${CODER_ADMIN_USERNAME:-admin}"
+      CODER_ADMIN_PASSWORD: "${CODER_ADMIN_PASSWORD:-}"
+    volumes:
+      - coder_data:/home/coder
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -eu
+        chown -R 1000:1000 /home/coder
+        if [ -f /home/coder/.abi-coder-owner ]; then echo "Coder owner exists"; exit 0; fi
+        [ -n "$$CODER_ADMIN_EMAIL" ] && [ -n "$$CODER_ADMIN_PASSWORD" ] || { echo "CODER_ADMIN_EMAIL or CODER_ADMIN_PASSWORD is empty: run abi deploy" >&2; exit 1; }
+        /opt/coder server --http-address 127.0.0.1:7080 --access-url http://127.0.0.1:7080 >/tmp/coderd.log 2>&1 &
+        pid=$$!
+        i=0
+        until curl -fsS http://127.0.0.1:7080/api/v2/buildinfo >/dev/null 2>&1; do
+          i=$$((i + 1))
+          if [ "$$i" -ge 180 ] || ! kill -0 "$$pid" 2>/dev/null; then tail -n 20 /tmp/coderd.log >&2; exit 1; fi
+          sleep 1
+        done
+        if curl -fsS http://127.0.0.1:7080/api/v2/users/first >/dev/null 2>&1; then
+          echo "Coder owner exists"
+        else
+          printf '{"email":"%s","username":"%s","password":"%s","name":"Admin","trial":false}' \
+            "$$CODER_ADMIN_EMAIL" "$$CODER_ADMIN_USERNAME" "$$CODER_ADMIN_PASSWORD" \
+            | curl -fsS -X POST http://127.0.0.1:7080/api/v2/users/first -H 'Content-Type: application/json' -d @- >/dev/null
+          echo "Coder owner created"
+        fi
+        kill "$$pid"
+        wait "$$pid" 2>/dev/null || true
+        touch /home/coder/.abi-coder-owner
+        chown 1000:1000 /home/coder/.abi-coder-owner
+    networks:
+      - abi-network
+
+  # ---------------------------------------------------------------------------
+  # coder-docker - the Docker API Coder provisions workspaces with: containers,
+  # images, networks and volumes, nothing else (no exec, no swarm, no secrets).
+  # Coder runs as its own user and never holds the socket.
+  # ---------------------------------------------------------------------------
+  coder-docker:
+    image: tecnativa/docker-socket-proxy:0.3.0@sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      IMAGES: "1"
+      NETWORKS: "1"
+      VOLUMES: "1"
+      INFO: "1"
+      VERSION: "1"
+      POST: "1"
+      EXEC: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - coder-docker
 
   # ---------------------------------------------------------------------------
   # Forgejo - git host + in-app code review backend, at git.<web host>.
@@ -576,9 +731,14 @@ services:
         aliases:
           - ${ABI_STACK_NAME}-forgejo
       dokploy-network: {}
+      coding: {}
+      ci:
+        aliases:
+          - ${ABI_STACK_NAME}-forgejo
 
-  # Forgejo Actions runner (CI). Job containers join the fixed-name abi
-  # network, so they reach Forgejo through its stack alias.
+  # Forgejo Actions runner (CI). Job containers join the fixed-name ci
+  # network (Forgejo only), so they reach Forgejo through its stack alias, and
+  # never get the Docker socket.
   act-runner:
     image: gitea/act_runner:latest
     pull_policy: always
@@ -598,7 +758,7 @@ services:
       - act_runner_data:/data
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
-      - abi-network
+      - ci
 
   # ---------------------------------------------------------------------------
   # coding-init - one-shot bootstrap on every deploy (idempotent). Mints the
@@ -678,8 +838,10 @@ configs:
       cache:
         enabled: true
       container:
-        # Job containers join the stack network so they resolve `forgejo`.
-        network: "${ABI_STACK_NAME}-abi-network"
+        # Job containers join the ci network so they resolve Forgejo.
+        network: "${ABI_STACK_NAME}-ci"
+        # "-": jobs never get the Docker socket (empty mounts the runner's).
+        docker_host: "-"
         privileged: false
         valid_volumes: []
         force_pull: false
@@ -693,3 +855,24 @@ networks:
     driver: bridge
   dokploy-network:
     external: true
+{% if INCLUDE_CODING %}
+  # Coding workspaces: coderd, Forgejo and the API, none of the data services.
+  coding:
+    name: ${ABI_STACK_NAME:?set ABI_STACK_NAME}-coding
+    driver: bridge
+  # CI job containers: Forgejo only.
+  ci:
+    name: ${ABI_STACK_NAME:?set ABI_STACK_NAME}-ci
+    driver: bridge
+  # coderd and its Docker API.
+  coder-docker:
+    driver: bridge
+    internal: true
+{% endif %}
+{% if NATS %}
+  # The NATS monitoring port, shared by the broker and the engine only: it
+  # lists every connection and subscription, and has no login.
+  nats-monitor:
+    driver: bridge
+    internal: true
+{% endif %}

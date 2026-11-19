@@ -12,6 +12,8 @@ from __future__ import annotations
 import importlib
 import subprocess
 
+from naas_abi_cli.cli.admin_credentials import configured_superadmins
+
 project = importlib.import_module("naas_abi_cli.cli.new.project")
 
 _FRAMEWORK_PACKAGES = {
@@ -177,6 +179,8 @@ def _run_new_project(tmp_path, monkeypatch, *extra_args, submodule_ok: bool):
             "--domain",
             "localhost",
             "--without-local-deploy",
+            "--admin-email",
+            "ops@acme.dev",
             *extra_args,
         ],
     )
@@ -213,6 +217,8 @@ def _invoke_new_project(tmp_path, monkeypatch, *extra_args, commands=None):
             "--domain",
             "localhost",
             "--without-local-deploy",
+            "--admin-email",
+            "ops@acme.dev",
             *extra_args,
         ],
     )
@@ -310,7 +316,7 @@ def test_new_project_makes_no_admin_password(tmp_path, monkeypatch) -> None:
     env = (tmp_path / "demo" / ".env").read_text(encoding="utf-8")
     assert "NEXUS_USER_" not in env
     # The admin signs in at the identity provider, with a code mailed to it.
-    assert "admin@example.com" in result.output
+    assert "ops@acme.dev" in result.output
     assert "abi dev code" in result.output
     assert "password" not in result.output.lower()
 
@@ -431,7 +437,15 @@ def test_a_nats_project_stops_when_the_clone_fails(tmp_path, monkeypatch) -> Non
 
     result = CliRunner().invoke(
         project.new_project,
-        ["demo", str(tmp_path), "--domain", "localhost", "--without-local-deploy"],
+        [
+            "demo",
+            str(tmp_path),
+            "--domain",
+            "localhost",
+            "--without-local-deploy",
+            "--admin-email",
+            "ops@acme.dev",
+        ],
     )
 
     assert result.exit_code != 0
@@ -461,10 +475,67 @@ def test_a_config_that_does_not_validate_is_reported_not_raised(
 
     result = CliRunner().invoke(
         project.new_project,
-        ["demo", str(tmp_path), "--domain", "localhost", "--without-local-deploy"],
+        [
+            "demo",
+            str(tmp_path),
+            "--domain",
+            "localhost",
+            "--without-local-deploy",
+            "--admin-email",
+            "ops@acme.dev",
+        ],
     )
 
     assert result.exit_code == 1
     assert not isinstance(result.exception, subprocess.CalledProcessError)
     assert str(tmp_path / "demo") in result.output
     assert "abi config validate" in result.output
+
+
+def test_new_project_keeps_the_administrator_it_is_given(tmp_path, monkeypatch) -> None:
+    result = _invoke_new_project(tmp_path, monkeypatch)
+    assert result.exit_code == 0, result.output
+    for name in ("config.yaml", "config.local.yaml"):
+        config = (tmp_path / "demo" / name).read_text(encoding="utf-8")
+        assert configured_superadmins(config) == ["ops@acme.dev"], name
+        assert "admin@example.com" not in config, name
+        assert config.count("ops@acme.dev") == 3, name
+    assert "Admin: ops@acme.dev" in result.output
+
+
+def test_new_project_keeps_asking_for_an_email_address(tmp_path, monkeypatch) -> None:
+    from click.testing import CliRunner
+
+    result = CliRunner().invoke(
+        project.new_project,
+        [
+            "demo",
+            str(tmp_path),
+            "--domain",
+            "localhost",
+            "--admin-email",
+            "not-an-address",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "is not an email address" in result.output
+
+
+def test_new_project_keeps_a_placeholder_administrator_to_dev(
+    tmp_path, monkeypatch
+) -> None:
+    from click.testing import CliRunner
+
+    deploy_module = importlib.import_module("naas_abi_cli.cli.deploy.deploy")
+
+    result = _invoke_new_project(
+        tmp_path, monkeypatch, "--admin-email", "admin@example.com"
+    )
+    assert result.exit_code == 0, result.output
+    assert "receives no mail" in result.output
+    monkeypatch.chdir(tmp_path / "demo")
+    for command in (["local"], ["dokploy", "--domain", "example.com"]):
+        refused = CliRunner().invoke(deploy_module.deploy, command)
+        assert refused.exit_code != 0
+        assert "receives no mail" in refused.output
+        assert 'owner_email: "admin@example.com"  ->' in refused.output

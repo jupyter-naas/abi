@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { ONTOLOGY_SPACING, ontologySpacing, ontologySpacingRoute, spaceOntologyNodes } from './ontology-spacing';
 import type { GraphNode } from '../stores/knowledge-graph';

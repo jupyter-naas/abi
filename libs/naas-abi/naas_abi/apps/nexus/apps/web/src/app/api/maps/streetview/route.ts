@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { resolveGoogleMapsApiKey } from '../_google';
 import { MAPS_USER_AGENT, mapsJson } from '../_lib';
@@ -11,6 +11,7 @@ import {
   placeholderPreviewSvg,
   type StreetViewQuery,
 } from './streetview';
+import { mapsRoute } from '../_guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -104,7 +105,7 @@ async function osmPreview(query: StreetViewQuery): Promise<NextResponse> {
 }
 
 /** Same-origin pin preview. Google Street View Static when a server key exists. */
-export async function GET(req: NextRequest) {
+async function handle(req: Request) {
   const url = new URL(req.url);
   if (url.searchParams.get('status') === '1') {
     const resolved = resolveGoogleMapsApiKey();
@@ -130,3 +131,5 @@ export async function GET(req: NextRequest) {
   }
   return osmPreview(query);
 }
+
+export const GET = mapsRoute('streetview', handle, { perMinute: 120, cacheSeconds: 3600 });

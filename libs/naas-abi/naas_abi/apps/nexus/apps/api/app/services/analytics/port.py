@@ -360,7 +360,7 @@ class AnalyticsStoragePort(ABC):
     adapter only knows how to read/write opaque blobs by ``(dir, name)``.
     """
 
-    # --- per-event pickle store ---------------------------------------------
+    # --- per-event store ---------------------------------------------------
 
     @abstractmethod
     def save_event(self, event: dict[str, Any]) -> str:

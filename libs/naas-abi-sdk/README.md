@@ -140,9 +140,9 @@ abi iam service-account create module/default/acme.research --key
 The SDK logs in to the broker with the key (user `sa`, the key as password) and
 exchanges it at `abi.iam.v1.token` for an engine-signed token of at most ten
 minutes, renewed at half its life. The broker gives the connection only the
-subjects its approved policy allows, for a few minutes: the transport reconnects
-itself every two minutes, so a revoked key or a narrowed manifest reaches the
-broker within minutes. A call to another module's agent, model or app carries a
+subjects its approved policy allows, until the engine ends the connection on an
+IAM change: a revoked key or a narrowed manifest reaches the broker within
+seconds, and the transport never reconnects on a timer. A call to another module's agent, model or app carries a
 token addressed to that host (`abi:host:<sa>`, from its subject), exchanged
 with the same key: the host reads it, no kernel service accepts it, and
 discovery accepts it from that host only.
@@ -218,6 +218,15 @@ class ABIModule(BaseModule):
   `OnEvent(event_type=..., filter={...})`.
 - `max_concurrency` (default 1: no overlap), `timeout` (sets `ctx.cancelled`),
   `max_attempts` (default 1).
+- `skip_if_running=True` (on `@job`, `@workflow`, `declare_workflow` and
+  `JobSettings`): one run per input at a time. A run claims its input before it
+  starts; one whose input another active run (`RUNNING` or `RETRYING`) holds
+  ends `SKIPPED`, naming that run, instead of queueing behind it (a poller's
+  next tick). A retry holds its own claim and never skips itself; the claim of
+  a finished run, or of one whose heartbeats stopped, is taken over. The
+  skipping run takes a slot to start, so set `max_concurrency` to at least two
+  per input that can overlap. A caller waiting on a skipped workflow gets no
+  output (`None`).
 - `self.trigger_job(name, payload, idempotency_key=...)` (sync) or
   `await self.atrigger_job(...)` triggers the module's own jobs; another
   module's: `await self.engine.modules[id].get_job(name)`, then
@@ -907,7 +916,8 @@ nats:
     chunk_bytes: 65536
     idle_seconds: 60
     max_sessions: 32
-    max_upload_bytes: null
+    max_upload_bytes: 1073741824  # 1 GiB per object upload
+    max_buffered_upload_bytes: 4294967296  # 4 GiB spooled at once
   models:
     generation_timeout_seconds: null
     streaming:
@@ -919,9 +929,12 @@ nats:
 ```
 
 Chunk size is reduced for the broker's advertised packet limit. Uploads spool to
-temporary disk and execute only after upload completion. Set `max_upload_bytes`
-for object uploads if a deployment cap is needed. Model upload budgets are finite
-and configurable, enforced before accepting each chunk. They bound serialized
+temporary disk and execute only after upload completion. Every upload budget is
+finite and configurable (`max_upload_bytes` per session, `max_buffered_upload_bytes`
+for a host), enforced before accepting each chunk; one caller (actor and user)
+gets a quarter of a host's sessions and spooled bytes. Only the operations that
+read an upload take one (object PUT, dataset writes, model requests), and an
+object PUT or a dataset write is authorized at `open`, before any byte is spooled. They bound serialized
 input, not total generation duration or output length. Decoded protobuf and
 provider objects require additional memory. Each domain limits active sessions and
 buffers two output packets per session. Model providers and callers still hold

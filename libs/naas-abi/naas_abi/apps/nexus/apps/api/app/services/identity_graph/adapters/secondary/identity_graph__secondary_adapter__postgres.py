@@ -84,8 +84,20 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
         )
         workspaces = await self._all(WorkspaceModel, WorkspaceModel.created_at, WorkspaceModel.id)
         apps = await self._all(AppConfigModel, AppConfigModel.workspace_id, AppConfigModel.app_id)
-        agents = await self._all(
-            AgentConfigModel, AgentConfigModel.workspace_id, AgentConfigModel.id
+        # Each workspace's default agent only. Every workspace has a row per agent the
+        # engine knows (115 workspaces x 220 agents = 25k rows on one install), and who
+        # may use an agent is IAM's, not these rows': mirroring them all made the graph
+        # 100k+ triples, rewritten on every identity change.
+        agents = list(
+            (
+                await self.db.execute(
+                    select(AgentConfigModel)
+                    .where(AgentConfigModel.is_default != 0)
+                    .order_by(AgentConfigModel.workspace_id, AgentConfigModel.id)
+                )
+            )
+            .scalars()
+            .all()
         )
 
         # Roles are IAM's: the graph mirrors its attachments, never the old rows.

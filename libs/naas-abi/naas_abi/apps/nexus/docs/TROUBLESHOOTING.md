@@ -415,7 +415,7 @@ curl -I http://localhost:8000/uploads/logos/test.png
 
 **Symptom:** The login page shows an error, no provider, or the code never arrives
 
-Nexus has no password: you enter your email, the identity provider emails a 6-digit code, and the browser comes back signed in.
+Nexus has no password: you enter your email, the identity provider emails a 8-digit code, and the browser comes back signed in.
 
 **Solutions:**
 

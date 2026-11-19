@@ -77,8 +77,10 @@ class MapsFeedLayerService:
         layers, its automatic "every feature" default is dropped. A feed left
         with no layer gets that default.
         """
-        feed_ids = {feed.id for feed in feeds}
-        feed_seeds = [seed for seed in seeds if seed.feed_id in feed_ids]
+        # A seed's layers go to the deployment feed they belong to, never to a
+        # workspace record that holds the same id.
+        system_feed_ids = {feed.id for feed in feeds if feed.system}
+        feed_seeds = [seed for seed in seeds if seed.feed_id in system_feed_ids]
         stored = await self._store.list(workspace_id)
         if not seed:
             return stored
@@ -186,6 +188,9 @@ class MapsFeedLayerService:
         feed = await self._feeds.get(workspace_id, layer.feed_id)
         if feed.feed_type != FEED_OBJECT_STORAGE or not layer.storage_path:
             raise MapsFeedLayerNotFoundError(f"Map layer {layer_id!r} has no stored data")
+        if layer.system and not feed.system:
+            # A deployment layer reads its data only through its deployment feed.
+            raise MapsFeedLayerNotFoundError(f"Map layer {layer_id!r} has no stored data")
         return layer, feed
 
     async def _own(self, workspace_id: str, layer_id: str) -> MapsFeedLayer | None:
@@ -214,6 +219,10 @@ class MapsFeedLayerService:
             class_labels=tuple(dict.fromkeys(v.strip() for v in layer.class_labels if v.strip())),
             shared_from="",
         )
+        existing = await self._own(workspace_id, layer.id)
+        if existing is not None and existing.system:
+            # The workspace's copy of a seed keeps its seed's id.
+            reserved = frozenset(reserved) - {layer.id}
         errors = validate_feed_layer(layer, reserved=reserved)
         if errors:
             raise MapsFeedLayerValidationError(errors)
@@ -224,7 +233,6 @@ class MapsFeedLayerService:
             raise MapsFeedLayerValidationError([f"feed {layer.feed_id!r} not found"])
         if feed.shared_from:
             raise MapsFeedLayerPolicyError("This feed is shared from another workspace")
-        existing = await self._own(workspace_id, layer.id)
         if existing is None and any(
             stored.id == layer.id for stored in await self._store.list(workspace_id)
         ):

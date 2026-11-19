@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Building2 } from 'lucide-react';
+import { Building2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
+import { useRememberSettingsScope } from '@/hooks/use-remember-settings-scope';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { opensRolesAndPermissions } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
@@ -15,6 +16,7 @@ import {
   SettingsNavItem,
   useWorkspaceReturnPath,
 } from '@/components/settings/settings-shell';
+import { SettingsShellHeader } from '@/components/settings/settings-shell-header';
 import { SettingsNoAccess } from '@/components/settings/settings-no-access';
 import {
   orgSectionRedirect,
@@ -98,8 +100,9 @@ export default function OrganizationSettingsLayout({
     primary: null,
     accent: null,
   });
-  const [orgCount, setOrgCount] = useState<number | null>(null);
   const [layoutKey, setLayoutKey] = useState(0);
+
+  useRememberSettingsScope(pathname);
 
   useEffect(() => {
     const fetchOrg = async () => {
@@ -119,11 +122,6 @@ export default function OrganizationSettingsLayout({
           });
         }
 
-        const orgsResponse = await authFetch('/api/organizations/');
-        if (orgsResponse.ok) {
-          const orgs = await orgsResponse.json();
-          setOrgCount(orgs.length);
-        }
       } catch (error) {
         console.error('Failed to fetch organization:', error);
       } finally {
@@ -167,16 +165,10 @@ export default function OrganizationSettingsLayout({
       router.push(orgSettingsIndexPath(orgId));
       return;
     }
-    if (orgCount === 1) {
-      router.push(workspaceHref);
-      return;
-    }
-    router.push('/organizations');
+    router.push(workspaceHref);
   };
 
-  const headerTitle = showMobileDetail
-    ? sectionLabel ?? 'Organization Settings'
-    : orgName || 'Organization Settings';
+  const scopeTitle = orgName || 'Organization Settings';
 
   const showNav = !showMobileDetail;
   // On a phone the section list is the index; with no section, the refusal is shown instead.
@@ -185,28 +177,16 @@ export default function OrganizationSettingsLayout({
   return (
     <SettingsLayoutRoot key={layoutKey} brand={orgColors} borderRadius={borderRadius}>
       <div className="org-settings-layout-left">
-      <header className="org-settings-layout-header">
-        <div className="org-settings-layout-header-inner">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="org-settings-back-button"
-            aria-label={
-              showMobileDetail
-                ? 'Back to organization settings'
-                : orgCount === 1
-                  ? 'Back to workspace'
-                  : 'Back to organizations'
-            }
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <div className="org-settings-layout-header-meta">
-            {!showMobileDetail && <Building2 size={16} className="org-settings-layout-header-icon" />}
-            <h1 className="org-settings-layout-header-title">{headerTitle}</h1>
-          </div>
-        </div>
-      </header>
+      <SettingsShellHeader
+        scopeTitle={scopeTitle}
+        detailTitle={sectionLabel}
+        showScopeSwitcher={!showMobileDetail}
+        icon={Building2}
+        onBack={handleBack}
+        backAriaLabel={
+          showMobileDetail ? 'Back to organization settings' : 'Back to workspace'
+        }
+      />
 
       <div
         data-org-settings-body=""

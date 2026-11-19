@@ -30,15 +30,15 @@ enum DataType {
   DATA_TYPE_TEXT = 1;
   DATA_TYPE_JSON = 2;
   DATA_TYPE_BINARY = 3;
+  // Legacy entries only: never accepted by `set`, never served by `get`.
   DATA_TYPE_PICKLE = 4;
 }
 
 // Mirrors naas_abi_core.services.cache.CachePort.CachedData 1:1.
 //
 // `data` is always a plain string by the time it reaches ICacheAdapter --
-// binary/pickle payloads are base64-encoded into a str by CacheService
-// before ever calling the adapter (see CacheService.set_binary/set_pickle)
-// -- so this is a proto `string`, never `bytes`/`Struct`/`Any`. `created_at`
+// binary payloads are base64-encoded into a str by CacheService before ever
+// calling the adapter (see CacheService.set_binary) -- so this is a proto `string`, never `bytes`/`Struct`/`Any`. `created_at`
 // stays a plain `string` too: the Python field is typed `str` (an
 // ISO-8601-formatted value), not `datetime`, so it is never converted to
 // `google.protobuf.Timestamp`.

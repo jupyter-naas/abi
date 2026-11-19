@@ -228,3 +228,26 @@ def test_a_loaded_module_named_remote_does_not_take_remote_app_urls(
     assert [app.module_path for app in catalog] == ["acme.ops"]
     assert set(paths) == {"acme/ops/board/index.html", "acme/ops/board/manifest.json"}
     assert "Module remote: its apps are not served" in caplog.text
+
+
+def test_a_remote_app_tile_shows_its_published_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import RemoteApp
+
+    monkeypatch.setattr(
+        adapter,
+        "resolve_public_module_asset_url",
+        lambda path, abi_module_path: "https://api.example.com" + path,
+    )
+    asset = RemoteApp(
+        "acme.research", "console", avatar_url="/modules/acme/assets/public/console.svg"
+    )
+    hosted = RemoteApp("acme.research", "deck", avatar_url="https://cdn.example.com/deck.png")
+    plain = RemoteApp("acme.research", "plain", icon_emoji="🛰")
+
+    assert (
+        adapter._remote_app_info(asset).avatar_url
+        == "https://api.example.com/modules/acme/assets/public/console.svg"
+    )
+    assert adapter._remote_app_info(hosted).avatar_url == "https://cdn.example.com/deck.png"
+    assert adapter._remote_app_info(plain).avatar_url is None
+    assert adapter._remote_app_info(plain).icon_emoji == "🛰"

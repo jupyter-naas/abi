@@ -26,7 +26,18 @@ describe('old table pages', () => {
   });
 
   it('leave the sections, the index and legacy workspace links alone', () => {
-    for (const path of ['/settings', '/settings/tables', '/settings/tables/users', '/settings/system', '/settings/system/jobs', '/settings/roles']) {
+    for (const path of [
+      '/settings',
+      '/settings/tables',
+      '/settings/tables/users',
+      '/settings/system',
+      '/settings/system/jobs',
+      '/settings/system/bus',
+      '/settings/activity/traces',
+      '/settings/resources/models',
+      '/settings/data/documents',
+      '/settings/roles',
+    ]) {
       expect(platformSettingsRedirect(path)).toBeNull();
     }
     expect(platformSettingsRedirect('/settings/infrastructure')).toBeNull();
@@ -44,10 +55,23 @@ describe('old System links', () => {
     );
     expect(
       platformSettingsRedirect('/workspace/ws-1/admin/system', '?tab=traces&trace=abc&span=d')
-    ).toBe('/settings/system/traces?trace=abc&span=d');
+    ).toBe('/settings/activity/traces?trace=abc&span=d');
     expect(
       platformSettingsRedirect('/org/acme/workspace/ws-1/admin/system', '?tab=data&service=cache')
-    ).toBe('/settings/system/data?service=cache');
+    ).toBe('/settings/data/cache');
+  });
+
+  it('send the Data page to the service page, and Live traffic, Traces and Events to Activity', () => {
+    expect(platformSettingsRedirect('/settings/system/data')).toBe('/settings/data/knowledge-graph');
+    expect(platformSettingsRedirect('/settings/system/data', '?service=email&item=m-1')).toBe(
+      '/settings/resources/email?item=m-1'
+    );
+    expect(platformSettingsRedirect('/settings/system/traffic')).toBe('/settings/activity/traffic');
+    expect(platformSettingsRedirect('/settings/system/traces/', '?trace=abc')).toBe(
+      '/settings/activity/traces?trace=abc'
+    );
+    expect(platformSettingsRedirect('/settings/system/events')).toBe('/settings/activity/events');
+    expect(platformSettingsRedirect('/settings/system/nats')).toBeNull();
   });
 
   it('send Access to Roles & permissions', () => {
@@ -62,10 +86,10 @@ describe('old System links', () => {
     expect(platformSettingsRedirect('/settings/modules', '?org=acme')).toBe('/settings/roles?org=acme');
   });
 
-  it('send Events to System › Events', () => {
-    expect(platformSettingsRedirect('/workspace/ws-1/admin/events')).toBe('/settings/system/events');
+  it('send Events to Activity › Events', () => {
+    expect(platformSettingsRedirect('/workspace/ws-1/admin/events')).toBe('/settings/activity/events');
     expect(platformSettingsRedirect('/org/acme/workspace/ws-1/admin/events')).toBe(
-      '/settings/system/events'
+      '/settings/activity/events'
     );
   });
 
@@ -77,7 +101,23 @@ describe('old System links', () => {
 
 describe('PLATFORM_SETTINGS_SECTIONS', () => {
   it('is the first segment of each section path', () => {
-    expect(PLATFORM_SETTINGS_SECTIONS).toEqual(['tables', 'system', 'organizations', 'users', 'roles']);
+    expect(PLATFORM_SETTINGS_SECTIONS).toEqual([
+      'general',
+      'tables',
+      'system',
+      'activity',
+      'resources',
+      'data',
+      'organizations',
+      'users',
+      'roles',
+    ]);
+  });
+
+  it('serves Create user at /settings/users/new, never redirected to a users row', () => {
+    expect(platformSettingsRedirect('/settings/users/new')).toBeNull();
+    expect(isPlatformSettingsPath('/settings/users/new')).toBe(true);
+    expect(platformSettingsRedirect('/settings/users/usr_a')).toBe('/settings/tables/users/usr_a');
   });
 
   it('serves Users, never redirected to the users table (its rows still are)', () => {
@@ -99,6 +139,9 @@ describe('isPlatformSettingsPath', () => {
     expect(isPlatformSettingsPath('/settings')).toBe(true);
     expect(isPlatformSettingsPath('/settings/tables/users')).toBe(true);
     expect(isPlatformSettingsPath('/settings/system/events')).toBe(true);
+    expect(isPlatformSettingsPath('/settings/activity/events')).toBe(true);
+    expect(isPlatformSettingsPath('/settings/resources/models')).toBe(true);
+    expect(isPlatformSettingsPath('/settings/data')).toBe(true);
     expect(isPlatformSettingsPath('/settings/roles')).toBe(true);
     expect(isPlatformSettingsPath('/settings/organizations')).toBe(true);
     expect(isPlatformSettingsPath('/settings/modules')).toBe(false);

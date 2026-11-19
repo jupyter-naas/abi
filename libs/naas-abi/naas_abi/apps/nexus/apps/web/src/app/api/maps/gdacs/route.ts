@@ -5,6 +5,7 @@ import {
   gdacsEventUrl,
   type GdacsCollection,
 } from './gdacs';
+import { mapsRoute } from '../_guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,7 @@ async function fetchEventType(eventType: string): Promise<GdacsCollection> {
 
 /** GDACS multi-hazard event list: one call per event type, merged. A type that
  * fails is left out; the layer fails only when every type does. */
-export async function GET() {
+async function handle() {
   const results = await Promise.allSettled(GDACS_EVENT_TYPES.map(fetchEventType));
   const collections: GdacsCollection[] = [];
   const failed: string[] = [];
@@ -39,3 +40,5 @@ export async function GET() {
     ...(failed.length ? { unavailable: failed } : {}),
   });
 }
+
+export const GET = mapsRoute('gdacs', handle, { perMinute: 120 });

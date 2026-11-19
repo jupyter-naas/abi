@@ -133,11 +133,11 @@ class NexusHarness:
             runtime.configure(previous)
             await engine.dispose()
 
-    async def _sign_in(self, client, harness, user, *, next_path="/workspace/w1"):
-        started = await client.get(
-            "/api/auth/oidc/login",
-            params={"provider": harness.provider_name, "next": next_path},
-        )
+    async def _sign_in(self, client, harness, user, *, next_path="/workspace/w1", email=None):
+        params = {"provider": harness.provider_name, "next": next_path}
+        if email is not None:  # typed in the login form: the provider's login_hint
+            params["email"] = email
+        started = await client.get("/api/auth/oidc/login", params=params)
         assert started.status_code == 302, started.text
         assert BINDING_COOKIE in started.headers.get("set-cookie", "")
         callback = harness.sign_in(started.headers["location"], user)
@@ -969,3 +969,16 @@ class TestNexusSignInWithBuiltinIdP(NexusSignInContract):
 
         with BuiltinIdPHarness(redirect_uri=CALLBACK) as idp:
             yield idp
+
+    @pytest.mark.asyncio
+    async def test_the_address_typed_in_the_login_form_is_not_asked_again(self, nexus, harness):
+        client, _, _ = nexus
+        user = harness.create_user(f"once-{os.urandom(3).hex()}@example.com")
+        before = len(harness.mailer.sent)
+        # The harness follows the provider's redirect to its code page: no email page.
+        landed = await self._sign_in(client, harness, user, email=user.email)
+        assert landed.status_code == 302
+        assert landed.headers["location"] == f"{WEB}/auth/callback?next=%2Fworkspace%2Fw1"
+        assert [m.to for m in harness.mailer.sent[before:]] == [user.email]
+        me = (await client.get("/api/auth/me")).json()
+        assert me["email"] == user.email

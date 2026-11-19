@@ -22,7 +22,8 @@ This file covers `services/oidc/` (the sign-in and the session) and `services/au
 | `oidc/service.py` | `OidcSignInService`: `route`, `begin`, `complete`, `resolve` (the session a cookie names, refreshed when due), `logout`; the CSRF helpers; `PLACEHOLDER_EMAIL_DOMAIN` |
 | `oidc/port.py` | `OidcSessionPersistencePort`, `IdentityGateway`, `PrincipalGateway`, the records (`OidcUser`, `SessionRecord`, `LoginRequest`) |
 | `oidc/runtime.py` | `RUNTIME`: builds the service from the engine's identity and IAM; `session_secret`, `is_document_request`, the cookie-auth result; tests `configure` another |
-| `oidc/adapters/primary/` | `/api/auth/oidc/{providers,route,login,callback,session,logout}` |
+| `oidc/adapters/primary/` | `/api/auth/oidc/{providers,route,login,callback,session,logout,web-pass}` |
+| `oidc/web_pass.py` | The web app's pass: how the web app's own server routes know a browser is signed in (see "The web pass") |
 | `oidc/adapters/secondary/engine.py` | The engine's identity and IAM, in process (`EngineIdentityGateway`; `EngineIAMPrincipals` caches "is the principal active" for 5 s) |
 | `oidc/adapters/secondary/postgres.py` | `users`, `auth_sessions`, `oidc_login_requests`, `organization_domains` |
 | `oidc/migration.py` | `migrate_users`: what `abi user migrate` runs (see "Accounts of the old login") |
@@ -36,8 +37,11 @@ This file covers `services/oidc/` (the sign-in and the session) and `services/au
 ## Sign-in
 
 - `GET /api/auth/oidc/login?provider=&email=&next=` starts it. `route(email)` answers
-  the provider of the email's verified organization domain (`organization_domains.provider`),
-  else the engine's default provider; with neither `provider` nor `email` the default
+  the provider of the email's verified organization domain (`organization_domains.provider`;
+  verified only with its DNS TXT proof `_nexus-verify.<domain>` or by a platform admin, and
+  never a public mail domain, which routes nothing whatever an older row says; rows that
+  differ only in case are one domain: `services/organizations/domain_proof.py`), else the
+  engine's default provider; with neither `provider` nor `email` the default
   provider is used. The default provider never captures an email by itself (it would shut
   out every account it does not hold): it is a "Continue with ..." button and the target
   of a bare `/login`.
@@ -125,6 +129,21 @@ This file covers `services/oidc/` (the sign-in and the session) and `services/au
   `authFetch`, or `withAuth` / `getAuthHeader(method)` + `authCredentials()` for a raw
   `fetch`, and `selectSession` / `hasSession` to know whether someone is signed in. The
   WebSocket handshake carries the cookie too.
+
+### The web pass
+
+The session cookie stays on the API's host, and the web app runs on another one
+(`PUBLIC_WEB_HOST`, `PUBLIC_API_HOST`), so the web app's own server routes that fetch for a page
+(`/api/image-data`, `/api/link-preview`, `/api/maps/*`) never see it. Once the browser knows its
+session, it asks `POST /api/auth/oidc/web-pass` (cookie session, CSRF-checked) for a **pass**, and hands
+it to the web app's `POST /api/web-pass`, which keeps it in an httpOnly, `SameSite=Strict` cookie of
+the web host (`nexus-web-pass`). Those routes ask `GET /api/auth/oidc/web-pass` (the pass in
+`X-Web-Pass`) whose pass it is, and keep the answer a minute at most; without a live pass they answer
+401. The pass is a link (`apps/links.py`): an IAM grant of the user, audience `abi:delegated:app`, bound
+to `web-pass` and narrowed to nothing, eight hours at most and never past its session's end
+(`ActiveSession.expires_at`), revoked at sign-out with the remote app grants. It opens no app (the app routes take `/app-html/` and `app-remote/` resources only) and is never
+a session: all it says is who its user is. The web side is `apps/web/src/lib/web-pass.ts` (browser) and
+`web-pass-server.ts` (routes). Tests: `web_pass_test.py`.
 
 ## Credentials: which kind goes where
 

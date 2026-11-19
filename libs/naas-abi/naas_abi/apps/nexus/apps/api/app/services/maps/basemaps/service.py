@@ -215,9 +215,17 @@ class MapsBasemapService:
         return basemap
 
     async def save(
-        self, workspace_id: str, basemap: MapsBasemap, *, user_id: str | None
+        self,
+        workspace_id: str,
+        basemap: MapsBasemap,
+        *,
+        user_id: str | None,
+        reserved: set[str] | frozenset[str] = frozenset(),
     ) -> MapsBasemap:
         existing = await self._find(workspace_id, basemap.id)
+        if basemap.id in reserved and not (existing is not None and existing.system):
+            # Seed ids belong to the deployment, whatever this workspace holds.
+            raise MapsBasemapValidationError([f"id {basemap.id!r} is reserved by the deployment"])
         if existing is None and any(
             stored.id == basemap.id and stored.system
             for stored in await self._store.list(workspace_id)

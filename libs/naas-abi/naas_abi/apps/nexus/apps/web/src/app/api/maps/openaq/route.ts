@@ -1,4 +1,5 @@
 import { mapsPinResponse, mapsUpstreamGet } from '../_lib';
+import { mapsRoute } from '../_guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,7 +34,7 @@ function pmColor(pm25: number): string {
   return '#dc2626';
 }
 
-export async function GET() {
+async function handle() {
   const apiKey = process.env.OPENAQ_API_KEY?.trim();
 
   if (apiKey) {
@@ -128,3 +129,5 @@ async function fetchOpenMeteo() {
   );
   return pins;
 }
+
+export const GET = mapsRoute('openaq', handle, { perMinute: 30, cacheSeconds: 300 });

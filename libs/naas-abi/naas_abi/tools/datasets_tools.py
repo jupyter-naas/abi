@@ -1,7 +1,9 @@
 """DatasetsAgent tools for Nexus Datasets (read-only catalog + SQL).
 
 Same operations as ``/api/datasets`` (list, describe, preview, namespace
-query) with the same membership check. SQL goes through
+query) with the same checks: the workspace membership, then the route's action
+(and the ``datasets`` feature) on each dataset and namespace reached, the
+namespaces a query's SQL names included (``services/datasets/access.py``). SQL goes through
 ``DatasetsService.query``, which enforces read-only statements
 (``sql_safe.assert_read_only_sql``) and caps the row limit, so the agent has
 no more power than the Datasets page. The dataset open on
@@ -21,6 +23,7 @@ from naas_abi.agents.feature.runtime import (
     guarded,
     jsonable,
     matches,
+    run,
     tool_context,
 )
 
@@ -79,13 +82,24 @@ def _known_error(exc: Exception) -> dict[str, str] | None:
     return None
 
 
-def _call(user_id: str, workspace_id: str, fn: Any) -> Any:
+def _call(user_id: str, workspace_id: str, fn: Any, check: Any = None) -> Any:
+    """``fn()`` once the user belongs to the workspace and ``check()`` (an
+    awaitable of ``access``) passes: what the route decides before it runs."""
+
     def _run() -> Any:
+        from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AuthzDenied
+
         role = check_member(user_id, workspace_id)
         if isinstance(role, dict):
             return role
         try:
+            if check is not None:
+                run(check())
             return fn()
+        except AuthzDenied:
+            return {
+                "error": "You do not have access to this dataset in this workspace."
+            }
         except Exception as exc:
             known = _known_error(exc)
             if known:
@@ -93,6 +107,28 @@ def _call(user_id: str, workspace_id: str, fn: Any) -> Any:
             raise
 
     return guarded(_FEATURE, _run)
+
+
+async def _may(
+    user_id: str, workspace_id: str, action: str, dataset: tuple[str, str] | None = None
+) -> None:
+    """The route's check: ``action`` in the workspace (the ``datasets`` feature),
+    and on the dataset and its namespace when one is named."""
+    from naas_abi.apps.nexus.apps.api.app.services.datasets import access
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+    if dataset is None:
+        await AUTHZ.require(action, user=user_id, workspace=workspace_id, id="-")
+        return
+    await access.require_datasets(
+        action, [dataset], user=user_id, workspace_id=workspace_id
+    )
+
+
+async def _may_query(user_id: str, workspace_id: str, sql: str, namespace: str) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.datasets import access
+
+    await access.require_query(user_id, workspace_id, sql, namespace)
 
 
 def _result(result: Any) -> dict[str, Any]:
@@ -117,7 +153,10 @@ def datasets_tools() -> list[BaseTool]:
         open_id = active_feature_resource_id(DATASET_RESOURCE_KIND)
 
         def _list() -> Any:
+            from naas_abi.apps.nexus.apps.api.app.services.datasets import access
+
             items = _service().list(namespace=(namespace or "").strip() or None)
+            items = run(access.visible(items, user=user_id))
             rows = [
                 {
                     "dataset": f"{i.namespace}/{i.name}",
@@ -129,7 +168,12 @@ def datasets_tools() -> list[BaseTool]:
             ]
             return {"open_dataset": open_id, "total": len(rows), "datasets": rows[:100]}
 
-        return _call(user_id, workspace_id, _list)
+        return _call(
+            user_id,
+            workspace_id,
+            _list,
+            lambda: _may(user_id, workspace_id, "ListDatasets"),
+        )
 
     @tool
     def describe_dataset(dataset: str = "") -> Any:
@@ -147,6 +191,7 @@ def datasets_tools() -> list[BaseTool]:
             user_id,
             workspace_id,
             lambda: jsonable(_service().describe(name, namespace=namespace)),
+            lambda: _may(user_id, workspace_id, "GetDataset", (namespace, name)),
         )
 
     @tool
@@ -164,6 +209,7 @@ def datasets_tools() -> list[BaseTool]:
             user_id,
             workspace_id,
             lambda: _result(_service().preview(name, namespace=namespace, limit=limit)),
+            lambda: _may(user_id, workspace_id, "PreviewDataset", (namespace, name)),
         )
 
     @tool
@@ -187,6 +233,7 @@ def datasets_tools() -> list[BaseTool]:
             user_id,
             workspace_id,
             lambda: _result(_service().query(sql, namespace=target, limit=limit)),
+            lambda: _may_query(user_id, workspace_id, sql, target),
         )
 
     return [list_datasets, describe_dataset, preview_dataset, query_datasets]

@@ -199,6 +199,23 @@ class JobCatalog(Protocol):
         ...
 
 
+@dataclass(frozen=True)
+class JobRecentRuns:
+    """One job's runs as the overview shows them."""
+
+    recent: tuple[JobRun, ...] = ()
+    last_skipped: JobRun | None = None
+
+
+@dataclass(frozen=True)
+class ModuleRuns:
+    """What the overview needs of one module's runs, read in one go: each job's
+    recent runs and last skip, and the module's active runs."""
+
+    jobs: dict[str, JobRecentRuns] = field(default_factory=dict)
+    running: tuple[JobRun, ...] = ()
+
+
 class JobRunStore(Protocol):
     """Run records, newest first by ``started_at``. Raises SourceUnavailable."""
 
@@ -221,6 +238,14 @@ class JobRunStore(Protocol):
 
     async def get_run(self, module_id: str, run_id: str) -> JobRun:
         """Raises RunNotFound."""
+        ...
+
+    async def module_runs(
+        self, module_id: str, jobs: Sequence[str], *, recent: int = 20
+    ) -> ModuleRuns:
+        """For each of ``jobs``: its last ``recent`` runs in LISTED_STATUSES and its
+        last SKIPPED run; and the module's RUNNING or RETRYING runs. One call per
+        module, so a store can answer it without a round trip per job."""
         ...
 
 

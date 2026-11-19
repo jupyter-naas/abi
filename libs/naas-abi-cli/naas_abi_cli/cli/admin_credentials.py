@@ -12,23 +12,42 @@ signs in at the built-in identity provider with the code it mails to
 
 from __future__ import annotations
 
+import re
 import secrets
+import sys
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
-# The account the project templates seed (``users:`` of the Nexus configuration).
+from .private_dir import private_file
+
+# A placeholder address, for `abi dev` and examples only: a project's own
+# administrator is the address `abi new project --admin-email` asks for, which
+# its configs seed (``users:`` of the Nexus configuration).
 ADMIN_EMAIL = "admin@example.com"
+# Where the configs of the ABI repository itself read their administrator.
+ADMIN_ADDRESS_ENV = "NEXUS_USER_ADMIN_EMAIL"
+_EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s.]+")
+# Domains that receive no mail (RFC 2606, RFC 6761, mDNS).
+_PLACEHOLDER_DOMAINS = frozenset(
+    {"example.com", "example.net", "example.org", "localhost"}
+)
+_PLACEHOLDER_SUFFIXES = (".example", ".invalid", ".test", ".localhost", ".local")
 API_KEY = "ABI_API_KEY"
 # The secret of the client ABI (Nexus, as a relying party) signs in to the
 # built-in IdP with: read by the engine (identity.providers) and by the IdP
 # module, which hashes it. Generated once per project.
 IDP_CLIENT_SECRET = "ABI_IDP_CLIENT_SECRET"
 # The broker's static users and the .env keys of their passwords: the engine's
-# processes (engine), and the engine's auth callout responder (auth). Every
-# other connection (modules, scripts) logs in with a service key and is
-# admitted by the callout. Docker reads them in .deploy/docker/nats/nats.conf,
-# `abi dev` writes them into its own nats.conf.
-NATS_USERS = {"engine": "NATS_ENGINE_PASSWORD", "auth": "NATS_AUTH_PASSWORD"}
+# processes (engine), the engine's auth callout responder (auth), and its
+# connection warden in the system account (sys), which ends the module
+# connections an IAM change affects. Every other connection (modules, scripts)
+# logs in with a service key and is admitted by the callout. Docker reads them
+# in .deploy/docker/nats/nats.conf, `abi dev` writes them into its own nats.conf.
+NATS_USERS = {
+    "engine": "NATS_ENGINE_PASSWORD",
+    "auth": "NATS_AUTH_PASSWORD",
+    "sys": "NATS_SYSTEM_PASSWORD",
+}
 NATS_PASSWORDS = tuple(NATS_USERS.values())
 # The seed of the account key the callout signs admitted users with, and its
 # public half, which nats.conf names (auth_callout.issuer, $NATS_AUTH_CALLOUT_ISSUER).
@@ -44,6 +63,13 @@ _SHIPPED_DEFAULTS = frozenset(
 
 def _is_shipped_default(value: str | None) -> bool:
     return (value or "").strip().casefold() in _SHIPPED_DEFAULTS
+
+
+def _is_replaced_api_key(value: str | None) -> bool:
+    """A default, or a value the API refuses to start with (retired)."""
+    from naas_abi_core.apps.api.abi_api_key_auth import is_retired_abi_api_key
+
+    return _is_shipped_default(value) or is_retired_abi_api_key(value)
 
 
 def _read(env_path: Path) -> list[str]:
@@ -76,14 +102,16 @@ def _set(lines: list[str], key: str, value: str) -> list[str]:
 
 
 def _write(env_path: Path, lines: list[str]) -> None:
+    private_file(env_path)
     env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def ensure_api_key(env_path: Path) -> str:
-    """Return ``ABI_API_KEY`` from ``.env``, generating it when missing or a default."""
+    """Return ``ABI_API_KEY`` from ``.env``, generating it when missing, a
+    default or a retired value."""
     lines = _read(env_path)
     key = _value(lines, API_KEY)
-    if key and not _is_shipped_default(key):
+    if key and not _is_replaced_api_key(key):
         return key
     key = secrets.token_urlsafe(32)
     _write(env_path, _set(lines, API_KEY, key))
@@ -160,6 +188,40 @@ def ensure_nats_passwords(env_path: Path) -> dict[str, str]:
     return passwords
 
 
+# The credentials of the stack's data services, which refuse to start without
+# them: Fuseki's admin and the engine's own Fuseki user (`abi`), Redis's
+# password and Qdrant's API key. Hex, so a value goes into a URL
+# (``redis://:<password>@redis``) and Fuseki's shiro.ini as is.
+DATA_SERVICE_SECRETS = (
+    "FUSEKI_ADMIN_PASSWORD",
+    "FUSEKI_ENGINE_PASSWORD",
+    "REDIS_PASSWORD",
+    "QDRANT_API_KEY",
+)
+_MIN_DATA_SERVICE_SECRET = 16
+
+
+def generate_data_service_secret() -> str:
+    return secrets.token_hex(24)
+
+
+def ensure_data_service_secrets(env_path: Path) -> dict[str, str]:
+    """Return the data services' credentials from ``.env``, generating any that
+    is missing or shorter than 16 characters."""
+    lines = _read(env_path)
+    original = list(lines)
+    values: dict[str, str] = {}
+    for key in DATA_SERVICE_SECRETS:
+        value = _value(lines, key) or ""
+        if len(value) < _MIN_DATA_SERVICE_SECRET or _is_shipped_default(value):
+            value = generate_data_service_secret()
+            lines = _set(lines, key, value)
+        values[key] = value
+    if lines != original:
+        _write(env_path, lines)
+    return values
+
+
 RABBITMQ_USER = "RABBITMQ_USER"
 RABBITMQ_PASSWORD = "RABBITMQ_PASSWORD"
 
@@ -188,3 +250,61 @@ def nats_login(url: str, user: str, password: str) -> str:
         host = f"[{host}]"
     port = f":{parts.port}" if parts.port else ""
     return urlunsplit(parts._replace(netloc=f"{user}:{password}@{host}{port}"))
+
+
+def is_email_address(value: str) -> bool:
+    return bool(_EMAIL.fullmatch(value.strip()))
+
+
+def is_placeholder_address(email: str) -> bool:
+    """Whether ``email``'s domain can receive no mail, so nobody would get the
+    sign-in codes the identity provider sends it."""
+    domain = email.rsplit("@", 1)[-1].strip().lower().rstrip(".")
+    # The reserved domains and every name under them (mail.example.com).
+    return domain.endswith(_PLACEHOLDER_SUFFIXES) or any(
+        domain == reserved or domain.endswith("." + reserved)
+        for reserved in _PLACEHOLDER_DOMAINS
+    )
+
+
+def configured_superadmins(config_text: str) -> list[str]:
+    """The ``is_superadmin`` addresses of a config's Nexus ``users:``."""
+    import yaml
+
+    text = re.sub(r"\{\{\s*secret\.(\w+)\s*\}\}", r"secret:\1", config_text)
+    text = re.sub(r"\{[%#].*?[%#]\}", "", text)
+    try:
+        document = yaml.safe_load(text) or {}
+    except yaml.YAMLError:
+        return []
+    found: list[str] = []
+    for module in document.get("modules") or []:
+        nexus = ((module or {}).get("config") or {}).get("nexus_config") or {}
+        for user in nexus.get("users") or []:
+            if (user or {}).get("is_superadmin") and user.get("email"):
+                found.append(str(user["email"]))
+    return found
+
+
+def ensure_admin_email(env_path: Path) -> str:
+    """Return ``NEXUS_USER_ADMIN_EMAIL`` from ``.env``, asking for it (and
+    keeping it there) when it is missing. Without a terminal to ask on, fails
+    with what to set."""
+    import click
+
+    lines = _read(env_path)
+    email = (_value(lines, ADMIN_ADDRESS_ENV) or "").strip()
+    if is_email_address(email):
+        return email
+    if not sys.stdin.isatty():
+        raise click.ClickException(
+            f"{ADMIN_ADDRESS_ENV} is not set in {env_path}: set it to the address of "
+            "the platform administrator, who signs in with the codes mailed to it."
+        )
+    while True:
+        email = click.prompt("Platform administrator's email address").strip()
+        if is_email_address(email):
+            break
+        click.echo("That is not an email address.")
+    _write(env_path, _set(lines, ADMIN_ADDRESS_ENV, email))
+    return email

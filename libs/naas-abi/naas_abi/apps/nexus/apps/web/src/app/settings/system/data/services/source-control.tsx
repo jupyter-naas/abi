@@ -62,7 +62,6 @@ export const sourceControlView: ServiceView = {
   label: 'Source control',
   description: 'Repositories on the platform forge and the files on their default branch.',
   icon: GitBranch,
-  group: 'Platform',
   noun: { one: 'file', many: 'files' },
   entryIcon: (entry) => {
     const depth = depthOf(entry);

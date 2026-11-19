@@ -45,7 +45,8 @@ SERVICE = "nexus"
 # Raise when the catalog changes; IAM keeps the highest version it has seen.
 # 9: published by naas_abi (``publisher``).
 # 10: the platform's accounts (``user``: Platform Settings > Users).
-VERSION = 10
+# 11: the organization drive (``ListOrgFiles``, ``GetOrgFile``, ``PutOrgFile``, ``DeleteOrgFile``).
+VERSION = 11
 
 _MODULES = (
     organizations,

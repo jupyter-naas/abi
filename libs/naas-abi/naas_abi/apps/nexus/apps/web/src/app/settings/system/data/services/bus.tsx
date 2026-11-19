@@ -2,7 +2,7 @@
 
 import './bus.css';
 
-import { Binary, File, FileJson, FileText, Lock, Waypoints, type LucideIcon } from 'lucide-react';
+import { Binary, File, FileJson, FileText, Lock, MessagesSquare, Waypoints, type LucideIcon } from 'lucide-react';
 import { absoluteTime, formatBytes, formatCount } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
 import { Badge, CopyButton, EmptyState, Hint, Notice, RelativeTime, type Tone } from '../data-ui';
@@ -149,8 +149,7 @@ export const busView: ServiceView = {
   name: 'bus',
   label: 'Bus',
   description: 'JetStream streams on the NATS network (bus topics, jobs, key-value buckets) and their stored messages.',
-  icon: Waypoints,
-  group: 'Streams & logs',
+  icon: MessagesSquare,
   noun: { one: 'message', many: 'messages' },
   nounFor: (entry) =>
     entry.kind === 'container' ? { one: 'stream', many: 'streams' } : { one: 'message', many: 'messages' },

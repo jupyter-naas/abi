@@ -196,8 +196,8 @@ Notes:
     It is found where the code is, and moves with it when the code moves.
   - **In the module's `tests/`** for a test with no single natural neighbour — module-wide
     behaviour, or something defined in `__init__.py`. `tests/` also holds shared
-    `artifacts/` fixtures. Example: `applications/x/tests/XTweetSearchWorkflowConfiguration_test.py`,
-    which covers a config model declared in the module's `__init__.py`.
+    `artifacts/` fixtures. Example: `naas_abi_apps/linkedin/tests/module_test.py`
+    (in `libs/naas-abi-marketplace-modules`), which covers the module declared in its `__init__.py`.
 
 ## Architecture Guidelines
 
@@ -240,10 +240,10 @@ def unsupported_method(self, arg: str) -> None:
 
 After `abi stack start`, the web UI is at `http://localhost:3042`.
 
-Nexus has no login of its own and no password: people sign in at an identity provider (`identity.providers`; the built-in one, `libs/naas-abi-idp`, is the default of `abi dev up`, `abi deploy local` and `abi new project`). The only seeded account is `admin@example.com` (`users:` in the configuration): the API makes it exist at the built-in provider when it starts, and its first sign-in links it to the account, which keeps the roles configured there. Enter the address on the login page; the provider emails a 6-digit code. In `abi dev` the mail is a file in `storage/email`, and the code is one command away:
+Nexus has no login of its own and no password: people sign in at an identity provider (`identity.providers`; the built-in one, `libs/naas-abi-idp`, is the default of `abi dev up`, `abi deploy local` and `abi new project`). The only seeded account is the platform administrator (`users:` in the configuration; this repository's configs read it from `NEXUS_USER_ADMIN_EMAIL` in `.env`, which `abi dev up` and `abi stack start` ask for once, and `abi new project --admin-email` writes a project's): the API makes it exist at the built-in provider when it starts, and its first sign-in links it to the account, which keeps the roles configured there. Enter the address on the login page; the provider emails a 8-digit code. In `abi dev` the mail is a file in `storage/email`, and the code is one command away:
 
 ```bash
-abi dev code            # the newest sign-in code mailed to admin@example.com
+abi dev code            # the newest sign-in code mailed to the administrator
 abi dev code --email bob@example.com
 ```
 
@@ -261,7 +261,7 @@ The repo runs on NATS by default, like a project from `abi new project`: its
 `config.yaml` (`abi dev up`) and `config.local.yaml` (`abi stack start`) have a
 `nats:` block. Kernel services, the bus (JetStream), module jobs and remote
 module discovery go through the broker. The broker's passwords
-(`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`) and the seed of its auth callout
+(`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`, `NATS_SYSTEM_PASSWORD`) and the seed of its auth callout
 (`NATS_AUTH_CALLOUT_SEED`) are generated into `.env` on first run (see
 `.env.example`); modules log in with their own service key, not a shared password.
 
@@ -452,9 +452,50 @@ Run all four services with `uv run abi dev up -d`, then `abi dev status` / `abi 
 
 Non-obvious gotchas discovered during setup:
 
-- **`.env` is required and gitignored.** It is auto-created on first `abi dev up`, seeding `ABI_API_KEY`, the broker's secrets (`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`, `NATS_AUTH_CALLOUT_SEED`) and the identity provider's client secret (there is no admin password). The engine renders `config.yaml` through Jinja and **hard-fails non-interactively (no TTY) on missing `{{ secret.X }}` in active (non-comment) YAML**. Full-line YAML comments are left unrendered, so commented-out modules can keep example `{{ secret.X }}` placeholders. Deploy placeholders are in `.env.example` (`NAAS_API_KEY`, `ABI_API_KEY`, `NEXUS_API_URL`): copy those if missing. The root config also names `OPENAI_API_KEY`, `OPENROUTER_API_KEY` and `GITHUB_ACCESS_TOKEN` in active YAML, so set them (a placeholder lets the API boot) through environment secrets or `.env`.
+- **`.env` is required and gitignored.** It is auto-created on first `abi dev up`, seeding `ABI_API_KEY`, the broker's secrets (`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`, `NATS_SYSTEM_PASSWORD`, `NATS_AUTH_CALLOUT_SEED`) and the identity provider's client secret (there is no admin password). The engine renders `config.yaml` through Jinja and **hard-fails non-interactively (no TTY) on missing `{{ secret.X }}` in active (non-comment) YAML**. Full-line YAML comments are left unrendered, so commented-out modules can keep example `{{ secret.X }}` placeholders. Deploy placeholders are in `.env.example` (`NAAS_API_KEY`, `ABI_API_KEY`, `NEXUS_API_URL`): copy those if missing. The root config also names `OPENAI_API_KEY`, `OPENROUTER_API_KEY` and `GITHUB_ACCESS_TOKEN` in active YAML, so set them (a placeholder lets the API boot) through environment secrets or `.env`.
 - **NATS ports are offset too.** `abi dev up` starts its own `nats-server` on an offset client port and hands the api its URL through `.abi/dev/dev.overlay.yaml`; the `127.0.0.1:4222` in `config.yaml` is the Docker stack's broker. `abi dev ports` lists the live ones; the broker's monitoring endpoint is the client port + 1000 (`/healthz`, `/connz`).
 - **For capable cloud models:** set `global_config.ai_mode: "cloud"`, uncomment a cloud provider module in `config.yaml`, replace `SECRET_REF` with a real Jinja secret, and add its key via environment secrets or `.env`.
 - **First API boot is slow (~2-3 min):** the worker loads every module/ontology and runs Nexus SQLite migrations before serving. Watch `abi dev logs api`; it is ready when `/docs` returns 200 (`GET http://localhost:<api-port>/docs`).
 - **Ports are offset per worktree** (see `abi dev ports`), so they are not the config defaults. `abi dev` injects `OXIGRAPH_URL` into each service; the `config.yaml` default `:7878` is not the live port. To run a test that builds its own engine against the live triple store, pass `OXIGRAPH_URL=http://127.0.0.1:<oxigraph-port>`.
-- **Login:** `admin@example.com` at the built-in identity provider, with the code it emails: `uv run abi dev code` prints the newest one (dev mail is a file in `storage/email`). There is no password. Web UI is the `nexus-web` port.
+- **Login:** the platform administrator (`NEXUS_USER_ADMIN_EMAIL`) at the built-in identity provider, with the code it emails: `uv run abi dev code` prints the newest one (dev mail is a file in `storage/email`). There is no password. Web UI is the `nexus-web` port.
+
+## Decision: release and dependency inputs
+
+Decision:
+
+- Every action in `.github/workflows/` is pinned by commit, with its tag in a comment;
+  Dependabot (`.github/dependabot.yml`) proposes updates once a release is a week old.
+- Dependabot checks weekly: uv (root, Nexus API), npm (Nexus), GitHub Actions and Docker
+  (the ABI images, Nexus, IdP). Minor and patch bumps come grouped, one pull request per
+  ecosystem and directory; a major bump comes alone. At most 5 version-update pull
+  requests stay open per entry and directory. `python` and `ubuntu` image bumps stay out
+  of the Docker group; non-LTS `ubuntu` releases and odd `node` majors are ignored.
+  The IdP's uv lock is not on Dependabot: its image installs a hashed `uv export` of it
+  (`libs/naas-abi-idp/requirements.txt`) that Dependabot would leave stale, so it is
+  upgraded by hand with the export.
+- Tooling the workflows install comes from hashed files in `.github/requirements/`
+  (`*.in` and the `uv pip compile` command in each `.txt` header). Docker logins to
+  ghcr.io use the job's `GITHUB_TOKEN`.
+- `release.yml` has two jobs. `release` versions, builds and tags each package and makes
+  its GitHub release; the release PAT is in one step's environment and the checkout keeps
+  no token. `publish` uploads the files `release` built (an artifact) to PyPI as the
+  trusted publisher (workflow `release.yml`, environment `pypi`), with `id-token: write`
+  and nothing else.
+- `deploy_api.yml` runs only after a `Build ABI Container` run that succeeded.
+- The root `uv.lock` and the Nexus API's resolve with a release-age cooldown
+  (`[tool.uv] exclude-newer = "7 days"`, uv 0.9.17 or later). `make check-advisories`
+  (`scripts/check_advisories.sh`, the `advisories` job of `pull_request.yml`) runs
+  `uv audit` on both and fails on any advisory that `.github/advisories-allowlist.txt`
+  does not list with its reason.
+- Projects that are never published carry names under the `naas-abi-` prefix:
+  `naas-abi-workspace` (the root) and `naas-abi-nexus-api`.
+
+Consequences:
+
+- A lock refresh that moves past an allow-listed advisory leaves a stale line: remove it.
+  An advisory with no fixed release is listed `until-fixed`, and fails the check once a
+  fix exists.
+- A Dependabot security-update pull request on the IdP's `uv.lock` fails
+  `libs/naas-abi-idp/tests/test_image.py` until `requirements.txt` is exported again on
+  its branch.
+- Tests: `tests/unit/test_release_pipeline.py`.

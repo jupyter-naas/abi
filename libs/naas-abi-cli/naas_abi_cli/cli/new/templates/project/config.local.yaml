@@ -4,6 +4,12 @@ api:
   description: "API for ABI"
   logo_path: "assets/logo.png"
   favicon_path: "assets/favicon.ico"
+  # Auto-reload on changes under src/ (uvicorn's WatchFiles reloader): off.
+  # `true` while editing src/ in the Docker stack (`abi dev up` turns it on by
+  # itself), never on a deployed engine: it rescans src/ all the time and
+  # keeps a NATS engine running after NATS is gone.
+  # `abi deploy dokploy` copies this file into config.dokploy.yaml.
+  reload: false
   cors_origins:
     - "http://{{ secret.PUBLIC_WEB_HOST }}"
     - "https://{{ secret.PUBLIC_WEB_HOST }}"
@@ -27,6 +33,7 @@ nats:
   nats_url: "nats://engine:{% raw %}{{ secret.NATS_ENGINE_PASSWORD }}{% endraw %}@nats:4222"
   auth_callout:
     nats_url: "nats://auth:{% raw %}{{ secret.NATS_AUTH_PASSWORD }}{% endraw %}@nats:4222"
+    system_url: "nats://sys:{% raw %}{{ secret.NATS_SYSTEM_PASSWORD }}{% endraw %}@nats:4222"
     issuer_seed: "{% raw %}{{ secret.NATS_AUTH_CALLOUT_SEED }}{% endraw %}"
   # One engine per project hosts the module registry: the `abi` service. The
   # stack runs no second engine (no Dagster: module jobs replace it).
@@ -38,7 +45,7 @@ nats:
     lease_seconds: 180
   # The broker's HTTP monitoring port, read by the Nexus System app. No auth:
   # reachable on the Compose network and on 127.0.0.1 only.
-  monitoring_url: "http://nats:8222"
+  monitoring_url: "http://nats-monitor:8222"
 
 # The built-in identity provider (naas-abi-idp): users sign in with a code
 # emailed to them. It runs as a module over NATS (the `idp` service of docker-compose.yml); Nexus serves it at
@@ -112,7 +119,7 @@ modules:
           show_powered_by: false
           login_footer_text: "© ABI AI Platform"
         users:
-          - email: "admin@example.com"
+          - email: "{% endraw %}{{ admin_email }}{% raw %}"
             name: "ABI Admin"
             # Platform-wide admin (admin console, live event stream). Config only
             # promotes on boot; manage superadmins in Platform Settings > Users.
@@ -120,7 +127,7 @@ modules:
         organizations:
           - name: "ABI"
             slug: "abi"
-            owner_email: "admin@example.com"
+            owner_email: "{% endraw %}{{ admin_email }}{% raw %}"
             primary_color: "#34D399"
             accent_color: "#34D399"
             login_footer_text: "© ABI"
@@ -128,7 +135,7 @@ modules:
             workspaces:
               - name: "ABI"
                 slug: "abi"
-                owner_email: "admin@example.com"
+                owner_email: "{% endraw %}{{ admin_email }}{% raw %}"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
 
@@ -227,18 +234,19 @@ services:
     triple_store_adapter:
       adapter: "apache_jena_tdb2"
       config:
-        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@fuseki:3030/ds"
+        jena_tdb2_url: "http://abi:{{ secret.FUSEKI_ENGINE_PASSWORD }}@fuseki:3030/ds"
         key_value_service:
           kv_adapter:
             adapter: "redis"
             config:
-              redis_url: "redis://redis:6379"
+              redis_url: "redis://:{{ secret.REDIS_PASSWORD }}@redis:6379"
   vector_store:
     vector_store_adapter:
       adapter: "qdrant"
       config:
         host: "qdrant"
         port: 6333
+        api_key: "{{ secret.QDRANT_API_KEY }}"
 {% endraw %}{% if not nats %}{% raw %}
   bus:
     bus_adapter:
@@ -250,7 +258,7 @@ services:
     kv_adapter:
       adapter: "redis"
       config:
-        redis_url: "redis://redis:6379"
+        redis_url: "redis://:{{ secret.REDIS_PASSWORD }}@redis:6379"
   email:
     email_adapter:
       adapter: "filesystem"

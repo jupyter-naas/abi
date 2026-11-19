@@ -33,11 +33,13 @@ import {
   type SlideMutationResult,
 } from '@/components/slides/slides-outline';
 import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
+import { OfficeCreateLoader } from '@/components/office/office-create-loader';
 import {
-  openSlidesAgentPane,
-  slidesApiErrorMessage,
-  startNewPresentation,
-} from '@/lib/create-slides-project';
+  clearOfficeCreate,
+  pushOfficeCreate,
+  useOfficeCreateStore,
+} from '@/components/office/office-create-state';
+import { openSlidesAgentPane, slidesApiErrorMessage } from '@/lib/create-slides-project';
 import { copyDeckToMyDrive } from '@/lib/slides-my-drive';
 import { createOfficeSaveQueue, type OfficeSaveQueue } from '@/lib/office-save-queue';
 import { authFetch } from '@/stores/auth';
@@ -212,6 +214,7 @@ export default function SlidesEditorPage() {
   const [manualEdit, setManualEdit] = useState(false);
   const [holdPreview, setHoldPreview] = useState(false);
   const [mutating, setMutating] = useState(false);
+  const creating = useOfficeCreateStore((s) => s.kind === 'deck');
   const previewRef = useRef<SlidesPreviewFrameHandle>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
@@ -348,9 +351,12 @@ export default function SlidesEditorPage() {
         }
         setLoading(false);
         setRefreshing(false);
+        // A quiet refresh of the page File → New left must not end that create.
+        if (!quiet) clearOfficeCreate();
         if (ensureRuntime) {
           // Fire-and-forget: Preview already has Forgejo HTML. Coder ensure is
           // optional (deployed sidecar) and must not block or alarm locally.
+          // Overlay and editor wait only on HTML.
           void ensureSlidesRuntime(workspaceId, slug, quiet ? 2 : 6)
             .then((runtime) => {
               if (gen !== loadGenRef.current) return;
@@ -365,6 +371,8 @@ export default function SlidesEditorPage() {
         }
       } catch (e) {
         if (gen !== loadGenRef.current) return;
+        // A quiet refresh of the page File → New left must not end that create.
+        if (!quiet) clearOfficeCreate();
         const message = (e as Error).message;
         // Deck load Forgejo races are not a Coder outage; keep banners separate.
         setError(
@@ -753,11 +761,9 @@ export default function SlidesEditorPage() {
   const menuBar = (
     <SlidesMenuBar
       onNewPresentation={() => {
-        if (!workspaceId) return;
-        void startNewPresentation(workspaceId, (href) => router.push(href)).catch((e) => {
-          setError(slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'));
-        });
+        pushOfficeCreate(router, 'deck', workspaceId);
       }}
+      newDisabled={creating}
       onCommit={() => void save()}
       commitDisabled={saving || !dirty || loading}
       onSaveToMyDrive={() => void saveToMyDrive()}
@@ -800,6 +806,16 @@ export default function SlidesEditorPage() {
     />
   );
 
+  if (creating) {
+    return (
+      <div className="flex h-full flex-col">
+        <Header title="New presentation" nav={menuBar} />
+        <OfficeCreateLoader kind="deck" phase="creating" />
+        <SlidesStatusBar />
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex h-full flex-col">
@@ -808,10 +824,7 @@ export default function SlidesEditorPage() {
           subtitle={slug ? `slides/${slug}/deck.html` : undefined}
           nav={menuBar}
         />
-        <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-          <Loader2 size={16} className="animate-spin" />
-          Loading deck…
-        </div>
+        <OfficeCreateLoader kind="deck" phase="opening" />
         <SlidesStatusBar />
       </div>
     );

@@ -65,6 +65,9 @@ class EmailService(ServiceBase):
     ) -> str | None:
         """Send; returns the id of the kept copy when the adapter keeps one."""
         self._guard.require("Send", "sender", from_email or DEFAULT_SENDER)
+        # The kept copy is placed in the container of the call: the caller must
+        # be allowed to send a message there, before anything is sent.
+        self._guard.require_new("Send", "message")
         recipients = ", ".join(resolve_recipients(to_email, to_emails))
         cc_recipients = (
             ", ".join(resolve_recipients(None, cc_emails)) if cc_emails else ""
@@ -91,7 +94,7 @@ class EmailService(ServiceBase):
             )
             raise
         if message_id is not None:
-            self._guard.place_new("message", message_id)
+            self._guard.place_new("message", message_id, action="Send")
         self.__publish_event(
             EmailSent(to=display_recipients, subject=subject, sender=from_email)
         )

@@ -41,6 +41,7 @@ nats:
   nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@nats:4222"
   auth_callout:
     nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@nats:4222"
+    system_url: "nats://sys:{{ secret.NATS_SYSTEM_PASSWORD }}@nats:4222"
     issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
   # One engine per project hosts the module registry: the `abi` service. The
   # default stack runs no second engine (Dagster is behind the `legacy` profile,
@@ -53,7 +54,7 @@ nats:
     lease_seconds: 180
   # The broker's HTTP monitoring port, read by the Nexus System app. No auth:
   # reachable on the Compose network and on 127.0.0.1 only.
-  monitoring_url: "http://nats:8222"
+  monitoring_url: "http://nats-monitor:8222"
 
 # 2. MODULES: what the system does
 # Q: Which modules do you want to load at startup?
@@ -125,7 +126,7 @@ modules:
         # A: List seed users here. They are made at the built-in identity provider, which
         #    mails each a sign-in code; there is no password.
         users:
-          - email: "admin@example.com"
+          - email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
             name: "Local Admin"
           - email: "member@example.com"
             name: "Local Member"
@@ -137,18 +138,18 @@ modules:
         organizations:
           - name: "ABI"
             slug: "abi"
-            owner_email: "admin@example.com"
+            owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
             primary_color: "#34D399"
             accent_color: "#34D399"
             workspaces:
               - name: "Primary"
                 slug: "primary"
-                owner_email: "admin@example.com"
+                owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
               - name: "Secondary"
                 slug: "secondary"
-                owner_email: "admin@example.com"
+                owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
 
@@ -274,12 +275,12 @@ services:
     triple_store_adapter:
       adapter: "apache_jena_tdb2"
       config:
-        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@fuseki:3030/ds"
+        jena_tdb2_url: "http://abi:{{ secret.FUSEKI_ENGINE_PASSWORD }}@fuseki:3030/ds"
         key_value_service:
           kv_adapter:
             adapter: "redis"
             config:
-              redis_url: "redis://redis:6379"
+              redis_url: "redis://:{{ secret.REDIS_PASSWORD }}@redis:6379"
 
   # Q: Where are the vectors stored that power semantic search?
   # A: Qdrant holds them. Swap to "python" for in-memory storage (lost on restart).
@@ -289,6 +290,7 @@ services:
       config:
         host: "qdrant"
         port: 6333
+        api_key: "{{ secret.QDRANT_API_KEY }}"
 
   # Q: How do background tasks get queued between services?
   # A: No `bus:` block: with the `nats:` block above, the bus is JetStream on the
@@ -310,7 +312,7 @@ services:
     kv_adapter:
       adapter: "redis"
       config:
-        redis_url: "redis://redis:6379"
+        redis_url: "redis://:{{ secret.REDIS_PASSWORD }}@redis:6379"
 
   # Q: How are emails sent (magic links, notifications)?
   # A: "filesystem" writes them as files to the path below -- no email server needed locally.
@@ -328,6 +330,11 @@ api:
   description: "API for ABI"
   logo_path: "assets/logo.png"
   favicon_path: "assets/favicon.ico"
+  # Auto-reload on changes under src/: this is the ABI repository's own
+  # development stack. It costs CPU (the reloader rescans src/ all the time)
+  # and keeps a NATS engine running after NATS is gone. Never set it on a
+  # deployed engine.
+  reload: true
   cors_origins:
     - "http://localhost:9879" # ABI core API (backend)
     - "http://localhost:3042" # Nexus web app (frontend)

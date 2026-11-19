@@ -27,7 +27,10 @@ Conventions for building on this template. Read `README.md` first.
 
 ## Auth
 - Local template = shared root password (`ROOT_PASSWORD`), which mints a
-  full-access OWNER session mapped to the owner declared in `config.yaml`. There
+  full-access OWNER session mapped to the owner declared in `config.yaml`.
+  The template ships `SESSION_SECRET` and `ROOT_PASSWORD` empty; kickstart
+  generates both, and production refuses template values
+  (`lib/auth/templateSecrets.ts`). No default password in docs or manifests. There
   is no e-mail/magic-link path — do not re-introduce one for the template.
 
 ## Storage / deploy

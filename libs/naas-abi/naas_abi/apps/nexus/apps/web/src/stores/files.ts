@@ -41,6 +41,7 @@ export const defaultStorageSources: StorageSource[] = [
   // Local - default workspace storage on server
   { id: 'my-drive', name: 'My Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Personal files shared across workspaces' },
   { id: 'workspace', name: 'Workspace Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Workspace files (create, edit, upload)' },
+  { id: 'organization-drive', name: 'Organization Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: "Files of the workspace's organization, shared across its workspaces" },
   { id: 'platform-drive', name: 'Platform Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Files shared across every workspace where platform drive is enabled' },
   { id: 'system-drive', name: 'System Drive', icon: 'server', category: 'local', enabled: true, connected: true, description: 'Full object storage tree (workspace admins only)' },
   
@@ -277,15 +278,10 @@ interface FilesState {
 }
 
 import { getApiUrl } from '@/lib/config';
+import { filesScopeForSource } from '@/app/workspace/[workspaceId]/files/lib/drive-label';
 
 const getApiBase = () => getApiUrl();
 
-const getFilesScope = (activeSource: string): 'workspace' | 'my_drive' | 'platform_drive' | 'system_drive' => {
-  if (activeSource === 'my-drive') return 'my_drive';
-  if (activeSource === 'platform-drive') return 'platform_drive';
-  if (activeSource === 'system-drive') return 'system_drive';
-  return 'workspace';
-};
 
 // Files page listing requests. Each fetch bumps the generation; only the
 // latest one may commit files, errors or the loading flag. Switching drive or
@@ -603,7 +599,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     // Do not force a workspace prefix here.
     const relativePath = path.replace(/^\/+|\/+$/g, '');
     const workspaceId = options?.workspaceId ?? getCurrentWorkspaceId();
-    const scope = getFilesScope(get().activeSource);
+    const scope = filesScopeForSource(get().activeSource);
 
     // Pagination: when a limit is provided the server only lists that slice,
     // which is what keeps large folders (200+ files) from stalling the API.
@@ -630,7 +626,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       return;
     }
 
-    // The files API requires a workspace for workspace/platform-drive scopes.
+    // The files API requires a workspace for the workspace, organization and platform drives.
     // During app bootstrap the workspace can still be null.
     if (scope !== 'my_drive' && !relativePath && !workspaceId) {
       set({
@@ -774,7 +770,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   createFile: async (path, content = '') => {
     const workspacePath = path.replace(/^\/+|\/+$/g, '');
     const workspaceId = getCurrentWorkspaceId();
-    const scope = getFilesScope(get().activeSource);
+    const scope = filesScopeForSource(get().activeSource);
 
     if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
@@ -814,7 +810,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   createFolder: async (path) => {
     const workspacePath = path.replace(/^\/+|\/+$/g, '');
     const workspaceId = getCurrentWorkspaceId();
-    const scope = getFilesScope(get().activeSource);
+    const scope = filesScopeForSource(get().activeSource);
 
     if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
@@ -847,7 +843,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   deleteFile: async (path) => {
     const workspaceId = getCurrentWorkspaceId();
-    const scope = getFilesScope(get().activeSource);
+    const scope = filesScopeForSource(get().activeSource);
     if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return false;
@@ -886,7 +882,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   renameFile: async (oldPath, newPath) => {
     const workspaceId = getCurrentWorkspaceId();
-    const scope = getFilesScope(get().activeSource);
+    const scope = filesScopeForSource(get().activeSource);
     if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return false;
@@ -943,7 +939,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const cleanRelative = (relativeDir || '').replace(/^\/+|\/+$/g, '');
     const uploadPath = [currentPath, cleanRelative].filter(Boolean).join('/');
     const workspaceId = getCurrentWorkspaceId();
-    const scope = getFilesScope(get().activeSource);
+    const scope = filesScopeForSource(get().activeSource);
 
     if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
@@ -1069,7 +1065,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   readFile: async (path) => {
     const workspaceId = getCurrentWorkspaceId();
-    const scope = getFilesScope(get().activeSource);
+    const scope = filesScopeForSource(get().activeSource);
     if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected' });
       return null;
@@ -1100,7 +1096,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const { fileContents, unsavedChanges } = get();
     const content = fileContents[path];
     const workspaceId = getCurrentWorkspaceId();
-    const scope = getFilesScope(get().activeSource);
+    const scope = filesScopeForSource(get().activeSource);
     
     if (content === undefined) {
       return false;
