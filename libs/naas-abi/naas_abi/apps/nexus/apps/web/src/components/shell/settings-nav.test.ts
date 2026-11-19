@@ -30,6 +30,12 @@ describe('workspace settings nav', () => {
     );
   });
 
+  it('has no Drives: they are listed in Platform Settings › Drives', () => {
+    const all = SETTINGS_GROUPS.flatMap((group) => group.items);
+    expect(all.map((item) => item.label)).not.toContain('Drives');
+    expect(settingsItemFor('/workspace/ws-1/settings/drives')).toBeUndefined();
+  });
+
   it('shows Roles & permissions only to whoever holds an iam: action there', () => {
     expect(labels(visibleSettingsGroups(resources()))).not.toContain('Roles & permissions');
     expect(labels(visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { holdsIam: true }))).toContain(

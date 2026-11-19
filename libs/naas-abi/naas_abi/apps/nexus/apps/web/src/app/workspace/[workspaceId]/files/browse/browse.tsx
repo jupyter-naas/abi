@@ -71,6 +71,7 @@ import {
 } from '@/lib/ontology-spacing';
 import { usePublishFeatureResource } from '@/stores/feature-pane';
 import { PrivateToPerson, usePrivateTo } from '@/components/view-as/private-to-person';
+import { PLATFORM_DRIVES_PATH } from '@/app/settings/drives/drives-model';
 import './browse.css';
 
 type FileWithRelativeDir = { file: File; relativeDir?: string };
@@ -1626,9 +1627,7 @@ function FilesBrowser() {
               handleRefresh();
               requestFilesExplorerRefresh();
             }}
-            onOpenDriveSettings={() =>
-              router.push(`/workspace/${encodeURIComponent(workspaceId)}/settings/drives`)
-            }
+            onOpenDriveSettings={() => router.push(PLATFORM_DRIVES_PATH)}
             isSystemFolder={isSystemPath(currentPath)}
             showSystemFiles={showSystemFiles}
             onShowSystemFilesChange={(show) => {

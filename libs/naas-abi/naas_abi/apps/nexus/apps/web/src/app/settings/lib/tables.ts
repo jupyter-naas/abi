@@ -65,6 +65,7 @@ export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   'skills',
   'apps',
   'models',
+  // Workspace settings › Drives, gone: its page redirects (Platform Settings' own is /settings/drives).
   'drives',
   'infrastructure',
   'workflows',

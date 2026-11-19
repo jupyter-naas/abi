@@ -19,6 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
     chat,
     code,
     datasets,
+    drives,
     features,
     files,
     knowledge,
@@ -50,7 +51,8 @@ SERVICE = "nexus"
 #     ``PutPlatformFile``, ``DeletePlatformFile``) and System Files (``system_file``:
 #     ``ListObjectStoreFiles``, ``GetObjectStoreFile``, ``PutObjectStoreFile``,
 #     ``DeleteObjectStoreFile``), platform-level, no role's; ``*SystemFile`` deprecated.
-VERSION = 12
+# 13: the platform's drives (``drive``: Platform Settings > Drives, ``ListDrives``).
+VERSION = 13
 
 _MODULES = (
     organizations,
@@ -70,6 +72,7 @@ _MODULES = (
     settings,
     platform,
     users,
+    drives,
     realtime,
 )
 

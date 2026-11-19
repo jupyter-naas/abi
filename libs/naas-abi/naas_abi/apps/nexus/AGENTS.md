@@ -555,7 +555,7 @@ Route parsing lives in `lib/files-route.ts` and is imported by `workspace-layout
 
 ### Drives
 
-Every drive is a tree of the object storage under `naas_abi/`, served by the files API (`/api/files`, `?scope=`) and listed in the Files sidebar (`files-section.tsx`), the browser and Workspace settings › Drives (`settings/drives/drive-rows.ts`). The sources, scopes and roots are in `lib/drive-label.ts` (`REMOTE_DRIVE_SOURCES`); a deep link is `?source=<source>&path=<path>`.
+Every drive is a tree of the object storage under `naas_abi/`, served by the files API (`/api/files`, `?scope=`) and listed in the Files sidebar (`files-section.tsx`) and the browser. The drives themselves (the storage backends: today the File System, the object storage) are listed read-only in Platform Settings › Drives (`app/settings/drives`, `GET /api/platform/drives`, `nexus:ListDrives`: platform admins), with type, provider, location and whether the storage answers, never a credential; Workspace settings › Drives is gone (its URL opens Workspace settings). The sources, scopes and roots are in `lib/drive-label.ts` (`REMOTE_DRIVE_SOURCES`); a deep link is `?source=<source>&path=<path>`.
 
 | Drive | Source / scope | Root | Made by | Who reaches it |
 |---|---|---|---|---|

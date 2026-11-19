@@ -1,0 +1,36 @@
+/* platform settings / drives (the table is the Users page's, shared styles) */
+
+.platform-drives-location {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.platform-drives-location-part {
+  white-space: nowrap;
+}
+
+/* The same dot as System › Services: green when the storage answers, red when not. */
+.platform-drives-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.platform-drives-status::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background-color: #16a34a;
+}
+
+.platform-drives-status.is-unreachable {
+  color: var(--destructive-hex);
+}
+
+.platform-drives-status.is-unreachable::before {
+  background-color: var(--destructive-hex);
+}
