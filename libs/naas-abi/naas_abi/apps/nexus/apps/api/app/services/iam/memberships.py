@@ -381,6 +381,12 @@ class Memberships:
         wide = wide_scope(scope)
         if wide is None:
             return
+        Memberships.hold_wide(iam, principal_id, wide, role)
+
+    @staticmethod
+    def hold_wide(iam: Any, principal_id: str, wide: str, role: str | None) -> None:
+        """Hold at ``wide``, the scope below an organization, the role its own
+        ``role`` carries there (an owner's or an admin's), and no other."""
         wanted = role if role in INHERITING_ROLES else None
         with as_service_account("api"):
             held = Memberships._held(iam, principal_id, wide)
