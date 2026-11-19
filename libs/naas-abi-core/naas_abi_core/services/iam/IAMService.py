@@ -312,6 +312,42 @@ class _TTLCache:
             self._entries.clear()
 
 
+_REVOCATION_WAIT_SECONDS = 1.0
+
+
+class _RevocationWait:
+    """What one ``revoke_tokens`` may still sleep: one second in all, counted
+    from what it asked ``sleep`` for, whatever the clock does meanwhile."""
+
+    def __init__(self, sleep: Callable[[float], None]) -> None:
+        self._sleep = sleep
+        self._left = _REVOCATION_WAIT_SECONDS
+
+    def past_pushed_second(
+        self, floor: datetime | None, clock: Callable[[], datetime]
+    ) -> datetime:
+        """``clock()`` once the second ``floor`` pushed fresh tokens' ``iat``
+        into (``int(floor) + 1``) has begun, or, when the budget runs out first
+        (the clock went back, or stands still), as it is then."""
+        now = clock()
+        if floor is None:
+            return now
+        pushed = int(floor.timestamp()) + 1
+        while now.timestamp() < pushed:
+            if self._left <= 0:
+                logger.warning(
+                    f"Token revocation: the clock is at {now.isoformat()}, short of "
+                    f"the second a floor pushed tokens into ({pushed}) after waiting "
+                    f"{_REVOCATION_WAIT_SECONDS:g}s; did it step back?"
+                )
+                break
+            step = min(pushed - now.timestamp(), self._left)
+            self._sleep(step)
+            self._left -= step
+            now = clock()
+        return now
+
+
 class IAMService(IIAMService, PolicySource):
     def __init__(
         self,
@@ -343,6 +379,8 @@ class IAMService(IIAMService, PolicySource):
         self._seal_key: bytes | None = None
         self._seal_lock = threading.Lock()
         self._approve_lock = threading.Lock()
+        self._revoking: dict[str, threading.Lock] = {}
+        self._revoking_lock = threading.Lock()
         for catalog in store.list_catalogs():
             self._registry.register(catalog)
         self._registry.register(CATALOG)
@@ -3675,40 +3713,48 @@ class IAMService(IIAMService, PolicySource):
 
         The floor is the instant of the revocation, never later. When this
         principal's previous floor pushed fresh tokens' ``iat`` into a second
-        that has not begun (``issue_after_floor``), this waits for it to begin
-        (at most a second), or those tokens would outlive the revocation."""
+        that has not begun (``issue_after_floor``), this waits for it to begin,
+        or those tokens would outlive the revocation. So does a later floor
+        another process wrote meanwhile. The waits add up to one second at most;
+        revocations of one principal in this process run one at a time."""
         self.require(
             "iam:RevokeTokens",
             principal_resource(principal_id),
             not_found=lambda: IAMNotFoundError(f"Principal {principal_id} not found"),
         )
         record = self._user_or_account(principal_id, create=True)
-        now = self._after_pushed_second(record.id)
-        self.store.set_token_floor(record.id, now)
-        for key in self.store.list_keys(record.id):
-            ends = (
-                include_keys
-                or key.kind == "grant"
-                or (key.kind == "personal" and key.audience == CODING_AUDIENCE)
-            )
-            if ends and key.revoked_at is None:
-                self.store.revoke_key(key.key_id, now)
+        with self._revoking_one(record.id):
+            now = self._set_floor_past_pushed_second(record.id)
+            for key in self.store.list_keys(record.id):
+                ends = (
+                    include_keys
+                    or key.kind == "grant"
+                    or (key.kind == "personal" and key.audience == CODING_AUDIENCE)
+                )
+                if ends and key.revoked_at is None:
+                    self.store.revoke_key(key.key_id, now)
         self._changed()
 
-    def _after_pushed_second(self, principal_id: str) -> datetime:
-        """The issuer's clock, once the second that ``principal_id``'s floor
-        pushed fresh tokens into has begun. The floor is read from the store,
-        not the cache: another process may have revoked since."""
-        now = self.tokens.now()
+    def _revoking_one(self, principal_id: str) -> threading.Lock:
+        """The lock revocations of ``principal_id`` take in this process: one
+        that read the floor before another wrote it would miss it."""
+        with self._revoking_lock:
+            return self._revoking.setdefault(principal_id, threading.Lock())
+
+    def _set_floor_past_pushed_second(self, principal_id: str) -> datetime:
+        """Store the floor of ``principal_id``, once the second that its
+        stored floor pushed fresh tokens into has begun, and return it. Floors
+        are read from the store, not the cache: another process may have revoked
+        since. When another process wrote a later floor meanwhile, wait for its
+        pushed second too and store again. One second of waiting at most."""
+        budget = _RevocationWait(self._sleep)
         previous = self.store.token_floors().get(principal_id)
-        if previous is None:
-            return now
-        pushed = datetime.fromtimestamp(int(previous.timestamp()) + 1, UTC)
-        # Never more than a second, even past a floor another clock wrote.
-        pushed = min(pushed, now + timedelta(seconds=1))
-        while now < pushed:
-            self._sleep((pushed - now).total_seconds())
-            now = self.tokens.now()
+        now = budget.past_pushed_second(previous, self.tokens.now)
+        self.store.set_token_floor(principal_id, now)
+        stored = self.store.token_floors().get(principal_id)
+        if stored is not None and stored.timestamp() > now.timestamp():
+            now = budget.past_pushed_second(stored, self.tokens.now)
+            self.store.set_token_floor(principal_id, now)
         return now
 
     def resolve_user(self, user_id: str) -> PrincipalRecord | None:

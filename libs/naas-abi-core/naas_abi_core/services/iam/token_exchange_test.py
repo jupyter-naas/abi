@@ -1095,6 +1095,86 @@ def test_revoking_another_principal_in_the_same_second_does_not_wait(h, iam, bob
     assert clock.slept == []
 
 
+@pytest.mark.parametrize("step", [-5.0, 0.0], ids=["steps-back", "stands-still"])
+def test_a_revocation_waits_one_second_at_most_whatever_the_clock_does(
+    h, iam, bob, step
+):
+    clock = _Clock(iam)
+    _revoke(h, iam, bob)
+    clock.tick(0.2)
+    _delegated_for(iam, bob)
+
+    def sleep(seconds: float) -> None:
+        clock.slept.append(seconds)
+        clock.tick(step)
+
+    iam._sleep = sleep
+    _revoke(h, iam, bob)
+    assert clock.slept and sum(clock.slept) <= 1
+
+
+def test_a_later_floor_another_process_wrote_meanwhile_is_waited_for_too(
+    h, iam, bob, monkeypatch
+):
+    """Another process revokes bob between this revocation's read of the floor
+    and its write, with a clock a little ahead, and a token is issued past that
+    floor: this revocation must cover it."""
+    clock = _Clock(iam)
+    store = iam.store
+    write = store.set_token_floor
+    issued = []
+
+    def set_token_floor(principal_id, not_before):
+        if not issued:
+            write(principal_id, not_before + timedelta(seconds=0.05))
+            iam._floors.clear()
+            issued.append(_verify(iam, _delegated_for(iam, bob)))
+        write(principal_id, not_before)
+
+    monkeypatch.setattr(store, "set_token_floor", set_token_floor)
+    second = int(clock.at.timestamp())
+    _revoke(h, iam, bob)
+    # Pushed past the other floor, into a second that had not begun.
+    assert issued[0].issued_at == second + 1
+    assert clock.slept == [pytest.approx(0.9)]
+    assert iam.token_revoked(issued[0])
+    assert max(store.token_floors().values()) <= clock.at
+
+
+def test_revocations_of_one_principal_in_a_process_run_one_at_a_time(
+    h, iam, bob, monkeypatch
+):
+    """The second one reads the floor the first wrote, never before it."""
+    import threading
+
+    clock = _Clock(iam)
+    set_floor = iam._set_floor_past_pushed_second
+    steps: list[str] = []
+    first_in = threading.Event()
+
+    def setting_the_floor(principal_id):
+        name = threading.current_thread().name
+        steps.append(f"{name} in")
+        if name == "first":
+            first_in.set()
+            time.sleep(0.2)
+        floor = set_floor(principal_id)
+        steps.append(f"{name} out")
+        return floor
+
+    monkeypatch.setattr(iam, "_set_floor_past_pushed_second", setting_the_floor)
+    first = threading.Thread(target=_revoke, args=(h, iam, bob), name="first")
+    second = threading.Thread(target=_revoke, args=(h, iam, bob), name="second")
+    first.start()
+    assert first_in.wait(5)
+    second.start()
+    first.join(5)
+    second.join(5)
+    assert steps == ["first in", "first out", "second in", "second out"]
+    # So the second saw the first's floor and waited out its pushed second.
+    assert clock.slept == [pytest.approx(0.9)]
+
+
 def test_a_host_token_made_right_after_a_revocation_is_past_the_floor(
     h, iam, bob, people
 ):
