@@ -39,7 +39,7 @@ describe('parseOrgSettingsRoute', () => {
       orgId: 'org-1',
       isDetail: true,
       section: 'users',
-      sectionLabel: 'Users',
+      sectionLabel: 'Members',
     });
   });
 
@@ -51,7 +51,7 @@ describe('parseOrgSettingsRoute', () => {
       orgId: 'org-1',
       isDetail: true,
       section: 'users',
-      sectionLabel: 'Users',
+      sectionLabel: 'Members',
     });
   });
 

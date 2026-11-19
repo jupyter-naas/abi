@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  INFRASTRUCTURE_LAYERS_PATH,
-  INFRASTRUCTURE_PAGE_PATTERN,
   SETTINGS_GROUPS,
   settingsItemFor,
   settingsItemShown,
@@ -86,22 +84,12 @@ describe('workspace settings nav', () => {
   it('finds the entry of a path, nested pages included', () => {
     expect(settingsItemFor('/workspace/ws-1/settings/apps')?.label).toBe('Apps');
     expect(settingsItemFor('/workspace/ws-1/settings/agents/a-1')?.label).toBe('Agents');
-    expect(settingsItemFor('/workspace/ws-1/settings/infrastructure/layers')?.label).toBe('Layers');
-    expect(settingsItemFor('/workspace/ws-1/settings/infrastructure/diagrams')?.label).toBe('Diagrams');
     expect(settingsItemFor('/workspace/ws-1/chat')).toBeUndefined();
   });
 
-  it('lists Infrastructure as its own group, one entry per view, after Features', () => {
-    const groups = visibleSettingsGroups(null);
-    expect(groups.map((group) => group.label)).toEqual(['General', 'Features', 'Infrastructure']);
-    expect(groups[2].items.map((item) => item.label)).toEqual(['Layers', 'Diagrams']);
-  });
-
-  it('gives the Infrastructure pages the whole content area', () => {
-    expect(INFRASTRUCTURE_PAGE_PATTERN.test('/workspace/ws-1/settings/infrastructure')).toBe(true);
-    expect(INFRASTRUCTURE_PAGE_PATTERN.test(`/workspace/ws-1${INFRASTRUCTURE_LAYERS_PATH}`)).toBe(true);
-    expect(INFRASTRUCTURE_PAGE_PATTERN.test('/workspace/ws-1/settings/infrastructure/diagrams')).toBe(true);
-    expect(INFRASTRUCTURE_PAGE_PATTERN.test('/workspace/ws-1/settings/agents')).toBe(false);
+  it('has no Infrastructure: the map of the code is the platform\'s, in the Console', () => {
+    expect(visibleSettingsGroups(null).map((group) => group.label)).toEqual(['General', 'Features']);
+    expect(settingsItemFor('/workspace/ws-1/settings/infrastructure/layers')).toBeUndefined();
   });
 
   it('describes a module by what the caller may use of it', () => {

@@ -1,6 +1,6 @@
 /**
- * Last page visited in each settings scope (sessionStorage), so switching scopes
- * reopens where the caller left off.
+ * The last Settings page and the last Console page visited (sessionStorage), so the
+ * avatar menu and the dock reopen where the caller left off.
  */
 
 export type SettingsScopeKey =
@@ -9,57 +9,31 @@ export type SettingsScopeKey =
   | { kind: 'organization'; orgId: string }
   | { kind: 'workspace'; workspaceId: string };
 
-const PREFIX = 'nexus-settings-scope-path';
+/** Settings (what is set, at every level) or the Console (what is watched). */
+export type SettingsArea = 'settings' | 'console';
 
-function storageKey(scope: SettingsScopeKey): string {
-  switch (scope.kind) {
-    case 'account':
-      return `${PREFIX}:account`;
-    case 'platform':
-      return `${PREFIX}:platform`;
-    case 'organization':
-      return `${PREFIX}:org:${scope.orgId}`;
-    case 'workspace':
-      return `${PREFIX}:workspace:${scope.workspaceId}`;
-  }
-}
+const PREFIX = 'nexus-settings-return-path';
 
-function isValidScopePath(scope: SettingsScopeKey, path: string): boolean {
+function isAreaPath(area: SettingsArea, path: string): boolean {
   if (!path.startsWith('/') || path.startsWith('//')) return false;
-  switch (scope.kind) {
-    case 'account':
-      return /^\/account(?:\/|$|\?|#)/.test(path);
-    case 'platform':
-      return /^\/settings(?:\/|$|\?|#)/.test(path);
-    case 'organization':
-      return new RegExp(`^/organizations/${escapeRegExp(scope.orgId)}/settings(?:/|$|\\?|#)`).test(
-        path
-      );
-    case 'workspace':
-      return new RegExp(`^/workspace/${escapeRegExp(scope.workspaceId)}/settings(?:/|$|\\?|#)`).test(
-        path
-      );
-  }
+  if (area === 'console') return path.startsWith('/settings/');
+  return settingsScopeFromPathname(path) !== null;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-export function rememberSettingsScopePath(scope: SettingsScopeKey, path: string): void {
-  if (!isValidScopePath(scope, path)) return;
+export function rememberSettingsPath(area: SettingsArea, path: string): void {
+  if (!isAreaPath(area, path)) return;
   try {
-    window.sessionStorage.setItem(storageKey(scope), path);
+    window.sessionStorage.setItem(`${PREFIX}:${area}`, path);
   } catch {
     // Storage blocked.
   }
 }
 
-/** Remembered path for ``scope``, else ``fallback``. */
-export function settingsScopeReturnPath(scope: SettingsScopeKey, fallback: string): string {
+/** The last page visited in ``area``, else ``fallback``. */
+export function settingsReturnPath(area: SettingsArea, fallback: string): string {
   try {
-    const path = window.sessionStorage.getItem(storageKey(scope));
-    if (path && isValidScopePath(scope, path)) return path;
+    const path = window.sessionStorage.getItem(`${PREFIX}:${area}`);
+    if (path && isAreaPath(area, path)) return path;
   } catch {
     // Storage blocked.
   }
@@ -82,15 +56,7 @@ export function settingsScopeFromPathname(pathname: string | null | undefined): 
   return null;
 }
 
-export function scopeKeysEqual(a: SettingsScopeKey, b: SettingsScopeKey): boolean {
-  if (a.kind !== b.kind) return false;
-  switch (a.kind) {
-    case 'account':
-    case 'platform':
-      return true;
-    case 'organization':
-      return a.orgId === (b as { kind: 'organization'; orgId: string }).orgId;
-    case 'workspace':
-      return a.workspaceId === (b as { kind: 'workspace'; workspaceId: string }).workspaceId;
-  }
+/** Whether ``pathname`` is a workspace's settings page (they leave the workspace's chrome). */
+export function isWorkspaceSettingsPath(pathname: string | null | undefined): boolean {
+  return !!pathname && WORKSPACE_SETTINGS_PATH.test(pathname);
 }

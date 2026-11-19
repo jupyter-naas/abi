@@ -16,6 +16,7 @@ import {
   Hash,
   History,
   KeyRound,
+  Layers,
   LockKeyhole,
   Mail,
   MessagesSquare,
@@ -25,6 +26,7 @@ import {
   ScrollText,
   Server,
   Sheet,
+  Spline,
   Table2,
   TerminalSquare,
   Users,
@@ -33,6 +35,8 @@ import {
   Zap,
 } from 'lucide-react';
 import {
+  INFRASTRUCTURE_DIAGRAMS_PATH,
+  INFRASTRUCTURE_LAYERS_PATH,
   ROLES_PATH,
   SYSTEM_VIEWS,
   systemViewPath,
@@ -47,14 +51,15 @@ import { safeDecode } from './page-helpers';
 import { SERVICE_PAGES, servicePagePath, servicePagesIn } from './service-pages';
 
 /**
- * Platform Settings, outside any organization or workspace. Each item names what
+ * The platform's pages, outside any organization or workspace. Each item names what
  * opening it takes; the shell shows the items the caller holds (asked of IAM with
  * `GET /api/iam/admin/access`) and a 403 page when there are none. The API checks
  * every call itself: this only decides what is shown.
  *
- * The groups answer one question each, in the order an administrator asks them:
- * what the platform is and who has access (Administration), is it running (System), what happened (Activity),
- * what is connected (Resources), what is stored (Data). Each page has one home.
+ * What is set, Administration (what the platform is and who has access), is the Platform
+ * level of Settings. What is watched is the Console, one question per group: is it running
+ * (System, with the map of the code), what happened (Activity), what is connected
+ * (Resources), what is stored (Data). Each page has one home.
  */
 
 /** What an item needs: one action, or any platform-level `iam:` action. */
@@ -186,6 +191,23 @@ export const ROLES_ITEM: PlatformSettingsNavItem = {
   needs: ANY_IAM_ACTION,
 };
 
+/** The ABI code as layered planes, then as a diagram: the same snapshot, two views. */
+export const LAYERS_ITEM: PlatformSettingsNavItem = {
+  id: 'system-layers',
+  label: 'Layers',
+  href: INFRASTRUCTURE_LAYERS_PATH,
+  icon: Layers,
+  needs: READ_SYSTEM,
+};
+
+export const DIAGRAMS_ITEM: PlatformSettingsNavItem = {
+  id: 'system-diagrams',
+  label: 'Diagrams',
+  href: INFRASTRUCTURE_DIAGRAMS_PATH,
+  icon: Spline,
+  needs: READ_SYSTEM,
+};
+
 // Discovery sits by Modules, Bus by NATS and the Event store by Events: each shows the
 // same things as its neighbour, until the two pages are one.
 /** Pages laid out like the organization's settings pages: padded, width capped
@@ -205,11 +227,12 @@ export function laysOutOwnPanes(item: Pick<PlatformSettingsNavItem, 'id'>): bool
   return item.id !== NEXUS_TABLES_ITEM.id && !PADDED_ITEM_IDS.has(item.id);
 }
 
-export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
-  {
-    label: 'Administration',
-    items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM, ROLES_ITEM, DRIVES_ITEM],
-  },
+export const ADMINISTRATION_GROUP: PlatformSettingsNavGroup = {
+  label: 'Administration',
+  items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM, ROLES_ITEM, DRIVES_ITEM],
+};
+
+export const consoleGroups: PlatformSettingsNavGroup[] = [
   {
     label: 'System',
     items: [
@@ -221,6 +244,8 @@ export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
       systemItem('jobs'),
       systemItem('nats'),
       serviceItem('bus'),
+      LAYERS_ITEM,
+      DIAGRAMS_ITEM,
     ],
   },
   {
@@ -239,6 +264,12 @@ export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
     items: [NEXUS_TABLES_ITEM, ...servicePagesIn('data').map((page) => serviceItem(page.service))],
   },
 ];
+
+export const platformSettingsGroups: PlatformSettingsNavGroup[] = [ADMINISTRATION_GROUP, ...consoleGroups];
+
+const CONSOLE_ITEM_IDS: ReadonlySet<string> = new Set(
+  consoleGroups.flatMap((group) => group.items.map((item) => item.id))
+);
 
 export const platformSettingsNav: PlatformSettingsNavItem[] = platformSettingsGroups.flatMap(
   (group) => group.items
@@ -262,6 +293,35 @@ export function visiblePlatformSettingsGroups(
 /** Where `/settings` lands: the first item the caller may open, or null (403). */
 export function firstPlatformSettingsPath(actions: PlatformActions | null): string | null {
   return platformSettingsNav.find((item) => holds(item.needs, actions))?.href ?? null;
+}
+
+/** The Platform level of Settings: the Administration pages the caller may open. */
+export function visibleAdministrationItems(actions: PlatformActions | null): PlatformSettingsNavItem[] {
+  return ADMINISTRATION_GROUP.items.filter((item) => holds(item.needs, actions));
+}
+
+/** The Console's groups the caller may open, empty groups left out. */
+export function visibleConsoleGroups(actions: PlatformActions | null): PlatformSettingsNavGroup[] {
+  return visiblePlatformSettingsGroups(actions).filter((group) => group.label !== ADMINISTRATION_GROUP.label);
+}
+
+/** The Console's own index: a computer opens its first page, a phone lists them. */
+export const CONSOLE_PATH = '/settings/console';
+
+/** Where the Console opens: its first page the caller may open, or null (none). */
+export function firstConsolePath(actions: PlatformActions | null): string | null {
+  return visibleConsoleGroups(actions)[0]?.items[0]?.href ?? null;
+}
+
+export function isConsoleIndex(pathname: string | null | undefined): boolean {
+  return (pathname ?? '').replace(/\/+$/, '') === CONSOLE_PATH;
+}
+
+/** Whether a path is a Console page (watched) rather than a Platform setting. */
+export function isConsolePath(pathname: string | null | undefined): boolean {
+  if (isConsoleIndex(pathname)) return true;
+  const item = pathname ? platformSettingsItemFor(pathname) : null;
+  return !!item && CONSOLE_ITEM_IDS.has(item.id);
 }
 
 /** The item a path belongs to: the longest href it is, or is under. */

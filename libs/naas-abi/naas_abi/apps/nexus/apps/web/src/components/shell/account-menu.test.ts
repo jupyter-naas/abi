@@ -3,11 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
 
 const state = vi.hoisted(() => ({
-  user: 'olivia',
-  answers: {} as Record<string, unknown>,
-  opensWorkspaceSettings: false,
-  hang: false,
+  workspaceAccess: 'none' as 'all' | 'iam' | 'none' | 'unknown',
   platformStatus: 'ready' as 'ready' | 'checking',
+  platformActions: {} as Record<string, boolean>,
 }));
 
 vi.mock('next/link', async () => {
@@ -21,84 +19,83 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined })
 vi.mock('@/hooks/use-platform-settings-access', () => ({
   usePlatformSettingsAccess: () => ({
     status: state.platformStatus,
-    actions: state.platformStatus === 'ready' ? {} : null,
+    actions: state.platformStatus === 'ready' ? state.platformActions : null,
     retry: () => undefined,
   }),
 }));
 vi.mock('@/hooks/use-workspace-settings-access', () => ({
-  useOpensWorkspaceSettings: () => state.opensWorkspaceSettings,
+  useWorkspaceSettingsAccess: () => state.workspaceAccess,
 }));
 vi.mock('@/stores/auth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/stores/auth')>()),
-  useAuthStore: (select: (s: unknown) => unknown) =>
-    select({ user: { id: state.user }, logout: () => undefined }),
-  authFetch: async (url: string) =>
-    state.hang
-      ? new Promise<Response>(() => undefined)
-      : url in state.answers
-      ? new Response(JSON.stringify(state.answers[url]), { status: 200 })
-      : new Response('{}', { status: 403 }),
+  useAuthStore: (select: (s: unknown) => unknown) => select({ user: { id: 'olivia' }, logout: () => undefined }),
 }));
 
 import { useWorkspaceStore } from '@/stores/workspace';
+import { rememberSettingsPath } from '@/lib/settings-scope-path';
 import { AccountMenuPanel } from './account-menu';
-
-const ACCESS_ACME = `/api/iam/admin/access?scope=${encodeURIComponent('abi:nexus:organization/acme')}`;
 
 let mounted: Mounted | null = null;
 afterEach(async () => {
   await mounted?.unmount();
   mounted = null;
-  state.opensWorkspaceSettings = false;
-  state.hang = false;
+  state.workspaceAccess = 'none';
   state.platformStatus = 'ready';
+  state.platformActions = {};
+  window.sessionStorage.clear();
 });
 
-async function menuFor(user: string, orgRole: string, focusFirstItem = false): Promise<HTMLElement> {
-  state.user = user;
-  state.answers = {
-    '/api/organizations': [{ id: 'acme', name: 'Acme', current_user_role: orgRole }],
-    [ACCESS_ACME]: { actions: { 'iam:ListPolicies': false } },
-  };
+async function menu(focusFirstItem = false): Promise<HTMLElement> {
+  useWorkspaceStore.setState({ currentWorkspaceId: 'ws-1' });
   mounted = await mount(AccountMenuPanel, {
-    user: { name: user, email: `${user}@example.com` },
+    user: { name: 'Olivia', email: 'olivia@example.com' },
     onClose: () => undefined,
     focusFirstItem,
   });
   await mounted.flush();
-  await mounted.flush();
   return mounted.host;
 }
 
-function organizationLink(menu: HTMLElement): HTMLAnchorElement | null {
-  return menu.querySelector<HTMLAnchorElement>('a[href^="/organizations/acme/settings"]');
-}
-
-describe('the account menu', () => {
-  it('links Organization to an organization admin', async () => {
-    const link = organizationLink(await menuFor('olivia', 'admin'));
-    expect(link?.textContent).toContain('Organization');
-  });
-  it('hides it from a workspace owner who is a member of the organization', async () => {
-    const menu = await menuFor('bob', 'member');
-    expect(organizationLink(menu)).toBeNull();
-    expect(menu.textContent).toContain('Account');
-  });
-});
-
-function items(menu: HTMLElement): string[] {
-  return [...menu.querySelectorAll('[role="menuitem"] .account-menu-item-label')].map(
+function items(host: HTMLElement): string[] {
+  return [...host.querySelectorAll('[role="menuitem"] .account-menu-item-label')].map(
     (el) => el.textContent?.trim() ?? '',
   );
 }
 
-describe('the account menu and the workspace settings', () => {
-  it('leaves Infrastructure to Settings, even for whoever opens them', async () => {
-    useWorkspaceStore.setState({ currentWorkspaceId: 'ws-1' });
-    state.opensWorkspaceSettings = true;
-    const menu = await menuFor('olivia', 'admin');
-    expect(items(menu)).toEqual(['Account', 'Organization', 'Help', 'Log out']);
-    expect(menu.querySelector('a[href*="/settings/infrastructure"]')).toBeNull();
+const href = (host: HTMLElement, label: string) =>
+  [...host.querySelectorAll<HTMLAnchorElement>('a[role="menuitem"]')].find((a) => a.textContent?.includes(label))
+    ?.getAttribute('href');
+
+describe('the account menu', () => {
+  it('has one Settings door, not one per level', async () => {
+    const host = await menu();
+    expect(items(host)).toEqual(['Settings', 'Help', 'Log out']);
+    expect(href(host, 'Settings')).toBe('/account/profile');
+  });
+
+  it('opens Settings on the workspace when the caller opens its settings', async () => {
+    state.workspaceAccess = 'all';
+    expect(href(await menu(), 'Settings')).toBe('/workspace/ws-1/settings/general');
+  });
+
+  it('reopens the last settings page, at any level, but not another workspace\'s', async () => {
+    rememberSettingsPath('settings', '/organizations/acme/settings/members');
+    expect(href(await menu(), 'Settings')).toBe('/organizations/acme/settings/members');
+    await mounted?.unmount();
+    rememberSettingsPath('settings', '/workspace/ws-9/settings/general');
+    expect(href(await menu(), 'Settings')).toBe('/account/profile');
+  });
+
+  it('shows the Console to whoever may watch the platform', async () => {
+    state.platformActions = { 'nexus:ReadSystem': true };
+    const host = await menu();
+    expect(items(host)).toEqual(['Settings', 'Console', 'Help', 'Log out']);
+    expect(href(host, 'Console')).toMatch(/^\/settings\/system/);
+  });
+
+  it('leaves the Console out for a platform administrator who may only set things', async () => {
+    state.platformActions = { 'nexus:ListUsers': true };
+    expect(items(await menu())).toEqual(['Settings', 'Help', 'Log out']);
   });
 });
 
@@ -109,43 +106,33 @@ describe('the account menu from the keyboard', () => {
   const focused = () => document.activeElement?.querySelector('.account-menu-item-label')?.textContent;
 
   it('holds focus itself when a pointer opens it, and ArrowDown enters the rows', async () => {
-    const menu = await menuFor('bob', 'member');
-    expect(document.activeElement).toBe(menu.querySelector('[role="menu"]'));
+    const host = await menu();
+    expect(document.activeElement).toBe(host.querySelector('[role="menu"]'));
     press('ArrowDown');
-    expect(focused()).toBe('Account');
+    expect(focused()).toBe('Settings');
   });
 
   it('opens on its first item from the keyboard and the arrows go round', async () => {
-    await menuFor('bob', 'member', true);
-    expect(focused()).toBe('Account');
+    await menu(true);
+    expect(focused()).toBe('Settings');
     press('ArrowDown');
     expect(focused()).toBe('Help');
     press('End');
     expect(focused()).toBe('Log out');
     press('ArrowDown');
-    expect(focused()).toBe('Account');
+    expect(focused()).toBe('Settings');
     press('ArrowUp');
     expect(focused()).toBe('Log out');
     press('Home');
-    expect(focused()).toBe('Account');
+    expect(focused()).toBe('Settings');
   });
 
-  it('skips the rows whose access is still read', async () => {
-    state.hang = true;
+  it('shows the Console as a busy row while the access is read, and skips it', async () => {
     state.platformStatus = 'checking';
-    await menuFor('carol', 'admin', true);
+    const host = await menu(true);
+    const busy = [...host.querySelectorAll('[aria-busy="true"]')].map((el) => el.textContent?.trim());
+    expect(busy).toEqual(['Console']);
     press('ArrowDown');
     expect(focused()).toBe('Help');
-  });
-});
-
-describe('the settings entries while their access is read', () => {
-  it('shows Organization and Platform as busy rows, not links, until they answer', async () => {
-    state.hang = true;
-    state.platformStatus = 'checking';
-    const menu = await menuFor('carol', 'admin');
-    const busy = [...menu.querySelectorAll('[aria-busy="true"]')].map((el) => el.textContent?.trim());
-    expect(busy).toEqual(['Organization', 'Platform']);
-    expect(menu.querySelector('a[href^="/organizations/"]')).toBeNull();
   });
 });

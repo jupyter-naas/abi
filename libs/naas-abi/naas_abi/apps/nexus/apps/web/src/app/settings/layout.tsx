@@ -2,13 +2,14 @@
 
 import { useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { RefreshCw, ShieldCheck } from 'lucide-react';
+import { Gauge, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
-import { useRememberSettingsScope } from '@/hooks/use-remember-settings-scope';
+import { useRememberSettingsPath } from '@/hooks/use-remember-settings-scope';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
+import { SettingsLevelsNav } from '@/components/settings/settings-levels-nav';
 import {
   SettingsLayoutRoot,
   SettingsNavItem,
@@ -17,11 +18,15 @@ import {
 import { SettingsShellHeader } from '@/components/settings/settings-shell-header';
 import { SettingsLoading } from '@/components/settings/settings-ui';
 import {
+  CONSOLE_PATH,
   holds,
+  isConsoleIndex,
+  isConsolePath,
   laysOutOwnPanes,
   parsePlatformSettingsRoute,
   PLATFORM_SETTINGS_INDEX,
   READ_SYSTEM,
+  visibleConsoleGroups,
   visiblePlatformSettingsGroups,
   type PlatformSettingsNavItem,
 } from './lib/nav';
@@ -73,7 +78,7 @@ function PlatformSettingsForbidden({ onRetry }: { onRetry?: () => void }) {
       <p className="org-settings-empty-body">
         {error
           ? 'The permission service did not answer. Try again in a moment.'
-          : 'Platform Settings shows what your permissions let you open. Ask a platform administrator for access.'}
+          : 'The platform shows what your permissions let you open. Ask a platform administrator for access.'}
       </p>
       {error && (
         <button
@@ -92,16 +97,19 @@ function PlatformSettingsForbidden({ onRetry }: { onRetry?: () => void }) {
 export default function PlatformSettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? PLATFORM_SETTINGS_INDEX;
   const router = useRouter();
-  useRememberSettingsScope(pathname);
+  // What is watched (the Console) or what is set (the Platform level of Settings).
+  const inConsole = isConsolePath(pathname);
+  useRememberSettingsPath(pathname, inConsole ? 'console' : 'settings');
   const { status, actions, retry } = usePlatformSettingsAccess({ fresh: true });
   const isMobile = useIsMobile();
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const groups = useMemo(() => visiblePlatformSettingsGroups(actions), [actions]);
-  const sectionHrefs = useMemo(
-    () => groups.flatMap((group) => group.items.map((item) => item.href)),
-    [groups]
+  const consoleGroups = useMemo(() => visibleConsoleGroups(actions), [actions]);
+  const consoleHrefs = useMemo(
+    () => (inConsole ? consoleGroups.flatMap((group) => group.items.map((item) => item.href)) : []),
+    [inConsole, consoleGroups]
   );
-  useDevRouteWarmup(sectionHrefs);
+  useDevRouteWarmup(consoleHrefs);
 
   // Runs that failed since the admin last looked: the Jobs item's badge, and the Jobs page.
   const jobsApi = useMemo(() => createJobsApi(), []);
@@ -117,8 +125,10 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
   const isFramed = !!item && laysOutOwnPanes(item);
   // A table page fills the height: the table scrolls, not the page (headers stay visible).
   const fillsHeight = isTables && !!table && !rowId;
-  const showMobileList = isMobile && !isDetail;
-  const showMobileDetail = isMobile && isDetail;
+  // A phone lists Settings on /settings, the Console on /settings/console.
+  const consoleIndex = isConsoleIndex(pathname);
+  const showMobileList = isMobile && (!isDetail || consoleIndex);
+  const showMobileDetail = isMobile && !showMobileList;
 
   const workspaceHref = useWorkspaceReturnPath(
     currentWorkspaceId ? `/workspace/${currentWorkspaceId}/chat` : '/',
@@ -127,10 +137,10 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
 
   const handleBack = () => {
     if (showMobileDetail) {
-      // A row goes back to its table, a table to Nexus tables, a page to the list.
+      // A row goes back to its table, a table to Nexus tables, a setting to the list.
       if (rowId && table) router.push(platformTablePath(table));
       else if (table) router.push(PLATFORM_TABLES_PATH);
-      else router.push(PLATFORM_SETTINGS_INDEX);
+      else router.push(inConsole ? CONSOLE_PATH : PLATFORM_SETTINGS_INDEX);
       return;
     }
     router.push(workspaceHref);
@@ -140,7 +150,8 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
   const detailTitle = table ? (tableLabel ?? table) : (item?.label ?? 'Platform');
 
   const ready = status === 'ready';
-  const allowed = ready && (item ? holds(item.needs, actions) : groups.length > 0);
+  const allowed =
+    ready && (item ? holds(item.needs, actions) : (consoleIndex ? consoleGroups : groups).length > 0);
 
   let content: React.ReactNode;
   if (status === 'checking') content = <SettingsLoading />;
@@ -148,12 +159,12 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
   else if (!allowed) content = <PlatformSettingsForbidden />;
   else content = children;
 
-  const nav = (
-    <SettingsLayoutNav title="Platform Settings" resizable={!showMobileList}>
+  const nav = inConsole ? (
+    <SettingsLayoutNav title="Console" resizable={!showMobileList}>
       {ready &&
-        groups.map((group) => (
-          <div key={group.label} className="platform-settings-nav-group">
-            <h3 className="platform-settings-nav-group-title">{group.label}</h3>
+        consoleGroups.map((group) => (
+          <div key={group.label} className="settings-console-group">
+            <h2 className="settings-console-group-title">{group.label}</h2>
             <ul className="settings-layout-nav-list">
               {group.items.map((navItem) => (
                 <NavItem
@@ -168,6 +179,8 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
           </div>
         ))}
     </SettingsLayoutNav>
+  ) : (
+    <SettingsLevelsNav mobileList={showMobileList} />
   );
 
   return (
@@ -175,10 +188,9 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
       <SettingsLayoutRoot className="platform-settings-root">
         <div className="org-settings-layout-left">
           <SettingsShellHeader
-            scopeTitle="Platform"
-            detailTitle={detailTitle}
-            showScopeSwitcher={!showMobileDetail}
-            icon={ShieldCheck}
+            title={inConsole ? 'Console' : 'Settings'}
+            icon={inConsole ? Gauge : undefined}
+            detailTitle={showMobileDetail ? detailTitle : null}
             onBack={handleBack}
             backAriaLabel={showMobileDetail ? 'Back' : 'Back to workspace'}
           />

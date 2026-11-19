@@ -26,6 +26,63 @@
   --workspace-accent-hsl: 160 84% 45%;
 }
 
+/* The column of Settings: one section per level (Account, Workspace, Organization,
+   Platform), a level's later groups named under it (Workspace › Features). */
+.settings-level + .settings-level {
+  margin-top: var(--space-6);
+}
+
+.settings-level-title,
+.settings-console-group-title {
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--muted-foreground-hex);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-level-group + .settings-level-group {
+  margin-top: var(--space-3);
+}
+
+.settings-level-group-title {
+  margin: 0 0 var(--space-1);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--muted-foreground-hex);
+}
+
+.settings-level .org-settings-nav-item-label,
+.settings-console-group .org-settings-nav-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-console-group + .settings-console-group {
+  margin-top: var(--space-4);
+}
+
+/* A page that lays out its own panes: the whole area, edge to edge. */
+.org-settings-layout-main.settings-main-full {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.org-settings-layout-content.settings-content-full {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+}
+
 /* A count on a nav item that wants attention (e.g. failed job runs). */
 .settings-nav-item-badge {
   display: inline-flex;

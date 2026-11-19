@@ -53,9 +53,8 @@ export const QUICK_OPEN_SECTIONS: readonly QuickOpenSection[] = [
   },
   { id: 'code', label: 'Code', href: '/code', feature: 'code' },
   { id: 'marketplace', label: 'Marketplace', href: '/marketplace', feature: 'marketplace' },
-  { id: 'settings', label: 'Settings', href: '/settings', feature: 'settings.workspace' },
-  { id: 'infrastructure-layers', label: 'Infrastructure · Layers', href: '/settings/infrastructure/layers', feature: 'settings.workspace' },
-  { id: 'infrastructure-diagrams', label: 'Infrastructure · Diagrams', href: '/settings/infrastructure/diagrams', feature: 'settings.workspace' },
+  // Every level the caller may open: Account at least.
+  { id: 'settings', label: 'Settings', href: '/settings' },
 ];
 
 export const QUICK_OPEN_GROUP_LABEL: Record<QuickOpenGroup, string> = {

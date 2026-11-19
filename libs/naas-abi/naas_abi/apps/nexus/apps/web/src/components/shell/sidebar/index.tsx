@@ -32,7 +32,7 @@ import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
 import { DockProfile } from './dock-profile';
 import { prefetchSectionPanel } from './section-panel';
 import { WorkspaceSwitcher } from '../workspace-switcher';
-import { useOpensWorkspaceSettings } from '@/hooks/use-workspace-settings-access';
+import { useSettingsHref } from '@/hooks/use-avatar-settings-links';
 
 type SectionDef = {
   id: SidebarSection;
@@ -40,7 +40,7 @@ type SectionDef = {
   label: string;
   description: string;
   href: string;
-  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'documents' | 'sheets' | 'tasks' | 'settings.workspace';
+  feature?: 'maps' | 'chat' | 'files' | 'datasets' | 'apps' | 'marketplace' | 'search' | 'ontology' | 'graph' | 'code' | 'slides' | 'documents' | 'sheets' | 'tasks';
   extraHref?: string;
 };
 
@@ -63,7 +63,8 @@ const SECTIONS: SectionDef[] = [
 ];
 
 const BOTTOM_SECTIONS: SectionDef[] = [
-  { id: 'settings', icon: <Settings size={18} />, label: 'Settings', description: 'Workspace settings and preferences', href: '/settings', feature: 'settings.workspace' },
+  // Opens Settings, the same place as the avatar menu's: every level, no column of its own.
+  { id: 'settings', icon: <Settings size={18} />, label: 'Settings', description: 'Account, workspace, organization and platform settings', href: '/settings' },
 ];
 
 const ALL_SECTIONS: SectionDef[] = [...SECTIONS, ...BOTTOM_SECTIONS];
@@ -146,8 +147,7 @@ export function Sidebar() {
   const canDocuments = useFeature('documents');
   const canSheets = useFeature('sheets');
   const canTasks = useFeature('tasks');
-  // The workspace's settings: the role there brings them, or IAM shows a Roles & permissions section.
-  const canSettingsWorkspace = useOpensWorkspaceSettings();
+  const settingsHref = useSettingsHref();
 
   useEffect(() => {
     setMounted(true);
@@ -256,7 +256,6 @@ export function Sidebar() {
     if (feature === 'documents') return !!canDocuments;
     if (feature === 'sheets') return !!canSheets;
     if (feature === 'tasks') return !!canTasks;
-    if (feature === 'settings.workspace') return !!canSettingsWorkspace;
     return true;
   };
 
@@ -316,10 +315,10 @@ export function Sidebar() {
       case 'tasks':     return getWorkspacePath(currentWorkspaceId, '/tasks');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
-      case 'settings':     return getWorkspacePath(currentWorkspaceId, '/settings');
+      case 'settings':     return settingsHref;
       case 'workspaces':   return getWorkspacePath(currentWorkspaceId, '/home');
     }
-  }, [currentWorkspaceId]);
+  }, [currentWorkspaceId, settingsHref]);
 
   useEffect(() => {
     if (!currentWorkspaceId) return;
@@ -350,6 +349,11 @@ export function Sidebar() {
       // Closing is cheap, and the reconciler keeps a Workspaces panel open on
       // Home, so an explicit Home click still closes whatever column is open.
       showPanel(null);
+      if (navigates) navigate();
+      return;
+    }
+    if (section.id === 'settings') {
+      // A full-screen shell of its own: the workspace's column stays as it was for the way back.
       if (navigates) navigate();
       return;
     }

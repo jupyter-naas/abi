@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, type KeyboardEvent } from 'react';
-import { Building2, HelpCircle, LogOut, ShieldCheck, User, type LucideIcon } from 'lucide-react';
+import { Gauge, HelpCircle, LogOut, Settings, type LucideIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
@@ -55,7 +55,7 @@ function ItemLabel({ label }: { label: string }) {
   return <span className="account-menu-item-label">{label}</span>;
 }
 
-/** One settings scope of the menu: a link, a muted row while its access is read, or nothing. */
+/** An entry of the menu that needs a right: a link, a muted row while it is read, or nothing. */
 function SettingsScopeItem({
   entry,
   label,
@@ -157,15 +157,14 @@ export function AccountMenuPanel({
         </div>
       </div>
 
-      {/* Settings from the narrowest scope to the widest: you, the organization, the
-          platform. The workspace's own settings are the sidebar's Settings. */}
+      {/* Settings is one place, every level in its column (the dock's Settings opens it
+          too); the Console is what the platform runs, for whoever may watch it. */}
       <div className="account-menu-group" role="group" aria-label="Settings">
-        <Link href={links.account.href} role="menuitem" onClick={onClose} className="account-menu-settings-item">
-          <User size={14} className="shrink-0 text-muted-foreground" />
-          <ItemLabel label={links.account.label} />
+        <Link href={links.settings.href} role="menuitem" onClick={onClose} className="account-menu-settings-item">
+          <Settings size={14} className="shrink-0 text-muted-foreground" />
+          <ItemLabel label={links.settings.label} />
         </Link>
-        <SettingsScopeItem entry={links.organization} label="Organization" icon={Building2} onClose={onClose} />
-        <SettingsScopeItem entry={links.platform} label="Platform" icon={ShieldCheck} onClose={onClose} />
+        <SettingsScopeItem entry={links.console} label="Console" icon={Gauge} onClose={onClose} />
       </div>
 
       <div className="account-menu-group" role="group" aria-label="Session">

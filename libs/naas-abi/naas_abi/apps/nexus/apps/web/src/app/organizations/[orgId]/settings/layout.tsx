@@ -2,20 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useParams, useRouter } from 'next/navigation';
-import { Building2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
-import { useRememberSettingsScope } from '@/hooks/use-remember-settings-scope';
+import { useRememberSettingsPath } from '@/hooks/use-remember-settings-scope';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { opensRolesAndPermissions } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
-import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
-import {
-  SettingsLayoutRoot,
-  SettingsNavItem,
-  useWorkspaceReturnPath,
-} from '@/components/settings/settings-shell';
+import { SettingsLevelsNav } from '@/components/settings/settings-levels-nav';
+import { SettingsLayoutRoot, useWorkspaceReturnPath } from '@/components/settings/settings-shell';
 import { SettingsShellHeader } from '@/components/settings/settings-shell-header';
 import { SettingsNoAccess } from '@/components/settings/settings-no-access';
 import {
@@ -24,34 +19,9 @@ import {
   orgSettingsIndexPath,
   orgSettingsNavForRole,
   orgSettingsSectionPath,
-  type OrgSettingsNavItem,
 } from './lib/nav';
 import { parseOrgSettingsRoute } from './lib/org-settings-route';
 import './org-settings-layout.css';
-
-function NavItem({
-  item,
-  pathname,
-  orgId,
-  mobileList = false,
-}: {
-  item: OrgSettingsNavItem;
-  pathname: string;
-  orgId: string;
-  mobileList?: boolean;
-}) {
-  const fullHref = orgSettingsSectionPath(orgId, item.slug);
-  const isActive = pathname === fullHref || pathname.startsWith(`${fullHref}/`);
-  return (
-    <SettingsNavItem
-      href={fullHref}
-      label={item.label}
-      icon={item.icon}
-      active={isActive}
-      chevron={mobileList}
-    />
-  );
-}
 
 export default function OrganizationSettingsLayout({
   children,
@@ -82,6 +52,7 @@ export default function OrganizationSettingsLayout({
     accessSettled: !accessLoading,
   });
   const visibleNav = useMemo(() => orgSettingsNavForRole(viewerRole, { holdsIam }), [viewerRole, holdsIam]);
+  const navOrganization = useMemo(() => ({ id: orgId, items: visibleNav }), [orgId, visibleNav]);
   const sectionHrefs = useMemo(
     () => (orgId ? visibleNav.map((item) => orgSettingsSectionPath(orgId, item.slug)) : []),
     [orgId, visibleNav]
@@ -101,7 +72,7 @@ export default function OrganizationSettingsLayout({
   });
   const [layoutKey, setLayoutKey] = useState(0);
 
-  useRememberSettingsScope(pathname);
+  useRememberSettingsPath(pathname);
 
   useEffect(() => {
     const fetchOrg = async () => {
@@ -174,14 +145,9 @@ export default function OrganizationSettingsLayout({
     <SettingsLayoutRoot key={layoutKey} brand={orgColors} borderRadius={borderRadius}>
       <div className="org-settings-layout-left">
       <SettingsShellHeader
-        scopeTitle="Organization"
-        detailTitle={sectionLabel}
-        showScopeSwitcher={!showMobileDetail}
-        icon={Building2}
+        detailTitle={showMobileDetail ? sectionLabel : null}
         onBack={handleBack}
-        backAriaLabel={
-          showMobileDetail ? 'Back to organization settings' : 'Back to workspace'
-        }
+        backAriaLabel={showMobileDetail ? 'Back to settings' : 'Back to workspace'}
       />
 
       <div
@@ -194,21 +160,7 @@ export default function OrganizationSettingsLayout({
               : 'org-settings-layout-body'
         }
       >
-        {showNav && (
-          <SettingsLayoutNav title="Organization Settings" resizable={!showMobileList}>
-            <ul className="settings-layout-nav-list">
-              {visibleNav.map((item) => (
-                <NavItem
-                  key={item.slug}
-                  item={item}
-                  pathname={pathname}
-                  orgId={orgId}
-                  mobileList={showMobileList}
-                />
-              ))}
-            </ul>
-          </SettingsLayoutNav>
-        )}
+        {showNav && <SettingsLevelsNav mobileList={showMobileList} organization={navOrganization} />}
 
         {showMain && (
           <div className="org-settings-layout-main">

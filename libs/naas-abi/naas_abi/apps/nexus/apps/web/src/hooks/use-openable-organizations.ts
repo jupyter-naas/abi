@@ -7,7 +7,8 @@ import { openableOrganizations } from '@/hooks/use-organization-settings-access'
 
 type Fetcher = (url: string) => Promise<Response>;
 
-export type OpenableOrganization = { id: string; name: string };
+/** `role`: the caller's there, which decides the sections an organization shows them. */
+export type OpenableOrganization = { id: string; name: string; role: string | null };
 export type OpenableOrganizationsStatus = 'checking' | 'ready' | 'error';
 
 /** How long a list stays fresh: a mount after that reads it again, showing the old one meanwhile. */
@@ -25,7 +26,7 @@ export async function fetchOpenableOrganizations(fetcher: Fetcher = authFetch): 
     orgs.map((o) => ({ id: o.id, name: o.name || o.id, currentUserRole: o.current_user_role ?? null })),
     fetcher
   );
-  return open.map((o) => ({ id: o.id, name: o.name }));
+  return open.map((o) => ({ id: o.id, name: o.name, role: o.currentUserRole }));
 }
 
 export interface OpenableOrganizationsState {
@@ -39,7 +40,7 @@ export interface OpenableOrganizationsState {
 
 /**
  * The organizations whose settings open for the caller, shared by the avatar menu and
- * the settings scope switcher: one call in flight per user, kept across mounts. A failed
+ * the settings column: one call in flight per user, kept across mounts. A failed
  * read keeps the last list this user had.
  */
 export function createOpenableOrganizationsStore(fetcher: Fetcher = authFetch, now: () => number = Date.now) {
