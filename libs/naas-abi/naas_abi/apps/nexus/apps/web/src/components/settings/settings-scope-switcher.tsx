@@ -1,16 +1,16 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronDown, type LucideIcon } from 'lucide-react';
+import { Check, ChevronDown, Loader2, type LucideIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
 import { useAuthStore } from '@/stores/auth';
 import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
 import { settingsScopeFromPathname } from '@/lib/settings-scope-path';
-import { buildSettingsScopeMenuEntries } from './settings-scope-list';
+import { buildSettingsScopeMenuEntries, opensAnotherPage } from './settings-scope-list';
 import './settings-scope-switcher.css';
 
 export function SettingsScopeSwitcher({
@@ -30,6 +30,11 @@ export function SettingsScopeSwitcher({
 
   // Shared with the avatar menu: one read per user, kept across scope switches.
   const { orgs: organizations } = useOpenableOrganizations();
+
+  // The entry followed, until its page replaces this one: a scope's first open can
+  // take seconds (``next dev`` compiles it), and a click must not look like a no-op.
+  const [followed, setFollowed] = useState<{ href: string; from: string } | null>(null);
+  const pendingHref = followed && followed.from === pathname ? followed.href : null;
 
   if (!currentScope || currentScope.kind === 'workspace') return null;
 
@@ -57,9 +62,14 @@ export function SettingsScopeSwitcher({
         <DropdownMenu.Trigger
           className="settings-scope-switcher-trigger"
           aria-label="Switch settings scope"
+          aria-busy={pendingHref ? true : undefined}
         >
           <span className="settings-scope-switcher-title">{title}</span>
-          <ChevronDown size={16} className="settings-scope-switcher-chevron" aria-hidden />
+          {pendingHref ? (
+            <Loader2 size={16} className="settings-scope-switcher-chevron animate-spin" aria-hidden />
+          ) : (
+            <ChevronDown size={16} className="settings-scope-switcher-chevron" aria-hidden />
+          )}
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content
@@ -79,9 +89,23 @@ export function SettingsScopeSwitcher({
                       href={entry.href}
                       className="settings-scope-switcher-link"
                       aria-current={entry.current ? 'page' : undefined}
+                      aria-busy={pendingHref === entry.href ? true : undefined}
+                      onClick={(event) => {
+                        // A new tab or window leaves this page where it is.
+                        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                          return;
+                        }
+                        if (pathname && opensAnotherPage(entry.href, pathname)) {
+                          setFollowed({ href: entry.href, from: pathname });
+                        }
+                      }}
                     >
                       <span className="settings-scope-switcher-check" aria-hidden>
-                        {entry.current ? <Check size={16} /> : null}
+                        {pendingHref === entry.href ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : entry.current ? (
+                          <Check size={16} />
+                        ) : null}
                       </span>
                       <span className="min-w-0 truncate">{entry.label}</span>
                     </Link>

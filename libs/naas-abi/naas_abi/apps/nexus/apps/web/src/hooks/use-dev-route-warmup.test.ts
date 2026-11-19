@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetWarmedRoutes, warmRoutes } from './use-dev-route-warmup';
+import { noteLinkFollowed, resetWarmedRoutes, warmRoutes } from './use-dev-route-warmup';
 
 describe('warmRoutes', () => {
   beforeEach(() => resetWarmedRoutes());
@@ -33,5 +33,20 @@ describe('warmRoutes', () => {
     });
     await warmRoutes(['/a', '/b'], fetchImpl, () => cancelled);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  // `next dev` compiles one route at a time: the page the user asked for goes next,
+  // not after every sibling still queued (the settings scope switcher waited ~40 s).
+  it('stops once the user follows a link, leaving the rest unwarmed', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(''));
+    fetchImpl.mockImplementationOnce(async () => {
+      noteLinkFollowed();
+      return new Response('');
+    });
+    await warmRoutes(['/a', '/b'], fetchImpl);
+    expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual(['/a']);
+
+    await warmRoutes(['/b'], fetchImpl);
+    expect(fetchImpl.mock.calls.map((c) => c[0])).toEqual(['/a', '/b']);
   });
 });
