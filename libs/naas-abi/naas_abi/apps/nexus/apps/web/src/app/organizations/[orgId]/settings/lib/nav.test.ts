@@ -39,6 +39,30 @@ describe('org settings nav', () => {
   });
 });
 
+describe('org settings nav › Analytics', () => {
+  it('shows Analytics to an owner or admin once the API says they may read it', () => {
+    for (const role of ['owner', 'admin']) {
+      expect(orgSettingsNavForRole(role).map((item) => item.slug)).not.toContain('analytics');
+      expect(orgSettingsNavForRole(role, { readsAnalytics: true }).map((item) => item.slug)).toContain('analytics');
+    }
+  });
+
+  it('shows no Analytics to a member or someone with no role, whatever the API says', () => {
+    for (const role of ['member', null]) {
+      expect(orgSettingsNavForRole(role, { readsAnalytics: true }).map((item) => item.slug)).not.toContain('analytics');
+      expect(orgSettingsNavForRole(role, { holdsIam: true, readsAnalytics: true }).map((item) => item.slug)).toEqual([
+        'roles',
+      ]);
+    }
+  });
+
+  it('lists Analytics after Roles & permissions', () => {
+    expect(
+      orgSettingsNavForRole('owner', { holdsIam: true, readsAnalytics: true }).map((item) => item.slug)
+    ).toEqual(['general', 'branding', 'workspaces', 'users', 'roles', 'analytics']);
+  });
+});
+
 describe('orgSettingsAccess', () => {
   it('opens to owners and admins at once, by their role', () => {
     for (const role of ['owner', 'admin']) {
