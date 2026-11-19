@@ -4,6 +4,7 @@ import {
   filterWorkspaces,
   groupByOrganization,
   groupWorkspaces,
+  hasWorkspaceGroups,
   listWorkspaces,
   OTHERS_GROUP,
   PERSONAL_ORGANIZATION,
@@ -78,6 +79,19 @@ describe('groupWorkspaces', () => {
 
   it('returns nothing for no workspaces', () => {
     expect(groupWorkspaces([])).toEqual([]);
+  });
+});
+
+describe('hasWorkspaceGroups', () => {
+  const ws = (name: string, group?: string | null) => ({ id: name, name, group });
+
+  it('needs no headings when no workspace has a group', () => {
+    expect(hasWorkspaceGroups([ws('JOE'), ws('Core', '  '), ws('Ops', null)])).toBe(false);
+    expect(hasWorkspaceGroups([])).toBe(false);
+  });
+
+  it('needs headings once one workspace has a group', () => {
+    expect(hasWorkspaceGroups([ws('JOE'), ws('Allianz', 'Key Accounts')])).toBe(true);
   });
 });
 

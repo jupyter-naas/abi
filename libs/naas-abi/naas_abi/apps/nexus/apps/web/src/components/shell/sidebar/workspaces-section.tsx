@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
   groupByOrganization,
+  hasWorkspaceGroups,
   listWorkspaces,
   OTHERS_GROUP,
   spansOrganizations,
@@ -31,8 +32,10 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
   const currentOrganizationId = workspaces.find((w) => w.id === currentWorkspaceId)?.organizationId;
   // Grouped by organization, then by workspace group (Settings → General; no group
   // shows under "Others"). The organization headings show only when the person's
-  // workspaces span more than one organization (personal ones counting as one).
+  // workspaces span more than one organization (personal ones counting as one),
+  // and the group headings only when one of them has a group.
   const showOrganizations = useMemo(() => spansOrganizations(workspaces), [workspaces]);
+  const showGroups = useMemo(() => hasWorkspaceGroups(workspaces), [workspaces]);
   const sections = useMemo(
     () => groupByOrganization(listed, currentOrganizationId),
     [listed, currentOrganizationId],
@@ -84,7 +87,7 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
               onPick={pick}
             />
           ))
-        ) : (
+        ) : showGroups ? (
           sections
             .flatMap((section) => section.groups)
             .map((group) => (
@@ -95,6 +98,17 @@ export function WorkspacesSection({ onPicked }: { onPicked?: () => void }) {
                 onPick={pick}
               />
             ))
+        ) : (
+          <div className="flex flex-col gap-1 pt-1">
+            {listed.map((workspace) => (
+              <WorkspaceRow
+                key={workspace.id}
+                workspace={workspace}
+                current={workspace.id === currentWorkspaceId}
+                onPick={pick}
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>

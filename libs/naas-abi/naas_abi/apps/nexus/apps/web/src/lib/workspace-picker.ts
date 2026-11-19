@@ -78,6 +78,15 @@ export function spansOrganizations(workspaces: readonly NamedWorkspace[]): boole
 }
 
 /**
+ * Whether the list needs group headings: only when some workspace has a group.
+ * Without one, an "Others" heading over every workspace says nothing. Decided
+ * on every workspace, like ``spansOrganizations``.
+ */
+export function hasWorkspaceGroups(workspaces: readonly NamedWorkspace[]): boolean {
+  return workspaces.some((w) => !!w.group?.trim());
+}
+
+/**
  * Workspaces by organization, then by workspace group: two organizations' groups of
  * the same name stay apart. The current workspace's organization comes first, the
  * others alphabetically, then "Personal" (no organization). Each organization's
