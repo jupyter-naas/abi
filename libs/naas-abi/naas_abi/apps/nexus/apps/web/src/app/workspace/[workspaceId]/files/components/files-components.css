@@ -281,40 +281,6 @@
 
 /* Drive and View dropdowns (Files page and sidebar) */
 
-.files-view-picker {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.files-view-picker-select {
-  min-width: 0;
-  height: 28px;
-  padding: 0 var(--space-2);
-  border: 1px solid var(--border-hex);
-  border-radius: var(--org-border-radius, 0px);
-  background: var(--background-hex);
-  color: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.files-view-picker-select:focus-visible {
-  outline: 2px solid var(--workspace-accent, #22c55e);
-  outline-offset: 1px;
-}
-
-.files-view-picker.is-compact {
-  margin-bottom: 6px;
-  padding: 0 2px;
-}
-
-.files-view-picker.is-compact .files-view-picker-select {
-  flex: 1;
-  height: 26px;
-}
-
 /* All Views: one folder per view */
 
 .files-views-root {
