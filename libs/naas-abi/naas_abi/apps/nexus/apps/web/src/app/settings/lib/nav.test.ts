@@ -57,6 +57,7 @@ describe('platformSettingsGroups', () => {
       ['Organizations', '/settings/organizations'],
       ['Users', '/settings/users'],
       ['Roles & permissions', '/settings/roles'],
+      ['Drives', '/settings/drives'],
     ]);
     expect(items('System')).toEqual([
       ['Overview', '/settings/system'],
@@ -83,7 +84,6 @@ describe('platformSettingsGroups', () => {
       ['Coding environments', '/settings/resources/coding-environments'],
     ]);
     expect(items('Data')).toEqual([
-      ['Drives', '/settings/drives'],
       ['Nexus tables', '/settings/tables'],
       ['Knowledge graph', '/settings/data/knowledge-graph'],
       ['Vector store', '/settings/data/vector-store'],
@@ -161,7 +161,9 @@ describe('what the caller sees', () => {
 
   it('shows Drives to whoever IAM lets list the drives, and nothing else to them', () => {
     expect(ids(driveLister)).toEqual(['drives']);
-    expect(visiblePlatformSettingsGroups(driveLister).map((group) => group.label)).toEqual(['Data']);
+    expect(visiblePlatformSettingsGroups(driveLister).map((group) => group.label)).toEqual([
+      'Administration',
+    ]);
     expect(firstPlatformSettingsPath(driveLister)).toBe('/settings/drives');
   });
 
@@ -242,14 +244,11 @@ describe('laysOutOwnPanes', () => {
     expect(laysOutOwnPanes(ORGANIZATIONS_ITEM)).toBe(false);
     expect(laysOutOwnPanes(USERS_ITEM)).toBe(false);
     expect(laysOutOwnPanes(ROLES_ITEM)).toBe(false);
+    expect(laysOutOwnPanes(DRIVES_ITEM)).toBe(false);
   });
 
   it('lets the System pages lay out their own panes', () => {
     expect(laysOutOwnPanes({ id: 'overview' })).toBe(true);
-  });
-
-  it('keeps those margins on Drives, a table like Users', () => {
-    expect(laysOutOwnPanes(DRIVES_ITEM)).toBe(false);
   });
 
   it('leaves Nexus tables to their own layout', () => {

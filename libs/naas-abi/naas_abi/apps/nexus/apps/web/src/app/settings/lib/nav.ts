@@ -189,9 +189,9 @@ export const ROLES_ITEM: PlatformSettingsNavItem = {
 // Discovery sits by Modules, Bus by NATS and the Event store by Events: each shows the
 // same things as its neighbour, until the two pages are one.
 /** Pages laid out like the organization's settings pages: padded, width capped
- * (Administration: General, Organizations, Users, Roles & permissions; and Drives, a
- * table like Users). The other pages (System, Activity, Resources, Data) lay out their
- * own panes edge to edge; Nexus tables have their own layout. */
+ * (Administration: General, Organizations, Users, Roles & permissions, Drives). The other
+ * pages (System, Activity, Resources, Data) lay out their own panes edge to edge;
+ * Nexus tables have their own layout. */
 const PADDED_ITEM_IDS: ReadonlySet<string> = new Set([
   GENERAL_ITEM.id,
   ORGANIZATIONS_ITEM.id,
@@ -206,7 +206,10 @@ export function laysOutOwnPanes(item: Pick<PlatformSettingsNavItem, 'id'>): bool
 }
 
 export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
-  { label: 'Administration', items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM, ROLES_ITEM] },
+  {
+    label: 'Administration',
+    items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM, ROLES_ITEM, DRIVES_ITEM],
+  },
   {
     label: 'System',
     items: [
@@ -233,11 +236,7 @@ export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
   { label: 'Resources', items: servicePagesIn('resources').map((page) => serviceItem(page.service)) },
   {
     label: 'Data',
-    items: [
-      DRIVES_ITEM,
-      NEXUS_TABLES_ITEM,
-      ...servicePagesIn('data').map((page) => serviceItem(page.service)),
-    ],
+    items: [NEXUS_TABLES_ITEM, ...servicePagesIn('data').map((page) => serviceItem(page.service))],
   },
 ];
 
