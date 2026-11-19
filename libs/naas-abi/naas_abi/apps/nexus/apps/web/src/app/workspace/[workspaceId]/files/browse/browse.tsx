@@ -49,6 +49,7 @@ import { CsvPreview } from '@/components/files/csv-preview';
 import { FilesAddSheet } from '../components/files-add-sheet';
 import { FilesMenuBar } from '../components/files-menu-bar';
 import { requestFilesExplorerRefresh } from '../lib/explorer-refresh';
+import { carriesExternalFiles, leavesDropZone } from '../lib/drop-zone';
 import { isSystemPath, withoutSystemFiles } from '@/lib/system-files';
 import { FilesMobileRow } from '../components/files-mobile-row';
 import { FilesMobileToolbar } from '../components/files-mobile-toolbar';
@@ -486,7 +487,31 @@ function FilesBrowser() {
     if (isInternalDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
+    // Moving between the zone's own children (rows, the overlay) is no leave: hiding
+    // the overlay there made it flicker, and a drop on it then opened the file.
+    if (!leavesDropZone(e.currentTarget, e.relatedTarget)) return;
     setIsDragging(false);
+  }, []);
+
+  // Files dropped anywhere else on the page are not opened by the browser.
+  useEffect(() => {
+    const keepFilesInPage = (event: DragEvent) => {
+      // The drop zone handles its own drags (and marks them handled).
+      if (event.defaultPrevented || !event.dataTransfer) return;
+      if (!carriesExternalFiles(Array.from(event.dataTransfer.types))) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'none';
+    };
+    const endDrag = (event: DragEvent) => {
+      keepFilesInPage(event);
+      setIsDragging(false);
+    };
+    window.addEventListener('dragover', keepFilesInPage);
+    window.addEventListener('drop', endDrag);
+    return () => {
+      window.removeEventListener('dragover', keepFilesInPage);
+      window.removeEventListener('drop', endDrag);
+    };
   }, []);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
