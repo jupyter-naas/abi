@@ -85,6 +85,7 @@ export function AddPeople({
   const listId = `${id}-listbox`;
   const optionId = (index: number) => `${id}-option-${index}`;
   const inputRef = useRef<HTMLInputElement>(null);
+  const refocus = useRef(false);
 
   const [text, setText] = useState('');
   const [found, setFound] = useState<FoundPeople>({ text: '', items: [] });
@@ -150,8 +151,16 @@ export function AddPeople({
     setRole('member');
     setAddError('');
     setFound({ text: '', items: [] });
-    inputRef.current?.focus();
+    refocus.current = true;
   };
+
+  // Back in the box once the pick is done (it is disabled while a pick is open).
+  useEffect(() => {
+    if (!picked && refocus.current) {
+      refocus.current = false;
+      inputRef.current?.focus();
+    }
+  }, [picked]);
 
   const add = async () => {
     if (!picked) return;
@@ -214,7 +223,7 @@ export function AddPeople({
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={expanded}
-          aria-controls={listId}
+          aria-controls={expanded ? listId : undefined}
           aria-activedescendant={expanded && activeIndex >= 0 ? optionId(activeIndex) : undefined}
           autoComplete="off"
           value={text}

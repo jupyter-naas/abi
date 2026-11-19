@@ -141,6 +141,7 @@ describe('Add people', () => {
     await typeAndSettle('Flo');
     await key('Escape');
     expect(input().getAttribute('aria-expanded')).toBe('false');
+    expect(input().hasAttribute('aria-controls')).toBe(false);
     expect(options()).toEqual([]);
   });
 
@@ -157,6 +158,7 @@ describe('Add people', () => {
     expect(onAdded).toHaveBeenCalledWith(FLO, true);
     expect(input().value).toBe('');
     expect(mounted!.host.querySelector('[data-add-people-pick]')).toBeNull();
+    expect(document.activeElement).toBe(input());
   });
 
   it('offers owner to an owner only', async () => {
