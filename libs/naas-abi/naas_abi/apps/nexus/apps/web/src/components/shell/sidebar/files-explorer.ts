@@ -10,6 +10,27 @@ export function explorerDirKey(source: string, path: string): string {
 }
 
 /** Strip leading/trailing slashes so root is always `''`. */
+/**
+ * Whether the tree must ask for a folder's listing: not when it is already listed or a
+ * fetch for it is pending in the same load generation (the effects that open Files ask
+ * for the same root at once); always when forced (refresh, after a move).
+ */
+export function explorerDirNeedsLoad({
+  force = false,
+  cached,
+  inFlightGeneration,
+  generation,
+}: {
+  force?: boolean;
+  cached: boolean;
+  inFlightGeneration: number | undefined;
+  generation: number;
+}): boolean {
+  if (force) return true;
+  if (cached) return false;
+  return inFlightGeneration !== generation;
+}
+
 export function normalizeExplorerPath(path: string): string {
   return (path || '').replace(/^\/+|\/+$/g, '');
 }
