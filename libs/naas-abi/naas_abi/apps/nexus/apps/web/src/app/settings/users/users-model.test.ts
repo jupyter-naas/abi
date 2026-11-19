@@ -33,6 +33,8 @@ const user = (over: Partial<AdminUser> = {}): AdminUser => ({
 describe('cells', () => {
   it('say the status, deactivated or not, as the filter sees it', () => {
     expect(cellValues(user(), 'status')).toEqual(['Signed in', 'Active']);
+    // The API's status since people are created at once: active, or invited.
+    expect(cellValues(user({ status: 'active' }), 'status')).toEqual(['Signed in', 'Active']);
     expect(cellValues(user({ status: 'invited', deactivated: true }), 'status')).toEqual([
       'Invited, not yet',
       'Deactivated',
