@@ -12,6 +12,12 @@ export type SettingsScopeMenuEntry =
 
 export type OpenableOrganization = { id: string; name: string };
 
+/** Whether following ``href`` from ``pathname`` loads another page (query and hash aside). */
+export function opensAnotherPage(href: string, pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  return href.split(/[?#]/, 1)[0] !== pathname;
+}
+
 /** Pure list for the header scope switcher (Vitest covers access rules). */
 export function buildSettingsScopeMenuEntries({
   currentScope,

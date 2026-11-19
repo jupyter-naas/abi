@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildSettingsScopeMenuEntries } from './settings-scope-list';
+import { buildSettingsScopeMenuEntries, opensAnotherPage } from './settings-scope-list';
 
 const platformAdmin = { 'nexus:ListOrganizations': true, 'iam:ListPolicies': true };
 
@@ -81,5 +81,21 @@ describe('buildSettingsScopeMenuEntries', () => {
     });
     const unnamed = buildSettingsScopeMenuEntries({ ...base, accountName: '  ' });
     expect(unnamed.find((e) => e.type === 'item' && e.id === 'account')).toMatchObject({ label: 'Account' });
+  });
+});
+
+describe('opensAnotherPage', () => {
+  it('is true for another path, ignoring query and hash', () => {
+    expect(opensAnotherPage('/organizations/org-1/settings', '/settings/general')).toBe(true);
+    expect(opensAnotherPage('/account/profile?tab=a#b', '/account/security')).toBe(true);
+  });
+
+  it('is false for the page already open: no navigation, so nothing pending', () => {
+    expect(opensAnotherPage('/settings/general', '/settings/general')).toBe(false);
+    expect(opensAnotherPage('/settings/general?x=1#y', '/settings/general')).toBe(false);
+  });
+
+  it('is false without a current path', () => {
+    expect(opensAnotherPage('/settings/general', null)).toBe(false);
   });
 });
