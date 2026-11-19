@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { opensRolesAndPermissions } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
+import { useReadsAnalytics } from '@/hooks/use-analytics-access';
 import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
 import {
   SettingsLayoutRoot,
@@ -81,7 +82,12 @@ export default function OrganizationSettingsLayout({
     holdsIam,
     accessSettled: !accessLoading,
   });
-  const visibleNav = useMemo(() => orgSettingsNavForRole(viewerRole, { holdsIam }), [viewerRole, holdsIam]);
+  // Analytics is shown once the API says the caller may read the organization's.
+  const readsAnalytics = useReadsAnalytics(orgId ? { kind: 'organization', orgId } : null);
+  const visibleNav = useMemo(
+    () => orgSettingsNavForRole(viewerRole, { holdsIam, readsAnalytics }),
+    [viewerRole, holdsIam, readsAnalytics]
+  );
   const sectionHrefs = useMemo(
     () => (orgId ? visibleNav.map((item) => orgSettingsSectionPath(orgId, item.slug)) : []),
     [orgId, visibleNav]

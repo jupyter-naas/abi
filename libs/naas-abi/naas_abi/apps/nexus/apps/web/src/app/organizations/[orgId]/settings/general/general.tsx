@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { BadgeCheck, Building2, Check, Copy, Mail, MapPin, Save } from 'lucide-react';
+import { BadgeCheck, Building2, Check, Clock, Copy, Mail, MapPin, Save } from 'lucide-react';
 import { selectSession, useAuthStore } from '@/stores/auth';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '../components/org-settings-section-card';
@@ -19,6 +19,7 @@ import {
   type IdentityFieldSpec,
   type OrganizationIdentity,
 } from './identity';
+import { DEFAULT_TIMEZONE, timezoneChange, timezoneFrom, timezoneLabel, timezoneOptions } from './timezone';
 import '../components/org-settings-components.css';
 import './general.css';
 
@@ -48,6 +49,8 @@ export default function OrganizationGeneralPage() {
 
   const [initial, setInitial] = useState<OrganizationIdentity>(() => identityFrom({}));
   const [values, setValues] = useState<OrganizationIdentity>(() => identityFrom({}));
+  const [initialTimezone, setInitialTimezone] = useState(DEFAULT_TIMEZONE);
+  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [domains, setDomains] = useState<DomainsState>({ status: 'loading' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -75,9 +78,12 @@ export default function OrganizationGeneralPage() {
         if (cancelled) return;
 
         if (orgRes.ok) {
-          const identity = identityFrom(await orgRes.json());
+          const body = await orgRes.json();
+          const identity = identityFrom(body);
           setInitial(identity);
           setValues(identity);
+          setInitialTimezone(timezoneFrom(body));
+          setTimezone(timezoneFrom(body));
         } else {
           console.error('Failed to fetch organization:', orgRes.status);
         }
@@ -105,8 +111,18 @@ export default function OrganizationGeneralPage() {
     };
   }, [authReady, orgId, token]);
 
-  const changes = identityChanges(initial, values);
+  const changes = { ...identityChanges(initial, values), ...timezoneChange(initialTimezone, timezone) };
   const dirty = Object.keys(changes).length > 0;
+  // The browser's list with offsets, built once; the saved timezone is added if it lacks it.
+  const timezoneLabels = useMemo(() => {
+    const now = new Date();
+    return new Map(timezoneOptions().map((name) => [name, timezoneLabel(name, now)]));
+  }, []);
+  const timezones = useMemo(
+    () =>
+      timezoneOptions(timezone).map((name) => ({ name, label: timezoneLabels.get(name) ?? timezoneLabel(name) })),
+    [timezone, timezoneLabels]
+  );
 
   const handleSave = async () => {
     if (!dirty) return;
@@ -122,9 +138,12 @@ export default function OrganizationGeneralPage() {
         body: JSON.stringify(body),
       });
       if (response.ok) {
-        const identity = identityFrom(await response.json());
+        const updated = await response.json();
+        const identity = identityFrom(updated);
         setInitial(identity);
         setValues(identity);
+        setInitialTimezone(timezoneFrom(updated));
+        setTimezone(timezoneFrom(updated));
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
       } else {
@@ -183,7 +202,7 @@ export default function OrganizationGeneralPage() {
     <div className="org-settings-general-page">
       <OrgSettingsPageHeader
         title="General"
-        subtitle="The organization's identity, contact details and verified domains"
+        subtitle="The organization's identity, contact details, timezone and verified domains"
         actions={
           <button
             type="button"
@@ -258,6 +277,34 @@ export default function OrganizationGeneralPage() {
           <div className="org-settings-general-grid org-settings-general-grid-3">
             {ADDRESS_FIELDS.slice(2).map(renderField)}
           </div>
+        </div>
+      </OrgSettingsSectionCard>
+
+      <OrgSettingsSectionCard padded>
+        <div className="org-settings-card-heading">
+          <Clock size={20} />
+          <h3 className="org-settings-card-heading-title">Timezone</h3>
+        </div>
+        <div className="org-settings-field">
+          <label className="org-settings-field-label" htmlFor="org-timezone">
+            Timezone
+          </label>
+          <select
+            id="org-timezone"
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            className="org-settings-input"
+          >
+            {timezones.map(({ name, label }) => (
+              <option key={name} value={name}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <p className="org-settings-field-hint">
+            Analytics periods (Today, Yesterday, This week, This month) start at midnight in this timezone,
+            for the organization and each of its workspaces.
+          </p>
         </div>
       </OrgSettingsSectionCard>
 
