@@ -777,6 +777,125 @@ class TestSettingsOtherThanBuiltinNeverLink(NexusHarness):
         assert landed.headers["location"] == f"{WEB}/auth/login?sso_error=email_in_use"
 
 
+class TestInvitedPeopleSignIn(NexusHarness):
+    """Someone invited is a row before they sign in (``services/people``): their first
+    sign-in makes it active. One no provider made (``provisioning: none``, the
+    default here) is bound by that sign-in, through the provider the row names."""
+
+    WS = "abi:nexus:organization/acme/nexus:workspace/ws1"
+
+    @pytest.fixture(scope="class")
+    def harness(self):
+        with FakeIdP(redirect_uri=CALLBACK) as idp:
+            yield idp
+
+    async def _unbound(self, sessions, iam, email, *, provider, user_id="user-inv-1"):
+        """As the people service leaves it: the row, and IAM's user of its id holding
+        the role the invitation gave."""
+        async with sessions() as db:
+            db.add(
+                UserModel(
+                    id=user_id, email=email, name="Ines", status="invited", idp_provider=provider
+                )
+            )
+            await db.commit()
+        with as_service_account("engine"):
+            principal = iam.ensure_user(LEGACY_ISSUER, user_id, provider="nexus")
+            iam.attach_policy("builtin.member", principal.id, self.WS)
+        return principal
+
+    async def _row(self, sessions, user_id):
+        async with sessions() as db:
+            return (await db.execute(select(UserModel).where(UserModel.id == user_id))).scalar_one()
+
+    @pytest.mark.asyncio
+    async def test_the_first_verified_sign_in_binds_and_activates_the_invited_row(
+        self, nexus, harness
+    ):
+        client, iam, sessions = nexus
+        email = f"ines-{os.urandom(3).hex()}@example.com"
+        principal = await self._unbound(sessions, iam, email, provider=harness.provider_name)
+        user = harness.create_user(email)
+
+        landed = await self._sign_in(client, harness, user)
+        assert landed.headers["location"].startswith(f"{WEB}/auth/callback"), landed.headers
+
+        me = (await client.get("/api/auth/me")).json()
+        assert me["id"] == "user-inv-1"
+        row = await self._row(sessions, "user-inv-1")
+        assert (row.status, row.principal_id, row.idp_subject) == (
+            "active",
+            principal.id,
+            user.subject,
+        )
+        assert row.activated_at is not None
+        # The roles the invitation attached are the person's.
+        assert iam.store.find_user(harness.issuer, user.subject).id == principal.id
+        held = {
+            (a.policy_id, a.scope) for a in iam.store.list_attachments(principal_id=principal.id)
+        }
+        assert ("builtin.member", self.WS) in held
+        async with sessions() as db:
+            assert len((await db.execute(select(UserModel))).scalars().all()) == 1
+
+    @pytest.mark.asyncio
+    async def test_only_the_provider_the_row_names_binds_it(self, nexus, harness):
+        client, iam, sessions = nexus
+        email = f"jo-{os.urandom(3).hex()}@example.com"
+        await self._unbound(sessions, iam, email, provider="another-provider")
+        landed = await self._sign_in(client, harness, harness.create_user(email))
+        assert landed.headers["location"] == f"{WEB}/auth/login?sso_error=email_in_use"
+        row = await self._row(sessions, "user-inv-1")
+        assert (row.status, row.principal_id) == ("invited", None)
+
+    @pytest.mark.asyncio
+    async def test_an_unverified_email_never_binds(self, nexus, harness):
+        client, iam, sessions = nexus
+        email = f"kim-{os.urandom(3).hex()}@example.com"
+        await self._unbound(sessions, iam, email, provider=harness.provider_name)
+        user = harness.create_user(email)
+        harness._users[user.subject].email_verified = False
+        await self._sign_in(client, harness, user)
+        assert (await client.get("/api/auth/me")).json()["id"] != "user-inv-1"
+        row = await self._row(sessions, "user-inv-1")
+        assert (row.status, row.principal_id) == ("invited", None)
+
+    @pytest.mark.asyncio
+    async def test_an_invited_row_whose_identity_is_known_is_activated(self, nexus, harness):
+        """The invitation made the account and IAM's user: the sign-in finds the row
+        by its principal and makes it active, nothing else."""
+        client, iam, sessions = nexus
+        email = f"lu-{os.urandom(3).hex()}@example.com"
+        user = harness.create_user(email)
+        with as_service_account("api"):
+            principal = iam.ensure_user(
+                harness.issuer, user.subject, provider=harness.provider_name, email=email
+            )
+        async with sessions() as db:
+            db.add(
+                UserModel(
+                    id=principal.id,
+                    email=email,
+                    name="Lu",
+                    principal_id=principal.id,
+                    idp_provider=harness.provider_name,
+                    idp_issuer=harness.issuer,
+                    idp_subject=user.subject,
+                    status="invited",
+                )
+            )
+            await db.commit()
+
+        await self._sign_in(client, harness, user)
+
+        assert (await client.get("/api/auth/me")).json()["id"] == principal.id
+        row = await self._row(sessions, principal.id)
+        assert row.status == "active" and row.activated_at is not None
+        client.cookies.clear()
+        await self._sign_in(client, harness, user)  # once: the second changes nothing
+        assert (await self._row(sessions, principal.id)).activated_at == row.activated_at
+
+
 class TestLinkingTheRows:
     """The Nexus rows of the old login: found by email, linked once."""
 
@@ -791,6 +910,17 @@ class TestLinkingTheRows:
         async with AsyncSession(engine, expire_on_commit=False) as session:
             session.add(UserModel(id="u-ada", email="Ada@Example.com", name="Ada"))
             session.add(UserModel(id="u-bob", email="bob@example.com", name="Bob"))
+            # Invited through a provider that made no account: bound by its sign-in
+            # there, never moved to the built-in provider as a legacy user.
+            session.add(
+                UserModel(
+                    id="u-dan",
+                    email="dan@example.com",
+                    name="Dan",
+                    status="invited",
+                    idp_provider="corp",
+                )
+            )
             session.add(
                 UserModel(
                     id="usr_1",
@@ -811,6 +941,8 @@ class TestLinkingTheRows:
 
         assert [u.id for u in await adapter.list_legacy_users()] == ["u-ada", "u-bob"]
         assert (await adapter.legacy_user_by_email("ADA@example.com")).id == "u-ada"  # type: ignore[union-attr]
+        dan = await adapter.legacy_user_by_email("dan@example.com")
+        assert dan is not None and (dan.status, dan.idp_provider) == ("invited", "corp")
         assert await adapter.legacy_user_by_email("carl@example.com") is None
         assert await adapter.legacy_user_by_email("nobody@example.com") is None
 

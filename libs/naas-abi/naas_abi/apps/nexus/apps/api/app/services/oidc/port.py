@@ -47,6 +47,11 @@ class OidcUser:
     principal_id: str | None
     idp_issuer: str | None
     idp_subject: str | None
+    # ``invited`` until the first sign-in (``services/people``), then ``active``.
+    status: str = "active"
+    # The provider the row names: for an invited row no provider made yet, the
+    # one whose verified email binds it at the first sign-in.
+    idp_provider: str | None = None
 
 
 class UserConflictError(Exception):
@@ -99,13 +104,19 @@ class OidcSessionPersistencePort(ABC):
         """Refresh the profile a provider states; ``None`` keeps a field."""
 
     @abstractmethod
+    async def activate_user(self, user_id: str, *, now: datetime) -> bool:
+        """An ``invited`` row's first sign-in: ``active``, once. True when this call did."""
+
+    @abstractmethod
     async def legacy_user_by_email(self, email: str) -> OidcUser | None:
-        """The user of the old built-in login this address belongs to: a row no
-        identity provider signs in yet (no principal, no identity)."""
+        """A row no identity provider signs in yet (no principal, no identity) that
+        this address belongs to: a user of the old built-in login, or someone
+        invited through a provider that made no account (``status`` ``invited``)."""
 
     @abstractmethod
     async def list_legacy_users(self) -> list[OidcUser]:
-        """Every user of the old built-in login no provider signs in yet, by email."""
+        """Every user of the old built-in login no provider signs in yet, by email
+        (not the invited rows waiting for their provider)."""
 
     @abstractmethod
     async def link_user(
