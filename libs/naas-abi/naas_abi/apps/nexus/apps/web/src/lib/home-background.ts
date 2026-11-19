@@ -1,7 +1,7 @@
 import { authFetch } from '@/stores/auth';
 
 /**
- * Home desk wallpaper, kept in the workspace drive under `.home/`. The API
+ * Home desk wallpaper, kept in Workspace Files under `.home/`. The API
  * stages an image in `.home/tmp`, serves it for preview, then commits it to
  * `.home/background-img` and points the workspace at it. `.home` is a system
  * folder, so these endpoints — not the files API — are the only way in.
@@ -86,7 +86,7 @@ export async function commitBackgroundImage(
 }
 
 /**
- * Remove the wallpaper: the API moves the file to the workspace drive's
+ * Remove the wallpaper: the API moves the file to Workspace Files'
  * `.home/archives` and clears the workspace's `background_image_url`.
  */
 export async function removeBackgroundImage(workspaceId: string): Promise<void> {

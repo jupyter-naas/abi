@@ -81,22 +81,22 @@ describe('filesBrowseHref', () => {
 
 describe('parseFilesDeepLink', () => {
   it('reads source and a drive-relative path', () => {
-    expect(parseFilesDeepLink(`?source=platform-drive&path=${FILE}`)).toEqual({
-      source: 'platform-drive',
+    expect(parseFilesDeepLink(`?source=platform-files&path=${FILE}`)).toEqual({
+      source: 'platform-files',
       path: FILE,
     });
   });
 
   it('reads a query string without a leading question mark', () => {
-    expect(parseFilesDeepLink('source=my-drive&path=uploads/notes.md')).toEqual({
-      source: 'my-drive',
+    expect(parseFilesDeepLink('source=my-files&path=uploads/notes.md')).toEqual({
+      source: 'my-files',
       path: 'uploads/notes.md',
     });
   });
 
   it('trims whitespace on source and path', () => {
-    expect(parseFilesDeepLink('?source=  platform-drive  &path=  shared/docs  ')).toEqual({
-      source: 'platform-drive',
+    expect(parseFilesDeepLink('?source=  platform-files  &path=  shared/docs  ')).toEqual({
+      source: 'platform-files',
       path: 'shared/docs',
     });
   });
@@ -117,9 +117,23 @@ describe('parseFilesDeepLink', () => {
 
   it('keeps source when path is omitted', () => {
     expect(parseFilesDeepLink('?source=platform-drive')).toEqual({
-      source: 'platform-drive',
+      source: 'platform-files',
       path: null,
     });
+  });
+
+  it.each([
+    ['my-drive', 'my-files'],
+    ['workspace', 'workspace-files'],
+    ['organization-drive', 'organization-files'],
+    ['platform-drive', 'platform-files'],
+    ['system-drive', 'system-files'],
+  ])('opens an old ?source=%s link in %s', (old, view) => {
+    expect(parseFilesDeepLink(`?source=${old}&path=docs`)).toEqual({ source: view, path: 'docs' });
+  });
+
+  it('ignores a source that names no view (a synced folder of old)', () => {
+    expect(parseFilesDeepLink('?source=synced-1&path=docs')).toEqual({ source: null, path: 'docs' });
   });
 
   it('keeps path when source is omitted', () => {

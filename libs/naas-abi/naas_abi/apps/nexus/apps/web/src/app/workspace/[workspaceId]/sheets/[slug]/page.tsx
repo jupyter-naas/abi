@@ -463,7 +463,7 @@ export default function SheetsEditorPage() {
         title,
         workspaceId,
       });
-      setStatus(`Copied to My Drive: ${relativePath}`);
+      setStatus(`Copied to My Files: ${relativePath}`);
     } catch (e) {
       setError((e as Error).message);
     } finally {

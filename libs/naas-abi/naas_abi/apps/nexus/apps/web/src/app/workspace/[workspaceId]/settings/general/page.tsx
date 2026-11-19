@@ -60,7 +60,7 @@ async function readApiError(response: Response, fallback: string): Promise<strin
 
 /**
  * Settings → General: the workspace's identity (name, group, slug, description,
- * and logo stored in the workspace drive like account avatars), its desk
+ * and logo stored in Workspace Files like account avatars), its desk
  * wallpaper (the same editor as Home → File → Edit background image) and its
  * colors.
  */
@@ -123,7 +123,7 @@ export default function GeneralSettingsPage() {
     setOwnerId(workspace?.ownerId ?? '');
   }, [workspace?.ownerId]);
 
-  // As on Home: the wallpaper lives in the workspace drive; when the theme lost
+  // As on Home: the wallpaper lives in Workspace Files; when the theme lost
   // its pointer, ask the API for the committed file.
   const themeBackgroundUrl = resolveDeskImageUrl(theme.backgroundImageUrl);
   useEffect(() => {
@@ -222,7 +222,7 @@ export default function GeneralSettingsPage() {
       });
       if (!res.ok) throw new Error(await readApiError(res, 'Failed to upload the logo'));
       const data: { logo_url: string } = await res.json();
-      // The API already saved it (workspace drive): update the store only.
+      // The API already saved it (Workspace Files): update the store only.
       applyWorkspaceTheme(currentWorkspaceId, { logoUrl: data.logo_url });
     } catch (err) {
       setLogoError(err instanceof Error ? err.message : 'Failed to upload the logo');

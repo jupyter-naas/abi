@@ -111,12 +111,12 @@ const PROVIDERS: Record<string, Provider> = {
     const files = data.files.slice(0, ctx.limit);
     return {
       hasMore: data.files.length > ctx.limit,
-      note: 'File names in the top folder of the workspace drive.',
+      note: 'File names in the top folder of Workspace Files.',
       hits: files.map(f => ({
         id: f.path,
         title: f.name,
         subtitle: f.type === 'folder' ? 'Folder' : f.path,
-        action: { kind: 'file', source: 'workspace', path: f.path, type: f.type === 'folder' ? 'folder' : 'file' },
+        action: { kind: 'file', source: 'workspace-files', path: f.path, type: f.type === 'folder' ? 'folder' : 'file' },
       })),
     };
   },
