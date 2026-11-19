@@ -4,9 +4,7 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { User } from 'lucide-react';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { useAuthStore } from '@/stores/auth';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { useMounted } from '@/hooks/use-mounted';
 import { useRememberSettingsScope } from '@/hooks/use-remember-settings-scope';
 import { loadOrgBranding, resolveWorkspaceOrgId } from '@/lib/org-branding';
 import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
@@ -57,8 +55,6 @@ export default function AccountLayout({
   const workspaceOrgId = useWorkspaceStore(
     (state) => state.workspaces.find((w) => w.id === state.currentWorkspaceId)?.organizationId,
   );
-  const user = useAuthStore((state) => state.user);
-  const mounted = useMounted();
   const [borderRadius, setBorderRadius] = useState('0');
 
   useRememberSettingsScope(pathname);
@@ -101,8 +97,6 @@ export default function AccountLayout({
     router.push(workspaceHref);
   };
 
-  const scopeTitle = (mounted && user?.name) || 'Account';
-
   const showNav = !showMobileDetail;
   const showMain = !showMobileList;
 
@@ -110,7 +104,7 @@ export default function AccountLayout({
     <SettingsLayoutRoot borderRadius={borderRadius}>
       <div className="org-settings-layout-left">
         <SettingsShellHeader
-          scopeTitle={scopeTitle}
+          scopeTitle="Account"
           detailTitle={sectionLabel}
           showScopeSwitcher={!showMobileDetail}
           icon={User}

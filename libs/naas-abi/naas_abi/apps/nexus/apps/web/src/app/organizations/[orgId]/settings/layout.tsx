@@ -99,7 +99,6 @@ export default function OrganizationSettingsLayout({
   const showMobileDetail = isMobile && isDetail;
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
 
-  const [orgName, setOrgName] = useState('');
   const [borderRadius, setBorderRadius] = useState('0');
   // The organization's colours, not the last workspace's (see SettingsLayoutRoot).
   const [orgColors, setOrgColors] = useState<{ primary: string | null; accent: string | null }>({
@@ -118,7 +117,6 @@ export default function OrganizationSettingsLayout({
         const response = await authFetch(`/api/organizations/${orgId}`);
         if (response.ok) {
           const data = await response.json();
-          setOrgName(data.name);
           setViewer({ orgId, role: data.current_user_role ?? null });
           const radius = data.loginBorderRadius ?? data.login_border_radius ?? '0';
           setBorderRadius(radius);
@@ -174,8 +172,6 @@ export default function OrganizationSettingsLayout({
     router.push(workspaceHref);
   };
 
-  const scopeTitle = orgName || 'Organization Settings';
-
   const showNav = !showMobileDetail;
   // On a phone the section list is the index; with no section, the refusal is shown instead.
   const showMain = !showMobileList || settingsAccess === 'none';
@@ -184,7 +180,7 @@ export default function OrganizationSettingsLayout({
     <SettingsLayoutRoot key={layoutKey} brand={orgColors} borderRadius={borderRadius}>
       <div className="org-settings-layout-left">
       <SettingsShellHeader
-        scopeTitle={scopeTitle}
+        scopeTitle="Organization"
         detailTitle={sectionLabel}
         showScopeSwitcher={!showMobileDetail}
         icon={Building2}
