@@ -109,7 +109,9 @@ the removal of the app and its object-storage files #1536.
 9. **Backfill and retention.** Once (`analytics_jobs` `backfill_v1`, claimed for an
    hour so one process runs it): the log's and the legacy object-storage events of the
    last 45 days are applied, the organization stamped from the workspace; then the
-   messages of the last 45 days get their facts (`message_facts_v1`, also claimed). Daily, across
+   messages of the last 45 days get their facts (`message_facts_v1`, also claimed). Both are
+   asked at every upkeep (five minutes) until recorded as done, so a failed run is retried
+   once its claim lapses, without waiting for a restart. Daily, across
    processes (`claim_job`): raw `analytics_events` older than 45 days are deleted; the
    rollups stay. Thirty minutes after the backfill, once (`legacy_storage_cleanup_v1`,
    claimed), the removed app's object-storage files are deleted (#1536, see Consequences).

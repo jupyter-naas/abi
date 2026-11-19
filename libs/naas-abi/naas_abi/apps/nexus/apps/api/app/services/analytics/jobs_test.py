@@ -5,6 +5,7 @@ A real EventService on SQLite holds the log; the rollups are SQLite tables.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -312,6 +313,59 @@ async def test_unreadable_legacy_files_are_neither_backfilled_nor_deleted(sessio
     async with sessions() as db:
         port = jobs_module.AnalyticsSecondaryAdapterPostgresEvents(db)
         assert await port.job_last_run(BACKFILL_JOB) is None
+
+
+@pytest.mark.asyncio
+async def test_a_failed_backfill_is_retried_at_upkeep_once_its_claim_lapses(
+    sessions, events
+) -> None:
+    clock = {"now": NOW}
+    publish(events, payload("logged"))
+    legacy = FakeLegacy([payload("legacy")], readable=False)
+    jobs = AnalyticsJobs(sessions, events=events, legacy=legacy, now=lambda: clock["now"])
+
+    async def backfilled() -> bool:
+        async with sessions() as db:
+            port = jobs_module.AnalyticsSecondaryAdapterPostgresEvents(db)
+            return await port.job_last_run(BACKFILL_JOB) is not None
+
+    await jobs.upkeep()  # the storage is unreachable: the backfill fails
+    assert not await backfilled()
+    legacy.readable = True
+    clock["now"] = NOW + timedelta(minutes=10)
+    await jobs.upkeep()  # the failed run's claim still holds
+    assert not await backfilled()
+    clock["now"] = NOW + timedelta(hours=1, minutes=1)
+    await jobs.upkeep()  # without a restart
+    assert await backfilled()
+    async with sessions() as db:
+        rows = (await db.execute(select(AnalyticsEventModel))).scalars().all()
+    assert sorted(json.loads(r.payload)["event_id"] for r in rows) == ["legacy", "logged"]
+    clock["now"] += jobs_module.LEGACY_CLEANUP_DELAY
+    await jobs.upkeep()
+    assert legacy.deleted == 1
+
+
+@pytest.mark.asyncio
+async def test_the_loop_starts_with_the_upkeep_then_drains(sessions, events, monkeypatch) -> None:
+    calls: list[str] = []
+    jobs = AnalyticsJobs(sessions, events=events)
+
+    async def upkeep() -> None:
+        calls.append("upkeep")
+
+    async def drain() -> int:
+        calls.append("drain")
+        if calls.count("drain") == 2:
+            raise asyncio.CancelledError
+        return 0
+
+    monkeypatch.setattr(jobs, "upkeep", upkeep)
+    monkeypatch.setattr(jobs, "drain", drain)
+    with pytest.raises(asyncio.CancelledError):
+        await jobs.run(every=0)
+    # The upkeep (the backfill first) before the first drain, then every few minutes.
+    assert calls == ["upkeep", "drain", "drain"]
 
 
 @pytest.mark.asyncio

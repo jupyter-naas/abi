@@ -8,7 +8,8 @@
 * **Backfill** (once, ``rollups.BACKFILL_JOB``): what the log and the legacy
   object-storage events hold of the last 45 days, the organization stamped from the
   workspace. Then the messages of the last 45 days get their facts
-  (``MESSAGE_FACTS_JOB``).
+  (``MESSAGE_FACTS_JOB``). Both are asked at each upkeep until recorded as done: a
+  failed run is retried once its claim lapses (an hour).
 * **Legacy cleanup** (once, ``LEGACY_CLEANUP_JOB``, ``LEGACY_CLEANUP_DELAY`` after the
   backfill, asked at each upkeep): the removed analytics app's files under
   ``naas_abi/nexus/analytics/`` are deleted (``legacy_storage``). The delay outlasts a
@@ -333,19 +334,26 @@ class AnalyticsJobs:
         if self._failing.pop(name, 0):
             logger.info("[analytics] %s works again", name)
 
-    async def run(self, *, every: float = DRAIN_SECONDS) -> None:
+    async def upkeep(self) -> None:
+        """What each process asks every ``UPKEEP_SECONDS`` (and first at start): the
+        one-time jobs until they are recorded as done, so a failed backfill (storage or
+        database unreachable) is retried once its claim lapses rather than at the next
+        process start, while the log still holds what it replays; then the heal, the
+        purge and the legacy cleanup. Each is claimed across processes, and a done
+        one-time job costs one query."""
         await self._step("backfill", self.backfill)
         await self._step("message facts", self.index_messages)
+        await self._step("heal", self.heal)
+        await self._step("purge", self.purge)
+        await self._step("legacy cleanup", self.clean_legacy_storage)
+
+    async def run(self, *, every: float = DRAIN_SECONDS) -> None:
         next_upkeep = 0.0
         while True:
-            await self._step("rollups", self.drain)
             if time.monotonic() >= next_upkeep:
-                # The purge and the heal are claimed across processes; each process
-                # asks every few minutes, not every tick.
-                await self._step("heal", self.heal)
-                await self._step("purge", self.purge)
-                await self._step("legacy cleanup", self.clean_legacy_storage)
+                await self.upkeep()
                 next_upkeep = time.monotonic() + UPKEEP_SECONDS
+            await self._step("rollups", self.drain)
             await asyncio.sleep(every)
 
 
