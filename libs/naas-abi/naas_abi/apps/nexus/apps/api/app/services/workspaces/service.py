@@ -228,9 +228,13 @@ class WorkspaceService:
     ) -> WorkspaceRecord | None:
         """Update the workspace. A new ``owner_id`` becomes its owner in IAM and the
         previous owner an admin: ``by`` is checked for both (``MembershipDenied``
-        when IAM refuses, owners alone make owners)."""
+        when IAM refuses, owners alone make owners). A new name renames its access
+        policy and default groups (``ContainerDefaults.renamed``)."""
+        before = None
+        if updates.owner_id is not None or updates.name is not None:
+            before = await self.adapter.get_workspace_by_id(workspace_id=workspace_id)
         if updates.owner_id is not None:
-            record = await self.adapter.get_workspace_by_id(workspace_id=workspace_id)
+            record = before
             scope = await self._scope(workspace_id)
             if record is not None and scope is not None and updates.owner_id != record.owner_id:
                 await self.memberships.grant(updates.owner_id, "owner", scope, by=by)
@@ -239,7 +243,15 @@ class WorkspaceService:
                     and await self.memberships.role_at(record.owner_id, scope) == "owner"
                 ):
                     await self.memberships.grant(record.owner_id, "admin", scope, by=by)
-        return await self.adapter.update_workspace(workspace_id=workspace_id, updates=updates)
+        updated = await self.adapter.update_workspace(workspace_id=workspace_id, updates=updates)
+        if updated is not None and before is not None and updated.name != before.name:
+            await self.defaults.renamed(
+                defaults_store_of(self.adapter),
+                scope_of(updated),
+                updated.name,
+                previous=before.name,
+            )
+        return updated
 
     async def get_workspace_stats(self, workspace_id: str) -> WorkspaceStatsRecord | None:
         return await self.adapter.get_workspace_stats(workspace_id=workspace_id)

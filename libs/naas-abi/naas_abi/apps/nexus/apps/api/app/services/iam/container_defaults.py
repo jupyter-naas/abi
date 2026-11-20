@@ -43,6 +43,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     is_workspace_container,
     org_below,
     org_container,
+    org_of,
     workspace_container,
 )
 from naas_abi_core import logger
@@ -121,6 +122,32 @@ def members_name(label: str) -> str:
 
 def admins_name(label: str) -> str:
     return f"{label} admins"
+
+
+def access_template(container: str) -> str | None:
+    """The description of ``container``'s access policy as made, ``{label}`` unfilled;
+    None for a container that is neither an organization nor a workspace."""
+    org_id = org_of(container)
+    if is_org_container(container) and org_id:
+        return ORG_ACCESS.replace("{org_id}", org_id)
+    if is_workspace_container(container):
+        return WORKSPACE_ACCESS if org_id else ORGLESS_WORKSPACE_ACCESS
+    return None
+
+
+def access_description(container: str, label: str) -> str:
+    template = access_template(container)
+    if template is None:
+        raise ValueError(f"{container} is neither an organization nor a workspace")
+    return template.replace("{label}", label)
+
+
+def labels_in(template: str, text: str) -> tuple[str, ...] | None:
+    """The labels ``text`` was made with from ``template``, one per ``{label}``; None
+    when it was not made from it (a person rewrote it)."""
+    pattern = "(.+?)".join(re.escape(part) for part in template.split("{label}"))
+    found = re.fullmatch(pattern, text, flags=re.DOTALL)
+    return found.groups() if found else None
 
 
 @dataclass(frozen=True)
@@ -362,7 +389,7 @@ def make_org(
     """ "<O> access" (the platform's, allowing nothing) attached to "<O> admins"
     below the organization, and the two groups; with ``adopt``, that policy instead,
     attached to nothing. Idempotent, and a failure leaves nothing. As ``api``."""
-    name, description = access_name(label), ORG_ACCESS.format(label=label, org_id=org_id)
+    name, description = access_name(label), access_description(org_container(org_id), label)
     return _ensure(
         iam,
         container=org_container(org_id),
@@ -393,8 +420,7 @@ def make_workspace(
     groups; with ``adopt``, that policy instead, attached to nothing. Idempotent, and a
     failure leaves nothing. As ``api``."""
     container = workspace_container(org_id, workspace_id)
-    name = access_name(label)
-    description = (WORKSPACE_ACCESS if org_id else ORGLESS_WORKSPACE_ACCESS).format(label=label)
+    name, description = access_name(label), access_description(container, label)
     return _ensure(
         iam,
         container=container,
@@ -436,6 +462,87 @@ def forget_made(iam: Any, record: DefaultsRecord) -> None:
             ("attachment", (attachment.policy_id, record.admins_group_id, attachment.scope))
         )
     _undo(iam, made)
+
+
+def align_names(
+    iam: Any,
+    record: DefaultsRecord,
+    label: str,
+    *,
+    previous: Sequence[str] = (),
+    policy: Policy | None = None,
+) -> list[str]:
+    """Name the access policy and the two groups of ``record`` after ``label``, its
+    container's name now, as ``make_org`` and ``make_workspace`` would. Only what the
+    system made is renamed: a name (or the description) made from an older label,
+    ``previous`` (the name before a rename) or one the access policy's description,
+    as made, still carries. A name a person chose stays. Idempotent. As ``api``;
+    ``policy``, the access policy when the caller listed it. What changed."""
+    template = access_template(record.container)
+    if policy is None and record.access_policy_id:
+        try:
+            policy = iam.get_policy(record.access_policy_id)
+        except (IAMNotFoundError, ResourceNotFoundError):
+            policy = None
+    described = labels_in(template, policy.description) if policy and template else None
+    older = {*previous, *(described or ())} - {label}
+    if not older:
+        return []
+    changed: list[str] = []
+    for group_id, name_of in (
+        (record.members_group_id, members_name),
+        (record.admins_group_id, admins_name),
+    ):
+        if not group_id:
+            continue
+        try:
+            group = iam.get_group(group_id)
+        except IAMNotFoundError:
+            continue
+        if group.status != "deleted" and group.name in {name_of(o) for o in older}:
+            iam.update_group(group_id, name=name_of(label))
+            changed.append(f"{group.name!r} -> {name_of(label)!r}")
+    if policy is not None and template is not None:
+        updates: dict[str, str] = {}
+        if policy.name in {access_name(o) for o in older}:
+            updates["name"] = access_name(label)
+        if described is not None and policy.description != access_description(
+            record.container, label
+        ):
+            updates["description"] = access_description(record.container, label)
+        if updates:
+            iam.update_policy(policy.id, expected_revision=policy.revision, **updates)
+            changed += [f"{getattr(policy, k)!r} -> {v!r}" for k, v in updates.items()]
+    return changed
+
+
+def align_all(
+    iam: Any,
+    orgs: Mapping[str, str],
+    workspaces: Mapping[str, tuple[str | None, str]],
+    records: Mapping[str, DefaultsRecord],
+) -> list[str]:
+    """``align_names`` for every recorded organization (``{id: name}``) and workspace
+    (``{id: (org, name)}``) after its name in Nexus: what a rename made before names
+    followed, or while they could not, is repaired at the next start. A failure is
+    logged and the others go on. As ``api``; what changed, by container."""
+    labels = {org_container(o): name for o, name in orgs.items()}
+    labels.update({workspace_container(org, w): name for w, (org, name) in workspaces.items()})
+    policies = {str(p.id): p for p in _pages(iam.list_policies)}
+    changed: list[str] = []
+    for container, record in sorted(records.items()):
+        label = labels.get(container)
+        if label is None:
+            continue
+        try:
+            policy = policies.get(str(record.access_policy_id))
+            changed += [
+                f"{container}: {change}"
+                for change in align_names(iam, record, label, policy=policy)
+            ]
+        except Exception:  # noqa: BLE001 - the others go on; this one at the next start
+            logger.exception(f"The access policy and groups of {container} keep their names")
+    return changed
 
 
 Holders = dict[str, set[str]]
@@ -580,6 +687,31 @@ class ContainerDefaults:
                 logger.warning(f"The access policy {policy_id} of {container} stays: {exc}")
 
         await run_in_threadpool(lambda: _as_api(delete))
+
+    async def renamed(
+        self, store: DefaultsStore | None, container: str, label: str, *, previous: str
+    ) -> None:
+        """After the container was renamed from ``previous`` to ``label``: its access
+        policy and groups follow (``align_names``). Never fails the rename: a failure
+        is logged, and the next start repairs it (``migrate``)."""
+        if label == previous:
+            return
+        try:
+            record = self._known.get(container)
+            if record is None and store is not None:
+                record = await store.get(container)
+            if record is None:
+                record = await self.record_of(container)
+            if record is None:
+                return
+            found = record
+            changed = await run_in_threadpool(
+                lambda: _as_api(lambda iam: align_names(iam, found, label, previous=(previous,)))
+            )
+            for change in changed:
+                logger.info(f"Renamed with {container}: {change}")
+        except Exception:  # noqa: BLE001 - the rename stands; the names follow at the next start
+            logger.exception(f"The access policy and groups of {container} keep their names")
 
     async def record_of(self, container: str) -> DefaultsRecord | None:
         found = self._known.get(container)
@@ -863,8 +995,9 @@ async def migrate(db: AsyncSession, defaults: ContainerDefaults = CONTAINER_DEFA
     """Give every organization and workspace with none its access policy and default
     groups (adopting what the sets' move made), then record ``container_defaults_v1``
     once nothing failed. Runs at every start, after the moves, under their lock
-    (``main``): only what has no record is touched, and nothing at all while a move is
-    not recorded (it is the move that makes the access policies to adopt)."""
+    (``main``): only what has no record is made, and nothing at all while a move is
+    not recorded (it is the move that makes the access policies to adopt). Every
+    recorded one's names then follow its container's (``align_all``)."""
     from naas_abi.apps.nexus.apps.api.app.services.iam.container_names import recorded
 
     store = SqlDefaultsStore(db)
@@ -880,6 +1013,16 @@ async def migrate(db: AsyncSession, defaults: ContainerDefaults = CONTAINER_DEFA
     )
     for record in made:
         await store.put(record)
+    records = {**known, **{record.container: record for record in made}}
+    try:
+        renamed = await run_in_threadpool(
+            lambda: _as_api(lambda iam: align_all(iam, orgs, workspaces, records))
+        )
+    except Exception:  # noqa: BLE001 - the names follow at the next start
+        logger.exception("Access policies and default groups not named after their containers")
+        renamed = []
+    for change in renamed:
+        logger.info(f"Named after its container: {change}")
     if not report.failed and not await recorded(db, MIGRATION_NAME):
         await db.execute(
             text(
@@ -912,8 +1055,11 @@ __all__ = [
     "DefaultsStore",
     "MIGRATION_NAME",
     "SqlDefaultsStore",
+    "access_description",
     "access_name",
     "admins_name",
+    "align_all",
+    "align_names",
     "defaults_store_of",
     "make_org",
     "make_workspace",
