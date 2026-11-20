@@ -63,12 +63,17 @@ export function settingsLevels(input: SettingsLevelsInput): SettingsLevel[] {
   }));
   const organization = input.organization && input.organization.items.length > 0 ? input.organization : null;
   if (organization) {
-    const groups: SettingsLinkGroup[] = [
-      {
-        label: null,
-        links: organization.items.map((item) => link({ ...item, href: orgSettingsSectionPath(organization.id, item.slug) })),
-      },
-    ];
+    // Its own pages, then those under a heading (Access); the first group is named by the tab.
+    const headings = [null, ...new Set(organization.items.flatMap((item) => (item.group ? [item.group] : [])))];
+    const groups: SettingsLinkGroup[] = headings
+      .map((heading) => ({
+        heading,
+        links: organization.items
+          .filter((item) => (item.group ?? null) === heading)
+          .map((item) => link({ ...item, href: orgSettingsSectionPath(organization.id, item.slug) })),
+      }))
+      .filter((group) => group.links.length > 0)
+      .map((group, index) => ({ label: index === 0 ? null : group.heading, links: group.links }));
     if (others.length > 0) groups.push({ label: 'Other organizations', links: others });
     levels.push({
       id: 'organization',

@@ -39,6 +39,8 @@ export interface MemberDetails {
     id: string;
     organization_id: string;
     user_id: string;
+    /** Their IAM principal: an account linked from the old login has another id in IAM. */
+    principal_id?: string | null;
     role: 'owner' | 'admin' | 'member';
     email: string | null;
     name: string | null;

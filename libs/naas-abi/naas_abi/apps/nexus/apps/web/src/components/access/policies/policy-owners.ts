@@ -1,11 +1,12 @@
 /**
- * Who owns a policy listed on a Roles & permissions page, as the page shows it: the owner's
- * name (its containers named as the caller may list them, `GET /resources`), what the caller
- * may do with the owner's policies (`GET /access?scope=<owner>`), and the owner's own Roles &
- * permissions page, opened on the policy. A policy is edited at its owner, wherever it is listed.
+ * Who owns a policy listed on a Policies page, as the page shows it: the owner's name (its
+ * containers named as the caller may list them, `GET /resources`), what the caller may do with
+ * the owner's policies (`GET /access?scope=<owner>`), and the policy's page at its owner. A
+ * policy is edited at its owner, wherever it is listed.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { IamAdminApi } from '@/lib/iam-admin/api';
+import { accessPathAt } from '../access-paths';
 import { PLATFORM, parseScope, type ContainerStep } from '../access-scope';
 import { viewFlagActive } from '@/lib/view-flag';
 
@@ -15,7 +16,7 @@ export type PolicyOwner = {
   /** "Workspace Alpha (Acme)", "Organization Acme", "Platform": the ids while names are not
    *  known, or when the caller may not list them. */
   label: string;
-  /** Whether the owner's Roles & permissions page is linked (``ownerHref``): another level's,
+  /** Whether the policy's page at its owner is linked (``ownerHref``): another level's,
    *  where the caller may manage something. */
   opens: boolean;
   /** At the owner: IAM's answer, false until known. */
@@ -62,24 +63,10 @@ export function ownedBy(label: string): string {
   return label === 'Platform' ? 'Owned by the platform' : `Owned by ${label[0].toLowerCase()}${label.slice(1)}`;
 }
 
-/** The owner's Roles & permissions page, on its Policies opened at ``policyId``: the platform's,
- *  an organization's or a workspace's; none for a container another module declares. */
+/** The owner's Policies, on the page of ``policyId``: the platform's, an organization's or a
+ *  workspace's; none for a container another module declares. */
 export function ownerHref(scope: string | null | undefined, policyId?: string): string | null {
-  const owner = scope ?? PLATFORM;
-  const parsed = parseScope(owner);
-  if (!parsed || parsed.below) return null;
-  const last = parsed.containers[parsed.containers.length - 1];
-  let path: string | null = null;
-  if (!last) path = '/settings/roles';
-  else if (last.service === 'nexus' && last.type === 'organization') {
-    path = `/organizations/${encodeURIComponent(last.id)}/settings/roles`;
-  } else if (last.service === 'nexus' && last.type === 'workspace') {
-    path = `/workspace/${encodeURIComponent(last.id)}/settings/permissions`;
-  }
-  if (!path) return null;
-  const query = new URLSearchParams({ section: 'policies' });
-  if (policyId) query.set('policy', policyId);
-  return `${path}?${query.toString()}`;
+  return accessPathAt(scope, 'policies', policyId);
 }
 
 /** The containers to name for ``scopes``: each step of each, once (a scope below a container,

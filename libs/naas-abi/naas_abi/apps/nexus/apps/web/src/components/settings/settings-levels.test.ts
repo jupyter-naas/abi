@@ -28,7 +28,7 @@ const labels = (input: SettingsLevelsInput, id: string) =>
 const all: SettingsLevelsInput = {
   ...member,
   workspace: { id: 'ws-1', groups: SETTINGS_GROUPS },
-  organization: { id: 'acme', name: 'Acme', items: orgSettingsNavForRole('admin', { holdsIam: true }), current: true },
+  organization: { id: 'acme', name: 'Acme', items: orgSettingsNavForRole('admin', { access: { actions: { 'iam:ListPolicies': true, 'iam:ListGroups': true } } }), current: true },
   platform: visiblePlatformSettingsGroups({ 'nexus:ReadSystem': true, 'nexus:ListUsers': true }),
 };
 
@@ -42,19 +42,31 @@ describe('the levels of Settings', () => {
     expect(labels(all, 'organization')).toContain('Members');
     expect(labels(all, 'platform')).toEqual(expect.arrayContaining(['General', 'Organizations', 'Users', 'Jobs']));
     expect(labels(all, 'platform')).not.toContain('Roles & permissions');
+    expect(labels(all, 'organization')).toEqual(expect.arrayContaining(['Members', 'Policies', 'Groups']));
+    expect(labels(all, 'organization')).not.toContain('Roles & permissions');
+  });
+
+  it('puts the organization’s Access pages under their own heading, after its pages', () => {
+    const organization = settingsLevels(all).find((level) => level.id === 'organization');
+    expect(organization?.groups.map((group) => group.label)).toEqual([null, 'Access']);
+    expect(organization?.groups[1].links.map((link) => [link.label, link.href])).toEqual([
+      ['Policies', '/organizations/acme/settings/policies'],
+      ['Groups', '/organizations/acme/settings/groups'],
+    ]);
   });
 
   it('keeps every group of the platform, each under its heading, Layers and Diagrams in System', () => {
     const platform = settingsLevels(all).find((level) => level.id === 'platform');
-    expect(platform?.groups.map((group) => group.label)).toEqual(['Administration', 'System', 'Activity', 'Resources', 'Data']);
-    expect(platform?.groups[1].links.map((link) => link.label)).toEqual(expect.arrayContaining(['Layers', 'Diagrams']));
+    expect(platform?.groups.map((group) => group.label)).toEqual(['Administration', 'Access', 'System', 'Activity', 'Resources', 'Data']);
+    expect(platform?.groups[1].links.map((link) => link.label)).toEqual(['Audit']);
+    expect(platform?.groups[2].links.map((link) => link.label)).toEqual(expect.arrayContaining(['Layers', 'Diagrams']));
     const usersOnly = settingsLevels({ ...member, platform: visiblePlatformSettingsGroups({ 'nexus:ListUsers': true }) });
     expect(usersOnly[0].groups).toMatchObject([{ label: 'Administration', links: [{ label: 'Users' }] }]);
   });
 
   it('roots the workspace pages at the workspace, its later groups named under the level', () => {
     const [workspace] = settingsLevels({ ...member, workspace: { id: 'ws-1', groups: SETTINGS_GROUPS } });
-    expect(workspace.groups.map((group) => group.label)).toEqual([null, 'Features']);
+    expect(workspace.groups.map((group) => group.label)).toEqual([null, 'Access', 'Features']);
     expect(workspace.groups[0].links[0].href).toBe('/workspace/ws-1/settings/general');
     expect(workspace.index).toBe('/workspace/ws-1/settings');
   });
@@ -72,7 +84,7 @@ describe('the levels of Settings', () => {
   it('names the organization when the caller opens several, and links the others', () => {
     const input: SettingsLevelsInput = {
       ...member,
-      organization: { id: 'acme', name: 'Acme', items: orgSettingsNavForRole('admin', { holdsIam: false }), current: true },
+      organization: { id: 'acme', name: 'Acme', items: orgSettingsNavForRole('admin', { access: null }), current: true },
       otherOrganizations: [{ id: 'beta', name: 'Beta' }],
     };
     const organization = settingsLevels(input).find((level) => level.id === 'organization');
@@ -84,7 +96,7 @@ describe('the levels of Settings', () => {
   });
 
   it('names the organization when it is not the current workspace\'s', () => {
-    const items = orgSettingsNavForRole('admin', { holdsIam: false });
+    const items = orgSettingsNavForRole('admin', { access: null });
     const elsewhere = { ...member, organization: { id: 'acme', name: 'Acme', items, current: false } };
     const here = { ...member, organization: { id: 'acme', name: 'Acme', items, current: true } };
     expect(titles(elsewhere)).toEqual(['Organization · Acme', 'Account']);

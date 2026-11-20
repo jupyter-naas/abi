@@ -16,7 +16,7 @@ import { SettingsShellHeader } from '@/components/settings/settings-shell-header
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useRememberSettingsPath } from '@/hooks/use-remember-settings-scope';
 import { useSettingsTabs } from '@/hooks/use-settings-levels';
-import { useWorkspaceSettingsAccess } from '@/hooks/use-workspace-settings-access';
+import { useWorkspaceSettingsAccessView } from '@/hooks/use-workspace-settings-access';
 import { reloadWorkspaceResources, useWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { SettingsReloadProvider } from '@/components/settings/settings-reload';
 import { NotInWorkspace } from './not-in-workspace';
@@ -56,14 +56,15 @@ export default function SettingsLayout({
   const item = settingsItemFor(pathname);
   const outsideSet = Boolean(item && resources && !settingsItemShown(item, resources));
   // Who may open these pages at all: the dock's rule (useWorkspaceSettingsAccess). Someone
-  // who holds only `iam:` rights here goes to Roles & permissions; anyone else is told no.
-  const access = useWorkspaceSettingsAccess();
-  const opens = isIndex ? true : settingsPageOpens(access, pathname);
+  // who holds only `iam:` rights here goes to the first page of Access they hold; anyone else
+  // is told no.
+  const { access, iam } = useWorkspaceSettingsAccessView();
+  const opens = isIndex ? true : settingsPageOpens(access, pathname, undefined, iam);
   useEffect(() => {
     if (access === 'iam' && opens === false && workspaceId) {
-      router.replace(`/workspace/${workspaceId}${settingsLandingPath(access)}`);
+      router.replace(`/workspace/${workspaceId}${settingsLandingPath(access, iam)}`);
     }
-  }, [access, opens, workspaceId, router]);
+  }, [access, iam, opens, workspaceId, router]);
   // Only a page of the column that opens is reopened: not the index, a former URL that
   // redirects, nor a page refused, outside the set, or not decided yet.
   useRememberSettingsPath(

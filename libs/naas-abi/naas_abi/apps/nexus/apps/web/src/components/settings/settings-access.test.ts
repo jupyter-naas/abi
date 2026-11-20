@@ -117,8 +117,20 @@ async function seenBy(person: Person, path?: string): Promise<Seen> {
 }
 
 const ACME = { id: 'acme', name: 'Acme' };
-const ALL_PLATFORM = ['nexus:ReadSystem', 'nexus:ListUsers', 'nexus:ListDrives', 'iam:ListAttachments'];
-const PLATFORM_GROUPS = ['Administration', 'System', 'Activity', 'Resources', 'Data'];
+const IAM_ALL = [
+  'iam:ListPolicies',
+  'iam:CreatePolicy',
+  'iam:ListGroups',
+  'iam:ListAttachments',
+  'iam:ListPrincipals',
+  'iam:ListManifests',
+  'iam:Explain',
+];
+const ALL_PLATFORM = ['nexus:ReadSystem', 'nexus:ListUsers', 'nexus:ListDrives', ...IAM_ALL];
+// At an organization or a workspace IAM answers its platform-only actions false.
+const IAM_CONTAINER = ['iam:ListPolicies', 'iam:CreatePolicy', 'iam:ListGroups', 'iam:ListAttachments'];
+const PLATFORM_GROUPS = ['Administration', 'Access', 'System', 'Activity', 'Resources', 'Data'];
+const PLATFORM_ACCESS = ['Policies', 'Groups', 'Service accounts', 'Module approvals', 'Simulator', 'Audit'];
 
 describe('who sees what in Settings', () => {
   it('a platform admin: the four tabs, Settings opening on the workspace, the Platform tab with every group', async () => {
@@ -126,21 +138,32 @@ describe('who sees what in Settings', () => {
       id: 'root',
       workspaceRole: 'owner',
       organizations: [{ ...ACME, role: 'owner' }],
-      grants: { platform: ALL_PLATFORM, workspace: ['iam:ListAttachments'], 'organization:acme': ['iam:ListAttachments'] },
+      grants: { platform: ALL_PLATFORM, workspace: IAM_CONTAINER, 'organization:acme': IAM_CONTAINER },
     };
     const seen = await seenBy(root);
     expect(seen.tabs).toEqual(['Platform', 'Organization', 'Workspace', 'Account']);
     expect(seen.settings).toBe('/workspace/ws-1/settings/general');
     expect(seen.level).toBe('Workspace');
-    expect(Object.keys(seen.column)).toEqual(['Workspace', 'Features']);
-    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Members', 'Roles & permissions']));
+    expect(Object.keys(seen.column)).toEqual(['Workspace', 'Access', 'Features']);
+    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Members']));
+    expect(seen.column.Access).toEqual(['Policies', 'Groups']);
 
     const platform = await seenBy(root, seen.opens.Platform);
     expect(seen.opens.Platform).toBe('/settings/general');
     expect(platform.level).toBe('Platform');
     expect(Object.keys(platform.column)).toEqual(PLATFORM_GROUPS);
-    expect(platform.column.Administration).toEqual(['General', 'Organizations', 'Users', 'Roles & permissions', 'Drives']);
+    expect(platform.column.Administration).toEqual(['General', 'Organizations', 'Users', 'Drives']);
+    expect(platform.column.Access).toEqual(PLATFORM_ACCESS);
     expect(platform.column.System).toEqual(expect.arrayContaining(['Overview', 'Jobs', 'Layers', 'Diagrams']));
+    // A policy's page and a person's keep the Platform column.
+    expect((await seenBy(root, '/settings/access/policies/builtin.owner')).column.Access).toEqual(PLATFORM_ACCESS);
+    expect((await seenBy(root, '/settings/users/usr_bob')).column.Administration).toContain('Users');
+
+    const organization = await seenBy(root, seen.opens.Organization);
+    expect(organization.column).toEqual({
+      Organization: ['General', 'Branding', 'Workspaces', 'Members'],
+      Access: ['Policies', 'Groups'],
+    });
   });
 
   it('an organization admin: their organization and workspace, no Platform tab', async () => {
@@ -152,11 +175,12 @@ describe('who sees what in Settings', () => {
     };
     const seen = await seenBy(olivia);
     expect(seen.tabs).toEqual(['Organization', 'Workspace', 'Account']);
-    expect(seen.column.Workspace).toContain('Roles & permissions');
+    expect(seen.column.Access).toEqual(['Policies']);
     const organization = await seenBy(olivia, seen.opens.Organization);
     expect(organization.level).toBe('Organization');
     expect(organization.column).toEqual({
-      Organization: ['General', 'Branding', 'Workspaces', 'Members', 'Roles & permissions'],
+      Organization: ['General', 'Branding', 'Workspaces', 'Members'],
+      Access: ['Policies'],
     });
   });
 
@@ -169,10 +193,11 @@ describe('who sees what in Settings', () => {
     });
     expect(seen.tabs).toEqual(['Workspace', 'Account']);
     expect(seen.settings).toBe('/workspace/ws-1/settings/general');
-    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Members', 'Roles & permissions']));
+    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Members']));
+    expect(seen.column.Access).toEqual(['Policies']);
   });
 
-  it('a workspace owner IAM gives no right over access: the workspace without Roles & permissions', async () => {
+  it('a workspace owner IAM gives no right over access: the workspace with Members, no Access', async () => {
     const seen = await seenBy({
       id: 'otto',
       workspaceRole: 'owner',
@@ -180,11 +205,12 @@ describe('who sees what in Settings', () => {
       grants: {},
     });
     expect(seen.level).toBe('Workspace');
-    expect(seen.column.Workspace).toContain('General');
-    expect(seen.column.Workspace).not.toContain('Roles & permissions');
+    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Members']));
+    expect(Object.keys(seen.column)).not.toContain('Access');
+    expect(Object.values(seen.column).flat()).not.toContain('Policies');
   });
 
-  it('a member to whom IAM delegates the workspace\'s access: Roles & permissions alone', async () => {
+  it('a member to whom IAM delegates the workspace\'s policies: its Policies alone', async () => {
     const seen = await seenBy({
       id: 'carol',
       workspaceRole: 'member',
@@ -192,8 +218,19 @@ describe('who sees what in Settings', () => {
       grants: { workspace: ['iam:ListPolicies'] },
     });
     expect(seen.tabs).toEqual(['Workspace', 'Account']);
-    expect(seen.settings).toBe('/workspace/ws-1/settings/permissions');
-    expect(seen.column).toEqual({ Workspace: ['Roles & permissions'] });
+    expect(seen.settings).toBe('/workspace/ws-1/settings/policies');
+    expect(seen.column).toEqual({ Workspace: ['Policies'] });
+  });
+
+  it('a member to whom IAM delegates the workspace\'s groups: its Groups alone', async () => {
+    const seen = await seenBy({
+      id: 'gus',
+      workspaceRole: 'member',
+      organizations: [{ ...ACME, role: 'member' }],
+      grants: { workspace: ['iam:ListGroups'] },
+    });
+    expect(seen.settings).toBe('/workspace/ws-1/settings/groups');
+    expect(seen.column).toEqual({ Workspace: ['Groups'] });
   });
 
   it('a plain member: no tabs, their account alone, and Settings opens it', async () => {
@@ -213,6 +250,8 @@ describe('who sees what in Settings', () => {
     expect(await seenBy(dave)).toEqual(expected);
     // A page they may not open: the layout refuses it, the column still lists their account.
     expect(await seenBy(dave, '/settings/users')).toEqual(expected);
+    expect(await seenBy(dave, '/settings/access/policies')).toEqual(expected);
+    expect(await seenBy(dave, '/workspace/ws-1/settings/policies')).toEqual(expected);
   });
 
   it('a viewer: the same as a member', async () => {
@@ -226,7 +265,7 @@ describe('who sees what in Settings', () => {
     });
   });
 
-  it('a member to whom IAM delegates the organization\'s access: its Roles & permissions alone', async () => {
+  it('a member to whom IAM delegates the organization\'s access: its Policies alone', async () => {
     const eve: Person = {
       id: 'eve',
       workspaceRole: 'member',
@@ -236,11 +275,12 @@ describe('who sees what in Settings', () => {
     const seen = await seenBy(eve);
     expect(seen.tabs).toEqual(['Organization', 'Account']);
     expect(seen.level).toBe('Account');
+    expect(seen.opens.Organization).toBe('/organizations/acme/settings/policies');
     const organization = await seenBy(eve, seen.opens.Organization);
-    expect(organization.column).toEqual({ Organization: ['Roles & permissions'] });
+    expect(organization.column).toEqual({ Organization: ['Policies'] });
   });
 
-  it('the admin of another organization than the workspace\'s: that one, named in its tab', async () => {
+  it('the admin of another organization than the workspace\'s: that one, named in its tab, no Access without IAM rights', async () => {
     const nina: Person = {
       id: 'nina',
       workspaceRole: 'member',
@@ -255,9 +295,10 @@ describe('who sees what in Settings', () => {
     const organization = await seenBy(nina, seen.opens['Organization · Beta']);
     expect(organization.level).toBe('Organization · Beta');
     expect(organization.column['Organization · Beta']).toContain('Members');
+    expect(Object.values(organization.column).flat()).not.toContain('Policies');
   });
 
-  it('someone who may read the system: a Platform tab with System, Activity, Resources and Data', async () => {
+  it('someone who may read the system: a Platform tab with System, Activity, Resources, Data and the Audit', async () => {
     const sam: Person = { id: 'sam', workspaceRole: 'member', organizations: [], grants: { platform: ['nexus:ReadSystem'] } };
     const seen = await seenBy(sam);
     expect(seen.tabs).toEqual(['Platform', 'Account']);
@@ -266,6 +307,7 @@ describe('who sees what in Settings', () => {
     expect(platform.level).toBe('Platform');
     expect(Object.keys(platform.column)).toEqual(PLATFORM_GROUPS);
     expect(platform.column.Administration).toEqual(['General', 'Organizations']);
+    expect(platform.column.Access).toEqual(['Audit']);
     expect(platform.column.System).toEqual(expect.arrayContaining(['Overview', 'Layers', 'Diagrams']));
     expect(platform.column.Resources).toContain('Models');
   });
@@ -277,5 +319,35 @@ describe('who sees what in Settings', () => {
     expect(seen.opens.Platform).toBe('/settings/users');
     const platform = await seenBy(uma, seen.opens.Platform);
     expect(platform.column).toEqual({ Administration: ['Users'] });
+  });
+
+  it('someone who may list who holds what on the platform (People & roles before): Users and Policies', async () => {
+    const hal: Person = { id: 'hal', workspaceRole: 'member', organizations: [], grants: { platform: ['iam:ListAttachments'] } };
+    const seen = await seenBy(hal);
+    expect(seen.opens.Platform).toBe('/settings/users');
+    const platform = await seenBy(hal, seen.opens.Platform);
+    expect(platform.column).toEqual({ Administration: ['Users'], Access: ['Policies'] });
+  });
+
+  it('a delegated IAM admin of the platform: the Access pages IAM opens to them, each alone', async () => {
+    const ivy: Person = {
+      id: 'ivy',
+      workspaceRole: 'member',
+      organizations: [],
+      grants: { platform: ['iam:ListGroups', 'iam:Explain'] },
+    };
+    const seen = await seenBy(ivy);
+    expect(seen.opens.Platform).toBe('/settings/access/groups');
+    expect((await seenBy(ivy, seen.opens.Platform)).column).toEqual({ Access: ['Groups', 'Simulator'] });
+
+    const sid: Person = {
+      id: 'sid',
+      workspaceRole: 'member',
+      organizations: [],
+      grants: { platform: ['iam:ListPrincipals', 'iam:ListManifests'] },
+    };
+    const accounts = await seenBy(sid);
+    expect(accounts.opens.Platform).toBe('/settings/access/service-accounts');
+    expect((await seenBy(sid, accounts.opens.Platform)).column).toEqual({ Access: ['Service accounts', 'Module approvals'] });
   });
 });

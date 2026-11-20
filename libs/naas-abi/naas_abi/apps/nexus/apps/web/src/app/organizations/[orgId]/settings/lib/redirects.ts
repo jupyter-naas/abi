@@ -4,12 +4,14 @@
  */
 
 /**
- * Old sections and the section that replaced them: Access became Roles & permissions, and
- * Modules & features (the organization's set, removed) is decided there by policies.
+ * Old sections and the section that replaced them: Access became Roles & permissions, then
+ * Access › Policies, and Modules & features (the organization's set, removed) is decided by
+ * policies. Roles & permissions itself is `components/access/access-paths.ts`'s
+ * (`oldAccessRedirect`): each of its sections has a page of its own now.
  */
 const MOVED_SECTIONS = new Map<string, string>([
-  ['access', 'roles'],
-  ['modules', 'roles'],
+  ['access', 'policies'],
+  ['modules', 'policies'],
 ]);
 
 const ORG_SETTINGS_SECTION = /^\/organizations\/([^/]+)\/settings\/([^/?#]+)(?:\/.*)?$/;

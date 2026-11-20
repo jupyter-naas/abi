@@ -69,8 +69,11 @@ export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   'drives',
   'infrastructure',
   'workflows',
-  // Roles & permissions of the workspace (Platform Settings' own is /settings/roles).
+  // Roles & permissions of the workspace, gone: its page redirects to Policies.
   'permissions',
+  // Access of the workspace (Platform Settings' own is /settings/access).
+  'policies',
+  'groups',
 ];
 
 /**

@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import { authFetch, useAuthStore } from '@/stores/auth';
-import { opensRolesAndPermissions } from '@/components/access/access-sections';
+import { opensAccess } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
 import type { AccessView } from '@/lib/iam-admin/types';
 import { viewFlagActive } from '@/lib/view-flag';
@@ -21,11 +21,11 @@ export const ACCESS_BATCH = 8;
 
 /**
  * Whether Organization settings opens for the caller in one organization: they are its
- * owner or admin there, or IAM shows them a Roles & permissions section at its scope.
+ * owner or admin there, or IAM shows them a page of its Access (Policies, Groups) at its scope.
  * The organization settings pages decide with it too.
  */
 export function opensOrganization({ role, access }: OrganizationAccess): boolean {
-  return role === 'owner' || role === 'admin' || opensRolesAndPermissions(access);
+  return role === 'owner' || role === 'admin' || opensAccess(access, 'organization');
 }
 
 /**
@@ -65,7 +65,7 @@ export async function fetchOrganizationSettingsAccess(fetcher: Fetcher = authFet
   for (let start = 0; start < orgs.length; start += ACCESS_BATCH) {
     const batch = orgs.slice(start, start + ACCESS_BATCH);
     const accesses = await Promise.all(batch.map((org) => fetchOrganizationAccess(org.id, fetcher)));
-    if (accesses.some((access) => opensRolesAndPermissions(access))) return true;
+    if (accesses.some((access) => opensAccess(access, 'organization'))) return true;
   }
   return false;
 }
@@ -89,7 +89,7 @@ export async function openableOrganizations<T extends { id: string; currentUserR
     const batch = rest.slice(start, start + ACCESS_BATCH);
     const accesses = await Promise.all(batch.map((org) => fetchOrganizationAccess(org.id, fetcher)));
     batch.forEach((org, i) => {
-      if (opensRolesAndPermissions(accesses[i])) opens.add(org.id);
+      if (opensAccess(accesses[i], 'organization')) opens.add(org.id);
     });
   }
   return orgs.filter((org) => opens.has(org.id));

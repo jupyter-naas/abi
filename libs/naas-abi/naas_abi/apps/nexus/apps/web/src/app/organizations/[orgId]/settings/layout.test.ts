@@ -84,6 +84,8 @@ describe('organization settings by URL (UJ-O1)', () => {
     const text = await render();
     expect(text).toContain('GENERAL PAGE');
     expect(text).toContain('Members');
+    expect(text).toContain('Policies');
+    expect(text).not.toContain('Roles & permissions');
     expect(mounted?.host.querySelector('header [aria-label="Help"]')).not.toBeNull();
     expect(mounted?.host.querySelector('header [aria-label="Log out"]')).not.toBeNull();
   });
@@ -97,11 +99,11 @@ describe('organization settings by URL (UJ-O1)', () => {
     expect(text).toContain('You have no access to these settings');
   });
 
-  it('send a member holding iam: rights there to Roles & permissions', async () => {
+  it('send a member holding iam: rights there to the first Access page they hold', async () => {
     state.role = 'member';
     state.access = { actions: { 'iam:ListPolicies': true } };
     await render();
-    expect(state.replaced).toEqual(['/organizations/acme/settings/roles']);
+    expect(state.replaced).toEqual(['/organizations/acme/settings/policies']);
   });
 
   it('remember a section once it opens, never a refused one or one that sends the caller elsewhere', async () => {
@@ -113,7 +115,7 @@ describe('organization settings by URL (UJ-O1)', () => {
     await mounted?.unmount();
     state.access = { actions: { 'iam:ListPolicies': true } };
     await render();
-    expect(state.replaced).toEqual(['/organizations/acme/settings/roles']);
+    expect(state.replaced).toEqual(['/organizations/acme/settings/policies']);
     expect(settingsReturnPath('nothing')).toBe('nothing');
 
     await mounted?.unmount();

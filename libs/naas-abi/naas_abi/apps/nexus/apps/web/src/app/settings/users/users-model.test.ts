@@ -103,7 +103,7 @@ describe('export', () => {
 
 describe('the person, oneself and the delete confirmation', () => {
   it('opens the person page on the IAM id, nothing without one', () => {
-    expect(personHref(user({ principal_id: 'usr_x/y' }))).toBe('/settings/roles?section=people&person=usr_x%2Fy');
+    expect(personHref(user({ principal_id: 'usr_x/y' }))).toBe('/settings/users/usr_x%2Fy');
     expect(personHref(user({ principal_id: null }))).toBeNull();
   });
 

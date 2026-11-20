@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 import { accountSettingsNavVisible } from '@/app/account/lib/nav';
 import { orgSettingsNavForRole, type OrgSettingsNavItem } from '@/app/organizations/[orgId]/settings/lib/nav';
 import { visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
-import { opensRolesAndPermissions } from '@/components/access/access-sections';
 import { organizationContainer, workspaceContainer } from '@/components/access/access-scope';
 import {
   currentSettingsLevel,
@@ -14,7 +13,12 @@ import {
   type SettingsLevel,
   type SettingsTab,
 } from '@/components/settings/settings-levels';
-import { SETTINGS_GROUPS, visibleSettingsGroups, workspaceOrganization } from '@/components/shell/settings-nav';
+import {
+  SETTINGS_GROUPS,
+  accessSettingsItems,
+  visibleSettingsGroups,
+  workspaceOrganization,
+} from '@/components/shell/settings-nav';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
@@ -36,13 +40,12 @@ export function useSettingsLevels({ organization }: { organization?: PageOrganiz
   const flags = workspace?.featureFlags;
   const workspaceAccess = useWorkspaceSettingsAccess();
   const { resources } = useWorkspaceResources(workspace?.id);
-  // Roles & permissions is shown to whoever would see a section of it in the workspace.
+  // Each page of Access is shown to whoever IAM lets open it in the workspace.
   const { access: workspaceIam } = useIamAccess(
     workspace ? workspaceContainer(workspaceOrganization(workspace), workspace.id) : undefined,
     undefined,
     { skip: !workspace }
   );
-  const holdsWorkspaceIam = !!workspace && opensRolesAndPermissions(workspaceIam);
 
   const { orgs } = useOpenableOrganizations();
   const workspaceOrgId = workspace?.organizationId;
@@ -62,16 +65,17 @@ export function useSettingsLevels({ organization }: { organization?: PageOrganiz
   return useMemo(() => {
     let workspaceGroups = null;
     if (workspace && workspaceAccess === 'all') {
-      workspaceGroups = visibleSettingsGroups(resources, flags, SETTINGS_GROUPS, { holdsIam: holdsWorkspaceIam });
+      workspaceGroups = visibleSettingsGroups(resources, flags, SETTINGS_GROUPS, { access: workspaceIam });
     } else if (workspace && workspaceAccess === 'iam') {
+      const held = accessSettingsItems(workspaceIam);
       workspaceGroups = SETTINGS_GROUPS.map((group) => ({
         ...group,
-        items: group.items.filter((item) => item.needs === 'iam'),
+        items: group.items.filter((item) => held.includes(item)),
       }));
     }
     const organizationItems =
       organization?.items ??
-      (listed ? orgSettingsNavForRole(listed.role, { holdsIam: opensRolesAndPermissions(orgIam) }) : []);
+      (listed ? orgSettingsNavForRole(listed.role, { access: orgIam }) : []);
     return settingsLevels({
       account: accountSettingsNavVisible,
       workspace: workspace && workspaceGroups ? { id: workspace.id, groups: workspaceGroups } : null,
@@ -86,7 +90,7 @@ export function useSettingsLevels({ organization }: { organization?: PageOrganiz
     workspaceAccess,
     resources,
     flags,
-    holdsWorkspaceIam,
+    workspaceIam,
     organization,
     listed,
     orgIam,

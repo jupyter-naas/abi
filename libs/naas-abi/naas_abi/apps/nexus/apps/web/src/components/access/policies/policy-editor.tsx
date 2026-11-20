@@ -26,6 +26,7 @@ import {
   type EditorStatement,
   type TextFormat,
 } from './policy-editor-model';
+import type { AccessDirectory } from '../access-directory';
 import type { AccessNavigation } from '../access-props';
 import { PolicyAttachments } from './policy-attachments';
 import { ownedBy, ownerLabel, type PolicyOwner } from './policy-owners';
@@ -71,6 +72,7 @@ export function PolicyEditor({
   api,
   policy,
   scope = PLATFORM_ACCESS_SCOPE,
+  directory,
   roles = [],
   parents = [],
   readOnly = false,
@@ -87,6 +89,8 @@ export function PolicyEditor({
   api: IamAdminApi;
   policy: PolicyView | null;
   scope?: AccessScope;
+  /** The people of the page's scope, offered when the policy is attached there. */
+  directory?: AccessDirectory;
   /** The built-in roles a new policy may start from: those the caller's policy list holds. */
   roles?: PolicyView[];
   /** The policies a new one may be a sub-policy of: those listed at this scope. */
@@ -98,7 +102,7 @@ export function PolicyEditor({
   onOpen?: (id: string) => void;
   /** Who owns the policy, as the list names it. */
   owner?: PolicyOwner | null;
-  /** The owner's Roles & permissions page, on this policy, when the caller may open it. */
+  /** The policy's page at its owner, when the caller may open it. */
   ownerLink?: string | null;
   validationDelayMs?: number;
   /** What the caller may do at the page's scope: with it, the editor lists where the policy is
@@ -381,7 +385,7 @@ export function PolicyEditor({
             <>
               {' '}
               <a className="access-policy-link" href={ownerLink}>
-                Open it in its owner’s Roles &amp; permissions
+                Open it at its owner
               </a>
             </>
           )}
@@ -421,7 +425,16 @@ export function PolicyEditor({
       )}
 
       {policy && can && (
-        <PolicyAttachments api={api} policyId={policy.id} here={ownerOf(scope)} can={can} open={open} nonce={nonce} />
+        <PolicyAttachments
+          api={api}
+          policyId={policy.id}
+          here={ownerOf(scope)}
+          can={can}
+          open={open}
+          nonce={nonce}
+          scope={scope}
+          directory={directory}
+        />
       )}
 
       <div className="access-policy-row">

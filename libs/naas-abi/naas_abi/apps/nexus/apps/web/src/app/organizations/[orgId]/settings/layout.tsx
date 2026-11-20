@@ -7,7 +7,7 @@ import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useRememberSettingsPath } from '@/hooks/use-remember-settings-scope';
 import { useSettingsTabs } from '@/hooks/use-settings-levels';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { opensRolesAndPermissions } from '@/components/access/access-sections';
+import { opensAccess } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
 import { SettingsLevelsNav } from '@/components/settings/settings-levels-nav';
@@ -24,6 +24,8 @@ import {
 import { parseOrgSettingsRoute } from './lib/org-settings-route';
 import './org-settings-layout.css';
 
+const MEMBER_PAGE = /^\/organizations\/[^/]+\/settings\/users\/(?!new(?:[/?#]|$))[^/?#]+/;
+
 export default function OrganizationSettingsLayout({
   children,
 }: {
@@ -39,20 +41,20 @@ export default function OrganizationSettingsLayout({
   // Whether the organization was read (its answer, or a refusal): the role is known.
   const roleKnown = !!orgId && viewer?.orgId === orgId;
   const viewerRole = roleKnown ? viewer.role : null;
-  // Roles & permissions is shown to whoever would see a section of it at the organization.
+  // Each page of Access is shown to whoever IAM lets open it at the organization.
   const { access, loading: accessLoading } = useIamAccess(orgId ? organizationContainer(orgId) : undefined, undefined, {
     skip: !orgId,
   });
-  const holdsIam = opensRolesAndPermissions(access);
+  const holdsIam = opensAccess(access, 'organization');
   // The Settings tabs' rule, for this organization: its owners and admins, or whoever IAM
-  // shows a Roles & permissions section here. Anyone else sees no section.
+  // shows a page of Access here. Anyone else sees no section.
   const settingsAccess = orgSettingsAccess({
     role: viewerRole,
     roleKnown,
     holdsIam,
     accessSettled: !accessLoading,
   });
-  const visibleNav = useMemo(() => orgSettingsNavForRole(viewerRole, { holdsIam }), [viewerRole, holdsIam]);
+  const visibleNav = useMemo(() => orgSettingsNavForRole(viewerRole, { access }), [viewerRole, access]);
   const navOrganization = useMemo(() => ({ id: orgId, items: visibleNav }), [orgId, visibleNav]);
   const sectionHrefs = useMemo(
     () => (orgId ? visibleNav.map((item) => orgSettingsSectionPath(orgId, item.slug)) : []),
@@ -62,6 +64,8 @@ export default function OrganizationSettingsLayout({
   const isMobile = useIsMobile();
   const { tabs, level } = useSettingsTabs({ organization: navOrganization, mobile: isMobile });
   const { isDetail, section, sectionLabel } = parseOrgSettingsRoute(pathname);
+  // A member's page (`users/<id>`): whoever opens Access here sees what they hold there.
+  const memberPage = section === 'users' && MEMBER_PAGE.test(pathname ?? '');
   const showMobileList = isMobile && !isDetail;
   const showMobileDetail = isMobile && isDetail;
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
@@ -75,11 +79,11 @@ export default function OrganizationSettingsLayout({
   const [layoutKey, setLayoutKey] = useState(0);
 
   // Reopened only once its section opens: not while the role or the access is read, not
-  // refused, not the index, nor a section that sends the caller to Roles & permissions.
+  // refused, not the index, nor a section that sends the caller to Access.
   const sectionOpens =
     !!sectionLabel &&
     (settingsAccess === 'admin' || settingsAccess === 'iam') &&
-    !orgSectionRedirect({ section, role: viewerRole, roleKnown, holdsIam, accessSettled: !accessLoading });
+    !orgSectionRedirect({ section, memberPage, role: viewerRole, roleKnown, access, accessSettled: !accessLoading });
   useRememberSettingsPath(sectionOpens ? pathname : null);
 
   useEffect(() => {
@@ -124,13 +128,14 @@ export default function OrganizationSettingsLayout({
     if (!orgId) return;
     const target = orgSectionRedirect({
       section,
+      memberPage,
       role: viewerRole,
       roleKnown,
-      holdsIam,
+      access,
       accessSettled: !accessLoading,
     });
     if (target) router.replace(orgSettingsSectionPath(orgId, target));
-  }, [orgId, viewerRole, roleKnown, section, holdsIam, accessLoading, router]);
+  }, [orgId, viewerRole, roleKnown, section, memberPage, access, accessLoading, router]);
 
   const workspaceHref = useWorkspaceReturnPath(
     currentWorkspaceId ? `/workspace/${currentWorkspaceId}/maps` : '/',
