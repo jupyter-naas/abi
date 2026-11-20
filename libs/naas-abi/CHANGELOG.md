@@ -58,6 +58,114 @@
 
 <!-- version list -->
 
+## v7.0.0 (2026-11-20)
+
+### Bug Fixes
+
+- **analytics**: A database fault skips no event; the cursor never moves forward on a rewind
+  ([`c2f587c`](https://github.com/jupyter-naas/abi/commit/c2f587ccdb9b121cdea93d93ad6dcca986f1e3f7))
+
+- **analytics**: A workspace pick lets go of a user who is not in it; filter menus close on Escape
+  or Tab with focus back on their button, and are labelled
+  ([`a27a014`](https://github.com/jupyter-naas/abi/commit/a27a0148afd8874a13083febc26fdfd8a299cb4e))
+
+- **analytics**: Clean the legacy files only once a rolling deploy is over
+  ([`78b97a0`](https://github.com/jupyter-naas/abi/commit/78b97a0a4a000f7040d86416cc08c059726e0e73))
+
+- **analytics**: Filters read workspaces, users, then periods; the workspace filter is searchable
+  like the user one
+  ([`cddc02f`](https://github.com/jupyter-naas/abi/commit/cddc02fa3eceac66729f28c8a8c4476b5371d842))
+
+- **analytics**: Hand a failed batch back off the event loop
+  ([`8cd2572`](https://github.com/jupyter-naas/abi/commit/8cd25723eeb0b966d0ca02774d462ea0cebb1c1d))
+
+- **analytics**: Heal lost batches, bound the ingest, register the tables
+  ([`449328d`](https://github.com/jupyter-naas/abi/commit/449328d666c1e67ce43a1923b73909e0382c6cc7))
+
+- **analytics**: No event stalls the rollups; every legacy event is replayed before deletion
+  ([`7a736f9`](https://github.com/jupyter-naas/abi/commit/7a736f994d080d81915fac9ead4f5d254cce5c9a))
+
+- **analytics**: One IAM pass per scope under concurrent cold reads; right 404 detail
+  ([`3702388`](https://github.com/jupyter-naas/abi/commit/370238876181963408e426f384662b08629394ef))
+
+- **analytics**: Retry a failed backfill at upkeep, not at the next process start
+  ([`4d6cce6`](https://github.com/jupyter-naas/abi/commit/4d6cce6064aa21d428bde8ffc764b827197f8241))
+
+- **analytics**: The user filter sits before the period buttons
+  ([`0ff1eb5`](https://github.com/jupyter-naas/abi/commit/0ff1eb5310bed0b2dfcbb861bb7b8f07586c5b6c))
+
+- **files**: The Files URL no longer drops a navigation or swallows Back
+  ([#1576](https://github.com/jupyter-naas/abi/pull/1576),
+  [`f43da5b`](https://github.com/jupyter-naas/abi/commit/f43da5bef3a080d5246bd9b21de2a8bbeb8ef902))
+
+- **nexus**: Skip an ADD COLUMN migration once its columns exist
+  ([`3891b69`](https://github.com/jupyter-naas/abi/commit/3891b691928f82d9d89b1f722d0329d03e4af200))
+
+- **nexus-web**: Analytics data hook never shows another resource's data
+  ([`9209252`](https://github.com/jupyter-naas/abi/commit/92092529b01250b4220de64f1f4037840c86bfa2))
+
+### Chores
+
+- **nexus-web**: Remove the Analytics app; /analytics leads to the organization's section
+  ([`ba94100`](https://github.com/jupyter-naas/abi/commit/ba94100b8c17b47dc88bf2241ce6aad9a90db0b3))
+
+### Documentation
+
+- **analytics**: The app's removal in the ADR, the release notes and the IAM guide
+  ([`2b5a617`](https://github.com/jupyter-naas/abi/commit/2b5a617cc5d711dd1b632fc236948e789064e337))
+
+### Features
+
+- **analytics**: Delete the legacy object-storage files once the backfill is done
+  ([`41ebec8`](https://github.com/jupyter-naas/abi/commit/41ebec8b8cce00aab56c3489617f144d6c11ead3))
+
+- **analytics**: Every member's events are recorded and rolled up
+  ([`2fca15b`](https://github.com/jupyter-naas/abi/commit/2fca15b510e50ae670ce903418598c101084cc68))
+
+- **analytics**: Organization and workspace analytics, scoped by IAM
+  ([`439fb8a`](https://github.com/jupyter-naas/abi/commit/439fb8a196c9c4f29499d27c17d027e6e6c52143))
+
+- **analytics**: SQL rollups and scoped reads behind two ports
+  ([`060dc58`](https://github.com/jupyter-naas/abi/commit/060dc58788a83486670c2495ba5835c36e657659))
+
+- **chat**: Keep a message's feedback and tools beside it
+  ([`8e282f6`](https://github.com/jupyter-naas/abi/commit/8e282f6b9815ada299f22cc1138345debdc4513e))
+
+- **chat**: Save a like or dislike through the chat's own route
+  ([`0b266ae`](https://github.com/jupyter-naas/abi/commit/0b266ae7f3d31a825ef6358b602a49f3ca22453c))
+
+- **nexus-web**: Analytics sections in Organization and Workspace settings
+  ([`424513b`](https://github.com/jupyter-naas/abi/commit/424513b27ec8cde90d5d3316b2b680c9f1de4eea))
+
+- **nexus-web**: Organization timezone in Organization settings › General
+  ([`670c639`](https://github.com/jupyter-naas/abi/commit/670c639fa787c3a076f7597108867923ab74b525))
+
+- **nexus-web**: Scoped analytics components and data hook
+  ([`f87ba2a`](https://github.com/jupyter-naas/abi/commit/f87ba2a7cef22c18b4c009ccd58ea95e45b4171d))
+
+- **organizations**: An organization has a time zone
+  ([`e1c0e1f`](https://github.com/jupyter-naas/abi/commit/e1c0e1ff102486645f3caaa836c15542c4269c97))
+
+### Performance Improvements
+
+- **analytics**: The message facts pass is set-based and keeps its claim while it runs
+  ([`62304e6`](https://github.com/jupyter-naas/abi/commit/62304e649552af0b8a2ea4ad085936896ce33ae7))
+
+- **analytics**: The overview reads its five figures at the same time; pages count users per page
+  from per-user sums
+  ([`02205f5`](https://github.com/jupyter-naas/abi/commit/02205f5580af818c224462bb7e4a99e941b59d84))
+
+### Refactoring
+
+- **analytics**: Remove the platform-wide reads, the rebuild and the JSON store
+  ([`1f2db1e`](https://github.com/jupyter-naas/abi/commit/1f2db1e6f4ddfce745dc7a62b322e55106d6d06b))
+
+### Breaking Changes
+
+- **analytics**: The platform-wide GET /api/analytics/* routes are removed; analytics are read under
+  /api/organizations/{org_id}/analytics and /api/workspaces/{workspace_id}/analytics.
+
+
 ## v6.0.0 (2026-11-19)
 
 ### Bug Fixes
