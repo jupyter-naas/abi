@@ -8,12 +8,8 @@ export type AvatarUser = {
   avatar?: string | null;
 };
 
-/** Where the avatar leads, in the dock and the phone's top bar: Settings, on the Account tab. */
+/** Account settings. The account menu's Account row, and the page Settings falls back to. */
 export const ACCOUNT_SETTINGS_PATH = '/account/profile';
-
-export function accountSettingsLabel(name: string | null | undefined): string {
-  return name ? `${name}, account settings` : 'Account settings';
-}
 
 export function UserAvatar({
   user,

@@ -13,11 +13,14 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => undefined, replace: () => undefined }),
   usePathname: () => '/workspace/ws-1/files',
 }));
-vi.mock('@/hooks/use-avatar-settings-links', () => ({ useWarmAvatarSettingsLinks: () => undefined }));
+vi.mock('@/hooks/use-avatar-settings-links', () => ({
+  useWarmAvatarSettingsLinks: () => undefined,
+  useSettingsHref: () => '/workspace/ws-1/settings/general',
+}));
 vi.mock('@/stores/auth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/stores/auth')>()),
   useAuthStore: (select: (s: unknown) => unknown) =>
-    select({ user: { name: 'Dev Admin', email: 'admin@joe.com' } }),
+    select({ user: { name: 'Dev Admin', email: 'admin@joe.com' }, logout: () => undefined }),
 }));
 
 import { MobileTopBar } from './mobile-top-bar';
@@ -29,22 +32,26 @@ afterEach(async () => {
   document.body.innerHTML = '';
 });
 
-const accountLink = (host: HTMLElement) => host.querySelector<HTMLAnchorElement>('a[href="/account/profile"]');
+const accountButton = (host: HTMLElement) =>
+  host.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
 
 describe('the phone top bar', () => {
-  it('has the avatar open Settings on the Account tab, with no popup', async () => {
+  it('opens the account menu from the avatar', async () => {
     mounted = await mount(MobileTopBar, { variant: 'top', title: 'Files' });
-    const link = accountLink(mounted.host);
-    expect(link?.getAttribute('aria-label')).toBe('Dev Admin, account settings');
-    expect(link?.hasAttribute('aria-haspopup')).toBe(false);
-    document.addEventListener('click', (event) => event.preventDefault(), { once: true });
-    await mounted.click(link);
-    expect(document.querySelector('[role="menu"]')).toBeNull();
-    expect(document.body.textContent).not.toContain('Log out');
+    await mounted.flush();
+    const button = accountButton(mounted.host);
+    expect(button?.getAttribute('aria-label')).toBe('Dev Admin, account menu');
+    expect(mounted.host.querySelector('a[href="/account/profile"]')).toBeNull();
+    await mounted.click(button);
+    const menu = document.querySelector('[role="menu"]');
+    expect(menu?.textContent).toContain('Find workspace');
+    expect(menu?.textContent).toContain('Log out');
+    expect(menu?.textContent).not.toContain('Help');
+    expect(menu?.querySelector('a[href="/account/profile"]')?.textContent).toContain('Account');
   });
 
   it('leaves the avatar out of a detail view', async () => {
     mounted = await mount(MobileTopBar, { variant: 'detail', title: 'Thread' });
-    expect(accountLink(mounted.host)).toBeNull();
+    expect(accountButton(mounted.host)).toBeNull();
   });
 });
