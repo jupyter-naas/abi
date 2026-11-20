@@ -2,14 +2,11 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import Link from 'next/link';
 import {
   ArrowLeft, X,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores/auth';
-import { useWarmAvatarSettingsLinks } from '@/hooks/use-avatar-settings-links';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { isMobileChatThreadOpen, parseChatRoute } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { getWorkspacePath } from '../sidebar/utils';
@@ -17,7 +14,7 @@ import { WorkspaceMark, WorkspaceMarkFrame } from '../workspace-mark';
 import { WorkspacesSection } from '../sidebar/workspaces-section';
 import { useShellTitle } from '../shell-title';
 import { resolveMobileTopBarTitle } from './mobile-top-bar-title';
-import { ACCOUNT_SETTINGS_PATH, accountSettingsLabel, UserAvatar } from '../user-avatar';
+import { AccountMenu } from '../account-menu';
 
 type MobileTopBarProps = {
   /** Top-level tab chrome, or an immersive detail view (chat thread, file browser). */
@@ -51,9 +48,6 @@ export function MobileTopBar({
   const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
   const setMobilePendingChatSlug = useWorkspaceStore((s) => s.setMobilePendingChatSlug);
 
-  const user = useAuthStore((s) => s.user);
-  // The Settings tabs' access reads start now, not when Settings opens.
-  useWarmAvatarSettingsLinks();
   const { title: pageTitle } = useShellTitle();
 
   useEffect(() => setMounted(true), []);
@@ -149,15 +143,7 @@ export function MobileTopBar({
         {actions}
 
         {/* Profile only on list / top-level tabs. Detail views stay immersive. */}
-        {variant === 'top' && (
-          <Link
-            href={ACCOUNT_SETTINGS_PATH}
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full"
-            aria-label={accountSettingsLabel(user?.name)}
-          >
-            <UserAvatar user={user} className="h-8 w-8" alt="" />
-          </Link>
-        )}
+        {variant === 'top' && <AccountMenu placement="phone" />}
       </header>
 
       {workspaceOpen && mounted && createPortal(
