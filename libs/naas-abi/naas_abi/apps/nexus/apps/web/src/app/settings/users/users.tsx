@@ -53,7 +53,6 @@ import {
   EXPORT_HEADERS,
   exportRow,
   isSelf,
-  NO_IAM_ID,
   NEW_USER_PATH,
   NO_ORGANIZATION,
   personHref,
@@ -325,7 +324,6 @@ function UserRow({
             </div>
           </div>
         </td>
-        <td className="platform-users-mono">{user.principal_id ?? <span className="platform-users-muted">{NO_IAM_ID}</span>}</td>
         <td>
           <span className={`platform-users-status is-${user.status}`} data-field="status">
             {statusLabel(user)}

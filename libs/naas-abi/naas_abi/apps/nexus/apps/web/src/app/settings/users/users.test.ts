@@ -100,17 +100,17 @@ async function render(props: Partial<Parameters<typeof PlatformUsers>[0]> & { fe
 }
 
 describe('PlatformUsers', () => {
-  it('lists every account and invitation with its IAM id, status, superadmin and organizations', async () => {
+  it('lists every account and invitation with its status, superadmin and organizations, not its IAM id', async () => {
     const { fetcher } = api();
     await render({ fetcher });
     const rows = [...mounted!.host.querySelectorAll('tr[data-user]')].map((r) => r.getAttribute('data-user'));
     expect(rows).toEqual(['usr_admin', 'usr_bob', 'invited:new@example.com']);
-    expect(row('usr_bob').textContent).toContain('usr_bob');
+    expect(row('usr_bob').textContent).not.toContain('usr_bob');
     expect(row('usr_bob').querySelector('[data-field="status"]')?.textContent).toBe('Signed in');
     expect(row('usr_bob').querySelector('[data-field="organizations"]')?.textContent).toBe('Acme');
     expect(row('usr_admin').querySelector('[data-field="superadmin"]')?.textContent).toContain('Superadmin');
     expect(row('invited:new@example.com').querySelector('[data-field="status"]')?.textContent).toBe('Invited, not yet');
-    expect(row('invited:new@example.com').textContent).toContain('None yet');
+    expect(row('invited:new@example.com').textContent).not.toContain('None yet');
   });
 
   it('opens the person page of a row with an IAM id, never the row of someone IAM has none for', async () => {

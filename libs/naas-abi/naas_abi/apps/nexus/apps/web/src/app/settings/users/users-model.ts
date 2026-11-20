@@ -91,7 +91,7 @@ export type ColumnId = 'user' | 'iam' | 'status' | 'superadmin' | 'organizations
 
 export const COLUMNS: { id: ColumnId; label: string }[] = [
   { id: 'user', label: 'User' },
-  { id: 'iam', label: 'IAM ID' },
+  // The IAM id is not a column: it stays in the search, the export and the person's page.
   { id: 'status', label: 'Status' },
   { id: 'superadmin', label: 'Superadmin' },
   { id: 'organizations', label: 'Organizations' },
