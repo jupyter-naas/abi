@@ -50,6 +50,12 @@ message Principal {
   // Groups: the container that owns them and names them, or abi: (the
   // platform). Empty: the platform.
   string owner_scope = 15;
+  // Groups: a membership group of this container: its members are members of
+  // it, where the policies attached at ${my workspaces} apply.
+  optional string membership_of = 16;
+  // Groups: a level group; its members change as the admins of any of a
+  // person's containers decide, audited.
+  bool level_group = 17;
 }
 
 // A stored policy; the document is the JSON policy document.
@@ -227,6 +233,9 @@ message DecidingStatement {
   optional string via_group = 9;
   repeated BoundingStatement bounded_by = 10;
   repeated string through = 11;
+  // Through an attachment at ${my workspaces}: the membership group that made
+  // scope (the container it applied at) the principal's.
+  optional string membership_group = 12;
 }
 
 message Explanation {
@@ -479,6 +488,10 @@ message CreateGroupRequest {
   reserved "org";
   // The owner: abi: (the platform, the default) or a container's name.
   optional string scope = 4;
+  // A membership group of this registered container, at or below the owner.
+  optional string membership_of = 5;
+  // A level group: the platform's grants only.
+  bool level = 6;
 }
 message CreateGroupResponse {
   abi.common.v1.CallError error = 1;
@@ -565,6 +578,46 @@ message ListPrincipalGroupsRequest {
 message ListPrincipalGroupsResponse {
   abi.common.v1.CallError error = 1;
   repeated Principal groups = 2;
+}
+
+// Sets both markers of a group (iam:UpdateGroup; on its platform name for the
+// level marker).
+message MarkGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+  // A membership group of this registered container; unset: none.
+  optional string membership_of = 3;
+  bool level = 4;
+}
+message MarkGroupResponse {
+  abi.common.v1.CallError error = 1;
+  Principal group = 2;
+}
+
+// A principal is a member of container through the membership group group_id.
+message Membership {
+  string group_id = 1;
+  string container = 2;
+}
+
+// The memberships of a principal whose group the caller may read.
+message ListMembershipsRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message ListMembershipsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Membership memberships = 2;
+}
+
+// The members of a container, through its membership groups the caller may read.
+message ListContainerMembersRequest {
+  abi.common.v1.CallContext context = 1;
+  string container = 2;
+}
+message ListContainerMembersResponse {
+  abi.common.v1.CallError error = 1;
+  repeated string principal_ids = 2;
 }
 
 message MapIdpGroupRequest {
