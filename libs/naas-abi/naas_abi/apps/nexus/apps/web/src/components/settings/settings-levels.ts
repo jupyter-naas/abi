@@ -5,24 +5,26 @@ import {
   orgSettingsSectionPath,
   type OrgSettingsNavItem,
 } from '@/app/organizations/[orgId]/settings/lib/nav';
-import type { PlatformSettingsNavItem } from '@/app/settings/lib/nav';
+import { PLATFORM_SETTINGS_INDEX, type PlatformSettingsNavGroup } from '@/app/settings/lib/nav';
 import type { SettingsNavGroup } from '@/components/shell/settings-nav';
+import { settingsScopeFromPathname, type SettingsLevelId } from '@/lib/settings-scope-path';
 
 /**
- * Settings, one column for every level, from the narrowest to the widest: what a change
- * there touches. Account is the caller alone, Workspace this workspace, Organization all
- * of its workspaces, Platform the whole instance. A level shows only what the caller may
- * open there, and a level with nothing is left out: a member sees Account and Workspace.
+ * Settings, one tab per level, from the widest to the narrowest: what a change there
+ * touches. Platform is the whole instance, Organization all of its workspaces, Workspace
+ * this workspace, Account the caller alone. A level shows only what the caller may open
+ * there, and a level with nothing is left out: a plain member has Account alone.
  */
 
 export type SettingsLink = { href: string; label: string; icon: LucideIcon };
 
-/** `label` null: the level's first group, named by the level itself. */
+/** `label` null: the level's first group, named by its tab. */
 export type SettingsLinkGroup = { label: string | null; links: SettingsLink[] };
 
-export type SettingsLevel = { id: string; label: string; groups: SettingsLinkGroup[] };
+/** `index`: the level's own URL, where a phone lists its pages. */
+export type SettingsLevel = { id: SettingsLevelId; label: string; index: string; groups: SettingsLinkGroup[] };
 
-/** `current`: the current workspace's organization. Any other is named in the heading, so
+/** `current`: the current workspace's organization. Any other is named in its tab, so
  *  "Organization" never stands for one the workspace is not in. */
 export type SettingsOrganization = { id: string; name: string; items: OrgSettingsNavItem[]; current: boolean };
 
@@ -33,7 +35,8 @@ export type SettingsLevelsInput = {
   /** The organization of the page (or of the current workspace), and the other ones the caller opens. */
   organization: SettingsOrganization | null;
   otherOrganizations: { id: string; name: string }[];
-  platform: PlatformSettingsNavItem[];
+  /** The platform's groups the caller may open. */
+  platform: PlatformSettingsNavGroup[];
 };
 
 function link(item: { href: string; label: string; icon: LucideIcon }, href = item.href): SettingsLink {
@@ -41,20 +44,15 @@ function link(item: { href: string; label: string; icon: LucideIcon }, href = it
 }
 
 export function settingsLevels(input: SettingsLevelsInput): SettingsLevel[] {
-  const levels: SettingsLevel[] = [
-    { id: 'account', label: 'Account', groups: [{ label: null, links: input.account.map((item) => link(item)) }] },
-  ];
+  const levels: SettingsLevel[] = [];
 
-  const { workspace } = input;
-  const workspaceGroups = (workspace?.groups ?? []).filter((group) => group.items.length > 0);
-  if (workspace && workspaceGroups.length > 0) {
+  const platformGroups = input.platform.filter((group) => group.items.length > 0);
+  if (platformGroups.length > 0) {
     levels.push({
-      id: 'workspace',
-      label: 'Workspace',
-      groups: workspaceGroups.map((group, index) => ({
-        label: index === 0 ? null : group.label,
-        links: group.items.map((item) => link(item, `/workspace/${workspace.id}${item.href}`)),
-      })),
+      id: 'platform',
+      label: 'Platform',
+      index: PLATFORM_SETTINGS_INDEX,
+      groups: platformGroups.map((group) => ({ label: group.label, links: group.items.map((item) => link(item)) })),
     });
   }
 
@@ -75,15 +73,33 @@ export function settingsLevels(input: SettingsLevelsInput): SettingsLevel[] {
     levels.push({
       id: 'organization',
       label: others.length > 0 || !organization.current ? `Organization · ${organization.name}` : 'Organization',
+      index: orgSettingsIndexPath(organization.id),
       groups,
     });
   } else if (others.length > 0) {
-    levels.push({ id: 'organization', label: 'Organizations', groups: [{ label: null, links: others }] });
+    levels.push({ id: 'organization', label: 'Organizations', index: others[0].href, groups: [{ label: null, links: others }] });
   }
 
-  if (input.platform.length > 0) {
-    levels.push({ id: 'platform', label: 'Platform', groups: [{ label: null, links: input.platform.map((item) => link(item)) }] });
+  const { workspace } = input;
+  const workspaceGroups = (workspace?.groups ?? []).filter((group) => group.items.length > 0);
+  if (workspace && workspaceGroups.length > 0) {
+    levels.push({
+      id: 'workspace',
+      label: 'Workspace',
+      index: `/workspace/${workspace.id}/settings`,
+      groups: workspaceGroups.map((group, index) => ({
+        label: index === 0 ? null : group.label,
+        links: group.items.map((item) => link(item, `/workspace/${workspace.id}${item.href}`)),
+      })),
+    });
   }
+
+  levels.push({
+    id: 'account',
+    label: 'Account',
+    index: '/account',
+    groups: [{ label: null, links: input.account.map((item) => link(item)) }],
+  });
   return levels;
 }
 
@@ -99,4 +115,37 @@ export function activeSettingsHref(levels: SettingsLevel[], pathname: string): s
     }
   }
   return best;
+}
+
+/** The level the column lists: the page's, or the only one the caller opens. */
+export function currentSettingsLevel(levels: SettingsLevel[], pathname: string): SettingsLevel | null {
+  const id = settingsScopeFromPathname(pathname)?.kind;
+  return levels.find((level) => level.id === id) ?? (levels.length === 1 ? levels[0] : null);
+}
+
+export type SettingsTab = { id: SettingsLevelId; label: string; href: string; active: boolean };
+
+/**
+ * One tab per level, none when there is only one. A tab opens its level where the caller
+ * left it (`lastVisited`, while that is still one of the level's pages), else at its first
+ * page; on a phone, at its list. The tab of the page's level stays on the page.
+ */
+export function settingsTabs(
+  levels: SettingsLevel[],
+  pathname: string,
+  { mobile, lastVisited }: { mobile: boolean; lastVisited: (level: SettingsLevelId) => string | null }
+): SettingsTab[] {
+  if (levels.length < 2) return [];
+  const current = currentSettingsLevel(levels, pathname);
+  return levels.map((level) => {
+    const active = level === current;
+    let href = level.index;
+    if (active) {
+      href = pathname;
+    } else if (!mobile) {
+      const last = lastVisited(level.id);
+      href = last && activeSettingsHref([level], last) ? last : (level.groups[0]?.links[0]?.href ?? level.index);
+    }
+    return { id: level.id, label: level.label, href, active };
+  });
 }

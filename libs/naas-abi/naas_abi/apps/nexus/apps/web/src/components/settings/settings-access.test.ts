@@ -4,9 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
 
 /**
- * Who sees what in Settings and the Console: each person as the API answers them (their
- * roles, then what IAM grants them on the platform, an organization and the workspace),
- * read by the hooks the shell uses. Only the network is a fake.
+ * Who sees what in Settings: each person as the API answers them (their roles, then what
+ * IAM grants them on the platform, an organization and the workspace), read by the hooks
+ * the shell uses. Only the network is a fake.
  */
 
 type Scope = 'platform' | 'workspace' | `organization:${string}`;
@@ -18,8 +18,9 @@ type Person = {
   grants: Partial<Record<Scope, string[]>>;
 };
 
-const world = vi.hoisted(() => ({ person: null as Person | null }));
+const world = vi.hoisted(() => ({ person: null as Person | null, path: '' }));
 
+vi.mock('next/navigation', () => ({ usePathname: () => world.path }));
 vi.mock('@/stores/auth', async (importOriginal) => {
   const ORGANIZATION = 'abi:nexus:organization/';
   const WORKSPACE = `${ORGANIZATION}acme/nexus:workspace/ws-1`;
@@ -54,20 +55,33 @@ vi.mock('@/stores/auth', async (importOriginal) => {
 vi.mock('@/hooks/use-workspace-resources', () => ({ useWorkspaceResources: () => ({ resources: null }) }));
 
 import { useWorkspaceStore } from '@/stores/workspace';
-import { useSettingsLevels } from '@/hooks/use-settings-levels';
+import { useSettingsTabs } from '@/hooks/use-settings-levels';
 import { useAvatarSettingsLinks } from '@/hooks/use-avatar-settings-links';
 
-type Seen = { levels: Record<string, string[]>; settings: string; console: string | null };
+/**
+ * `tabs`: their labels, none with one level; `opens`: where each tab leads. `level`: the
+ * level the column lists on this page, and `column` its groups, each under its heading
+ * (the level's own for its first group).
+ */
+type Seen = {
+  settings: string;
+  tabs: string[];
+  opens: Record<string, string>;
+  level: string | null;
+  column: Record<string, string[]>;
+};
 
 function Probe() {
-  const levels = useSettingsLevels();
-  const { settings, console: consoleEntry } = useAvatarSettingsLinks();
+  const { tabs, level } = useSettingsTabs({ mobile: false });
+  const { settings } = useAvatarSettingsLinks();
   const seen: Seen = {
-    levels: Object.fromEntries(
-      levels.map((level) => [level.label, level.groups.flatMap((group) => group.links.map((link) => link.label))])
-    ),
     settings: settings.href,
-    console: consoleEntry === null ? null : consoleEntry === 'loading' ? 'loading' : consoleEntry.href,
+    tabs: tabs.map((tab) => tab.label),
+    opens: Object.fromEntries(tabs.map((tab) => [tab.label, tab.href])),
+    level: level?.label ?? null,
+    column: Object.fromEntries(
+      (level?.groups ?? []).map((group) => [group.label ?? level?.label, group.links.map((link) => link.label)])
+    ),
   };
   return createElement('pre', null, JSON.stringify(seen));
 }
@@ -77,60 +91,85 @@ afterEach(async () => {
   await mounted?.unmount();
   mounted = null;
   world.person = null;
+  world.path = '';
   window.sessionStorage.clear();
 });
 
-async function seenBy(person: Person): Promise<Seen> {
-  world.person = person;
-  useWorkspaceStore.setState({
-    workspaces: [{ id: 'ws-1', name: 'Ops', organizationId: 'acme', currentUserRole: person.workspaceRole }] as never,
-    currentWorkspaceId: 'ws-1',
-  });
+async function probe(): Promise<Seen> {
+  await mounted?.unmount();
   mounted = await mount(Probe, {});
   for (let i = 0; i < 4; i += 1) await mounted.flush();
   return JSON.parse(mounted.host.textContent ?? '{}') as Seen;
 }
 
+/** What ``person`` sees on ``path``; by default where Settings opens for them. */
+async function seenBy(person: Person, path?: string): Promise<Seen> {
+  world.person = person;
+  useWorkspaceStore.setState({
+    workspaces: [{ id: 'ws-1', name: 'Ops', organizationId: 'acme', currentUserRole: person.workspaceRole }] as never,
+    currentWorkspaceId: 'ws-1',
+  });
+  world.path = path ?? '';
+  const seen = await probe();
+  if (path !== undefined) return seen;
+  world.path = seen.settings;
+  return probe();
+}
+
 const ACME = { id: 'acme', name: 'Acme' };
 const ALL_PLATFORM = ['nexus:ReadSystem', 'nexus:ListUsers', 'nexus:ListDrives', 'iam:ListAttachments'];
+const PLATFORM_GROUPS = ['Administration', 'System', 'Activity', 'Resources', 'Data'];
 
-describe('who sees what in Settings and the Console', () => {
-  it('a platform admin: every level, and the Console', async () => {
-    const seen = await seenBy({
+describe('who sees what in Settings', () => {
+  it('a platform admin: the four tabs, Settings opening on the workspace, the Platform tab with every group', async () => {
+    const root: Person = {
       id: 'root',
       workspaceRole: 'owner',
       organizations: [{ ...ACME, role: 'owner' }],
       grants: { platform: ALL_PLATFORM, workspace: ['iam:ListAttachments'], 'organization:acme': ['iam:ListAttachments'] },
-    });
-    expect(Object.keys(seen.levels)).toEqual(['Account', 'Workspace', 'Organization', 'Platform']);
-    expect(seen.levels.Platform).toEqual(['General', 'Organizations', 'Users', 'Roles & permissions', 'Drives']);
+    };
+    const seen = await seenBy(root);
+    expect(seen.tabs).toEqual(['Platform', 'Organization', 'Workspace', 'Account']);
     expect(seen.settings).toBe('/workspace/ws-1/settings/general');
-    expect(seen.console).toBe('/settings/system');
+    expect(seen.level).toBe('Workspace');
+    expect(Object.keys(seen.column)).toEqual(['Workspace', 'Features']);
+    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Members', 'Roles & permissions']));
+
+    const platform = await seenBy(root, seen.opens.Platform);
+    expect(seen.opens.Platform).toBe('/settings/general');
+    expect(platform.level).toBe('Platform');
+    expect(Object.keys(platform.column)).toEqual(PLATFORM_GROUPS);
+    expect(platform.column.Administration).toEqual(['General', 'Organizations', 'Users', 'Roles & permissions', 'Drives']);
+    expect(platform.column.System).toEqual(expect.arrayContaining(['Overview', 'Jobs', 'Layers', 'Diagrams']));
   });
 
-  it('an organization admin: their workspace and organization, nothing of the platform', async () => {
-    const seen = await seenBy({
+  it('an organization admin: their organization and workspace, no Platform tab', async () => {
+    const olivia: Person = {
       id: 'olivia',
       workspaceRole: 'admin',
       organizations: [{ ...ACME, role: 'admin' }],
       grants: { workspace: ['iam:ListAttachments'], 'organization:acme': ['iam:ListAttachments'] },
+    };
+    const seen = await seenBy(olivia);
+    expect(seen.tabs).toEqual(['Organization', 'Workspace', 'Account']);
+    expect(seen.column.Workspace).toContain('Roles & permissions');
+    const organization = await seenBy(olivia, seen.opens.Organization);
+    expect(organization.level).toBe('Organization');
+    expect(organization.column).toEqual({
+      Organization: ['General', 'Branding', 'Workspaces', 'Members', 'Roles & permissions'],
     });
-    expect(Object.keys(seen.levels)).toEqual(['Account', 'Workspace', 'Organization']);
-    expect(seen.levels.Organization).toEqual(['General', 'Branding', 'Workspaces', 'Members', 'Roles & permissions']);
-    expect(seen.levels.Workspace).toContain('Roles & permissions');
-    expect(seen.console).toBeNull();
   });
 
-  it('a workspace owner who is a member of the organization: no Organization level', async () => {
+  it('a workspace owner who is a member of the organization: no Organization tab', async () => {
     const seen = await seenBy({
       id: 'bob',
       workspaceRole: 'owner',
       organizations: [{ ...ACME, role: 'member' }],
       grants: { workspace: ['iam:ListAttachments'] },
     });
-    expect(Object.keys(seen.levels)).toEqual(['Account', 'Workspace']);
-    expect(seen.levels.Workspace).toEqual(expect.arrayContaining(['General', 'Members', 'Roles & permissions']));
+    expect(seen.tabs).toEqual(['Workspace', 'Account']);
     expect(seen.settings).toBe('/workspace/ws-1/settings/general');
+    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Members', 'Roles & permissions']));
   });
 
   it('a workspace owner IAM gives no right over access: the workspace without Roles & permissions', async () => {
@@ -140,8 +179,9 @@ describe('who sees what in Settings and the Console', () => {
       organizations: [{ ...ACME, role: 'member' }],
       grants: {},
     });
-    expect(seen.levels.Workspace).toContain('General');
-    expect(seen.levels.Workspace).not.toContain('Roles & permissions');
+    expect(seen.level).toBe('Workspace');
+    expect(seen.column.Workspace).toContain('General');
+    expect(seen.column.Workspace).not.toContain('Roles & permissions');
   });
 
   it('a member to whom IAM delegates the workspace\'s access: Roles & permissions alone', async () => {
@@ -151,40 +191,57 @@ describe('who sees what in Settings and the Console', () => {
       organizations: [{ ...ACME, role: 'member' }],
       grants: { workspace: ['iam:ListPolicies'] },
     });
-    expect(seen.levels).toEqual({
-      Account: ['Profile', 'Appearance'],
-      Workspace: ['Roles & permissions'],
-    });
+    expect(seen.tabs).toEqual(['Workspace', 'Account']);
     expect(seen.settings).toBe('/workspace/ws-1/settings/permissions');
+    expect(seen.column).toEqual({ Workspace: ['Roles & permissions'] });
   });
 
-  it('a plain member: their account alone, and Settings opens it', async () => {
-    const seen = await seenBy({
+  it('a plain member: no tabs, their account alone, and Settings opens it', async () => {
+    const dave: Person = {
       id: 'dave',
       workspaceRole: 'member',
       organizations: [{ ...ACME, role: 'member' }],
       grants: {},
-    });
-    expect(seen).toEqual({ levels: { Account: ['Profile', 'Appearance'] }, settings: '/account/profile', console: null });
+    };
+    const expected: Seen = {
+      settings: '/account/profile',
+      tabs: [],
+      opens: {},
+      level: 'Account',
+      column: { Account: ['Profile', 'Appearance'] },
+    };
+    expect(await seenBy(dave)).toEqual(expected);
+    // A page they may not open: the layout refuses it, the column still lists their account.
+    expect(await seenBy(dave, '/settings/users')).toEqual(expected);
   });
 
   it('a viewer: the same as a member', async () => {
     const seen = await seenBy({ id: 'vera', workspaceRole: 'viewer', organizations: [], grants: {} });
-    expect(seen).toEqual({ levels: { Account: ['Profile', 'Appearance'] }, settings: '/account/profile', console: null });
+    expect(seen).toEqual({
+      settings: '/account/profile',
+      tabs: [],
+      opens: {},
+      level: 'Account',
+      column: { Account: ['Profile', 'Appearance'] },
+    });
   });
 
   it('a member to whom IAM delegates the organization\'s access: its Roles & permissions alone', async () => {
-    const seen = await seenBy({
+    const eve: Person = {
       id: 'eve',
       workspaceRole: 'member',
       organizations: [{ ...ACME, role: 'member' }],
       grants: { 'organization:acme': ['iam:ListAttachments'] },
-    });
-    expect(seen.levels).toEqual({ Account: ['Profile', 'Appearance'], Organization: ['Roles & permissions'] });
+    };
+    const seen = await seenBy(eve);
+    expect(seen.tabs).toEqual(['Organization', 'Account']);
+    expect(seen.level).toBe('Account');
+    const organization = await seenBy(eve, seen.opens.Organization);
+    expect(organization.column).toEqual({ Organization: ['Roles & permissions'] });
   });
 
-  it('the admin of another organization than the workspace\'s: that one, named', async () => {
-    const seen = await seenBy({
+  it('the admin of another organization than the workspace\'s: that one, named in its tab', async () => {
+    const nina: Person = {
       id: 'nina',
       workspaceRole: 'member',
       organizations: [
@@ -192,30 +249,33 @@ describe('who sees what in Settings and the Console', () => {
         { id: 'beta', name: 'Beta', role: 'admin' },
       ],
       grants: { 'organization:beta': [] },
-    });
-    expect(Object.keys(seen.levels)).toEqual(['Account', 'Organization · Beta']);
-    expect(seen.levels['Organization · Beta']).toContain('Members');
+    };
+    const seen = await seenBy(nina);
+    expect(seen.tabs).toEqual(['Organization · Beta', 'Account']);
+    const organization = await seenBy(nina, seen.opens['Organization · Beta']);
+    expect(organization.level).toBe('Organization · Beta');
+    expect(organization.column['Organization · Beta']).toContain('Members');
   });
 
-  it('someone who may read the system: General and Organizations, and the Console', async () => {
-    const seen = await seenBy({
-      id: 'sam',
-      workspaceRole: 'member',
-      organizations: [],
-      grants: { platform: ['nexus:ReadSystem'] },
-    });
-    expect(seen.levels).toEqual({ Account: ['Profile', 'Appearance'], Platform: ['General', 'Organizations'] });
-    expect(seen.console).toBe('/settings/system');
+  it('someone who may read the system: a Platform tab with System, Activity, Resources and Data', async () => {
+    const sam: Person = { id: 'sam', workspaceRole: 'member', organizations: [], grants: { platform: ['nexus:ReadSystem'] } };
+    const seen = await seenBy(sam);
+    expect(seen.tabs).toEqual(['Platform', 'Account']);
+    expect(seen.settings).toBe('/account/profile');
+    const platform = await seenBy(sam, seen.opens.Platform);
+    expect(platform.level).toBe('Platform');
+    expect(Object.keys(platform.column)).toEqual(PLATFORM_GROUPS);
+    expect(platform.column.Administration).toEqual(['General', 'Organizations']);
+    expect(platform.column.System).toEqual(expect.arrayContaining(['Overview', 'Layers', 'Diagrams']));
+    expect(platform.column.Resources).toContain('Models');
   });
 
-  it('someone who may list the users only: Users, and no Console', async () => {
-    const seen = await seenBy({
-      id: 'uma',
-      workspaceRole: 'member',
-      organizations: [],
-      grants: { platform: ['nexus:ListUsers'] },
-    });
-    expect(seen.levels).toEqual({ Account: ['Profile', 'Appearance'], Platform: ['Users'] });
-    expect(seen.console).toBeNull();
+  it('someone who may list the users only: a Platform tab with Users alone', async () => {
+    const uma: Person = { id: 'uma', workspaceRole: 'member', organizations: [], grants: { platform: ['nexus:ListUsers'] } };
+    const seen = await seenBy(uma);
+    expect(seen.tabs).toEqual(['Platform', 'Account']);
+    expect(seen.opens.Platform).toBe('/settings/users');
+    const platform = await seenBy(uma, seen.opens.Platform);
+    expect(platform.column).toEqual({ Administration: ['Users'] });
   });
 });

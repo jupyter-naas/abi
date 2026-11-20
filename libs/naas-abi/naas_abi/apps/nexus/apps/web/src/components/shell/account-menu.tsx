@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, type KeyboardEvent } from 'react';
-import { Gauge, HelpCircle, LogOut, Settings, type LucideIcon } from 'lucide-react';
+import { HelpCircle, LogOut, Settings } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
-import { useAvatarSettingsLinks, type AvatarSettingsEntry } from '@/hooks/use-avatar-settings-links';
+import { useAvatarSettingsLinks } from '@/hooks/use-avatar-settings-links';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspacePath } from './sidebar/utils';
 import './account-menu.css';
@@ -53,40 +53,6 @@ function enabledItems(panel: HTMLElement | null): HTMLElement[] {
 
 function ItemLabel({ label }: { label: string }) {
   return <span className="account-menu-item-label">{label}</span>;
-}
-
-/** An entry of the menu that needs a right: a link, a muted row while it is read, or nothing. */
-function SettingsScopeItem({
-  entry,
-  label,
-  icon: Icon,
-  onClose,
-}: {
-  entry: AvatarSettingsEntry;
-  label: string;
-  icon: LucideIcon;
-  onClose: () => void;
-}) {
-  if (entry === null) return null;
-  if (entry === 'loading') {
-    return (
-      <span
-        role="menuitem"
-        aria-disabled="true"
-        aria-busy="true"
-        className="account-menu-settings-item account-menu-settings-item-loading"
-      >
-        <Icon size={14} className="shrink-0 text-muted-foreground" />
-        <ItemLabel label={label} />
-      </span>
-    );
-  }
-  return (
-    <Link href={entry.href} role="menuitem" onClick={onClose} className="account-menu-settings-item">
-      <Icon size={14} className="shrink-0 text-muted-foreground" />
-      <ItemLabel label={entry.label} />
-    </Link>
-  );
 }
 
 export function AccountMenuPanel({
@@ -157,14 +123,12 @@ export function AccountMenuPanel({
         </div>
       </div>
 
-      {/* Settings is one place, every level in its column (the dock's Settings opens it
-          too); the Console is what the platform runs, for whoever may watch it. */}
+      {/* Settings is one place, a tab per level (the dock's Settings opens it too). */}
       <div className="account-menu-group" role="group" aria-label="Settings">
         <Link href={links.settings.href} role="menuitem" onClick={onClose} className="account-menu-settings-item">
           <Settings size={14} className="shrink-0 text-muted-foreground" />
           <ItemLabel label={links.settings.label} />
         </Link>
-        <SettingsScopeItem entry={links.console} label="Console" icon={Gauge} onClose={onClose} />
       </div>
 
       <div className="account-menu-group" role="group" aria-label="Session">

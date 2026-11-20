@@ -28,16 +28,21 @@ vi.mock('@/hooks/use-platform-settings-access', () => ({
 }));
 // The column: this organization's level, as the layout has read it (role, IAM access).
 vi.mock('@/hooks/use-settings-levels', async () => {
-  const { settingsLevels } = await import('@/components/settings/settings-levels');
+  const { currentSettingsLevel, settingsLevels } = await import('@/components/settings/settings-levels');
   return {
-    useSettingsLevels: ({ organization }: { organization?: { id: string; items: never[] } } = {}) =>
-      settingsLevels({
-        account: [],
-        workspace: null,
-        organization: organization ? { ...organization, name: 'Acme' } : null,
-        otherOrganizations: [],
-        platform: [],
-      }),
+    useSettingsTabs: ({ organization }: { organization?: { id: string; items: never[] } }) => ({
+      tabs: [],
+      level: currentSettingsLevel(
+        settingsLevels({
+          account: [],
+          workspace: null,
+          organization: organization ? { ...organization, name: 'Acme', current: true } : null,
+          otherOrganizations: [],
+          platform: [],
+        }),
+        '/organizations/acme/settings/general'
+      ),
+    }),
   };
 });
 vi.mock('@/lib/iam-admin/use-access', () => ({

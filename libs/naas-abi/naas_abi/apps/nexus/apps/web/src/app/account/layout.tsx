@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useRememberSettingsPath } from '@/hooks/use-remember-settings-scope';
+import { useSettingsTabs } from '@/hooks/use-settings-levels';
 import { loadOrgBranding, resolveWorkspaceOrgId } from '@/lib/org-branding';
 import { SettingsLevelsNav } from '@/components/settings/settings-levels-nav';
 import { SettingsLayoutRoot, useWorkspaceReturnPath } from '@/components/settings/settings-shell';
@@ -28,6 +29,7 @@ export default function AccountLayout({
     (state) => state.workspaces.find((w) => w.id === state.currentWorkspaceId)?.organizationId,
   );
   const [borderRadius, setBorderRadius] = useState('0');
+  const { tabs, level } = useSettingsTabs({ mobile: isMobile });
 
   useRememberSettingsPath(pathname);
 
@@ -77,6 +79,7 @@ export default function AccountLayout({
       <div className="org-settings-layout-left">
         <SettingsShellHeader
           detailTitle={showMobileDetail ? sectionLabel : null}
+          tabs={showMobileDetail ? undefined : tabs}
           onBack={handleBack}
           backAriaLabel={showMobileDetail ? 'Back to settings' : 'Back to workspace'}
         />
@@ -91,7 +94,7 @@ export default function AccountLayout({
                 : 'org-settings-layout-body'
           }
         >
-          {showNav && <SettingsLevelsNav mobileList={showMobileList} />}
+          {showNav && <SettingsLevelsNav level={level} mobileList={showMobileList} />}
 
           {showMain && (
             <div className="org-settings-layout-main">

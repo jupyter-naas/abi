@@ -86,6 +86,12 @@ describe('old System links', () => {
     expect(platformSettingsRedirect('/settings/modules', '?org=acme')).toBe('/settings/roles?org=acme');
   });
 
+  it('send the Console, removed, to Settings', () => {
+    expect(platformSettingsRedirect('/settings/console')).toBe('/settings');
+    expect(platformSettingsRedirect('/settings/console/')).toBe('/settings');
+    expect(isPlatformSettingsPath('/settings/console')).toBe(false);
+  });
+
   it('send Events to Activity › Events', () => {
     expect(platformSettingsRedirect('/workspace/ws-1/admin/events')).toBe('/settings/activity/events');
     expect(platformSettingsRedirect('/org/acme/workspace/ws-1/admin/events')).toBe(

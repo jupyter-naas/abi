@@ -22,7 +22,7 @@ export const ACTIVITY_PATH = SECTION_PATHS.activity;
 /** Roles & permissions, which was System's Access tab. */
 export const ROLES_PATH = '/settings/roles';
 
-/** The map of the ABI code, one page per view (System, in the Console). */
+/** The map of the ABI code, one page per view (Settings › Platform › System). */
 export const INFRASTRUCTURE_LAYERS_PATH = `${SYSTEM_PATH}/layers`;
 export const INFRASTRUCTURE_DIAGRAMS_PATH = `${SYSTEM_PATH}/diagrams`;
 

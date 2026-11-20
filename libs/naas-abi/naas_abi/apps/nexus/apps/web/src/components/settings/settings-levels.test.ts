@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { accountSettingsNavVisible } from '@/app/account/lib/nav';
 import { orgSettingsNavForRole } from '@/app/organizations/[orgId]/settings/lib/nav';
-import { visibleAdministrationItems } from '@/app/settings/lib/nav';
+import { visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
 import { SETTINGS_GROUPS } from '@/components/shell/settings-nav';
-import { activeSettingsHref, settingsLevels, type SettingsLevelsInput } from './settings-levels';
+import {
+  activeSettingsHref,
+  currentSettingsLevel,
+  settingsLevels,
+  settingsTabs,
+  type SettingsLevelsInput,
+} from './settings-levels';
 
 const member: SettingsLevelsInput = {
   account: accountSettingsNavVisible,
@@ -19,27 +25,38 @@ const labels = (input: SettingsLevelsInput, id: string) =>
     .find((level) => level.id === id)
     ?.groups.flatMap((group) => group.links.map((link) => link.label)) ?? [];
 
+const all: SettingsLevelsInput = {
+  ...member,
+  workspace: { id: 'ws-1', groups: SETTINGS_GROUPS },
+  organization: { id: 'acme', name: 'Acme', items: orgSettingsNavForRole('admin', { holdsIam: true }), current: true },
+  platform: visiblePlatformSettingsGroups({ 'nexus:ReadSystem': true, 'nexus:ListUsers': true }),
+};
+
 describe('the levels of Settings', () => {
   it('shows a member their account alone', () => {
     expect(titles(member)).toEqual(['Account']);
   });
 
-  it('goes from the narrowest level to the widest, each with only what the caller opens', () => {
-    const all: SettingsLevelsInput = {
-      ...member,
-      workspace: { id: 'ws-1', groups: SETTINGS_GROUPS },
-      organization: { id: 'acme', name: 'Acme', items: orgSettingsNavForRole('admin', { holdsIam: true }), current: true },
-      platform: visibleAdministrationItems({ 'nexus:ReadSystem': true, 'nexus:ListUsers': true }),
-    };
-    expect(titles(all)).toEqual(['Account', 'Workspace', 'Organization', 'Platform']);
+  it('goes from the widest level to the narrowest, each with only what the caller opens', () => {
+    expect(titles(all)).toEqual(['Platform', 'Organization', 'Workspace', 'Account']);
     expect(labels(all, 'organization')).toContain('Members');
-    expect(labels(all, 'platform')).toEqual(['General', 'Organizations', 'Users']);
+    expect(labels(all, 'platform')).toEqual(expect.arrayContaining(['General', 'Organizations', 'Users', 'Jobs']));
+    expect(labels(all, 'platform')).not.toContain('Roles & permissions');
+  });
+
+  it('keeps every group of the platform, each under its heading, Layers and Diagrams in System', () => {
+    const platform = settingsLevels(all).find((level) => level.id === 'platform');
+    expect(platform?.groups.map((group) => group.label)).toEqual(['Administration', 'System', 'Activity', 'Resources', 'Data']);
+    expect(platform?.groups[1].links.map((link) => link.label)).toEqual(expect.arrayContaining(['Layers', 'Diagrams']));
+    const usersOnly = settingsLevels({ ...member, platform: visiblePlatformSettingsGroups({ 'nexus:ListUsers': true }) });
+    expect(usersOnly[0].groups).toMatchObject([{ label: 'Administration', links: [{ label: 'Users' }] }]);
   });
 
   it('roots the workspace pages at the workspace, its later groups named under the level', () => {
-    const [, workspace] = settingsLevels({ ...member, workspace: { id: 'ws-1', groups: SETTINGS_GROUPS } });
+    const [workspace] = settingsLevels({ ...member, workspace: { id: 'ws-1', groups: SETTINGS_GROUPS } });
     expect(workspace.groups.map((group) => group.label)).toEqual([null, 'Features']);
     expect(workspace.groups[0].links[0].href).toBe('/workspace/ws-1/settings/general');
+    expect(workspace.index).toBe('/workspace/ws-1/settings');
   });
 
   it('leaves a level out when the caller opens nothing there', () => {
@@ -47,6 +64,7 @@ describe('the levels of Settings', () => {
       ...member,
       workspace: { id: 'ws-1', groups: [{ label: 'General', items: [] }] },
       organization: { id: 'acme', name: 'Acme', items: [], current: true },
+      platform: [{ label: 'Administration', items: [] }],
     };
     expect(titles(input)).toEqual(['Account']);
   });
@@ -69,13 +87,13 @@ describe('the levels of Settings', () => {
     const items = orgSettingsNavForRole('admin', { holdsIam: false });
     const elsewhere = { ...member, organization: { id: 'acme', name: 'Acme', items, current: false } };
     const here = { ...member, organization: { id: 'acme', name: 'Acme', items, current: true } };
-    expect(titles(elsewhere)).toEqual(['Account', 'Organization · Acme']);
-    expect(titles(here)).toEqual(['Account', 'Organization']);
+    expect(titles(elsewhere)).toEqual(['Organization · Acme', 'Account']);
+    expect(titles(here)).toEqual(['Organization', 'Account']);
   });
 
   it('lists the organizations when none is the page\'s or the workspace\'s', () => {
     const input = { ...member, otherOrganizations: [{ id: 'acme', name: 'Acme' }, { id: 'beta', name: 'Beta' }] };
-    expect(titles(input)).toEqual(['Account', 'Organizations']);
+    expect(titles(input)).toEqual(['Organizations', 'Account']);
   });
 
   it('marks the link a page is, or is under, the longest first', () => {
@@ -83,5 +101,67 @@ describe('the levels of Settings', () => {
     expect(activeSettingsHref(levels, '/workspace/ws-1/settings/agents/a-1')).toBe('/workspace/ws-1/settings/agents');
     expect(activeSettingsHref(levels, '/account/profile?tab=x')).toBe('/account/profile');
     expect(activeSettingsHref(levels, '/workspace/ws-1/chat')).toBeNull();
+  });
+});
+
+describe('the level the column lists', () => {
+  it('is the page\'s', () => {
+    const levels = settingsLevels(all);
+    expect(currentSettingsLevel(levels, '/settings/system/jobs')?.id).toBe('platform');
+    expect(currentSettingsLevel(levels, '/organizations/acme/settings/members')?.id).toBe('organization');
+    expect(currentSettingsLevel(levels, '/workspace/ws-1/settings/agents')?.id).toBe('workspace');
+    expect(currentSettingsLevel(levels, '/account')?.id).toBe('account');
+  });
+
+  it('is the only level there is, on a page the caller may not open', () => {
+    expect(currentSettingsLevel(settingsLevels(member), '/settings/users')?.id).toBe('account');
+  });
+
+  it('is none on a page whose level the caller does not open, among several', () => {
+    const levels = settingsLevels({ ...all, platform: [] });
+    expect(currentSettingsLevel(levels, '/settings/users')).toBeNull();
+  });
+});
+
+describe('the tabs of Settings', () => {
+  const nothingVisited = () => null;
+
+  it('are none with one level', () => {
+    expect(settingsTabs(settingsLevels(member), '/account/profile', { mobile: false, lastVisited: nothingVisited })).toEqual([]);
+  });
+
+  it('are the levels, widest first, the page\'s marked and staying on the page', () => {
+    const tabs = settingsTabs(settingsLevels(all), '/settings/system/jobs', { mobile: false, lastVisited: nothingVisited });
+    expect(tabs.map((tab) => [tab.label, tab.href, tab.active])).toEqual([
+      ['Platform', '/settings/system/jobs', true],
+      ['Organization', '/organizations/acme/settings/general', false],
+      ['Workspace', '/workspace/ws-1/settings/general', false],
+      ['Account', '/account/profile', false],
+    ]);
+  });
+
+  it('open a level where the caller left it, while that is still one of its pages', () => {
+    const visited: Record<string, string> = {
+      workspace: '/workspace/ws-1/settings/agents/a-1',
+      account: '/account',
+      organization: '/organizations/gone/settings/members',
+    };
+    const tabs = settingsTabs(settingsLevels(all), '/settings/general', {
+      mobile: false,
+      lastVisited: (level) => visited[level] ?? null,
+    });
+    expect(Object.fromEntries(tabs.map((tab) => [tab.id, tab.href]))).toMatchObject({
+      workspace: '/workspace/ws-1/settings/agents/a-1',
+      account: '/account/profile',
+      organization: '/organizations/acme/settings/general',
+    });
+  });
+
+  it('open a level\'s list on a phone', () => {
+    const tabs = settingsTabs(settingsLevels(all), '/settings', {
+      mobile: true,
+      lastVisited: () => '/workspace/ws-1/settings/agents',
+    });
+    expect(tabs.map((tab) => tab.href)).toEqual(['/settings', '/organizations/acme/settings', '/workspace/ws-1/settings', '/account']);
   });
 });

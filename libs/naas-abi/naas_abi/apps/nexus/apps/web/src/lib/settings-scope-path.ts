@@ -1,6 +1,6 @@
 /**
- * The last Settings page and the last Console page visited (sessionStorage), so the
- * avatar menu and the dock reopen where the caller left off.
+ * The last Settings page visited (sessionStorage), and the last one of each level, so the
+ * avatar menu and the dock reopen where the caller left off, and each tab its level.
  */
 
 export type SettingsScopeKey =
@@ -9,42 +9,61 @@ export type SettingsScopeKey =
   | { kind: 'organization'; orgId: string }
   | { kind: 'workspace'; workspaceId: string };
 
-/** Settings (what is set, at every level) or the Console (what is watched). */
-export type SettingsArea = 'settings' | 'console';
+/** A level of Settings, one tab each. */
+export type SettingsLevelId = SettingsScopeKey['kind'];
 
 const PREFIX = 'nexus-settings-return-path';
+const LAST_KEY = `${PREFIX}:settings`;
+const LEVELS: readonly SettingsLevelId[] = ['platform', 'organization', 'workspace', 'account'];
+// Written while the Console was an area of its own: still cleared at sign-out.
+const CONSOLE_KEY = `${PREFIX}:console`;
 
-function isAreaPath(area: SettingsArea, path: string): boolean {
-  if (!path.startsWith('/') || path.startsWith('//')) return false;
-  if (area === 'console') return path.startsWith('/settings/');
-  return settingsScopeFromPathname(path) !== null;
+function levelKey(level: SettingsLevelId): string {
+  return `${PREFIX}:level:${level}`;
 }
 
-export function rememberSettingsPath(area: SettingsArea, path: string): void {
-  if (!isAreaPath(area, path)) return;
+function settingsLevelOfPath(path: string): SettingsLevelId | null {
+  if (!path.startsWith('/') || path.startsWith('//')) return null;
+  return settingsScopeFromPathname(path)?.kind ?? null;
+}
+
+function readPath(key: string): string | null {
   try {
-    window.sessionStorage.setItem(`${PREFIX}:${area}`, path);
+    const path = window.sessionStorage.getItem(key);
+    return path && settingsLevelOfPath(path) ? path : null;
+  } catch {
+    // Storage blocked.
+    return null;
+  }
+}
+
+export function rememberSettingsPath(path: string): void {
+  const level = settingsLevelOfPath(path);
+  if (!level) return;
+  try {
+    window.sessionStorage.setItem(LAST_KEY, path);
+    window.sessionStorage.setItem(levelKey(level), path);
   } catch {
     // Storage blocked.
   }
 }
 
-/** The last page visited in ``area``, else ``fallback``. */
-export function settingsReturnPath(area: SettingsArea, fallback: string): string {
-  try {
-    const path = window.sessionStorage.getItem(`${PREFIX}:${area}`);
-    if (path && isAreaPath(area, path)) return path;
-  } catch {
-    // Storage blocked.
-  }
-  return fallback;
+/** The last Settings page visited, at any level, else ``fallback``. */
+export function settingsReturnPath(fallback: string): string {
+  return readPath(LAST_KEY) ?? fallback;
+}
+
+/** The last page visited at ``level``, or null. */
+export function settingsLevelReturnPath(level: SettingsLevelId): string | null {
+  const path = readPath(levelKey(level));
+  return path && settingsLevelOfPath(path) === level ? path : null;
 }
 
 /** At sign-out: the next person to sign in on this tab starts from their own landing. */
 export function forgetSettingsPaths(): void {
   try {
-    for (const area of ['settings', 'console'] satisfies SettingsArea[]) {
-      window.sessionStorage.removeItem(`${PREFIX}:${area}`);
+    for (const key of [LAST_KEY, CONSOLE_KEY, ...LEVELS.map(levelKey)]) {
+      window.sessionStorage.removeItem(key);
     }
   } catch {
     // Storage blocked.

@@ -15,6 +15,7 @@ import { SettingsLayoutRoot, useWorkspaceReturnPath } from '@/components/setting
 import { SettingsShellHeader } from '@/components/settings/settings-shell-header';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useRememberSettingsPath } from '@/hooks/use-remember-settings-scope';
+import { useSettingsTabs } from '@/hooks/use-settings-levels';
 import { useWorkspaceSettingsAccess } from '@/hooks/use-workspace-settings-access';
 import { reloadWorkspaceResources, useWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { SettingsReloadProvider } from '@/components/settings/settings-reload';
@@ -42,6 +43,7 @@ export default function SettingsLayout({
   const isIndex = INDEX_PATTERN.test(pathname);
   const showMobileList = isMobile && isIndex;
   const showMobileDetail = isMobile && !isIndex;
+  const { tabs, level } = useSettingsTabs({ mobile: isMobile });
 
   // Reload: the workspaces and what this one has.
   const reload = useCallback(
@@ -90,6 +92,7 @@ export default function SettingsLayout({
       <div className="org-settings-layout-left">
         <SettingsShellHeader
           detailTitle={showMobileDetail ? (item?.label ?? null) : null}
+          tabs={showMobileDetail ? undefined : tabs}
           onBack={handleBack}
           backAriaLabel={showMobileDetail ? 'Back to settings' : 'Back to workspace'}
         />
@@ -104,7 +107,7 @@ export default function SettingsLayout({
                 : 'org-settings-layout-body'
           }
         >
-          {!showMobileDetail && <SettingsLevelsNav mobileList={showMobileList} />}
+          {!showMobileDetail && <SettingsLevelsNav level={level} mobileList={showMobileList} />}
 
           {!showMobileList && (
             <SettingsReloadProvider onReload={reload}>

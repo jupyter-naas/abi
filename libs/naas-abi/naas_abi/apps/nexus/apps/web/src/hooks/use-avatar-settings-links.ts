@@ -4,18 +4,13 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
 import { useWorkspaceSettingsAccess } from '@/hooks/use-workspace-settings-access';
-import { CONSOLE_PATH, firstConsolePath, visibleConsoleGroups } from '@/app/settings/lib/nav';
 import { settingsLandingPath } from '@/components/shell/settings-nav';
 import { isWorkspaceSettingsPath, settingsReturnPath } from '@/lib/settings-scope-path';
 
 export type AvatarSettingsLink = { label: string; href: string };
 
-/** An entry whose access is still being read shows as `loading`; refused, it is null. */
-export type AvatarSettingsEntry = AvatarSettingsLink | 'loading' | null;
-
 export type AvatarSettingsLinks = {
   settings: AvatarSettingsLink;
-  console: AvatarSettingsEntry;
 };
 
 /**
@@ -28,32 +23,18 @@ export function useSettingsHref(): string {
   const access = useWorkspaceSettingsAccess();
   const opensWorkspace = !!workspaceId && (access === 'all' || access === 'iam');
   const fallback = opensWorkspace ? `/workspace/${workspaceId}${settingsLandingPath(access)}` : '/account/profile';
-  const remembered = settingsReturnPath('settings', fallback);
+  const remembered = settingsReturnPath(fallback);
   const elsewhere = isWorkspaceSettingsPath(remembered) && !remembered.startsWith(`/workspace/${workspaceId}/`);
   return elsewhere ? fallback : remembered;
 }
 
 /**
- * The avatar menu's two doors: Settings (every level, `settingsLevels`) and the Console
- * (what the platform runs), the latter for whoever may watch something there. The access
- * reads are shared stores, so opening the menu again asks nothing new; mounting the avatar
- * button warms them (`useWarmAvatarSettingsLinks`).
+ * The avatar menu's door to Settings, every level in its tabs (`settingsLevels`), like the
+ * dock's. The levels' access reads are shared stores, so opening Settings asks nothing
+ * new; mounting the avatar button warms them (`useWarmAvatarSettingsLinks`).
  */
 export function useAvatarSettingsLinks(): AvatarSettingsLinks {
-  const settingsHref = useSettingsHref();
-  const platform = usePlatformSettingsAccess();
-
-  let consoleEntry: AvatarSettingsEntry = null;
-  if (platform.status === 'checking') {
-    consoleEntry = 'loading';
-  } else if (platform.status === 'ready' && visibleConsoleGroups(platform.actions).length > 0) {
-    consoleEntry = {
-      label: 'Console',
-      href: settingsReturnPath('console', firstConsolePath(platform.actions) ?? CONSOLE_PATH),
-    };
-  }
-
-  return { settings: { label: 'Settings', href: settingsHref }, console: consoleEntry };
+  return { settings: { label: 'Settings', href: useSettingsHref() } };
 }
 
 /** Start the access reads when the avatar button mounts, before the menu opens. */

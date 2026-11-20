@@ -79,22 +79,15 @@ describe('the account menu', () => {
   });
 
   it('reopens the last settings page, at any level, but not another workspace\'s', async () => {
-    rememberSettingsPath('settings', '/organizations/acme/settings/members');
+    rememberSettingsPath('/organizations/acme/settings/members');
     expect(href(await menu(), 'Settings')).toBe('/organizations/acme/settings/members');
     await mounted?.unmount();
-    rememberSettingsPath('settings', '/workspace/ws-9/settings/general');
+    rememberSettingsPath('/workspace/ws-9/settings/general');
     expect(href(await menu(), 'Settings')).toBe('/account/profile');
   });
 
-  it('shows the Console to whoever may watch the platform', async () => {
-    state.platformActions = { 'nexus:ReadSystem': true };
-    const host = await menu();
-    expect(items(host)).toEqual(['Settings', 'Console', 'Help', 'Log out']);
-    expect(href(host, 'Console')).toMatch(/^\/settings\/system/);
-  });
-
-  it('leaves the Console out for a platform administrator who may only set things', async () => {
-    state.platformActions = { 'nexus:ListUsers': true };
+  it('has the same three rows for a platform administrator: the platform is a tab of Settings', async () => {
+    state.platformActions = { 'nexus:ReadSystem': true, 'nexus:ListUsers': true };
     expect(items(await menu())).toEqual(['Settings', 'Help', 'Log out']);
   });
 });
@@ -125,14 +118,5 @@ describe('the account menu from the keyboard', () => {
     expect(focused()).toBe('Log out');
     press('Home');
     expect(focused()).toBe('Settings');
-  });
-
-  it('shows the Console as a busy row while the access is read, and skips it', async () => {
-    state.platformStatus = 'checking';
-    const host = await menu(true);
-    const busy = [...host.querySelectorAll('[aria-busy="true"]')].map((el) => el.textContent?.trim());
-    expect(busy).toEqual(['Console']);
-    press('ArrowDown');
-    expect(focused()).toBe('Help');
   });
 });

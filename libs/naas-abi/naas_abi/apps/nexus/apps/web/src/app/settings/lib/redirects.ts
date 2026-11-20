@@ -24,6 +24,9 @@ import {
 /** Modules & features, removed with the sets: what a user may use is policies' alone. */
 const OLD_MODULES_PATH = '/settings/modules';
 
+/** The Console, whose pages are the Platform tab's again. */
+const OLD_CONSOLE_PATH = '/settings/console';
+
 /** The first segments under /settings that Platform Settings serves, from its section paths. */
 export const PLATFORM_SETTINGS_SECTIONS: readonly string[] = [
   PLATFORM_GENERAL_PATH,
@@ -55,6 +58,7 @@ const OLD_TABLE_PAGE = /^\/settings\/([A-Za-z0-9_]+)(\/.*)?$/;
  * - `/settings/system/data?service=<name>` → that service's page;
  * - `/settings/system/{traffic,traces,events}` → the same page under `/settings/activity`;
  * - `/settings/modules` (Modules & features, removed) → Roles & permissions;
+ * - `/settings/console` (the Console, removed) → `/settings`;
  * - `/settings/users/<row id>` → `/settings/tables/users/<row id>` (`/settings/users` itself is
  *   the Users page);
  * - `/settings/<table>[/<row id>]` → `/settings/tables/<table>[/<row id>]` (`<name>_table`
@@ -72,6 +76,7 @@ export function platformSettingsRedirect(pathname: string, search = ''): string 
   for (const old of [`${SYSTEM_PATH}/access`, OLD_MODULES_PATH]) {
     if (pathname === old || pathname.startsWith(`${old}/`)) return `${ROLES_PATH}${query}`;
   }
+  if (pathname === OLD_CONSOLE_PATH || pathname.startsWith(`${OLD_CONSOLE_PATH}/`)) return '/settings';
 
   const systemPage = OLD_SYSTEM_PAGE.exec(pathname)?.[1];
   if (systemPage === 'data') return legacyDataPath(params);

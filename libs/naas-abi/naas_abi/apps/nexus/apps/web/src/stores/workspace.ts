@@ -193,7 +193,7 @@ export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' 
 
 // Lab left the dock; Events moved to Platform Settings › System › Events.
 // `board` is the panel id Tasks had before its rename.
-// Infrastructure is in the Console now; Settings is a full-screen shell with its own column.
+// Infrastructure is in Settings › Platform › System now; Settings is a full-screen shell with its own column.
 const RETIRED_PANEL_SECTIONS = new Set<string>(['lab', 'events', 'board', 'infrastructure', 'settings']);
 
 /** Home is a full-bleed desk. Workspaces is a mark-owned directory. Neither is a last-panel restore target. */

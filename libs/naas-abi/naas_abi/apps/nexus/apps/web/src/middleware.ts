@@ -11,7 +11,7 @@ import { WEB_PASS_COOKIE } from './lib/web-pass';
  * Routing hierarchy:
  *   /account/*                        -> authed
  *   /settings, /settings/{general,organizations,users,roles,drives,system,activity,resources,data,tables}/... -> authed, Platform Settings
- *   /settings/<table>, /settings/modules, /settings/system/{data,traffic,traces,events},
+ *   /settings/<table>, /settings/modules, /settings/console, /settings/system/{data,traffic,traces,events},
  *   /workspace/[id]/admin/{system,events} -> redirected there (old links)
  *   /organizations/[orgId]/settings   -> authed (/settings/{access,modules} -> /settings/roles)
  *   /org/[orgSlug]/login              -> public, org-branded login

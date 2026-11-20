@@ -5,6 +5,7 @@ import { usePathname, useParams, useRouter } from 'next/navigation';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useRememberSettingsPath } from '@/hooks/use-remember-settings-scope';
+import { useSettingsTabs } from '@/hooks/use-settings-levels';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { opensRolesAndPermissions } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
@@ -59,6 +60,7 @@ export default function OrganizationSettingsLayout({
   );
   useDevRouteWarmup(sectionHrefs);
   const isMobile = useIsMobile();
+  const { tabs, level } = useSettingsTabs({ organization: navOrganization, mobile: isMobile });
   const { isDetail, section, sectionLabel } = parseOrgSettingsRoute(pathname);
   const showMobileList = isMobile && !isDetail;
   const showMobileDetail = isMobile && isDetail;
@@ -146,6 +148,7 @@ export default function OrganizationSettingsLayout({
       <div className="org-settings-layout-left">
       <SettingsShellHeader
         detailTitle={showMobileDetail ? sectionLabel : null}
+        tabs={showMobileDetail ? undefined : tabs}
         onBack={handleBack}
         backAriaLabel={showMobileDetail ? 'Back to settings' : 'Back to workspace'}
       />
@@ -160,7 +163,7 @@ export default function OrganizationSettingsLayout({
               : 'org-settings-layout-body'
         }
       >
-        {showNav && <SettingsLevelsNav mobileList={showMobileList} organization={navOrganization} />}
+        {showNav && <SettingsLevelsNav level={level} mobileList={showMobileList} />}
 
         {showMain && (
           <div className="org-settings-layout-main">

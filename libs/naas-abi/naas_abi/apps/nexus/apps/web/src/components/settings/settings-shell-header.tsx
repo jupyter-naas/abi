@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect } from 'react';
-import { ArrowLeft, Settings, type LucideIcon } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowLeft, Settings } from 'lucide-react';
+import type { SettingsTab } from './settings-levels';
 
 // Open layers that take Esc for themselves: dialogs, menus, listboxes, popovers.
 const OPEN_LAYER =
@@ -22,17 +24,15 @@ export function escapeLeavesSettings(event: KeyboardEvent, doc: Document = docum
 }
 
 export function SettingsShellHeader({
-  title = 'Settings',
   detailTitle,
-  icon: Icon = Settings,
+  tabs = [],
   onBack,
   backAriaLabel,
 }: {
-  /** Settings, or the Console: the levels are the column's, not the header's. */
-  title?: string;
   /** The page's title on a phone, where the column is a screen of its own. */
   detailTitle?: string | null;
-  icon?: LucideIcon;
+  /** The levels the caller opens (`useSettingsTabs`), under the title; none on a phone's page. */
+  tabs?: SettingsTab[];
   onBack: () => void;
   backAriaLabel: string;
 }) {
@@ -47,21 +47,38 @@ export function SettingsShellHeader({
   }, [onBack]);
 
   return (
-    <header className="org-settings-layout-header">
-      <div className="org-settings-layout-header-inner">
-        <button
-          type="button"
-          onClick={onBack}
-          className="org-settings-back-button"
-          aria-label={backAriaLabel}
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <div className="org-settings-layout-header-meta">
-          <Icon size={16} className="org-settings-layout-header-icon" />
-          <h1 className="org-settings-layout-header-title">{detailTitle ?? title}</h1>
+    <>
+      <header className="org-settings-layout-header">
+        <div className="org-settings-layout-header-inner">
+          <button
+            type="button"
+            onClick={onBack}
+            className="org-settings-back-button"
+            aria-label={backAriaLabel}
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div className="org-settings-layout-header-meta">
+            <Settings size={16} className="org-settings-layout-header-icon" />
+            <h1 className="org-settings-layout-header-title">{detailTitle ?? 'Settings'}</h1>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+      {tabs.length > 0 && (
+        <nav className="settings-tabs" aria-label="Settings levels">
+          {tabs.map((tab) => (
+            <Link
+              key={tab.id}
+              href={tab.href}
+              title={tab.label}
+              aria-current={tab.active ? 'true' : undefined}
+              className={tab.active ? 'settings-tab settings-tab-active' : 'settings-tab'}
+            >
+              {tab.label}
+            </Link>
+          ))}
+        </nav>
+      )}
+    </>
   );
 }

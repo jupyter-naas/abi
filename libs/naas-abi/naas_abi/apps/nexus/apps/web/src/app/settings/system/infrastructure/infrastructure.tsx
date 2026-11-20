@@ -11,7 +11,7 @@ import './infrastructure.css';
 const ArchitectureScene = dynamic(() => import('./architecture-scene'), { ssr: false, loading: () => <div className="infrastructure-scene-error">Loading architecture…</div> });
 const ArchitectureGraph = dynamic(() => import('./architecture-graph'), { ssr: false });
 
-/** The Console page open: Layers (the 3D planes) or Diagrams (the 2D graph). */
+/** The System page open: Layers (the 3D planes) or Diagrams (the 2D graph). */
 export type InfrastructureView = 'layers' | 'diagrams';
 
 export default function Infrastructure({ view }: { view: InfrastructureView }) {
