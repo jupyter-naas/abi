@@ -69,6 +69,8 @@ export interface Organization {
   secondaryLogoUrl?: string;
   showLogoSeparator?: boolean;
   defaultTheme?: string;
+  /** IANA name the organization's analytics periods follow (`UTC` by default). */
+  timezone?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -346,6 +348,7 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         secondaryLogoUrl: normalize(org.secondary_logo_url) || undefined,
         showLogoSeparator: org.show_logo_separator ?? false,
         defaultTheme: org.default_theme || undefined,
+        timezone: org.timezone || 'UTC',
         createdAt: org.created_at,
         updatedAt: org.updated_at,
         currentUserRole: org.current_user_role ?? null,
@@ -371,7 +374,7 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         loginBgImageUrl: 'login_bg_image_url', showTermsFooter: 'show_terms_footer',
         showPoweredBy: 'show_powered_by', loginFooterText: 'login_footer_text',
         secondaryLogoUrl: 'secondary_logo_url', showLogoSeparator: 'show_logo_separator',
-        defaultTheme: 'default_theme',
+        defaultTheme: 'default_theme', timezone: 'timezone',
       };
       for (const [key, value] of Object.entries(updates)) {
         const apiKey = keyMap[key];
@@ -404,6 +407,7 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         secondaryLogoUrl: normalize(org.secondary_logo_url) || undefined,
         showLogoSeparator: org.show_logo_separator ?? false,
         defaultTheme: org.default_theme || undefined,
+        timezone: org.timezone || 'UTC',
         createdAt: org.created_at, updatedAt: org.updated_at,
       };
 

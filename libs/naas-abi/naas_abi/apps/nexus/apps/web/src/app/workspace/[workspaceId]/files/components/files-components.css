@@ -278,3 +278,62 @@
 .files-add-sheet-actions button:hover {
   background: var(--surface-subtle-hex);
 }
+
+/* Drive and View dropdowns (Files page and sidebar) */
+
+/* All Views: one folder per view */
+
+.files-views-root {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  list-style: none;
+}
+
+.files-views-root-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--org-border-radius, 0px);
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.files-views-root-item:hover,
+.files-views-root-item:focus-visible {
+  background: color-mix(in srgb, var(--workspace-accent, #22c55e) 10%, transparent);
+}
+
+.files-views-root-folder {
+  flex-shrink: 0;
+  color: var(--workspace-accent, #22c55e);
+}
+
+.files-views-root-icon {
+  flex-shrink: 0;
+  color: var(--muted-foreground-hex);
+}
+
+.files-views-root-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.files-views-root-empty {
+  padding: var(--space-6) var(--space-4);
+  color: var(--muted-foreground-hex);
+  font-size: 13px;
+  text-align: center;
+}

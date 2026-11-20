@@ -29,7 +29,8 @@ Nexus adds no role check of its own.
   at `scope`; at a scope, what the platform alone administers is false; no role feature defaults exist to
   report: no role brings a feature, a policy does; at the platform also `nexus:ReadSystem` and the accounts'
   `nexus:ListUsers`, `InviteUser`, `UpdateUser`, `SuspendUser`, `ResumeUser`, `DeleteUser`, on
-  `abi:nexus:user/-` as their routes ask them, false at a scope: `services/accounts`);
+  `abi:nexus:user/-` as their routes ask them, false at a scope: `services/accounts`; and the drives'
+  `nexus:ListDrives` on `abi:nexus:drive/-`, likewise: `services/drives`);
   `GET /catalogs?scope=&parent=` (only the actions the caller may grant
   at `scope`, the platform by default, and the types they name: a catalog with none is left out; with `parent`,
   within that policy, as `/grantable`)

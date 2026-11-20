@@ -74,7 +74,7 @@ ACME = IdentityWorkspace(
     owner_id="usr-1",
     organization_id="org-1",
     created_at=T0,
-    settings={"primary_color": "#0057B8", "platform_drive_enabled": True},
+    settings={"primary_color": "#0057B8", "font_family": "Inter"},
 )
 BOB_IN_ACME = IdentityMembership(
     id="mem-1", workspace_id="ws-1", user_id="usr-2", role="member", created_at=T0
@@ -252,7 +252,7 @@ def test_workspace_records_its_settings_and_configured_seeds() -> None:
     ws = workspace_iri("ws-1")
     assert (ws, NEXUS.slug, Literal("acme")) in graph
     assert (ws, NEXUS.primary_color, Literal("#0057B8")) in graph
-    assert (ws, NEXUS.platform_drive_enabled, Literal(True)) in graph
+    assert (ws, NEXUS.font_family, Literal("Inter")) in graph
     assert (ws, NEXUS.default_agent, Literal("bob BobAgent")) in graph
     assert (ws, NEXUS.seeded_agent, Literal("naas_abi SlidesAgent")) in graph
     assert (ws, NEXUS.seeded_app, Literal("external.acme:web")) in graph
@@ -457,3 +457,13 @@ def test_a_workspace_only_link_makes_a_user_of_the_organization_with_no_role() -
     assert (organization_iri("org-1"), NEXUS.hasUser, person_iri("usr-3")) in graph
     assert not list(graph.triples((organization_membership_iri("org-1", "usr-3"), None, None)))
     assert not list(graph.triples((organization_role_iri("org-1", "usr-3"), None, None)))
+
+
+def test_the_workspace_settings_mirrored_carry_no_drive_flag() -> None:
+    """Platform Files and System Files are IAM's: no workspace flag is mirrored."""
+    from naas_abi.apps.nexus.apps.api.app.services.identity_graph.adapters.secondary.identity_graph__secondary_adapter__postgres import (  # noqa: E501
+        WORKSPACE_SETTING_COLUMNS,
+    )
+
+    assert "platform_drive_enabled" not in WORKSPACE_SETTING_COLUMNS
+    assert "system_drive_enabled" not in WORKSPACE_SETTING_COLUMNS

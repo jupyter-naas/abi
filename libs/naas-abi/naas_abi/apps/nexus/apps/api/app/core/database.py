@@ -20,6 +20,12 @@ _SQLITE_ADD_COLUMN_RE = re.compile(
     r"\bADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\b",
     re.IGNORECASE,
 )
+# SQLite has no ``DROP COLUMN IF EXISTS``: the runner drops ``IF EXISTS`` and skips
+# a column already gone (``_DROP_COLUMN_RE``).
+_SQLITE_DROP_COLUMN_RE = re.compile(
+    r"\bDROP\s+COLUMN\s+IF\s+EXISTS\b",
+    re.IGNORECASE,
+)
 
 # Postgres lets you stack multiple ADD COLUMN clauses in one ALTER TABLE.
 # SQLite requires one ALTER TABLE per column.
@@ -81,6 +87,58 @@ def rename_already_applied(columns: set[str], old: str, new: str) -> bool:
     return old not in columns and new in columns
 
 
+# `ALTER TABLE t ADD COLUMN [IF NOT EXISTS] c ... [, ADD COLUMN ...]`: PostgreSQL takes
+# the table's ACCESS EXCLUSIVE lock before it checks IF NOT EXISTS, so on every boot such
+# a statement would queue behind any long transaction on the table (and every query of it
+# behind the ALTER). The runner skips it once all its columns exist.
+_ADD_COLUMN_STATEMENT_RE = re.compile(
+    r'^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"?(\w+)"?\s+(ADD\s+COLUMN\s+.*?)\s*;?\s*$',
+    re.IGNORECASE | re.DOTALL,
+)
+_ADD_COLUMN_CLAUSE_RE = re.compile(
+    r'^\s*ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?(?:\s|$)',
+    re.IGNORECASE,
+)
+
+
+def parse_add_columns(statement: str) -> tuple[str, list[str]] | None:
+    """(table, columns) for an `ALTER TABLE ... ADD COLUMN ...` made of ADD COLUMN
+    clauses only, else None."""
+    match = _ADD_COLUMN_STATEMENT_RE.match(statement)
+    if not match:
+        return None
+    table, body = match.group(1), match.group(2)
+    # Any other clause (``, DROP COLUMN ...``): run as written. Literals and
+    # parentheses (``NUMERIC(10,2)``) are left out of the look.
+    bare = re.sub(r"'[^']*'|\([^()]*\)", "", body)
+    if re.search(r",(?!\s*ADD\s+COLUMN\s)", bare, flags=re.I):
+        return None
+    columns = []
+    for clause in re.split(r",\s*(?=ADD\s+COLUMN\s)", body, flags=re.I):
+        found = _ADD_COLUMN_CLAUSE_RE.match(clause)
+        if found is None:
+            return None
+        columns.append(found.group(1))
+    return table, columns
+
+
+def add_columns_already_applied(columns: set[str], added: list[str]) -> bool:
+    return bool(added) and all(column in columns for column in added)
+
+
+async def _columns_of(table: str) -> set[str] | None:
+    """The table's column names; None when it does not exist."""
+    async with async_engine.connect() as conn:
+
+        def read(sync_conn) -> set[str] | None:
+            inspector = inspect(sync_conn)
+            if not inspector.has_table(table):
+                return None
+            return {c["name"] for c in inspector.get_columns(table)}
+
+        return await conn.run_sync(read)
+
+
 def _adapt_statement_for_dialect(statement: str, dialect: str) -> list[str]:
     """Return the statement(s) to actually execute for the active dialect.
 
@@ -88,6 +146,8 @@ def _adapt_statement_for_dialect(statement: str, dialect: str) -> list[str]:
     SQLite, two Postgres-isms get rewritten:
       - `ADD COLUMN IF NOT EXISTS` → `ADD COLUMN` (duplicate errors are
         caught and skipped by the runner for idempotent re-runs).
+      - `DROP COLUMN IF EXISTS` → `DROP COLUMN` (a column already dropped is
+        skipped by the runner).
       - `ALTER TABLE t ADD COLUMN a, ADD COLUMN b` → two separate ALTERs.
     """
     if dialect != "sqlite":
@@ -106,6 +166,7 @@ def _adapt_statement_for_dialect(statement: str, dialect: str) -> list[str]:
         return []
 
     rewritten = _SQLITE_ADD_COLUMN_RE.sub("ADD COLUMN", statement)
+    rewritten = _SQLITE_DROP_COLUMN_RE.sub("DROP COLUMN", rewritten)
 
     # Detect "ALTER TABLE x ADD COLUMN ... , ADD COLUMN ..." and split.
     match = _ALTER_TABLE_PREFIX_RE.match(rewritten)
@@ -300,6 +361,12 @@ async def init_db() -> None:
                             }
                         )
                     if rename_already_applied(columns, old, new):
+                        skipped += 1
+                        continue
+                added = parse_add_columns(statement)
+                if added is not None:
+                    existing = await _columns_of(added[0])
+                    if existing is not None and add_columns_already_applied(existing, added[1]):
                         skipped += 1
                         continue
                 try:

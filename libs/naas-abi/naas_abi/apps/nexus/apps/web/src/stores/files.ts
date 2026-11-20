@@ -23,48 +23,6 @@ const getCurrentWorkspaceId = (): string | null => {
   return useWorkspaceStore.getState().currentWorkspaceId ?? getWorkspaceIdFromPathname();
 };
 
-// Storage source types - only Local (synced folders) and Cloud
-export type StorageCategory = 'local' | 'cloud';
-
-export interface StorageSource {
-  id: string;
-  name: string;
-  icon: string;
-  category: StorageCategory;
-  enabled: boolean;
-  connected: boolean;
-  description?: string;
-}
-
-// Default storage sources
-export const defaultStorageSources: StorageSource[] = [
-  // Local - default workspace storage on server
-  { id: 'my-drive', name: 'My Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Personal files shared across workspaces' },
-  { id: 'workspace', name: 'Workspace Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Workspace files (create, edit, upload)' },
-  { id: 'organization-drive', name: 'Organization Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: "Files of the workspace's organization, shared across its workspaces" },
-  { id: 'platform-drive', name: 'Platform Drive', icon: 'hard-drive', category: 'local', enabled: true, connected: true, description: 'Files shared across every workspace where platform drive is enabled' },
-  { id: 'system-drive', name: 'System Drive', icon: 'server', category: 'local', enabled: true, connected: true, description: 'Full object storage tree (workspace admins only)' },
-  
-  // Cloud sources - third-party cloud storage
-  { id: 'google-drive', name: 'Google Drive', icon: 'cloud', category: 'cloud', enabled: false, connected: false, description: 'Sync with Google Drive' },
-  { id: 'icloud', name: 'iCloud Drive', icon: 'cloud', category: 'cloud', enabled: false, connected: false, description: 'Sync with iCloud' },
-  { id: 'dropbox', name: 'Dropbox', icon: 'cloud', category: 'cloud', enabled: false, connected: false, description: 'Sync with Dropbox' },
-  { id: 'onedrive', name: 'OneDrive', icon: 'cloud', category: 'cloud', enabled: false, connected: false, description: 'Sync with Microsoft OneDrive' },
-  { id: 's3', name: 'AWS S3', icon: 'database', category: 'cloud', enabled: false, connected: false, description: 'Amazon S3 bucket' },
-  { id: 'r2', name: 'Cloudflare R2', icon: 'database', category: 'cloud', enabled: false, connected: false, description: 'Cloudflare R2 storage' },
-  { id: 'minio', name: 'MinIO', icon: 'server', category: 'cloud', enabled: false, connected: false, description: 'Self-hosted S3-compatible' },
-];
-
-// Synced folder interface - local folders synced via File System Access API
-export interface SyncedFolder {
-  id: string;
-  name: string;
-  localPath: string;  // Display path on user's machine
-  handle?: FileSystemDirectoryHandle; // Native file system handle
-  syncEnabled: boolean;
-  lastSynced?: string;
-}
-
 export interface FileInfo {
   name: string;
   path: string;
@@ -72,14 +30,15 @@ export interface FileInfo {
   size?: number;
   modified?: string;
   content_type?: string;
-  source?: string; // Storage source ID
+  source?: string; // The view it was listed in
 }
 
 export interface StarredItem {
   path: string;
   name: string;
   type: 'file' | 'folder';
-  source: string; // activeSource value (my-drive, workspace, etc.)
+  /** The view it is in (`my-files`, `workspace-files`…). */
+  source: FileViewSource;
   workspaceId: string;
 }
 
@@ -87,15 +46,42 @@ export interface StarredNavigation {
   source: string;
   path: string;
   previewPath?: string; // for files: open preview after navigating to parent folder
+  /** The Files query its caller pushes (`filesNavigationQuery`); none when it pushes no URL. */
+  url?: string;
 }
 
 const STARRED_STORAGE_KEY = 'nexus-starred-files';
+
+/**
+ * Starred items as stored: an item kept with an old drive source (`my-drive`,
+ * `workspace`…) opens the view it became; one of a synced local folder (gone) or
+ * unreadable is dropped.
+ */
+export function starredItemsFrom(stored: unknown): StarredItem[] {
+  if (!Array.isArray(stored)) return [];
+  return stored.flatMap((raw): StarredItem[] => {
+    if (!raw || typeof raw !== 'object') return [];
+    const item = raw as Partial<StarredItem> & { source?: unknown };
+    const source = filesSourceFrom(typeof item.source === 'string' ? item.source : null);
+    if (!source || !isFileViewSource(source)) return [];
+    if (typeof item.path !== 'string' || typeof item.workspaceId !== 'string') return [];
+    return [
+      {
+        path: item.path,
+        name: typeof item.name === 'string' ? item.name : item.path.split('/').pop() || item.path,
+        type: item.type === 'folder' ? 'folder' : 'file',
+        source,
+        workspaceId: item.workspaceId,
+      },
+    ];
+  });
+}
 
 const getInitialStarredItems = (): StarredItem[] => {
   if (typeof window === 'undefined') return [];
   try {
     const stored = localStorage.getItem(STARRED_STORAGE_KEY);
-    return stored ? (JSON.parse(stored) as StarredItem[]) : [];
+    return stored ? starredItemsFrom(JSON.parse(stored)) : [];
   } catch {
     return [];
   }
@@ -173,6 +159,8 @@ interface FilesState {
   // Files page state (Finder-like navigation)
   files: FileInfo[];
   currentPath: string;
+  /** The view the shown listing (`currentPath`, `files`) belongs to; null before any. */
+  listedSource: FilesSource | null;
   loading: boolean;
   error: string | null;
 
@@ -184,10 +172,10 @@ interface FilesState {
   filesLimit: number | null;
   filesOffset: number;
   filesSearch: string;
-  // Persisted sort preference, applied server-side (remote) or client-side (local).
+  // Persisted sort preference, applied server-side.
   filesSortBy: FileSortKey;
   filesSortDir: SortDirection;
-  // Persisted: list system (dot) files. Applied server-side (remote) or client-side (local).
+  // Persisted: list system (dot) files. Applied server-side.
   showSystemFiles: boolean;
   
   // Lab state (VS Code-like, always at workspace root)
@@ -201,13 +189,13 @@ interface FilesState {
   fileContents: Record<string, string>;  // path -> content
   unsavedChanges: Record<string, boolean>;  // path -> hasUnsavedChanges
   
-  // Storage sources
-  storageSources: StorageSource[];
-  expandedCategories: StorageCategory[];
-  activeSource: string;
-  
-  // Synced folders
-  syncedFolders: SyncedFolder[];
+  // What the Files page and sidebar show: All Views (`all`, one folder per view
+  // the caller may open) or a view. `viewChoice` is the View dropdown: under All
+  // Views, opening a view's folder keeps it, so the breadcrumb leads back.
+  activeSource: FilesSource;
+  viewChoice: FilesSource;
+  // The Drive dropdown: All Drives, or one drive (File System, today's only).
+  activeDrive: FilesDrive;
 
   // Starred items (persisted in localStorage)
   starredItems: StarredItem[];
@@ -244,19 +232,17 @@ interface FilesState {
   unstarItem: (path: string, workspaceId: string) => void;
   setStarredNavigation: (nav: StarredNavigation | null) => void;
 
-  // Storage source actions
-  toggleCategory: (category: StorageCategory) => void;
-  toggleSource: (sourceId: string) => void;
-  setActiveSource: (sourceId: string) => void;
-  connectSource: (sourceId: string) => Promise<void>;
-  disconnectSource: (sourceId: string) => void;
-  
-  // Synced folder actions
-  addSyncedFolder: (folder: Omit<SyncedFolder, 'id'>) => void;
-  removeSyncedFolder: (id: string) => void;
-  toggleSyncFolder: (id: string) => void;
-  syncLocalFolder: () => Promise<SyncedFolder | null>;  // Opens native folder picker
-  fetchLocalFiles: (folderId: string, subPath?: string) => Promise<void>;  // Reads files from synced folder
+  // View actions
+  /** Open a view (or All Views): a link, a starred item, a folder of All Views. Old drive sources are read as their view. */
+  setActiveSource: (source: string) => void;
+  /** The View dropdown: open this view (or All Views) and keep it chosen. */
+  chooseView: (source: FilesSource) => void;
+  /** The Drive dropdown. */
+  chooseDrive: (drive: FilesDrive) => void;
+  /** The dock and Home open Files on Workspace Files inside All Views. */
+  openFilesEntry: () => void;
+  /** A Files URL's state (`filesStateFromUrl`): the drive, the View picker and the open view. */
+  restoreFilesState: (state: { drive: FilesDrive; view: FilesSource; source: FilesSource }) => void;
   
   // API actions
   fetchFiles: (
@@ -278,14 +264,26 @@ interface FilesState {
 }
 
 import { getApiUrl } from '@/lib/config';
-import { filesScopeForSource } from '@/app/workspace/[workspaceId]/files/lib/drive-label';
+import {
+  ALL_VIEWS,
+  FILES_ENTRY,
+  filesScopeForSource,
+  filesSourceFrom,
+  isFileViewSource,
+  type FileViewSource,
+  type FilesDrive,
+  type FilesSource,
+} from '@/app/workspace/[workspaceId]/files/lib/drive-label';
+
+/** Said when an action needs a view but All Views is open. */
+const NO_VIEW_OPEN = 'Open a view (My Files, Workspace Files…) first';
 
 const getApiBase = () => getApiUrl();
 
 
 // Files page listing requests. Each fetch bumps the generation; only the
-// latest one may commit files, errors or the loading flag. Switching drive or
-// reading a local folder also invalidates (and aborts) the pending listing.
+// latest one may commit files, errors or the loading flag. Switching view also
+// invalidates (and aborts) the pending listing.
 let filesRequestGen = 0;
 let filesRequestAbort: AbortController | null = null;
 
@@ -306,6 +304,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   // Files page state (Finder-like)
   files: [],
   currentPath: '',
+  listedSource: null,
   loading: false,
   error: null,
 
@@ -328,13 +327,9 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   fileContents: {},
   unsavedChanges: {},
   
-  // Storage sources
-  storageSources: defaultStorageSources,
-  expandedCategories: ['local'] as StorageCategory[],
-  activeSource: 'workspace',  // Default to workspace (server storage)
-  
-  // Synced folders
-  syncedFolders: [] as SyncedFolder[],
+  activeSource: ALL_VIEWS,
+  viewChoice: ALL_VIEWS,
+  activeDrive: 'all',
 
   starredItems: getInitialStarredItems(),
   starredNavigation: null,
@@ -378,180 +373,33 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     set({ showSystemFiles: show });
   },
   
-  // Storage source actions
-  toggleCategory: (category) => set((state) => ({
-    expandedCategories: state.expandedCategories.includes(category)
-      ? state.expandedCategories.filter((c) => c !== category)
-      : [...state.expandedCategories, category],
-  })),
-  
-  toggleSource: (sourceId) => set((state) => ({
-    storageSources: state.storageSources.map((s) =>
-      s.id === sourceId ? { ...s, enabled: !s.enabled } : s
-    ),
-  })),
-  
-  setActiveSource: (sourceId) => {
-    if (sourceId !== get().activeSource) invalidateFilesRequests();
-    set({ activeSource: sourceId });
+  setActiveSource: (raw) => {
+    const source = filesSourceFrom(raw);
+    if (!source) return;
+    const { activeSource, viewChoice } = get();
+    if (source !== activeSource) invalidateFilesRequests();
+    // Under All Views a view opens inside it; with one view chosen, another becomes the choice.
+    const nextChoice = viewChoice === ALL_VIEWS || source === ALL_VIEWS ? ALL_VIEWS : source;
+    set({ activeSource: source, viewChoice: nextChoice });
   },
-  
-  connectSource: async (sourceId) => {
-    // TODO: Implement OAuth or API key connection flow for cloud sources
-    set((state) => ({
-      storageSources: state.storageSources.map((s) =>
-        s.id === sourceId ? { ...s, connected: true, enabled: true } : s
-      ),
-    }));
+
+  chooseView: (source) => {
+    if (source !== get().activeSource) invalidateFilesRequests();
+    set({ activeSource: source, viewChoice: source });
   },
-  
-  disconnectSource: (sourceId) => set((state) => ({
-    storageSources: state.storageSources.map((s) =>
-      s.id === sourceId ? { ...s, connected: false, enabled: false } : s
-    ),
-  })),
-  
-  // Synced folder actions
-  addSyncedFolder: (folder) => set((state) => {
-    const newId = `synced-${Date.now()}`;
-    return {
-      syncedFolders: [
-        ...state.syncedFolders,
-        { ...folder, id: newId },
-      ],
-      // Auto-select if it's the first synced folder
-      activeSource: state.activeSource === '' ? newId : state.activeSource,
-    };
-  }),
-  
-  removeSyncedFolder: (id) => set((state) => ({
-    syncedFolders: state.syncedFolders.filter((f) => f.id !== id),
-    // Clear activeSource if we're removing the active one
-    activeSource: state.activeSource === id 
-      ? (state.syncedFolders.find((f) => f.id !== id)?.id || '')
-      : state.activeSource,
-  })),
-  
-  toggleSyncFolder: (id) => set((state) => ({
-    syncedFolders: state.syncedFolders.map((f) =>
-      f.id === id ? { ...f, syncEnabled: !f.syncEnabled } : f
-    ),
-  })),
-  
-  // Open native folder picker and sync a local folder
-  syncLocalFolder: async () => {
-    try {
-      // Check if File System Access API is supported
-      if (!('showDirectoryPicker' in window)) {
-        set({ error: 'Your browser does not support folder selection. Please use Chrome, Edge, or another Chromium-based browser.' });
-        return null;
-      }
-      
-      // Open native folder picker
-      const handle = await (window as Window & { showDirectoryPicker: () => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker();
-      
-      const newId = `synced-${Date.now()}`;
-      const newFolder: SyncedFolder = {
-        id: newId,
-        name: handle.name,
-        localPath: handle.name, // We can only get the folder name, not the full path for security
-        handle,
-        syncEnabled: true,
-        lastSynced: new Date().toISOString(),
-      };
-      
-      set((state) => ({
-        syncedFolders: [...state.syncedFolders, newFolder],
-        activeSource: newId,
-      }));
-      
-      // Fetch files from the newly synced folder
-      await get().fetchLocalFiles(newId);
-      
-      return newFolder;
-    } catch (err) {
-      // User cancelled the picker or browser doesn't support it
-      const errorName = (err as Error).name;
-      if (errorName !== 'AbortError' && errorName !== 'SecurityError') {
-        console.error('Error syncing folder:', err);
-        set({ error: 'Failed to sync folder. Make sure your browser supports the File System Access API.' });
-      }
-      // Clear any previous error on cancellation
-      if (errorName === 'AbortError') {
-        set({ error: null });
-      }
-      return null;
-    }
+
+  chooseDrive: (drive) => set({ activeDrive: drive }),
+
+  openFilesEntry: () => {
+    if (get().activeSource !== FILES_ENTRY.source) invalidateFilesRequests();
+    set({ viewChoice: FILES_ENTRY.view, activeSource: FILES_ENTRY.source });
   },
-  
-  // Fetch files from a synced local folder using File System Access API
-  fetchLocalFiles: async (folderId, subPath = '') => {
-    const { gen } = beginFilesRequest();
-    const { syncedFolders } = get();
-    const folder = syncedFolders.find((f) => f.id === folderId);
-    
-    if (!folder?.handle) {
-      set({ error: 'Folder handle not available. Please re-sync the folder.' });
-      return;
-    }
-    
-    set({ loading: true, error: null });
-    
-    try {
-      const files: FileInfo[] = [];
-      let targetHandle: FileSystemDirectoryHandle = folder.handle;
-      
-      // Navigate to subpath if provided
-      if (subPath) {
-        const parts = subPath.split('/').filter(Boolean);
-        for (const part of parts) {
-          targetHandle = await targetHandle.getDirectoryHandle(part);
-        }
-      }
-      
-      // Read directory contents
-      for await (const entry of (targetHandle as any).values()) {
-        const fileInfo: FileInfo = {
-          name: entry.name,
-          path: subPath ? `${subPath}/${entry.name}` : entry.name,
-          type: entry.kind === 'directory' ? 'folder' : 'file',
-          source: folderId,
-        };
-        
-        // Get file size and modified date for files
-        if (entry.kind === 'file') {
-          try {
-            const file = await entry.getFile();
-            fileInfo.size = file.size;
-            fileInfo.modified = file.lastModified ? new Date(file.lastModified).toISOString() : undefined;
-            fileInfo.content_type = file.type || undefined;
-          } catch {
-            // Ignore errors getting file metadata
-          }
-        }
-        
-        files.push(fileInfo);
-      }
-      
-      // Sort: folders first, then by name
-      files.sort((a, b) => {
-        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
-      
-      if (gen !== filesRequestGen) return;
-      set({ files, currentPath: subPath, loading: false });
-    } catch (err) {
-      if (gen !== filesRequestGen) return;
-      console.error('Error reading local folder:', err);
-      set({ 
-        error: 'Failed to read folder contents. You may need to re-grant access.',
-        loading: false,
-        files: [],
-      });
-    }
+
+  restoreFilesState: ({ drive, view, source }) => {
+    if (get().activeSource !== source) invalidateFilesRequests();
+    set({ activeDrive: drive, viewChoice: view, activeSource: source });
   },
-  
+
   openFile: (path) => {
     const { openFiles } = get();
     if (!openFiles.includes(path)) {
@@ -611,11 +459,13 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const { gen, signal } = beginFilesRequest();
     const isCurrent = () => gen === filesRequestGen;
 
-    // My Drive is the person's own: in a view nothing of it is asked for or shown.
-    if (scope === 'my_drive' && useAuthStore.getState().view) {
+    // All Views is the views' folders, which the page draws: nothing is listed.
+    // My Files is the person's own: in a view nothing of it is asked for or shown.
+    if (!scope || (scope === 'my_drive' && useAuthStore.getState().view)) {
       set({
         files: [],
-        currentPath: relativePath,
+        currentPath: scope ? relativePath : '',
+        listedSource: get().activeSource,
         filesTotal: 0,
         filesLimit: limit,
         filesOffset: offset,
@@ -626,12 +476,13 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       return;
     }
 
-    // The files API requires a workspace for the workspace, organization and platform drives.
+    // The files API requires a workspace for Workspace Files and Organization Files.
     // During app bootstrap the workspace can still be null.
     if (scope !== 'my_drive' && !relativePath && !workspaceId) {
       set({
         files: [],
         currentPath: '',
+        listedSource: get().activeSource,
         filesTotal: 0,
         filesLimit: limit,
         filesOffset: offset,
@@ -690,6 +541,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       set({
         files: resolvedFiles,
         currentPath: resolvedPath,
+        listedSource: get().activeSource,
         filesTotal: resolvedTotal,
         filesLimit: limit,
         filesOffset: offset,
@@ -772,6 +624,11 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const workspaceId = getCurrentWorkspaceId();
     const scope = filesScopeForSource(get().activeSource);
 
+    if (!scope) {
+      set({ error: NO_VIEW_OPEN, loading: false });
+      return null;
+    }
+
     if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return null;
@@ -812,6 +669,11 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const workspaceId = getCurrentWorkspaceId();
     const scope = filesScopeForSource(get().activeSource);
 
+    if (!scope) {
+      set({ error: NO_VIEW_OPEN, loading: false });
+      return null;
+    }
+
     if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return null;
@@ -844,6 +706,10 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   deleteFile: async (path) => {
     const workspaceId = getCurrentWorkspaceId();
     const scope = filesScopeForSource(get().activeSource);
+    if (!scope) {
+      set({ error: NO_VIEW_OPEN, loading: false });
+      return false;
+    }
     if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return false;
@@ -883,6 +749,10 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   renameFile: async (oldPath, newPath) => {
     const workspaceId = getCurrentWorkspaceId();
     const scope = filesScopeForSource(get().activeSource);
+    if (!scope) {
+      set({ error: NO_VIEW_OPEN, loading: false });
+      return false;
+    }
     if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
       return false;
@@ -940,6 +810,11 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const uploadPath = [currentPath, cleanRelative].filter(Boolean).join('/');
     const workspaceId = getCurrentWorkspaceId();
     const scope = filesScopeForSource(get().activeSource);
+
+    if (!scope) {
+      set({ error: NO_VIEW_OPEN, loading: false });
+      return null;
+    }
 
     if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected', loading: false });
@@ -1066,6 +941,10 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   readFile: async (path) => {
     const workspaceId = getCurrentWorkspaceId();
     const scope = filesScopeForSource(get().activeSource);
+    if (!scope) {
+      set({ error: NO_VIEW_OPEN });
+      return null;
+    }
     if (scope !== 'my_drive' && !workspaceId) {
       set({ error: 'No workspace selected' });
       return null;
@@ -1099,6 +978,11 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const scope = filesScopeForSource(get().activeSource);
     
     if (content === undefined) {
+      return false;
+    }
+
+    if (!scope) {
+      set({ error: NO_VIEW_OPEN });
       return false;
     }
 

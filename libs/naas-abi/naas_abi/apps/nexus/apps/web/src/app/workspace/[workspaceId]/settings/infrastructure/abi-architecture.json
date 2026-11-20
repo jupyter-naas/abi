@@ -232,20 +232,6 @@
       ]
     },
     {
-      "id": "abi/apps/analytics",
-      "label": "Analytics",
-      "layer": "applications",
-      "files": 1,
-      "lines": 0,
-      "classes": 0,
-      "functions": 0,
-      "tests": 0,
-      "symbols": 1,
-      "sourcePaths": [
-        "naas_abi/apps/analytics/__init__.py"
-      ]
-    },
-    {
       "id": "abi/agents/CodingAgent",
       "label": "CodingAgent",
       "layer": "applications",

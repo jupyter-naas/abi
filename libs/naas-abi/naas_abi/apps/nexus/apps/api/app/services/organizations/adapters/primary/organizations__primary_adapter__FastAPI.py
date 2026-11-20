@@ -12,6 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import offered_features
+from naas_abi.apps.nexus.apps.api.app.core.timezones import valid_timezone
 from naas_abi.apps.nexus.apps.api.app.services.auth import avatar_store, user_drive_profile
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     is_platform_admin,
@@ -170,6 +171,8 @@ class Organization(BaseModel):
     postal_code: str | None = None
     city: str | None = None
     country: str | None = None
+    # IANA time zone the analytics periods follow (Organization Settings > General).
+    timezone: str = "UTC"
     created_at: datetime | None = None
     updated_at: datetime | None = None
     current_user_role: str | None = None
@@ -269,6 +272,16 @@ class OrganizationUpdate(OrganizationIdentityFields):
     secondary_logo_url: str | None = None
     show_logo_separator: bool | None = None
     default_theme: str | None = None
+    # An IANA time zone (``Europe/Paris``): the organization's analytics periods
+    # (and its workspaces') start at midnight there.
+    timezone: str | None = Field(default=None, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def _timezone_is_iana(cls, value: str | None) -> str:
+        if value is None or not valid_timezone(value):
+            raise ValueError("timezone is an IANA time zone, such as Europe/Paris or UTC")
+        return value
 
 
 class OrganizationMember(BaseModel):

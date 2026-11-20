@@ -15,7 +15,7 @@ import {
   myDriveSlidesDir,
 } from './slides-my-drive';
 
-describe('My Drive slides paths', () => {
+describe('My Files slides paths', () => {
   it('keeps a user-relative slides/<slug> tree', () => {
     expect(myDriveSlidesDir('industry-deck')).toBe('slides/industry-deck');
     expect(myDriveDeckRelativePath('industry-deck')).toBe('slides/industry-deck/deck.html');
@@ -28,12 +28,12 @@ describe('My Drive slides paths', () => {
 describe('myDriveCopyErrorMessage', () => {
   it('hides storage internals', () => {
     expect(myDriveCopyErrorMessage('MinIO endpoint refused', 502)).toBe(
-      'My Drive is unavailable.',
+      'My Files is unavailable.',
     );
     expect(myDriveCopyErrorMessage('could not connect to s3 bucket abi', 400)).toBe(
-      'Could not copy to My Drive.',
+      'Could not copy to My Files.',
     );
-    expect(myDriveCopyErrorMessage('nope', 413)).toBe('Deck is too large for My Drive.');
+    expect(myDriveCopyErrorMessage('nope', 413)).toBe('Deck is too large for My Files.');
   });
 });
 

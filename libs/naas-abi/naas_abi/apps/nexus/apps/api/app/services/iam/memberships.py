@@ -285,6 +285,17 @@ class Memberships:
         """Who holds a role at ``scope``, each with the highest they hold."""
         return await self._run(lambda iam: self.members_by_scope(iam, scope).get(scope, []))
 
+    async def members_of(self, scopes: list[str]) -> dict[str, list[Member]]:
+        """Who holds a role at each of ``scopes``, in one pass over the roles'
+        attachments (``members`` would make one per scope)."""
+        wanted = set(scopes)
+
+        def work(iam: Any) -> dict[str, list[Member]]:
+            found = self.members_by_scope(iam)
+            return {scope: found.get(scope, []) for scope in wanted}
+
+        return await self._run(work)
+
     def members_by_scope(
         self, iam: Any, scope: str | None = None, *, org: str | None = None
     ) -> dict[str, list[Member]]:

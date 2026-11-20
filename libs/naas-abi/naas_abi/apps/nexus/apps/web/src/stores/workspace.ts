@@ -166,8 +166,6 @@ export interface Workspace {
   organizationSlug?: string;
   /** The organization's own square logo (the Workspaces list's headings). */
   organizationLogoUrl?: string;
-  /** Whether the user may open the organization's drive (Files sidebar). */
-  organizationDriveEnabled?: boolean;
   ownerId?: string;
   icon?: string;
   color?: string;
@@ -178,8 +176,6 @@ export interface Workspace {
   updatedAt: Date;
   currentUserRole?: string;
   featureFlags?: WorkspaceFeatureFlags;
-  platformDriveEnabled?: boolean;
-  systemDriveEnabled?: boolean;
   isDemo?: boolean;
 }
 
@@ -1448,7 +1444,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         organizationName: ws.organization_name || undefined,
         organizationSlug: ws.organization_slug || undefined,
         organizationLogoUrl: normalize(ws.organization_logo_url),
-        organizationDriveEnabled: Boolean(ws.organization_drive),
         ownerId: ws.owner_id || undefined,
         icon: ws.icon || ws.logo_emoji,
         color: ws.color,
@@ -1482,8 +1477,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         updatedAt: new Date(ws.updated_at || Date.now()),
         currentUserRole: ws.current_user_role,
         featureFlags: ws.feature_flags,
-        platformDriveEnabled: Boolean(ws.platform_drive_enabled),
-        systemDriveEnabled: Boolean(ws.system_drive_enabled),
       }));
 
       set({ workspaces });

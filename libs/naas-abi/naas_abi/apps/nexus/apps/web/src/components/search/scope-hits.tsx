@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import type { ScopeHit } from '@/lib/search-scopes';
 import { searchHref } from '@/lib/search-topics';
 import { useFilesStore } from '@/stores/files';
+import { filesNavigationQuery } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { Highlight } from './highlight';
 import { TopicAvatar } from './topic-avatar';
@@ -61,12 +62,15 @@ function HitRow({ workspaceId, hit, compact, query }: { workspaceId: string; hit
       className={row}
       onClick={() => {
         const parent = action.path.includes('/') ? action.path.slice(0, action.path.lastIndexOf('/')) : '';
+        const folderPath = action.type === 'folder' ? action.path : parent;
+        // The URL of where it goes (a bare /files would open the default view once it lands).
+        const url = filesNavigationQuery(useFilesStore.getState(), { source: action.source, path: folderPath });
         setStarredNavigation(action.type === 'folder'
-          ? { source: action.source, path: action.path }
-          : { source: action.source, path: parent, previewPath: action.path });
+          ? { source: action.source, path: folderPath, url }
+          : { source: action.source, path: folderPath, previewPath: action.path, url });
         setActiveSource(action.source);
         setActivePanelSection('files');
-        router.push(`/workspace/${encodeURIComponent(workspaceId)}/files`);
+        router.push(`/workspace/${encodeURIComponent(workspaceId)}/files?${url}`);
       }}
     >
       {body}

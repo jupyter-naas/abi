@@ -33,7 +33,8 @@ API:
 - naas_abi/__init__.py: FeatureFlagsConfig and WorkspaceSeedConfig (config.yaml nexus_config: feature_flags, organizations, workspaces, agents, apps, ontologies).
 Agent: naas_abi/agents/SettingsAgent.py, naas_abi/tools/settings_tools.py, naas_abi/tools/nexus_admin_tools.py."""
 
-SETTINGS_CAPABILITIES = """- Workspace settings: name and theme, members and roles (owner, admin, member, viewer), secrets, drives (platform and system drive access), models and inference servers, services, apps enablement, export.
+SETTINGS_CAPABILITIES = """- Workspace settings: name and theme, members and roles (owner, admin, member, viewer), secrets, models and inference servers, services, apps enablement, export.
+- Platform settings (platform admins): Drives lists the drives (File System); who opens each Files view (My Files, Workspace Files, Organization Files, Platform Files, System Files) is decided by IAM policies, not a workspace setting.
 - Organization settings: users, admins, workspaces, branding, domains, billing, and role-level feature overrides.
 - Feature access: each section has a flag; the effective set is the enabled catalog, the role baseline, organization overrides, then workspace overrides from config.
 - I can show this workspace's settings, your role and effective flags, secret names (never values), list organizations, workspaces, and members, invite or remove members, change roles, and update your profile (admin actions need owner or admin)."""

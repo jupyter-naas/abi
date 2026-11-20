@@ -24,6 +24,20 @@
 
 <!-- version list -->
 
+## v6.0.0 (2026-11-19)
+
+### Features
+
+- **files**: Views opened by IAM alone, workspace drive flags removed
+  ([#1529](https://github.com/jupyter-naas/abi/pull/1529),
+  [`fc44726`](https://github.com/jupyter-naas/abi/commit/fc44726a1f693c577a965d67b3c1377f10b4c672))
+
+### Breaking Changes
+
+- **files**: Access is reset. Whoever reached the platform drive through a workspace flag loses it
+  until a platform admin grants Platform Files; workspace owners and admins lose the system drive.
+
+
 ## v5.1.0 (2026-11-19)
 
 ### Bug Fixes

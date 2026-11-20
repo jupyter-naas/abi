@@ -128,6 +128,10 @@ ACCOUNT_ACTIONS: tuple[str, ...] = (
     "nexus:ResumeUser",
     "nexus:DeleteUser",
 )
+# The platform's drives (Platform Settings > Drives): answered at the platform only.
+DRIVE_ACTIONS: tuple[str, ...] = ("nexus:ListDrives",)
+# The ``nexus`` actions Platform Settings asks of the platform, each on ``<type>/-``.
+PLATFORM_NEXUS_ACTIONS: tuple[str, ...] = (*ACCOUNT_ACTIONS, *DRIVE_ACTIONS)
 
 # Each module's key and the ``module`` catalog types it exposes (its agents, apps,
 # workflows, pipelines), for ``publishers``.
@@ -233,7 +237,9 @@ class IamAdminService:
         actions, reads_system, accounts = await asyncio.gather(
             self._read(user, decide),
             self._reads_system(user) if scope is None else _false(),
-            self._account_actions(user) if scope is None else _none_of(ACCOUNT_ACTIONS),
+            self._platform_nexus_actions(user)
+            if scope is None
+            else _none_of(PLATFORM_NEXUS_ACTIONS),
         )
         actions["nexus:ReadSystem"] = reads_system
         actions.update(accounts)
@@ -342,15 +348,19 @@ class IamAdminService:
 
         return await AUTHZ.allowed("ReadSystem", user=user)
 
-    async def _account_actions(self, user: Any) -> dict[str, bool]:
-        """Platform Settings > Users (``services/accounts``): each ``nexus`` action on
-        the platform's accounts, as its routes ask it (``abi:nexus:user/-``)."""
+    async def _platform_nexus_actions(self, user: Any) -> dict[str, bool]:
+        """Platform Settings > Users (``services/accounts``) and Drives (``services/drives``):
+        each ``nexus`` action on the platform's accounts and drives, as its routes ask it
+        (``abi:nexus:user/-``, ``abi:nexus:drive/-``)."""
         from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 
         held = await asyncio.gather(
-            *(AUTHZ.allowed(a.removeprefix("nexus:"), user=user, id="-") for a in ACCOUNT_ACTIONS)
+            *(
+                AUTHZ.allowed(a.removeprefix("nexus:"), user=user, id="-")
+                for a in PLATFORM_NEXUS_ACTIONS
+            )
         )
-        return dict(zip(ACCOUNT_ACTIONS, held, strict=True))
+        return dict(zip(PLATFORM_NEXUS_ACTIONS, held, strict=True))
 
     # -- catalogs and validation ------------------------------------------------------
 

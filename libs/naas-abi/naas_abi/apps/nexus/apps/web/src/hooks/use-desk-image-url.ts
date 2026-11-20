@@ -6,7 +6,7 @@ import { authFetch } from '@/stores/auth';
 
 /**
  * The URL to paint the Home desk with. External URLs pass straight through;
- * a wallpaper kept in the workspace drive is served by the API behind auth,
+ * a wallpaper kept in Workspace Files is served by the API behind auth,
  * which CSS `url()` cannot send, so it is fetched once and shown as a blob URL.
  * The previous blob is revoked whenever the wallpaper changes.
  */

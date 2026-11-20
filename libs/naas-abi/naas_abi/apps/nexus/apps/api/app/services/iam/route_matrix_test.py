@@ -58,6 +58,10 @@ ACCOUNT_ROUTES: dict[tuple[str, str], str] = {
         "/api/invitations/providers",
     ): "the identity providers an invitation can go through: no tenant data",
     ("GET", "/api/platform/cli"): "the abi-platform CLI script, the same text for everyone",
+    ("POST", "/api/analytics/events"): (
+        "the caller's own usage events: identity from the token, a workspace kept only "
+        "for one of its members"
+    ),
     (
         "DELETE",
         "/api/iam/view-as",
@@ -256,3 +260,41 @@ async def test_guards_decide_by_level_for_every_role(table, world) -> None:
         if (tuple(seen[:4]), seen[4], seen[5]) != (want, False, True):
             wrong.append((key, guard.action, seen))
     assert wrong == []
+
+
+def test_the_scoped_analytics_are_guarded_by_their_scope(table) -> None:
+    """Organization analytics are its owners' and admins', a workspace's its admins'
+    (decided by level above); a conversation's messages also declare the action no
+    role holds."""
+    found: dict[tuple[str, str], set[str]] = {}
+    for key, calls in table.items():
+        if "/analytics" in key[1] and key[1].startswith(("/api/organizations", "/api/workspaces")):
+            found[key] = {d.action for d in _declared(calls)}
+    org = "/api/organizations/{org_id}/analytics"
+    workspace = "/api/workspaces/{workspace_id}/analytics"
+    for path in (
+        "overview",
+        "users",
+        "users/{user_id}",
+        "sessions",
+        "pages",
+        "events",
+        "chats",
+        "chat-analytics",
+    ):
+        assert found[("GET", f"{org}/{path}")] == {"ReadOrganizationAnalytics"}, path
+        assert found[("GET", f"{workspace}/{path}")] == {"ReadWorkspaceAnalytics"}, path
+    assert found[("GET", f"{org}/workspaces")] == {"ReadOrganizationAnalytics"}
+    assert ("GET", f"{workspace}/workspaces") not in found
+    for path in ("chats/{conversation_id}", "chats/{conversation_id}/export"):
+        assert found[("GET", f"{org}/{path}")] == {
+            "ReadOrganizationAnalytics",
+            "ReadAnalyticsConversation",
+        }
+        assert found[("GET", f"{workspace}/{path}")] == {
+            "ReadWorkspaceAnalytics",
+            "ReadAnalyticsConversation",
+        }
+    assert found[("GET", f"{org}/access")] == {"ReadOrganizationAnalytics"}
+    assert found[("GET", f"{workspace}/access")] == {"ReadWorkspaceAnalytics"}
+    assert TYPES_BY_NAME[TYPE_OF["ReadAnalyticsConversation"]].policy_only

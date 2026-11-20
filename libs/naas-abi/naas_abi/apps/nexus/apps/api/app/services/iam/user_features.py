@@ -66,37 +66,4 @@ async def user_feature_flags(
     return await run_in_threadpool(run)
 
 
-async def organization_drives(user: Any, organizations: Collection[str]) -> set[str]:
-    """The ``organizations`` whose drive ``user`` may list (``nexus:ListOrgFiles`` on
-    the drive's root, at each organization), in one ``filter``. Only shown, so the
-    Files sidebar offers the drive to who may open it: the API decides each call
-    again. Empty without IAM, or when IAM fails to answer (logged)."""
-    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
-    from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource, org_container
-    from naas_abi_core.engine.call_context import use_call_context
-
-    if not organizations:
-        return set()
-    ctx = AUTHZ.context(user)
-    names = {
-        nexus_resource("file", container=org_container(org), id=("organization",)): org
-        for org in set(organizations)
-    }
-
-    def run() -> set[str]:
-        try:
-            iam = runtime.iam()
-        except runtime.IAMUnavailableError:
-            return set()
-        try:
-            with use_call_context(ctx):
-                allowed = iam.filter("nexus:ListOrgFiles", list(names)).allowed
-        except Exception:  # noqa: BLE001 - shown only: fail closed, never a 500
-            _log.warning("Organization drives could not be read from IAM", exc_info=True)
-            return set()
-        return {names[name] for name in allowed}
-
-    return await run_in_threadpool(run)
-
-
-__all__ = ["organization_drives", "user_feature_flags"]
+__all__ = ["user_feature_flags"]

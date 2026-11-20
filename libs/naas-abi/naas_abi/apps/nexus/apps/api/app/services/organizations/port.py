@@ -42,6 +42,8 @@ class OrganizationRecord:
     postal_code: str | None = None
     city: str | None = None
     country: str | None = None
+    # IANA time zone of the analytics periods (migration 0073).
+    timezone: str = "UTC"
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -83,6 +85,8 @@ class OrganizationCreateInput:
     postal_code: str | None = None
     city: str | None = None
     country: str | None = None
+    # IANA time zone of the analytics periods (migration 0073).
+    timezone: str = "UTC"
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -122,6 +126,7 @@ class OrganizationUpdateInput:
     postal_code: str | None = None
     city: str | None = None
     country: str | None = None
+    timezone: str | None = None
     updated_at: datetime | None = None
     set_fields: set[str] | None = None
 

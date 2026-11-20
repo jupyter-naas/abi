@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DRIVES_ITEM,
   firstPlatformSettingsPath,
   holds,
   GENERAL_ITEM,
@@ -25,7 +26,7 @@ const IAM_ACTIONS = [
   'iam:ListManifests',
   'iam:Explain',
 ];
-const NEXUS_ACTIONS = ['nexus:ReadSystem', 'nexus:ListUsers'];
+const NEXUS_ACTIONS = ['nexus:ReadSystem', 'nexus:ListUsers', 'nexus:ListDrives'];
 const none = (): PlatformActions =>
   Object.fromEntries([...IAM_ACTIONS, ...NEXUS_ACTIONS].map((action) => [action, false]));
 
@@ -36,6 +37,7 @@ const delegatedIamAdmin: PlatformActions = { ...none(), 'iam:ListPolicies': true
 const systemReader: PlatformActions = { ...none(), 'nexus:ReadSystem': true };
 const stranger: PlatformActions = none();
 const userLister: PlatformActions = { ...none(), 'nexus:ListUsers': true };
+const driveLister: PlatformActions = { ...none(), 'nexus:ListDrives': true };
 
 const ids = (actions: PlatformActions | null) =>
   visiblePlatformSettingsGroups(actions).flatMap((group) => group.items.map((item) => item.id));
@@ -55,6 +57,7 @@ describe('platformSettingsGroups', () => {
       ['Organizations', '/settings/organizations'],
       ['Users', '/settings/users'],
       ['Roles & permissions', '/settings/roles'],
+      ['Drives', '/settings/drives'],
     ]);
     expect(items('System')).toEqual([
       ['Overview', '/settings/system'],
@@ -106,12 +109,14 @@ describe('platformSettingsGroups', () => {
     expect(new Set(all.map((item) => item.icon)).size).toBe(all.length);
   });
 
-  it('needs nexus:ListUsers for Users, any iam: action for Roles & permissions, nexus:ReadSystem for the rest', () => {
+  it('needs nexus:ListUsers for Users, nexus:ListDrives for Drives, any iam: action for Roles & permissions, nexus:ReadSystem for the rest', () => {
     for (const item of platformSettingsGroups.flatMap((group) => group.items)) {
       const expected =
         item.id === 'users'
           ? { action: 'nexus:ListUsers' }
-          : item.id === 'roles'
+          : item.id === 'drives'
+            ? { action: 'nexus:ListDrives' }
+            : item.id === 'roles'
             ? { anyOf: 'iam' }
             : { action: 'nexus:ReadSystem' };
       expect(item.needs).toEqual(expected);
@@ -121,8 +126,9 @@ describe('platformSettingsGroups', () => {
 
 describe('what the caller sees', () => {
   it('shows a platform admin everything, General first', () => {
-    expect(ids(platformAdmin)).toHaveLength(30);
+    expect(ids(platformAdmin)).toHaveLength(31);
     expect(ids(platformAdmin)).toContain('users');
+    expect(ids(platformAdmin)).toContain('drives');
     expect(visiblePlatformSettingsGroups(platformAdmin).map((group) => group.label)).toEqual(GROUPS);
     expect(firstPlatformSettingsPath(platformAdmin)).toBe('/settings/general');
   });
@@ -138,6 +144,7 @@ describe('what the caller sees', () => {
   it('shows a reader of the system everything but Users and Roles & permissions', () => {
     expect(ids(systemReader)).not.toContain('roles');
     expect(ids(systemReader)).not.toContain('users');
+    expect(ids(systemReader)).not.toContain('drives');
     expect(ids(systemReader)).toContain('tables');
     expect(ids(systemReader)).toContain('system-events');
     expect(ids(systemReader)).toContain('service-triple_store');
@@ -150,6 +157,14 @@ describe('what the caller sees', () => {
     expect(ids(userLister)).toEqual(['users']);
     expect(visiblePlatformSettingsGroups(userLister).map((group) => group.label)).toEqual(['Administration']);
     expect(firstPlatformSettingsPath(userLister)).toBe('/settings/users');
+  });
+
+  it('shows Drives to whoever IAM lets list the drives, and nothing else to them', () => {
+    expect(ids(driveLister)).toEqual(['drives']);
+    expect(visiblePlatformSettingsGroups(driveLister).map((group) => group.label)).toEqual([
+      'Administration',
+    ]);
+    expect(firstPlatformSettingsPath(driveLister)).toBe('/settings/drives');
   });
 
   it('shows a stranger nothing: the 403', () => {
@@ -205,6 +220,7 @@ describe('parsePlatformSettingsRoute', () => {
     expect(parsePlatformSettingsRoute('/settings/roles').item?.id).toBe('roles');
     expect(parsePlatformSettingsRoute('/settings/organizations').item?.id).toBe('organizations');
     expect(parsePlatformSettingsRoute('/settings/users').item?.id).toBe('users');
+    expect(parsePlatformSettingsRoute('/settings/drives').item?.id).toBe('drives');
     expect(parsePlatformSettingsRoute('/settings/system/jobs').table).toBeNull();
   });
 
@@ -228,6 +244,7 @@ describe('laysOutOwnPanes', () => {
     expect(laysOutOwnPanes(ORGANIZATIONS_ITEM)).toBe(false);
     expect(laysOutOwnPanes(USERS_ITEM)).toBe(false);
     expect(laysOutOwnPanes(ROLES_ITEM)).toBe(false);
+    expect(laysOutOwnPanes(DRIVES_ITEM)).toBe(false);
   });
 
   it('lets the System pages lay out their own panes', () => {

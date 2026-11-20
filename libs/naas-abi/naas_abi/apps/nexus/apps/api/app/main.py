@@ -191,8 +191,8 @@ def _schedule_identity_graph_sync(_published: int = 0, delay_seconds: float = 2.
 
 
 def _install_drive_writers() -> None:
-    """Keep .manifest.json and the default folders in every workspace drive,
-    organization drive and My Drive."""
+    """Keep .manifest.json and the default folders in every Workspace Files,
+    Organization Files and My Files folder."""
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
@@ -216,8 +216,8 @@ def _install_drive_writers() -> None:
 
 
 async def _backfill_drives() -> None:
-    """Write missing workspace, organization and My Drive defaults, and the platform
-    drive's staff folders."""
+    """Write missing Workspace Files, Organization Files and My Files defaults, and
+    Platform Files' staff folders."""
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
@@ -243,7 +243,7 @@ async def _backfill_drives() -> None:
         platform = await backfill_platform_drive(storage)
         if any(any(counts.values()) for counts in (workspaces, organizations, users, platform)):
             _log.info(
-                "✓ Drives backfilled: workspaces %s, organizations %s, my drives %s, platform %s",
+                "✓ Drives backfilled: workspaces %s, organizations %s, my files %s, platform %s",
                 workspaces,
                 organizations,
                 users,
@@ -661,6 +661,19 @@ async def _startup(app: FastAPI) -> None:
     except Exception:
         logging.getLogger(__name__).exception("Unable to start chat ingestion consumer")
 
+    # The analytics rollups: the log's consumer, the one-time backfill and the daily
+    # purge of raw events (services/analytics/jobs.py), after seeds so the
+    # backfill stamps seeded workspaces' organizations.
+    try:
+        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.services.analytics.jobs import (
+            start_analytics_jobs,
+        )
+
+        start_analytics_jobs(AsyncSessionLocal)
+    except Exception:
+        logging.getLogger(__name__).exception("Unable to start the analytics rollups")
+
     # Relay platform LogProcess events to the Socket.IO admin_events room
     # for the superadmin live event stream UI.
     try:
@@ -723,6 +736,9 @@ async def _startup(app: FastAPI) -> None:
 
 async def _shutdown(app: FastAPI) -> None:
     """Application shutdown handler."""
+    from naas_abi.apps.nexus.apps.api.app.services.analytics.jobs import stop_analytics_jobs
+
+    stop_analytics_jobs()
 
 
 @asynccontextmanager

@@ -25,8 +25,6 @@ class WorkspaceRecord:
     workspace_group: str | None = None
     # Saved in Organization Settings > Workspaces; None = config overrides apply.
     catalog_seed: dict[str, object] | None = None
-    platform_drive_enabled: bool = False
-    system_drive_enabled: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
     # Read from the organization (no column of the workspace): its name tells two
@@ -77,8 +75,6 @@ class WorkspaceUpdateInput:
     description: str | None = None
     workspace_group: str | None = None
     owner_id: str | None = None
-    platform_drive_enabled: bool | None = None
-    system_drive_enabled: bool | None = None
 
 
 @dataclass

@@ -4,7 +4,8 @@ import { Grid, List, MoreVertical, Plus, RefreshCw, Search } from 'lucide-react'
 import './files-components.css';
 
 type FilesMobileToolbarProps = {
-  isLocalFolder: boolean;
+  /** All Views is open: nothing can be added there. */
+  isViewsRoot: boolean;
   loading: boolean;
   searchQuery: string;
   onSearchChange: (value: string) => void;
@@ -17,7 +18,7 @@ type FilesMobileToolbarProps = {
 };
 
 export function FilesMobileToolbar({
-  isLocalFolder,
+  isViewsRoot,
   loading,
   searchQuery,
   onSearchChange,
@@ -31,7 +32,7 @@ export function FilesMobileToolbar({
   return (
     <div className="files-mobile-toolbar">
       <div className="files-mobile-toolbar-row">
-        {!isLocalFolder && (
+        {!isViewsRoot && (
           <button type="button" onClick={onAddClick} className="files-mobile-toolbar-add">
             <Plus size={18} />
             Add

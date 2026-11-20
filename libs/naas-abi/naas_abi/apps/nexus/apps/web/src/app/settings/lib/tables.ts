@@ -65,11 +65,14 @@ export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   'skills',
   'apps',
   'models',
+  // Workspace settings › Drives, gone: its page redirects (Platform Settings' own is /settings/drives).
   'drives',
   'infrastructure',
   'workflows',
   // Roles & permissions of the workspace (Platform Settings' own is /settings/roles).
   'permissions',
+  // Analytics of the workspace (new, but `getWorkspacePath(null, ...)` yields it too).
+  'analytics',
 ];
 
 /**
