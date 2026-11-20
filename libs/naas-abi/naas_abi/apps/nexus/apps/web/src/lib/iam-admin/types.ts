@@ -363,7 +363,7 @@ export type AuditEntry = {
 /** The actions the caller may perform, to show only the pages and buttons that will answer:
  *  `iam:ListPolicies`, `iam:CreatePolicy`, `iam:UpdatePolicy`, `iam:DeletePolicy`,
  *  `iam:ListAttachments`, `iam:AttachPolicy`, `iam:DetachPolicy`, `iam:ListGroups`,
- *  `iam:CreateGroup`, `iam:DeleteGroup`, `iam:AddGroupMember`, `iam:RemoveGroupMember`,
+ *  `iam:CreateGroup`, `iam:UpdateGroup`, `iam:DeleteGroup`, `iam:AddGroupMember`, `iam:RemoveGroupMember`,
  *  `iam:MapIdpGroup`, `iam:UnmapIdpGroup`, `iam:ListPrincipals`, `iam:CreateServiceAccount`,
  *  `iam:DeletePrincipal`, `iam:SuspendPrincipal`, `iam:ResumePrincipal`, `iam:ListKeys`,
  *  `iam:CreateKey`, `iam:RevokeKey`, `iam:ListManifests`, `iam:ApproveManifest`,

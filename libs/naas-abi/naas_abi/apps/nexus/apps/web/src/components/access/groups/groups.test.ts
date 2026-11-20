@@ -150,8 +150,47 @@ describe('GroupsView at a workspace', () => {
   it('changes neither the members nor the existence of a group owned above', async () => {
     await show(workspaceApi(), fromOrg.id);
     expect(buttonNamed('Delete Org analysts')).toBeNull();
+    expect(buttonNamed('Rename Org analysts')).toBeNull();
     expect(buttonNamed('Add member')).toBeNull();
     expect(buttonNamed('Attach policy')).not.toBeNull();
+  });
+
+  it('renames a group it owns, and shows the new name', async () => {
+    const renamed = { ...owned, name: 'Talent' };
+    const api = workspaceApi({ renameGroup: vi.fn(() => Promise.resolve(renamed)) });
+    await show(api, owned.id);
+    await mounted!.click(buttonNamed('Rename Recruiters'));
+    const input = document.querySelector('[aria-label="New group name"]') as HTMLInputElement;
+    expect(input.value).toBe('Recruiters');
+    await mounted!.type(input, '  Talent ');
+    await mounted!.click(buttonNamed('Save name'));
+    expect(api.renameGroup).toHaveBeenCalledWith('grp_ws', 'Talent');
+    expect(document.querySelector('.access-person-name')?.textContent).toBe('Talent');
+    expect(document.querySelector('[aria-label="New group name"]')).toBeNull();
+  });
+
+  it('offers no rename without iam:UpdateGroup, and keeps the form open when it fails', async () => {
+    await show(workspaceApi(), owned.id);
+    expect(buttonNamed('Rename Recruiters')).not.toBeNull();
+    await mounted!.unmount();
+    mounted = null;
+
+    const refused = (action: string) => action !== 'iam:UpdateGroup' && admin(action);
+    mounted = await mount(GroupsView, { api: workspaceApi(), can: refused, scope: wsScope, directory: fakeDirectory([member()]) });
+    await mounted.flush();
+    await mounted.click(document.querySelector(`[data-group="${owned.id}"] button.access-row-toggle`));
+    await mounted.flush();
+    expect(buttonNamed('Rename Recruiters')).toBeNull();
+    await mounted.unmount();
+    mounted = null;
+
+    const failing = workspaceApi({ renameGroup: vi.fn(() => Promise.reject(new IamAdminError('Not allowed to rename it', 403))) });
+    await show(failing, owned.id);
+    await mounted!.click(buttonNamed('Rename Recruiters'));
+    await mounted!.type(document.querySelector('[aria-label="New group name"]'), 'Talent');
+    await mounted!.click(buttonNamed('Save name'));
+    expect(mounted!.host.querySelector('[role="alert"]')?.textContent).toContain('Not allowed to rename it');
+    expect(document.querySelector('[aria-label="New group name"]')).not.toBeNull();
   });
 });
 
