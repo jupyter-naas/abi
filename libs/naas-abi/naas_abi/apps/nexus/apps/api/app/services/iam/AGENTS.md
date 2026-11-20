@@ -148,7 +148,7 @@ module per router family:
 | `chat.py`, `agents.py`, `apps.py`, `workflows.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` (`ListModuleScopes`); `workflow` (its settings: listed, deprecated switch) |
 | `files.py`, `datasets.py`, `office.py` | `file` (drive + path; Organization Files' `ListOrgFiles`, `GetOrgFile`, and admin-level `PutOrgFile`, `DeleteOrgFile` on `<org>/nexus:file/organization/<path>`), `my_file`, `user_storage`, `root_storage`, `platform_file` (Platform Files: `ListPlatformFiles`, `GetPlatformFile`, `PutPlatformFile`, `DeletePlatformFile`) and `system_file` (System Files: `ListObjectStoreFiles`, `GetObjectStoreFile`, `PutObjectStoreFile`, `DeleteObjectStoreFile`), both platform-level and `policy_only`; `dataset`; `project` (slides, documents, sheets) |
 | `knowledge.py`, `search.py` | `view`, `graph_cache`, `ontology`, `icon`, `layout`, `layer`, `feed_layer`, `basemap`, `maps_catalog`, `maps_access`; `search`, `topic`, `search_scope` |
-| `code.py`, `settings.py`, `platform.py`, `realtime.py` | `code`, `code_settings`; `secret`, `provider_model`, `abi_server`; `analytics`, `system`; `presence`, `speech` |
+| `code.py`, `settings.py`, `platform.py`, `realtime.py` | `code`, `code_settings`; `secret`, `provider_model`, `abi_server`; `analytics` (deprecated, see below), `analytics_conversation` (`policy_only`), `system`; `presence`, `speech`. Analytics are read in a scope: `ReadOrganizationAnalytics` on the organization, `ReadWorkspaceAnalytics` on the workspace (both `admin`), a conversation's messages `ReadAnalyticsConversation` in its workspace, which no role holds (`docs/adr/20261119_analytics_scoped_rollups.md`) |
 | `users.py` | `user` (platform: the platform's accounts, Platform Settings › Users, `services/accounts`): `ListUsers`, `InviteUser`, `UpdateUser`, `SuspendUser`, `ResumeUser`, `DeleteUser`; no role reaches it, the platform admin holds it |
 | `drives.py` | `drive` (platform: the storage backends, Platform Settings › Drives, `services/drives`): `ListDrives`; no role reaches it, the platform admin holds it |
 
@@ -222,6 +222,12 @@ a catalog, run the route matrix.
   `PutSystemFile` and `DeleteSystemFile` (admin level, on `<workspace>/nexus:file/system/...`) decided System
   Files in a workspace; System Files is `system_file` at the platform now. No route asks for them, so they
   authorize nothing, and they stay for the same reason (their description says "Deprecated").
+- **The platform analytics actions stay declared** (catalog 15). `ReadAnalytics` and `WriteAnalytics` (on the
+  platform singleton `analytics`) decided the platform-wide analytics app; it is removed with its routes (#1536),
+  and the analytics are read in Organization and Workspace settings. No route asks for them, so they authorize
+  nothing, and they stay for the same reason (their description says "Deprecated"). The tracker's
+  `POST /api/analytics/events` is any signed-in user's; a like or dislike in the chat is `UpdateConversation` on
+  the owner's conversation (`PATCH /api/chat/conversations/{id}/messages/{id}/feedback`).
 
 ## Access policies and default groups
 

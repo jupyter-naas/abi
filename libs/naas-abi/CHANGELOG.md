@@ -1,5 +1,39 @@
 # CHANGELOG
 
+## Upgrade notes (next release): Nexus Analytics in settings
+
+- **The Analytics app is removed.** Analytics are read in Organization settings ›
+  Analytics (its owners and admins, `ReadOrganizationAnalytics`) and Workspace settings ›
+  Analytics (its admins, `ReadWorkspaceAnalytics`), each limited to its own members and
+  workspaces, for Today, Yesterday, This week or This month in the organization's time
+  zone (Organization settings › General › Timezone, `UTC` by default). The app leaves
+  the Apps catalog, and `/analytics` leads to the current organization's section.
+- The platform-wide `GET /api/analytics/*` routes (and `POST /api/analytics/rebuild`)
+  are gone. `POST /api/analytics/events` stays, open to every signed-in user. It now
+  answers 422 to an event whose `timestamp` is not an ISO-8601 date within the last 45
+  days and at most one day ahead of the server's clock (a client whose clock is off by
+  more than a day is not recorded), and it removes control characters (NUL included)
+  from every string of the event.
+- A conversation's messages in the analytics need `ReadAnalyticsConversation`, which no
+  role holds: grant it with a policy.
+- `ReadAnalytics` and `WriteAnalytics` are deprecated and authorize nothing; policies
+  that name them can drop them.
+- The chat's like and dislike are saved through
+  `PATCH /api/chat/conversations/{id}/messages/{id}/feedback`, by the conversation's
+  owner (members and up), instead of the platform admin's analytics route.
+- On first start, **every** legacy event under `naas_abi/nexus/analytics/events/` in
+  object storage, whatever its age, is replayed into the new SQL rollups (kept forever;
+  only events of the last 45 days also get a raw row), with the event log's last 45
+  days. Thirty minutes later the legacy events are replayed again (idempotent, so what
+  old processes of a rolling deploy wrote meanwhile is counted), then the old aggregates
+  and each replayed event file are deleted. A file that cannot be replayed (unreadable,
+  not an event) is never deleted: it is moved to `naas_abi/nexus/analytics/unreadable/`
+  and logged. Nothing is deleted if the storage or the database cannot be read. See
+  `docs/adr/20261119_analytics_scoped_rollups.md`.
+- The migrations no longer re-run an `ALTER TABLE ... ADD COLUMN` whose columns all
+  exist: a start no longer takes an exclusive lock on those tables (`messages`
+  included), so it never waits behind a long transaction on them.
+
 ## Upgrade notes (next release): module scopes
 
 - **Workspace members and viewers need a grant to use what modules expose.** Every

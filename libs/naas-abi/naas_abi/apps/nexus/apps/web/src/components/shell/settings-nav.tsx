@@ -1,5 +1,6 @@
 import {
   AppWindow,
+  BarChart3,
   Bot,
   BrainCircuit,
   Network,
@@ -26,8 +27,9 @@ export type SettingsNavItem = {
   /** The module resources the page lists: shown only when the caller may use one of them. */
   kinds?: ResourceKind[];
   /** `iam`: shown to whoever would see a section of Roles & permissions in the workspace
-   *  (IAM says, `GET /access`). */
-  needs?: 'iam';
+   *  (IAM says, `GET /access`). `analytics`: shown to whoever may read the workspace's
+   *  analytics (`GET /api/workspaces/{id}/analytics/access` answers `can_read`). */
+  needs?: 'iam' | 'analytics';
 };
 
 export type SettingsNavGroup = {
@@ -53,6 +55,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       { href: '/settings/general', label: 'General', icon: SlidersHorizontal },
       { href: '/settings/members', label: 'Members', icon: Users },
       { href: '/settings/permissions', label: 'Roles & permissions', icon: KeyRound, needs: 'iam' },
+      { href: '/settings/analytics', label: 'Analytics', icon: BarChart3, needs: 'analytics' },
       { href: '/settings/secrets', label: 'Secrets', icon: Shield },
       { href: '/settings/export', label: 'Data Export', icon: Download },
     ],
@@ -115,22 +118,33 @@ export function settingsItemShown(
   return true;
 }
 
+/** Whether the caller holds what an entry `needs` (an entry that needs nothing: yes). */
+export function settingsItemNeedsMet(
+  item: SettingsNavItem,
+  { holdsIam = false, readsAnalytics = false }: { holdsIam?: boolean; readsAnalytics?: boolean } = {}
+): boolean {
+  if (item.needs === 'iam') return holdsIam;
+  if (item.needs === 'analytics') return readsAnalytics;
+  return true;
+}
+
 /**
  * The groups with only the entries the workspace has, and the ones the caller may open: an
- * entry that needs `iam` only for whoever would see a section of it there (`holdsIam`). An empty
+ * entry that needs `iam` only for whoever would see a section of it there (`holdsIam`), one
+ * that needs `analytics` only for whoever may read its analytics (`readsAnalytics`). An empty
  * group is left out.
  */
 export function visibleSettingsGroups(
   resources: WorkspaceResources | null,
   flags?: Partial<Record<string, boolean>>,
   groups: SettingsNavGroup[] = SETTINGS_GROUPS,
-  { holdsIam = false }: { holdsIam?: boolean } = {}
+  rights: { holdsIam?: boolean; readsAnalytics?: boolean } = {}
 ): SettingsNavGroup[] {
   return groups
     .map((group) => ({
       ...group,
       items: group.items.filter(
-        (item) => (item.needs !== 'iam' || holdsIam) && settingsItemShown(item, resources, flags)
+        (item) => settingsItemNeedsMet(item, rights) && settingsItemShown(item, resources, flags)
       ),
     }))
     .filter((group) => group.items.length > 0);

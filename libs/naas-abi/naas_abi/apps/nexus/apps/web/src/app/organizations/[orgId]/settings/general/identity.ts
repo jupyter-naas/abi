@@ -95,6 +95,7 @@ export function identitySaveError(status: number, detail: unknown): string {
       .filter((field): field is string => typeof field === 'string');
     if (fields.includes('website')) return 'The website is an http(s) address, such as https://example.com.';
     if (fields.includes('contact_email')) return 'The contact email is not an email address.';
+    if (fields.includes('timezone')) return 'The timezone is not one the server knows.';
     if (fields.length) return `Check ${fields.join(', ').replace(/_/g, ' ')}.`;
   }
   if (typeof detail === 'string' && detail) return detail;

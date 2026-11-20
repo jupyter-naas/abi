@@ -52,7 +52,11 @@ SERVICE = "nexus"
 #     ``ListObjectStoreFiles``, ``GetObjectStoreFile``, ``PutObjectStoreFile``,
 #     ``DeleteObjectStoreFile``), platform-level, no role's; ``*SystemFile`` deprecated.
 # 13: the platform's drives (``drive``: Platform Settings > Drives, ``ListDrives``).
-VERSION = 13
+# 14: scoped analytics (``ReadOrganizationAnalytics``, ``ReadWorkspaceAnalytics``,
+#     ``ReadAnalyticsConversation`` on ``analytics_conversation``).
+# 15: the platform analytics app removed: ``ReadAnalytics``, ``WriteAnalytics`` (and
+#     the ``analytics`` singleton) deprecated, authorizing nothing.
+VERSION = 15
 
 _MODULES = (
     organizations,

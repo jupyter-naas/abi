@@ -51,6 +51,8 @@ import { FilesMenuBar } from '../components/files-menu-bar';
 import { requestFilesExplorerRefresh } from '../lib/explorer-refresh';
 import { carriesExternalFiles, leavesDropZone } from '../lib/drop-zone';
 import { listOnSourceChange, startNavigation, type PendingNavigation } from '../lib/files-navigation';
+import { createFilesUrlSync, expectFilesUrl, filesUrlWrite, takeFilesUrl } from '../lib/files-url-sync';
+import { routerNavigationPending } from '@/lib/router-navigation';
 import { isSystemPath, withoutSystemFiles } from '@/lib/system-files';
 import { FilesMobileRow } from '../components/files-mobile-row';
 import { FilesMobileToolbar } from '../components/files-mobile-toolbar';
@@ -124,12 +126,10 @@ const SYSTEM_FILES_READ_ONLY = 'System files (names starting with ".") are read-
 
 /** My Files is the person's own: in a view it is private, and nothing is asked for. */
 /**
- * The Files URL the page last applied or wrote, for this page load (kept across mounts:
- * Back from another page to a URL the page wrote re-uses the store as it is), and whether
- * a navigation that pushes its own URL (tree, starred item, search, Home) asked the next
- * URL change to be taken as applied.
+ * The Files URL the page last applied or wrote, and the URL a navigation that pushes its own
+ * (tree, starred item, search, Home) waits for, for this page load (`files-url-sync`).
  */
-const filesUrl: { applied: string | null; absorbNext: boolean } = { applied: null, absorbNext: false };
+const filesUrl = createFilesUrlSync();
 
 const currentFilesSearch = (): string => window.location.search.replace(/^\?/, '');
 
@@ -177,6 +177,7 @@ function FilesBrowser() {
     refreshFiles,
     openFile,
     activeSource,
+    listedSource,
     setActiveSource,
     restoreFilesState,
     viewChoice,
@@ -348,8 +349,8 @@ function FilesBrowser() {
   // (`startNavigation`), never left to a flag a later view change would consume.
   useEffect(() => {
     if (!starredNavigation) return;
-    // The navigation, not the URL its caller pushes (often a bare /files), decides what opens.
-    filesUrl.absorbNext = true;
+    // The navigation opens its folder; the URL its caller pushes is taken as applied once it lands.
+    expectFilesUrl(filesUrl, starredNavigation.url, currentFilesSearch());
     clearPdfViewerState();
     clearImageViewerState();
     clearTextViewerState();
@@ -378,18 +379,15 @@ function FilesBrowser() {
   // The URL opens what it names (`filesNavigationFromUrl`): a page load, a link, browser
   // Back/Forward inside Files. A bare /files opens "All Views / Workspace Files"; an old
   // ?source=&path= link opens the view it became. A URL already applied or written in this
-  // page load (Back from another page, a remount) is not applied again: the store holds it.
-  // Storage keys are not HTTP routes; stay inside the Files UI.
+  // page load (Back from another page, a remount), the URL a navigation pushed, or one whose
+  // change is not the Files keys (`spacing`) is not applied (`takeFilesUrl`). While a router
+  // navigation is in flight, its URL is taken once it lands. Storage keys are not HTTP routes;
+  // stay inside the Files UI.
   useEffect(() => {
     if (starredNavigation) return;
+    if (routerNavigationPending()) return;
     const search = currentFilesSearch();
-    if (search === filesUrl.applied) return;
-    if (filesUrl.absorbNext) {
-      filesUrl.absorbNext = false;
-      filesUrl.applied = search;
-      return;
-    }
-    filesUrl.applied = search;
+    if (!takeFilesUrl(filesUrl, search)) return;
     const { state: urlState, folderPath, previewPath } = filesNavigationFromUrl(search);
     clearPdfViewerState();
     clearImageViewerState();
@@ -416,11 +414,11 @@ function FilesBrowser() {
   // The URL keeps the page's state (drive, View picker, open view, folder), so a reload, a
   // shared link or Back opens the same place. Only a settled state is written: the listing
   // shown belongs to the open view (`listedSource`), nothing loads, no error, no navigation
-  // waiting for its view. The write is recorded first (`filesUrl.applied`), so it never
-  // comes back as a URL to apply. `replaceState(null, …)` keeps Next's search params in
-  // sync; other parameters (`spacing`) are kept.
+  // waiting for its view (`listedSource` is a dependency: All Views lists nothing, so only
+  // it changes there). Nothing is written while a router navigation is in flight: Next would
+  // drop it (`filesUrlWrite`); its landing re-runs this. `replaceState(null, …)` keeps Next's
+  // search params in sync; other parameters (`spacing`) are kept, a stale `preview` dropped.
   useEffect(() => {
-    if (filesUrl.applied === null) return;
     if (pendingNavRef.current && !pendingNavRef.current.listed) return;
     const state = useFilesStore.getState();
     if (state.loading || state.error || state.listedSource !== state.activeSource) return;
@@ -430,14 +428,9 @@ function FilesBrowser() {
       source: state.activeSource,
       path: state.currentPath,
     });
-    const query = search.replace(/^\?/, '');
-    if (query === currentFilesSearch()) {
-      filesUrl.applied = query;
-      return;
-    }
-    filesUrl.applied = query;
+    if (!filesUrlWrite(filesUrl, search, window.location.search, routerNavigationPending())) return;
     window.history.replaceState(null, '', `${window.location.pathname}${search}`);
-  }, [activeDrive, viewChoice, activeSource, currentPath, loading, error, searchParams]);
+  }, [activeDrive, viewChoice, activeSource, currentPath, listedSource, loading, error, searchParams]);
 
   // Once the files list loads, open the pending preview (if any).
   useEffect(() => {

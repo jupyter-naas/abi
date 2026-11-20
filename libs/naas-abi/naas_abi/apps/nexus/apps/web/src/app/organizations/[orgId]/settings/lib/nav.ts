@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import {
+  BarChart3,
   Paintbrush,
   Users,
   Globe,
@@ -15,8 +16,10 @@ export type OrgSettingsNavItem = {
   label: string;
   icon: LucideIcon;
   adminOnly?: boolean;
-  /** `iam`: shown to whoever holds an `iam:` action at the organization, whatever their role. */
-  needs?: 'iam';
+  /** `iam`: shown to whoever holds an `iam:` action at the organization, whatever their role.
+   *  `analytics`: shown to whoever may read the organization's analytics
+   *  (`GET /api/organizations/{id}/analytics/access` answers `can_read`). */
+  needs?: 'iam' | 'analytics';
   /** Kept for deep-link labels; omitted from the settings sidebar. */
   hidden?: boolean;
 };
@@ -28,6 +31,8 @@ export const orgSettingsNav: OrgSettingsNavItem[] = [
   { slug: 'users', label: 'Users', icon: Users, adminOnly: true },
   // IAM decides (the access of the organization's scope), not the membership role.
   { slug: 'roles', label: 'Roles & permissions', icon: KeyRound, needs: 'iam' },
+  // The API decides (`ReadOrganizationAnalytics`, its owners and admins by default).
+  { slug: 'analytics', label: 'Analytics', icon: BarChart3, needs: 'analytics' },
   { slug: 'domains', label: 'Domains', icon: Globe, adminOnly: true, hidden: true },
   { slug: 'servers', label: 'Servers', icon: Server, adminOnly: true, hidden: true },
   { slug: 'services', label: 'Services', icon: Boxes, adminOnly: true, hidden: true },
@@ -65,12 +70,16 @@ export function orgSettingsAccess({
 
 export function orgSettingsNavForRole(
   role: string | null | undefined,
-  { holdsIam = false }: { holdsIam?: boolean } = {}
+  { holdsIam = false, readsAnalytics = false }: { holdsIam?: boolean; readsAnalytics?: boolean } = {}
 ): OrgSettingsNavItem[] {
   const admin = isOrgAdminRole(role);
-  return orgSettingsNav.filter(
-    (item) => !item.hidden && (item.needs === 'iam' ? holdsIam : admin)
-  );
+  return orgSettingsNav.filter((item) => {
+    if (item.hidden) return false;
+    if (item.needs === 'iam') return holdsIam;
+    // Shown to an owner or admin only once the API said yes: a role IAM stripped of it sees no entry.
+    if (item.needs === 'analytics') return admin && readsAnalytics;
+    return admin;
+  });
 }
 
 /**

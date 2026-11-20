@@ -33,6 +33,7 @@ class AnalyticsEventRecorded(LogProcess):
         "event_id": f"{NAMESPACE}eventId",
         "event_name": f"{NAMESPACE}eventName",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
+        "organization_id": f"{NAMESPACE}organizationId",
         "page_path": f"{NAMESPACE}pagePath",
         "payload_json": f"{NAMESPACE}payloadJson",
         "session_id": f"{NAMESPACE}sessionId",
@@ -65,6 +66,11 @@ class AnalyticsEventRecorded(LogProcess):
     workspace_id: Annotated[str, Field(description="Workspace the event occurred in.")] | None = (
         None
     )
+    # Stamped by the server from the workspace at ingest (epic #1533); empty for an
+    # event with no workspace and for events recorded before.
+    organization_id: (
+        Annotated[str, Field(description="Organization of the event's workspace.")] | None
+    ) = None
     session_id: (
         Annotated[str, Field(description="Tracker session the event belongs to.")] | None
     ) = None

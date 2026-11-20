@@ -25,7 +25,9 @@ const labels = (groups: ReturnType<typeof visibleSettingsGroups>) =>
 
 describe('workspace settings nav', () => {
   it('lists every entry the caller may use', () => {
-    expect(labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { holdsIam: true }))).toEqual(
+    expect(
+      labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { holdsIam: true, readsAnalytics: true }))
+    ).toEqual(
       SETTINGS_GROUPS.flatMap((group) => group.items.map((item) => item.label))
     );
   });
@@ -41,6 +43,22 @@ describe('workspace settings nav', () => {
     expect(labels(visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { holdsIam: true }))).toContain(
       'Roles & permissions'
     );
+  });
+
+  it('shows Analytics, in the General group, only to whoever may read the workspace analytics', () => {
+    expect(labels(visibleSettingsGroups(resources()))).not.toContain('Analytics');
+    expect(labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { holdsIam: true }))).not.toContain(
+      'Analytics'
+    );
+    const groups = visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { readsAnalytics: true });
+    expect(groups.find((group) => group.label === 'General')?.items.map((item) => item.label)).toContain('Analytics');
+    expect(settingsItemFor('/workspace/ws-1/settings/analytics')?.needs).toBe('analytics');
+  });
+
+  it('opens Analytics to whoever the role brings the settings, never to an iam:-only holder', () => {
+    expect(settingsPageOpens('all', '/workspace/ws-1/settings/analytics')).toBe(true);
+    expect(settingsPageOpens('iam', '/workspace/ws-1/settings/analytics')).toBe(false);
+    expect(settingsPageOpens('none', '/workspace/ws-1/settings/analytics')).toBe(false);
   });
 
   it('hides an entry whose feature the caller does not hold', () => {

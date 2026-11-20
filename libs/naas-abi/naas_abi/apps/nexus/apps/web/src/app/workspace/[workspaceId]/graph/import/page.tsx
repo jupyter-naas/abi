@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
-import { KpiCard } from '@/app/analytics/components/kpi-card';
+import { KpiCard } from '@/components/ui/kpi-card';
 import { ToastStack, type ToastItem } from '@/components/graph/toast-notification';
 
 const ACCEPTED_EXTENSIONS = ['.ttl', '.owl', '.nt', '.rdf', '.n3'];

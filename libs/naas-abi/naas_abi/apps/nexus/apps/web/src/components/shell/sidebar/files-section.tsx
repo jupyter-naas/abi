@@ -13,11 +13,9 @@ import { useFileViewsStore, useOfferedFileViews } from '@/hooks/use-file-views';
 import { useConfirm, usePrompt } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
-import { filesBrowsePath, filesUrlSearch } from '@/app/workspace/[workspaceId]/files/lib/files-route';
+import { filesBrowsePath, filesNavigationQuery } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import {
-  ALL_VIEWS,
   driveRootForSource,
-  filesSourceFrom,
   isFileViewSource,
   type FileViewSource,
 } from '@/app/workspace/[workspaceId]/files/lib/drive-label';
@@ -137,16 +135,16 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   );
 
   // Opens the Files page on `to` with its full URL state (drive, View picker, view, folder):
-  // a bare /files would reach the page after it wrote its state and wipe it.
+  // a bare /files would reach the page after it wrote its state and wipe it. Returns the
+  // query it pushed, for a navigation to carry (`StarredNavigation.url`).
   const openFilesBrowser = useCallback(
     (to: { source: string; path: string }) => {
       const base = isMobilePanel
         ? filesBrowsePath(currentWorkspaceId)
         : getWorkspacePath(currentWorkspaceId, '/files');
-      const source = filesSourceFrom(to.source) ?? ALL_VIEWS;
-      // As `setActiveSource`: under All Views a view opens inside it, else it becomes the choice.
-      const view = viewChoice === ALL_VIEWS || source === ALL_VIEWS ? ALL_VIEWS : source;
-      router.push(`${base}${filesUrlSearch('', { drive: activeDrive, view, source, path: normalizeExplorerPath(to.path) })}`);
+      const url = filesNavigationQuery({ activeDrive, viewChoice }, to);
+      router.push(`${base}?${url}`);
+      return url;
     },
     [activeDrive, currentWorkspaceId, isMobilePanel, router, viewChoice],
   );
@@ -221,8 +219,8 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
 
   const openFolder = useCallback(
     (source: string, path: string) => {
-      setStarredNavigation({ source, path: normalizeExplorerPath(path) });
-      openFilesBrowser({ source, path });
+      const url = openFilesBrowser({ source, path });
+      setStarredNavigation({ source, path: normalizeExplorerPath(path), url });
     },
     [openFilesBrowser, setStarredNavigation],
   );
@@ -233,12 +231,13 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       const parentPath = filePath.includes('/')
         ? filePath.slice(0, filePath.lastIndexOf('/'))
         : '';
+      const url = openFilesBrowser({ source, path: parentPath });
       setStarredNavigation({
         source,
         path: parentPath,
         previewPath: filePath,
+        url,
       });
-      openFilesBrowser({ source, path: parentPath });
     },
     [openFilesBrowser, setStarredNavigation],
   );
@@ -740,12 +739,13 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                             : item.path.includes('/')
                               ? item.path.substring(0, item.path.lastIndexOf('/'))
                               : '';
+                        const url = openFilesBrowser({ source: item.source, path: folderPath });
                         setStarredNavigation({
                           source: item.source,
                           path: folderPath,
                           ...(item.type === 'folder' ? {} : { previewPath: item.path }),
+                          url,
                         });
-                        openFilesBrowser({ source: item.source, path: folderPath });
                       }}
                       className={cn(
                         'flex flex-1 items-center gap-1 rounded-md transition-colors',

@@ -15,8 +15,10 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
+    PrimaryKeyConstraint,
     String,
     Text,
     UniqueConstraint,
@@ -91,6 +93,9 @@ class OrganizationModel(Base):
     postal_code = Column(String(20), nullable=True)
     city = Column(String(100), nullable=True)
     country = Column(String(100), nullable=True)
+    # IANA time zone (``Europe/Paris``) the organization's analytics periods follow
+    # (migration 0073); its workspaces use it too.
+    timezone = Column(String(64), nullable=False, default="UTC", server_default="UTC")
     # Made by the configuration's seeding (core/org_seed.py): the only rows it updates.
     # False for what people create; NULL for a row older than the flag.
     seeded = Column(Boolean, nullable=True, default=False)
@@ -485,9 +490,25 @@ class MessageModel(Base):
     agent = Column(String, nullable=True)
     metadata_ = Column("metadata", Text, nullable=True)  # JSON string
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    # Read off ``metadata`` whenever the chat adapter writes it (migration 0073), so
+    # analytics count likes, dislikes and tools in SQL instead of parsing the JSON.
+    feedback = Column(String(16), nullable=True)  # "like" | "dislike"
+    feedback_type = Column(String(100), nullable=True)
 
     # Relationships
     conversation = relationship("ConversationModel", back_populates="messages")
+
+
+class MessageToolModel(Base):
+    """The tools an assistant message called (its ``metadata.steps``), one row per
+    tool with its number of calls: written with the message's metadata."""
+
+    __tablename__ = "message_tools"
+    __table_args__ = (PrimaryKeyConstraint("message_id", "tool_name"),)
+
+    message_id = Column(String, ForeignKey("messages.id", ondelete="CASCADE"), nullable=False)
+    tool_name = Column(String(200), nullable=False)
+    uses = Column(Integer, nullable=False, default=1)
 
 
 class ChatIngestionJobModel(Base):
@@ -1118,3 +1139,130 @@ class TaskActivityModel(Base):
     old_value = Column(Text, nullable=True)  # JSON
     new_value = Column(Text, nullable=True)  # JSON
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+# ============================================
+# Analytics (rollups of the tracker's events; migration 0073)
+# ============================================
+
+
+class AnalyticsEventModel(Base):
+    """A tracker event of the last 45 days (purged daily; the rollups stay).
+
+    ``organization_id`` is stamped from the workspace at ingest. Empty strings, not
+    NULL, stand for "none" in the key columns of the rollups below.
+    """
+
+    __tablename__ = "analytics_events"
+    __table_args__ = (
+        Index("idx_analytics_events_org_ts", "organization_id", "timestamp"),
+        Index("idx_analytics_events_ws_ts", "workspace_id", "timestamp"),
+        Index("idx_analytics_events_ts", "timestamp"),
+    )
+
+    # sha256 of (user_id, the tracker's event_id): a replay of the same event is
+    # stored and counted once, and no user's id can shadow another's event.
+    event_key = Column(String(64), primary_key=True)
+    timestamp = Column(DateTime(timezone=False), nullable=False)  # UTC
+    organization_id = Column(String, nullable=False, default="")
+    workspace_id = Column(String, nullable=False, default="")
+    user_id = Column(String, nullable=False, default="")
+    session_id = Column(String(64), nullable=False, default="")
+    event_name = Column(String(64), nullable=False)
+    page_path = Column(String(512), nullable=False, default="")
+    payload = Column(Text, nullable=False)  # the tracker payload, JSON, no email
+
+
+class AnalyticsHourlyModel(Base):
+    """Event counts per UTC hour, organization, workspace, user, event and page."""
+
+    __tablename__ = "analytics_hourly"
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "bucket_hour", "organization_id", "workspace_id", "user_id", "event_name", "page_path"
+        ),
+        Index("idx_analytics_hourly_org_hour", "organization_id", "bucket_hour"),
+        Index("idx_analytics_hourly_ws_hour", "workspace_id", "bucket_hour"),
+    )
+
+    bucket_hour = Column(DateTime(timezone=False), nullable=False)  # UTC, minute 0
+    organization_id = Column(String, nullable=False, default="")
+    workspace_id = Column(String, nullable=False, default="")
+    user_id = Column(String, nullable=False, default="")
+    event_name = Column(String(64), nullable=False)
+    page_path = Column(String(512), nullable=False, default="")
+    count = Column(Integer, nullable=False, default=0)
+
+
+class AnalyticsUserHourlyModel(Base):
+    """Events and page views per UTC hour, organization, workspace and user: the
+    hourly counts without the event and page keys, an order of magnitude fewer rows
+    for the figures that count users and workspaces."""
+
+    __tablename__ = "analytics_user_hourly"
+    __table_args__ = (
+        PrimaryKeyConstraint("bucket_hour", "organization_id", "workspace_id", "user_id"),
+        Index("idx_analytics_user_hourly_org_hour", "organization_id", "bucket_hour"),
+        Index("idx_analytics_user_hourly_ws_hour", "workspace_id", "bucket_hour"),
+    )
+
+    bucket_hour = Column(DateTime(timezone=False), nullable=False)  # UTC, minute 0
+    organization_id = Column(String, nullable=False, default="")
+    workspace_id = Column(String, nullable=False, default="")
+    user_id = Column(String, nullable=False, default="")
+    events = Column(Integer, nullable=False, default=0)
+    page_views = Column(Integer, nullable=False, default=0)
+
+
+class AnalyticsSessionModel(Base):
+    """A tracker session in one workspace: a session that crosses workspaces has
+    a row in each, so every scope counts the part it holds."""
+
+    __tablename__ = "analytics_session"
+    __table_args__ = (
+        PrimaryKeyConstraint("session_id", "workspace_id"),
+        Index("idx_analytics_session_org_started", "organization_id", "started_at"),
+        Index("idx_analytics_session_ws_started", "workspace_id", "started_at"),
+    )
+
+    session_id = Column(String(64), nullable=False)
+    workspace_id = Column(String, nullable=False, default="")
+    organization_id = Column(String, nullable=False, default="")
+    user_id = Column(String, nullable=False, default="")
+    started_at = Column(DateTime(timezone=False), nullable=False)
+    ended_at = Column(DateTime(timezone=False), nullable=False)
+    page_views = Column(Integer, nullable=False, default=0)
+    events = Column(Integer, nullable=False, default=0)
+    device = Column(String(64), nullable=True)
+    browser = Column(String(64), nullable=True)
+
+
+class AnalyticsPageModel(Base):
+    """The latest title seen for a page path in a workspace (keyed like the hourly
+    counts, so a title sent from one organization never shows in another's)."""
+
+    __tablename__ = "analytics_page_titles"
+    __table_args__ = (PrimaryKeyConstraint("organization_id", "workspace_id", "page_path"),)
+
+    organization_id = Column(String, nullable=False, default="")
+    workspace_id = Column(String, nullable=False, default="")
+    page_path = Column(String(512), nullable=False)
+    page_title = Column(String(512), nullable=False, default="")
+
+
+class AnalyticsLegacyReplayedModel(Base):
+    """The removed analytics app's events already counted by a legacy replay (by
+    ``analytics_events.event_key``): those past retention have no raw row to tell."""
+
+    __tablename__ = "analytics_legacy_replayed"
+
+    event_key = Column(String(64), primary_key=True)
+
+
+class AnalyticsJobModel(Base):
+    """When each analytics job last ran: the one-time backfills, the daily purge."""
+
+    __tablename__ = "analytics_jobs"
+
+    name = Column(String(64), primary_key=True)
+    last_run_at = Column(DateTime(timezone=False), nullable=False)

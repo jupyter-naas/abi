@@ -9,6 +9,10 @@ analytics from ``endpoints`` alongside the other endpoint modules.
 
 from __future__ import annotations
 
-from naas_abi.apps.nexus.apps.api.app.services.analytics.handlers import router
+from naas_abi.apps.nexus.apps.api.app.services.analytics.handlers import (
+    organization_router,
+    router,
+    workspace_router,
+)
 
-__all__ = ["router"]
+__all__ = ["organization_router", "router", "workspace_router"]

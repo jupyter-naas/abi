@@ -71,6 +71,8 @@ export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   'workflows',
   // Roles & permissions of the workspace (Platform Settings' own is /settings/roles).
   'permissions',
+  // Analytics of the workspace (new, but `getWorkspacePath(null, ...)` yields it too).
+  'analytics',
 ];
 
 /**

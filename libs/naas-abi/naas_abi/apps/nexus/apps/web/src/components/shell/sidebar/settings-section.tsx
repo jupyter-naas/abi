@@ -12,6 +12,7 @@ import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { opensRolesAndPermissions } from '@/components/access/access-sections';
 import { workspaceContainer } from '@/components/access/access-scope';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
+import { useReadsAnalytics } from '@/hooks/use-analytics-access';
 
 export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const pathname = usePathname();
@@ -27,9 +28,12 @@ export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean;
     undefined,
     { skip: !workspace }
   );
+  // Analytics is shown to whoever may read the workspace's (its admins, by default).
+  const readsAnalytics = useReadsAnalytics(workspace ? { kind: 'workspace', workspaceId: workspace.id } : null);
   // Only what the caller may use here (the features they hold, the module resources they may use).
   const groups = visibleSettingsGroups(resources, flags, SETTINGS_GROUPS, {
     holdsIam: !!workspace && opensRolesAndPermissions(access),
+    readsAnalytics,
   });
 
   return (

@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
   role: 'member' as string | null,
   access: null as null | { actions: Record<string, boolean> },
   replaced: [] as string[],
+  readsAnalytics: false,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -32,6 +33,9 @@ vi.mock('@/components/settings/settings-scope-switcher', () => ({
 vi.mock('@/lib/iam-admin/use-access', () => ({
   useIamAccess: () => ({ access: state.access, loading: false, error: null, can: () => false }),
 }));
+vi.mock('@/hooks/use-analytics-access', () => ({
+  useReadsAnalytics: () => state.readsAnalytics,
+}));
 vi.mock('@/stores/workspace', () => {
   const store = { currentWorkspaceId: 'ws-1' };
   return { useWorkspaceStore: (select: (s: typeof store) => unknown) => select(store) };
@@ -51,6 +55,7 @@ afterEach(async () => {
   await mounted?.unmount();
   mounted = null;
   state.replaced = [];
+  state.readsAnalytics = false;
 });
 
 async function render(): Promise<string> {
@@ -82,5 +87,14 @@ describe('organization settings by URL (UJ-O1)', () => {
     state.access = { actions: { 'iam:ListPolicies': true } };
     await render();
     expect(state.replaced).toEqual(['/organizations/acme/settings/roles']);
+  });
+
+  it('show Analytics to an organization admin the analytics API lets read', async () => {
+    state.role = 'admin';
+    state.access = null;
+    expect(await render()).not.toContain('Analytics');
+    await mounted?.unmount();
+    state.readsAnalytics = true;
+    expect(await render()).toContain('Analytics');
   });
 });
