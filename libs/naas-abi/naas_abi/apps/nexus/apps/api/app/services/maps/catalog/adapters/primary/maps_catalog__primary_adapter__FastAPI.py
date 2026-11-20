@@ -95,4 +95,13 @@ async def get_catalog(
         "hidden_basemaps": sorted(listed_basemaps.hidden),
         "default_basemap_id": DEFAULT_BASEMAP_ID,
         "can_edit": can_edit,
+        "camera": (
+            {
+                "lat": defaults.camera.lat,
+                "lng": defaults.camera.lng,
+                "zoom": defaults.camera.zoom,
+            }
+            if defaults.camera is not None
+            else None
+        ),
     }

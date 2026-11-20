@@ -63,7 +63,7 @@ function memberRoleLabel(role: string | undefined): string | null {
   return ROLE_LABELS[role as BuiltInRole];
 }
 
-/** "JOE · Admin" — the workspace name and the label the members page already uses. */
+/** Workspace name and the role label the members page already uses. */
 export function workspaceRoleLine(name: string, role: string | undefined): string {
   const label = memberRoleLabel(role);
   return label ? `${name} · ${label}` : name;

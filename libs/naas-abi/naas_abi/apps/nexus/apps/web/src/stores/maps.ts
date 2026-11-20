@@ -6,6 +6,7 @@ import { FALLBACK_BASEMAP_ID } from '@/app/workspace/[workspaceId]/maps/lib/maps
 import type { MapsGroupBy } from '@/app/workspace/[workspaceId]/maps/lib/maps-country-cluster';
 import type { WorkspaceFeedLayer, WorkspaceMapLayout } from '@/app/workspace/[workspaceId]/maps/lib/layouts';
 import { mapsCatalogApi, type WorkspaceBasemap } from '@/app/workspace/[workspaceId]/maps/lib/basemaps-api';
+import { mapsCameraFromCatalog, type MapsCamera } from '@/app/workspace/[workspaceId]/maps/lib/leaflet-map';
 
 function list<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
@@ -26,6 +27,8 @@ export interface WorkspaceLayouts {
   hiddenBasemaps: string[];
   defaultBasemapId: string;
   canEdit: boolean;
+  /** Launch view from the workspace's maps config. Null opens on the world view. */
+  camera: MapsCamera | null;
 }
 
 export interface MapsState {
@@ -57,6 +60,7 @@ const EMPTY: WorkspaceLayouts = {
   hiddenBasemaps: [],
   defaultBasemapId: FALLBACK_BASEMAP_ID,
   canEdit: false,
+  camera: null,
 };
 
 const pendingCatalogs = new Map<string, Promise<void>>();
@@ -82,6 +86,7 @@ export const useMapsStore = create<MapsState>()(
                 hiddenBasemaps: list(data.hidden_basemaps),
                 defaultBasemapId: data.default_basemap_id ?? EMPTY.defaultBasemapId,
                 canEdit: data.can_edit === true,
+                camera: mapsCameraFromCatalog(data.camera),
               },
             },
             loading: false,

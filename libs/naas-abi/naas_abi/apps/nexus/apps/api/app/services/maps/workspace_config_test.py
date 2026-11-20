@@ -6,6 +6,7 @@ from naas_abi.apps.nexus.apps.api.app.core.config import (
     WorkspaceSeedConfig,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import (
+    MapsInitialCamera,
     WorkspaceMapsDefaults,
     unknown_workspace_map_ids,
     workspace_maps_defaults,
@@ -55,6 +56,31 @@ def test_workspaces_without_maps_config_start_with_every_feed_disabled() -> None
     assert workspace_maps_defaults(ORGS, None) == nothing
 
 
+def test_a_configured_camera_is_the_launch_view() -> None:
+    orgs = [
+        OrganizationSeedConfig(
+            name="Example",
+            slug="example",
+            workspaces=[
+                WorkspaceSeedConfig(
+                    name="Focused",
+                    slug="focused",
+                    maps={
+                        "feeds": ["earthquakes"],
+                        "camera": {"lat": 48.8, "lng": 2.3, "zoom": 6},
+                    },
+                )
+            ],
+        )
+    ]
+    assert workspace_maps_defaults(orgs, "focused") == WorkspaceMapsDefaults(
+        feeds=frozenset({"earthquakes"}),
+        custom_basemaps=frozenset(),
+        camera=MapsInitialCamera(lat=48.8, lng=2.3, zoom=6),
+    )
+    assert workspace_maps_defaults(ORGS, "erin").camera is None
+
+
 def test_unknown_keys_are_refused() -> None:
     import pytest
     from pydantic import ValidationError
@@ -63,6 +89,8 @@ def test_unknown_keys_are_refused() -> None:
         WorkspaceMapsSeedConfig.model_validate({"feeds": [], "default_on": []})
     with pytest.raises(ValidationError):
         WorkspaceMapsSeedConfig.model_validate({"basemaps": ["erin-countries"]})
+    with pytest.raises(ValidationError):
+        WorkspaceMapsSeedConfig.model_validate({"camera": {"lat": 48.8}})
 
 
 def test_unknown_ids_are_reported_per_workspace() -> None:

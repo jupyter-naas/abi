@@ -77,6 +77,8 @@ export interface MapsCatalogResponse {
   hidden_basemaps: string[];
   default_basemap_id: string;
   can_edit: boolean;
+  /** Launch view from the workspace's maps config. Null opens on the world view. */
+  camera?: { lat: number; lng: number; zoom: number } | null;
 }
 
 const api = () => `${getApiUrl()}/api/maps`;

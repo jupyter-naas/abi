@@ -393,11 +393,20 @@ export type MapsCamera = {
 
 /** Initial view before fit-bounds or user interaction (matches createMapsLeaflet).
  *
- * The launch camera: the map opens on the United States (this deployment is a
- * US daily situational awareness brief), and the first pins load keeps it —
- * see `maps-feed-canvas.tsx` (`skipLaunchFitRef`), which only fits after the
- * member interacts or switches layers. */
-export const MAPS_DEFAULT_CAMERA: MapsCamera = { lat: 39.5, lng: -98.35, zoom: 4 };
+ * A workspace may set its own launch camera (`workspaces[].maps.camera`);
+ * without one, the map opens here and the first pins fit the frame.
+ */
+export const MAPS_DEFAULT_CAMERA: MapsCamera = { lat: 20, lng: 0, zoom: 2 };
+
+export function mapsCameraFromCatalog(value: unknown): MapsCamera | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as { lat?: unknown; lng?: unknown; zoom?: unknown };
+  if (typeof raw.lat !== 'number' || typeof raw.lng !== 'number' || typeof raw.zoom !== 'number') {
+    return null;
+  }
+  if (!Number.isFinite(raw.lat) || !Number.isFinite(raw.lng) || !Number.isFinite(raw.zoom)) return null;
+  return { lat: raw.lat, lng: raw.lng, zoom: raw.zoom };
+}
 
 export function captureMapsCamera(map: LeafletMap): MapsCamera {
   const center = map.getCenter();

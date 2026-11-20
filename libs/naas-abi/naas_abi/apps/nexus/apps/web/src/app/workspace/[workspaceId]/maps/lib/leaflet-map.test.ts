@@ -3,12 +3,27 @@ import {
   canInvalidateMapsLeaflet,
   captureMapsCamera,
   flyMapToUserLocation,
+  MAPS_DEFAULT_CAMERA,
+  mapsCameraFromCatalog,
   mapsLocateZoomForAccuracy,
   mapsPinPopupHtml,
   observeMapsLeafletSize,
   restoreMapsCamera,
   safeInvalidateMapsLeafletSize,
 } from './leaflet-map';
+
+describe('maps default camera', () => {
+  it('opens on the world view unless a workspace sets its own', () => {
+    expect(MAPS_DEFAULT_CAMERA).toEqual({ lat: 20, lng: 0, zoom: 2 });
+    expect(mapsCameraFromCatalog({ lat: 48.8, lng: 2.3, zoom: 6 })).toEqual({
+      lat: 48.8,
+      lng: 2.3,
+      zoom: 6,
+    });
+    expect(mapsCameraFromCatalog(null)).toBeNull();
+    expect(mapsCameraFromCatalog({ lat: 48.8 })).toBeNull();
+  });
+});
 
 describe('mapsLocateZoomForAccuracy', () => {
   it('zooms in for a precise fix and eases out when accuracy is coarse', () => {

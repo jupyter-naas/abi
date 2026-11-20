@@ -195,12 +195,9 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   // Pins the view was last fitted to: re-fit on new data, not when the same
   // pins are re-drawn (e.g. group-by-country switching at the zoom threshold).
   const fittedPinsRef = useRef<MapsPinMarker[] | null>(null);
-  // The launch camera holds until the member interacts: the first pins load
-  // does not fit-bounds the map away from it (with several global feeds on,
-  // the fit would always zoom out to the whole world). Layer switches and
-  // data refreshes after that fit as before, and a drag re-arms the user's
-  // view (preserveUserViewRef).
-  const skipLaunchFitRef = useRef(true);
+  // Set when the workspace configured a launch camera: the first pins leave
+  // that view in place. Without one, the first pins fit the frame.
+  const skipLaunchFitRef = useRef(false);
   const onMapReadyRef = useRef(onMapReady);
   onMapReadyRef.current = onMapReady;
   const mapReadyExtraCleanupRef = useRef<(() => void) | null>(null);
@@ -244,7 +241,12 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     () => visiblePins.some((p) => p.country?.trim()),
     [visiblePins],
   );
-  const mapZoom = camera?.zoom ?? MAPS_DEFAULT_CAMERA.zoom;
+  const catalogEntry = useMapsStore((s) => (workspaceId ? s.byWorkspace[workspaceId] : undefined));
+  const catalogError = useMapsStore((s) => s.error);
+  const launchCamera = catalogEntry?.camera ?? null;
+  const launchReady = !workspaceId || catalogEntry != null || Boolean(catalogError);
+  const shownCamera = camera ?? launchCamera ?? MAPS_DEFAULT_CAMERA;
+  const mapZoom = shownCamera.zoom;
   const displayPins = useMemo(() => {
     const area = groupAreaAt(groupBy, DEFAULT_MAPS_GROUP_AREA, mapZoom, view);
     if (!area || groupBy === 'off') return visiblePins;
@@ -428,6 +430,8 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     const container = containerRef.current;
     if (!container) return;
 
+    if (!launchReady) return;
+
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | null = null;
     let moveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -436,10 +440,16 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     const ownedMarkers: Marker[] = [];
     const lifecycle = new AbortController();
     markersRef.current = ownedMarkers;
+    const launch = launchCamera;
+    skipLaunchFitRef.current = launch != null;
 
     // One initialization per effect, shared even if a refresh starts while
     // Leaflet is loading. Cleanup cancels it before it can claim the container.
-    const mapReady = createMapsLeaflet(container, {}, lifecycle.signal).then(({L, map}) => {
+    const mapReady = createMapsLeaflet(
+      container,
+      launch ? { center: { lat: launch.lat, lng: launch.lng }, zoom: launch.zoom } : {},
+      lifecycle.signal,
+    ).then(({L, map}) => {
       if (cancelled) {
         map.remove();
         return null;
@@ -561,7 +571,7 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
     };
     // Callers remount when dataset/workspace changes. Public feed factories are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshMs, fitMaxZoom, viewportBound]);
+  }, [refreshMs, fitMaxZoom, viewportBound, launchReady, launchCamera]);
 
   useEffect(() => {
     basemapHandleRef.current?.setBasemap(basemap, basemapDefs);
@@ -667,10 +677,10 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
 
   const viewMetaLine =
     status !== 'error'
-      ? formatMapsToolbarViewLine({
-          zoom: camera?.zoom ?? MAPS_DEFAULT_CAMERA.zoom,
-          lat: camera?.lat ?? MAPS_DEFAULT_CAMERA.lat,
-          lng: camera?.lng ?? MAPS_DEFAULT_CAMERA.lng,
+        ? formatMapsToolbarViewLine({
+          zoom: shownCamera.zoom,
+          lat: shownCamera.lat,
+          lng: shownCamera.lng,
           basemapLabel: basemapLabel(basemap, basemapDefs),
           radiusNm: viewRadiusNm ?? undefined,
         })

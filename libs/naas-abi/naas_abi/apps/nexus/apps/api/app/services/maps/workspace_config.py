@@ -1,8 +1,11 @@
 """Initial Maps setup of each workspace, declared in ``config.*.yaml`` (``workspaces[].maps``).
 
-The config gives initial values only: each feed and custom basemap is decided
-once per workspace (enabled when listed, disabled otherwise), then Settings →
-Maps owns it. Built-in basemaps are always enabled.
+Feeds and custom basemaps are initial values only: each is decided once per
+workspace (enabled when listed, disabled otherwise), then Settings → Maps owns
+it. Built-in basemaps are always enabled.
+
+``camera``, when set, is the view the map opens on. It is read from the config
+whenever the catalog loads, and it is not stored in Settings.
 """
 
 from __future__ import annotations
@@ -14,9 +17,17 @@ from naas_abi.apps.nexus.apps.api.app.core.config import OrganizationSeedConfig
 
 
 @dataclass(frozen=True)
+class MapsInitialCamera:
+    lat: float
+    lng: float
+    zoom: float
+
+
+@dataclass(frozen=True)
 class WorkspaceMapsDefaults:
     feeds: frozenset[str] = frozenset()
     custom_basemaps: frozenset[str] = frozenset()
+    camera: MapsInitialCamera | None = None
 
 
 def workspace_maps_defaults(
@@ -26,9 +37,15 @@ def workspace_maps_defaults(
     for organization in organizations:
         for workspace in organization.workspaces:
             if workspace.slug == workspace_slug and workspace.maps is not None:
+                camera = workspace.maps.camera
                 return WorkspaceMapsDefaults(
                     feeds=frozenset(workspace.maps.feeds),
                     custom_basemaps=frozenset(workspace.maps.basemaps.custom),
+                    camera=(
+                        MapsInitialCamera(lat=camera.lat, lng=camera.lng, zoom=camera.zoom)
+                        if camera is not None
+                        else None
+                    ),
                 )
     return WorkspaceMapsDefaults()
 

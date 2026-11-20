@@ -424,7 +424,7 @@ class WorkspaceSeedConfig(BaseModel):
     ontologies: list[str] | None = None
     # Exact data graph grants. Missing policy exposes owned graphs only.
     graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
-    # Initial Maps feeds and custom basemaps (see WorkspaceMapsSeedConfig).
+    # Initial Maps feeds, custom basemaps and launch camera (see WorkspaceMapsSeedConfig).
     maps: WorkspaceMapsSeedConfig | None = None
 
 
