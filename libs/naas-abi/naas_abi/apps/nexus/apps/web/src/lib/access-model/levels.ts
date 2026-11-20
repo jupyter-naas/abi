@@ -4,14 +4,17 @@
  * membership group of W holding "<W> access", the workspace's offer); **what** they may do there
  * is a level, written once as a generic policy held by a level group.
  *
- * The group and policy names are S2's (#1585) and S3's (#1586): kept here alone, so a change of
- * name there is a change of this file. Pure: no React, no fetch.
+ * The group and policy names are S2's (#1585, `services/iam/levels.py`, `container_defaults.py`)
+ * and S3's (#1586): kept here alone, so a change of name there is a change of this file. Pure:
+ * no React, no fetch.
  */
 
 /** A level a person holds everywhere they work (Workspace Admin is a Member with "<W> admins"). */
 export type Level = 'viewer' | 'member' | 'admin';
 
-/** The generic level policies: one each, attached once to its group (S2). */
+/** The generic level policies: one each, written once and owned by the platform (S2). Viewer and
+ *  Member access are held by "Viewers" and "Members" at `${my workspaces}`; Workspace admin access
+ *  by each "<W> admins" there. */
 export const LEVEL_POLICIES: { level: Level; name: string; group: string; summary: string }[] = [
   {
     level: 'viewer',
@@ -46,8 +49,13 @@ export function levelSummary(level: Level): string {
   return LEVEL_POLICIES.find((p) => p.level === level)?.summary ?? '';
 }
 
-/** The level groups, platform-owned (S2). */
+/** The level groups, platform-owned and marked `level_group` (S2). */
 export const LEVEL_GROUP_NAMES: readonly string[] = ['Viewers', 'Members'];
+/** The platform's "Workspace admins": whoever is in a "<W> admins" or "<O> admins", holding
+ *  every model (its members follow those groups). */
+export const ALL_WORKSPACE_ADMINS = 'Workspace admins';
+/** The platform's "Platform admins": `builtin.platform_admin` (`is_superadmin`). */
+export const PLATFORM_ADMINS = 'Platform admins';
 
 /** "<W> workspace": the membership group of W, holding W's offer ("<W> access"). */
 export const workspaceGroupName = (workspace: string) => `${workspace} workspace`;
@@ -78,9 +86,18 @@ export const CAPABILITY_GROUPS: { capability: Capability; name: string; summary:
 
 /** What a group is in the model: a level, an admins group, a workspace's membership group,
  *  an organization's people, a capability group, or one made for a per-person exception. */
-export type GroupKind = 'level' | 'org-admins' | 'workspace-admins' | 'workspace' | 'people' | 'capability' | 'custom';
+export type GroupKind =
+  | 'platform-admins'
+  | 'level'
+  | 'org-admins'
+  | 'workspace-admins'
+  | 'workspace'
+  | 'people'
+  | 'capability'
+  | 'custom';
 
 export const GROUP_KIND_LABELS: Record<GroupKind, string> = {
+  'platform-admins': 'Platform admins',
   level: 'Level',
   'org-admins': 'Org admins',
   'workspace-admins': 'Workspace admins',
@@ -90,7 +107,7 @@ export const GROUP_KIND_LABELS: Record<GroupKind, string> = {
   custom: 'Custom',
 };
 
-const ORDER: GroupKind[] = ['level', 'org-admins', 'workspace-admins', 'workspace', 'people', 'capability', 'custom'];
+const ORDER: GroupKind[] = ['platform-admins', 'level', 'org-admins', 'workspace-admins', 'workspace', 'people', 'capability', 'custom'];
 
 export function groupRank(kind: GroupKind): number {
   return ORDER.indexOf(kind);
@@ -114,6 +131,8 @@ export function groupKind(group: GroupLike): GroupKind {
   if (group.membership_of) return WORKSPACE_STEP.test(group.membership_of) ? 'workspace' : 'people';
   if (CAPABILITY_GROUPS.some((c) => c.name === name)) return 'capability';
   if (owner === 'abi:' && LEVEL_GROUP_NAMES.includes(name)) return 'level';
+  if (owner === 'abi:' && name === PLATFORM_ADMINS) return 'platform-admins';
+  if (owner === 'abi:' && name === ALL_WORKSPACE_ADMINS) return 'workspace-admins';
   if (WORKSPACE_STEP.test(owner)) {
     if (name.endsWith(' workspace')) return 'workspace';
     if (name.endsWith(' admins')) return 'workspace-admins';

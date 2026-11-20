@@ -33,3 +33,10 @@ export function workspaceCreateBody(draft: WorkspaceCreateDraft): Record<string,
     catalog_seed: draft.catalogSeed,
   };
 }
+
+/** The refusals of the create route that are about the workspace admin picked (400: not a
+ *  person of the organization's directory, not a known user): shown at the picker. */
+export function adminRefusal(status: number, detail: string): string | null {
+  if (status !== 400) return null;
+  return /workspace admin/i.test(detail) ? detail : null;
+}

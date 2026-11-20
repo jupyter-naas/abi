@@ -19,7 +19,7 @@ import {
   type CatalogSeedDraft,
 } from '../workspace-instances-section';
 import { useAuthStore } from '@/stores/auth';
-import { workspaceCreateBody } from '@/lib/access-model/workspace-create';
+import { adminRefusal, workspaceCreateBody } from '@/lib/access-model/workspace-create';
 import { slugify, WORKSPACE_SLUG } from './slug';
 import '@/app/account/profile/profile.css';
 import '@/app/workspace/[workspaceId]/settings/general/general.css';
@@ -73,6 +73,8 @@ export default function OrgCreateWorkspacePage() {
   const [adminId, setAdminId] = useState('');
   const [catalogSeedDraft, setCatalogSeedDraft] = useState<CatalogSeedDraft>({});
   const [error, setError] = useState('');
+  // A refusal about the workspace admin picked (400), shown at the picker.
+  const [adminError, setAdminError] = useState('');
   const [creating, setCreating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -164,6 +166,7 @@ export default function OrgCreateWorkspacePage() {
   const handleCreate = async () => {
     if (!canCreate) return;
     setError('');
+    setAdminError('');
     setCreating(true);
     const catalog_seed = catalogSeedPayload(catalogSeedDraft);
     try {
@@ -186,7 +189,14 @@ export default function OrgCreateWorkspacePage() {
         ),
       });
       if (!res.ok) {
-        throw new Error(await readApiError(res, `Failed to create the workspace (HTTP ${res.status}).`));
+        const detail = await readApiError(res, `Failed to create the workspace (HTTP ${res.status}).`);
+        const aboutAdmin = adminRefusal(res.status, detail);
+        if (aboutAdmin) {
+          setAdminError(aboutAdmin);
+          setCreating(false);
+          return;
+        }
+        throw new Error(detail);
       }
       const workspace: { id: string } = await res.json();
       if (logoFile) {
@@ -337,10 +347,18 @@ export default function OrgCreateWorkspacePage() {
             <WorkspaceOwnerSelect
               orgId={orgId}
               value={adminId}
-              onChange={setAdminId}
+              onChange={(id) => {
+                setAdminId(id);
+                setAdminError('');
+              }}
               disabled={creating}
               role="admin"
             />
+            {adminError && (
+              <span className="account-profile-field-label org-create-workspace-hint" role="alert" data-admin-error="">
+                {adminError}
+              </span>
+            )}
           </div>
           <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="create-workspace-slug">

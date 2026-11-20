@@ -304,6 +304,36 @@ async def test_a_workspace_is_created_with_an_admin_the_creator_by_default(api) 
 
 
 @pytest.mark.asyncio
+async def test_the_create_page_s_body_makes_the_picked_person_its_admin(api) -> None:
+    """The body Organization settings › Workspaces › Create sends (web
+    ``lib/access-model/workspace-create.ts``, #1588): ``admin_id``, no ``owner_id``,
+    empty fields as null; one outside the organization is a 400 the form shows."""
+
+    def body(slug: str, admin: str) -> dict[str, Any]:
+        return {
+            "name": slug.title(),
+            "slug": slug,
+            "organization_id": "org-1",
+            "admin_id": admin,
+            "workspace_group": None,
+            "description": None,
+            "primary_color": "#22c55e",
+            "accent_color": None,
+            "catalog_seed": None,
+        }
+
+    async with api("admin") as http:
+        made = await http.post("/api/workspaces", json=body("picked", "member"))
+        assert made.status_code == 200, made.text
+        refused = await http.post("/api/workspaces", json=body("nobody", "bob"))
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == "The workspace admin must be a person of the organization"
+    scope = workspace_container("org-1", made.json()["id"])
+    assert await role("member", scope) == "admin"
+    assert await role("admin", scope) != "owner"
+
+
+@pytest.mark.asyncio
 async def test_a_workspace_without_an_organization_is_the_callers_own(
     api, team, monkeypatch
 ) -> None:

@@ -59,14 +59,18 @@ describe('what a group is', () => {
     expect(groupKind(group('Acme people', { owner_scope: O }))).toBe('people');
     expect(groupKind(group('Workflow runners', { owner_scope: O }))).toBe('capability');
     expect(groupKind(group('Models · all'))).toBe('capability');
+    expect(groupKind(group('Platform admins'))).toBe('platform-admins');
+    // The platform's "Workspace admins" (every "<W> admins" and "<O> admins" person).
+    expect(groupKind(group('Workspace admins'))).toBe('workspace-admins');
     expect(groupKind(group('Data team', { owner_scope: W }))).toBe('custom');
     // "Members" owned by a workspace is someone's own group, not the level.
     expect(groupKind(group('Members', { owner_scope: W }))).toBe('custom');
   });
 
-  it('ranks the model groups before custom ones: levels, admins, workspaces, people, capabilities', () => {
-    const kinds = ['custom', 'capability', 'people', 'workspace', 'workspace-admins', 'org-admins', 'level'] as const;
+  it('ranks the model groups before custom ones: platform admins, levels, admins, workspaces, people, capabilities', () => {
+    const kinds = ['custom', 'capability', 'people', 'workspace', 'workspace-admins', 'org-admins', 'level', 'platform-admins'] as const;
     expect([...kinds].sort((a, b) => groupRank(a) - groupRank(b))).toEqual([
+      'platform-admins',
       'level',
       'org-admins',
       'workspace-admins',
