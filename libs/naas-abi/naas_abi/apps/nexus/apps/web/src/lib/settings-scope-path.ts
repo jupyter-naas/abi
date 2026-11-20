@@ -1,6 +1,6 @@
 /**
  * The last Settings page visited (sessionStorage), and the last one of each level, so the
- * avatar menu and the dock reopen where the caller left off, and each tab its level.
+ * dock's Settings reopens where the caller left off, and each tab its level.
  */
 
 export type SettingsScopeKey =

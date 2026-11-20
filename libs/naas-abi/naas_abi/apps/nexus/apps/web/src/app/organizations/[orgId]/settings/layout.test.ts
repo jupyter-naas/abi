@@ -56,6 +56,7 @@ vi.mock('@/stores/workspace', () => {
   return { useWorkspaceStore: (select: (s: typeof store) => unknown) => select(store) };
 });
 vi.mock('@/stores/auth', () => ({
+  useAuthStore: (select: (s: unknown) => unknown) => select({ logout: () => undefined }),
   authFetch: async (url: string) =>
     url === '/api/organizations/acme'
       ? new Response(JSON.stringify({ name: 'Acme', current_user_role: state.role }), { status: 200 })
@@ -88,6 +89,8 @@ describe('organization settings by URL (UJ-O1)', () => {
     const text = await render();
     expect(text).toContain('GENERAL PAGE');
     expect(text).toContain('Members');
+    expect(mounted?.host.querySelector('header [aria-label="Help"]')).not.toBeNull();
+    expect(mounted?.host.querySelector('header [aria-label="Log out"]')).not.toBeNull();
   });
 
   it('refuse an organization member with no iam: right there (Eve, Bob)', async () => {

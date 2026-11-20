@@ -56,7 +56,7 @@ vi.mock('@/hooks/use-workspace-resources', () => ({ useWorkspaceResources: () =>
 
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useSettingsTabs } from '@/hooks/use-settings-levels';
-import { useAvatarSettingsLinks } from '@/hooks/use-avatar-settings-links';
+import { useSettingsHref } from '@/hooks/use-avatar-settings-links';
 
 /**
  * `tabs`: their labels, none with one level; `opens`: where each tab leads. `level`: the
@@ -73,9 +73,9 @@ type Seen = {
 
 function Probe() {
   const { tabs, level } = useSettingsTabs({ mobile: false });
-  const { settings } = useAvatarSettingsLinks();
+  const settings = useSettingsHref();
   const seen: Seen = {
-    settings: settings.href,
+    settings,
     tabs: tabs.map((tab) => tab.label),
     opens: Object.fromEntries(tabs.map((tab) => [tab.label, tab.href])),
     level: level?.label ?? null,

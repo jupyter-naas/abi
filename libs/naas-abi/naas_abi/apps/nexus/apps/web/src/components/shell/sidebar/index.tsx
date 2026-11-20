@@ -63,7 +63,7 @@ const SECTIONS: SectionDef[] = [
 ];
 
 const BOTTOM_SECTIONS: SectionDef[] = [
-  // Opens Settings, the same place as the avatar menu's: every level, no column of its own.
+  // Opens Settings at the last page visited: every level, no column of its own.
   { id: 'settings', icon: <Settings size={18} />, label: 'Settings', description: 'Account, workspace, organization and platform settings', href: '/settings' },
 ];
 
