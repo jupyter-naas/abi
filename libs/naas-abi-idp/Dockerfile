@@ -3,7 +3,7 @@
 # stack's docker-compose.yml builds it with named contexts, so no project root
 # is ever sent:
 #   context = .abi/libs/naas-abi-idp, abi_proto / abi_sdk = .abi/libs/naas-abi-{proto,sdk}
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
