@@ -168,11 +168,20 @@ export function Toolbar({
 
 function NameCell({ view, entry }: { view: ServiceView; entry: ResourceEntry }) {
   const Icon = entryIcon(view, entry);
+  const image = view.entryImage?.(entry) ?? null;
   const summary = view.summary ? view.summary(entry) : entry.attributes.summary;
   return (
     <span className="data-row-name">
       <span className={`data-row-icon${entry.kind === 'container' ? ' data-row-icon-container' : ''}`}>
-        <Icon size={15} strokeWidth={1.75} aria-hidden="true" />
+        {image ? (
+          <img
+            src={image.url}
+            alt=""
+            className={image.mono ? 'data-entry-image data-entry-image-mono' : 'data-entry-image'}
+          />
+        ) : (
+          <Icon size={15} strokeWidth={1.75} aria-hidden="true" />
+        )}
       </span>
       <span className="data-row-text">
         <span className="data-row-title">
@@ -290,6 +299,7 @@ function CardsLayout({
     <div className="data-cards" role="listbox" aria-label="Entries">
       {entries.map((entry) => {
         const Icon = entryIcon(view, entry);
+        const image = view.entryImage?.(entry) ?? null;
         const summary = view.summary ? view.summary(entry) : entry.attributes.summary;
         return (
           <div
@@ -303,7 +313,15 @@ function CardsLayout({
           >
             <div className="data-card-head">
               <span className="data-card-icon">
-                <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
+                {image ? (
+                  <img
+                    src={image.url}
+                    alt=""
+                    className={image.mono ? 'data-entry-image data-entry-image-mono' : 'data-entry-image'}
+                  />
+                ) : (
+                  <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
+                )}
               </span>
               <span className="data-card-title" title={entry.id}>
                 {view.title?.(entry) ?? entry.name}

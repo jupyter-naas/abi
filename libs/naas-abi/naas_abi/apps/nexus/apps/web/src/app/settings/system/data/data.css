@@ -962,6 +962,20 @@
   color: var(--color-primary);
 }
 
+/* A service view's brand image (ServiceView.entryImage) inside the icon box. */
+.data-row-icon img,
+.data-card-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 3px;
+}
+
+/* Monochrome brand glyphs (OpenAI, Grok…) render black; invert them in dark mode. */
+.dark .data-entry-image-mono {
+  filter: invert(1);
+}
+
 .data-row-text {
   display: flex;
   flex-direction: column;

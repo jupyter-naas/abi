@@ -3,6 +3,7 @@
 import './model-registry.css';
 
 import { Cpu, Layers, Sparkles, Star } from 'lucide-react';
+import { modelBrandIcon } from '@/lib/model-icons';
 import { formatCount, parseJson } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
 import { Badge, CopyButton } from '../data-ui';
@@ -227,6 +228,7 @@ export const modelRegistryView: ServiceView = {
   readOnly: true,
   noun: { one: 'model', many: 'models' },
   entryIcon: (entry) => ((entry.attributes.kind ?? '').includes('embedding') ? Layers : Sparkles),
+  entryImage: (entry) => modelBrandIcon(entry.name, entry.attributes.display_name),
   level: () => ({
     layout: 'cards',
     card: (entry) => <ModelCard entry={entry} />,

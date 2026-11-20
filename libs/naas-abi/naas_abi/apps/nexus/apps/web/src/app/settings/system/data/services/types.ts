@@ -74,6 +74,8 @@ export interface ServiceView {
   /** False or a reason when nothing can be created at this depth (create stays possible elsewhere). */
   canCreate?: (depth: number, parent: string) => boolean | string;
   entryIcon?: (entry: ResourceEntry) => LucideIcon;
+  /** A brand image that replaces the generic entry icon in lists and cards (e.g. a model's brand logo); null keeps the icon. `mono` glyphs are inverted in dark mode. */
+  entryImage?: (entry: ResourceEntry) => { url: string; mono?: boolean } | null;
   /** What one entry is called ("folder", "collection"); defaults to ``noun`` for items. */
   nounFor?: (entry: ResourceEntry, depth: number) => Noun;
   /** The label shown for an entry when its name is an opaque id (e.g. a hash); the name stays in the id. */
