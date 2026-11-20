@@ -603,6 +603,34 @@ def test_a_member_of_a_container_belongs_to_its_organisation(h):
     assert dave.id in h.iam.store.list_group_members(team.id)
 
 
+@pytest.mark.parametrize("account", ["engine", "api"])
+def test_a_first_party_account_for_no_user_makes_the_first_tie(h, account):
+    """Nexus gives a person their first membership ("<W> workspace", owned by W)
+    after its route authorized the change: a first-party account acting for no
+    user may add someone who belongs to nothing yet to a membership group, and
+    that membership is their tie to the organisation. Any other group, and any
+    other writer, still takes only the organisation's people."""
+    _register_world(h)
+    newcomer, outsider = h.user("newcomer"), h.user("outsider")
+    with as_service_account("engine"):
+        workspace_group = _membership_group(h, W)
+        team = h.iam.create_group("team", scope=org())
+    with as_service_account(account):
+        with pytest.raises(IAMNotFoundError):
+            h.iam.add_group_member(team.id, newcomer.id)
+        h.iam.add_group_member(workspace_group.id, newcomer.id)
+        h.iam.add_group_member(team.id, newcomer.id)
+        assert h.iam.list_memberships(newcomer.id) == [
+            Membership(workspace_group.id, W)
+        ]
+    # On behalf of a user (an org admin through Nexus), the tie is still needed.
+    org_admin = h.user("org-admin")
+    h.attach(roles.ADMIN, org_admin.id, org())
+    h.attach(roles.ADMIN, org_admin.id, org() + "/*")
+    with h.as_(org_admin), pytest.raises(IAMNotFoundError):
+        h.iam.add_group_member(workspace_group.id, outsider.id)
+
+
 # -- the policy builder ----------------------------------------------------------------
 
 
@@ -623,3 +651,189 @@ def test_grantable_offers_the_scope(h):
     assert "${scope}" in everything["nexus:UpdateWorkspace"]
     # An admin of one organisation holds nothing at every container.
     assert "triple_store:Query" not in offered(org_admin)
+
+
+# -- bounds: what a membership group holds at its container ----------------------------
+
+
+INSERT = "triple_store:Insert"
+EVERY_GRAPH = "${scope}/triple_store:graph/*"
+
+
+def _graph_pattern(name: str) -> str:
+    return graph(name).replace(W, "${scope}")
+
+
+def _bounded_world(h: IAMHarness, *offered: str):
+    """Bob is in W's membership group, which holds "W access" (Insert on the
+    ``offered`` graphs) at W, and in a level group holding a generic customer
+    policy (Insert on every graph) and the member role at ``${my workspaces}``."""
+    _register_world(h)
+    bob = h.user("bob")
+    _ensure_belongs(h, bob.id)
+    members_of_w = _membership_group(h, W)
+    with as_service_account("engine"):
+        access = h.iam.create_policy(
+            "W access",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    statement(
+                        "Allow",
+                        [INSERT],
+                        [_graph_pattern(g) for g in offered],
+                        sid="Offer",
+                    )
+                ],
+            },
+            scope=W,
+        )
+        h.iam.attach_policy(access.id, members_of_w.id, W)
+        level = h.iam.create_group("Members", level=True)
+        generic = h.iam.create_policy(
+            "Member access",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    statement("Allow", [INSERT], [EVERY_GRAPH], sid="Write")
+                ],
+            },
+        )
+        h.iam.attach_policy(generic.id, level.id, MY_CONTAINERS_SCOPE)
+        h.iam.attach_policy(roles.VIEWER, level.id, MY_CONTAINERS_SCOPE)
+    return bob, members_of_w, level, access
+
+
+def test_a_level_policy_is_bounded_by_what_the_membership_group_holds_there(h):
+    """The intersection inside IAM (ADR item 4): a generic policy at
+    ``${my workspaces}`` grants at W only what W's membership group holds there."""
+    bob, members_of_w, level, access = _bounded_world(h, "a")
+    _join(h, members_of_w.id, bob.id)
+    # In W's membership group only: the bound grants nothing by itself.
+    assert not h.allowed(INSERT, graph("a"), bob)
+    _join(h, level.id, bob.id)
+    assert h.allowed(INSERT, graph("a"), bob)
+    assert not h.allowed(INSERT, graph("b"), bob)
+    explained = h.admin("explain", INSERT, graph("a"), principal_id=bob.id)
+    assert explained.statement is not None
+    assert [b.policy_id for b in explained.statement.bounded_by] == [access.id]
+    # Narrowing the bound narrows the level at the next decision.
+    with as_service_account("engine"):
+        current = h.iam.get_policy(access.id)
+        h.iam.update_policy(
+            access.id,
+            expected_revision=current.revision,
+            document={
+                "version": "2026-10-13",
+                "statements": [statement("Allow", [INSERT], [_graph_pattern("b")])],
+            },
+        )
+    assert not h.allowed(INSERT, graph("a"), bob)
+    assert h.allowed(INSERT, graph("b"), bob)
+
+
+def test_a_built_in_role_at_my_workspaces_is_not_bounded(h):
+    """The roles hold no module scope and no policy-only type, which a bound
+    offers: they keep the level's actions wherever the person is a member."""
+    bob, members_of_w, level, _access = _bounded_world(h, "a")
+    _join(h, members_of_w.id, bob.id)
+    _join(h, level.id, bob.id)
+    assert h.allowed("triple_store:Query", graph("b"), bob)
+
+
+def test_a_deny_of_the_bound_applies_and_its_parent_bounds_too(h):
+    _register_world(h)
+    bob = h.user("bob")
+    _ensure_belongs(h, bob.id)
+    members_of_w = _membership_group(h, W)
+    with as_service_account("engine"):
+        org_access = h.iam.create_policy(
+            "O access",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    statement(
+                        "Allow",
+                        [INSERT],
+                        [
+                            org() + "/*/triple_store:graph/a",
+                            org() + "/*/triple_store:graph/b",
+                        ],
+                    )
+                ],
+            },
+        )
+        access = h.iam.create_policy(
+            "W access",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    statement("Allow", [INSERT], [EVERY_GRAPH]),
+                    statement("Deny", ["triple_store:Query"], [_graph_pattern("c")]),
+                ],
+            },
+            scope=W,
+            parent=org_access.id,
+        )
+        h.iam.attach_policy(access.id, members_of_w.id, W)
+        level = h.iam.create_group("Members", level=True)
+        h.iam.attach_policy(roles.VIEWER, level.id, MY_CONTAINERS_SCOPE)
+        generic = h.iam.create_policy(
+            "Member access",
+            {
+                "version": "2026-10-13",
+                "statements": [statement("Allow", [INSERT], [EVERY_GRAPH])],
+            },
+        )
+        h.iam.attach_policy(generic.id, level.id, MY_CONTAINERS_SCOPE)
+    _join(h, members_of_w.id, bob.id)
+    _join(h, level.id, bob.id)
+    assert h.allowed(INSERT, graph("a"), bob)
+    # Beyond the organisation's, though W's own allows every graph.
+    assert not h.allowed(INSERT, graph("z"), bob)
+    # The bound's Deny wins over the viewer role.
+    assert h.allowed("triple_store:Query", graph("a"), bob)
+    assert not h.allowed("triple_store:Query", graph("c"), bob)
+
+
+def test_a_container_with_no_bound_is_not_narrowed(h):
+    _register_world(h)
+    bob = h.user("bob")
+    _ensure_belongs(h, bob.id)
+    members_of_w = _membership_group(h, W)
+    with as_service_account("engine"):
+        level = h.iam.create_group("Members", level=True)
+        generic = h.iam.create_policy(
+            "Member access",
+            {
+                "version": "2026-10-13",
+                "statements": [statement("Allow", [INSERT], [EVERY_GRAPH])],
+            },
+        )
+        h.iam.attach_policy(generic.id, level.id, MY_CONTAINERS_SCOPE)
+    _join(h, members_of_w.id, bob.id)
+    _join(h, level.id, bob.id)
+    assert h.allowed(INSERT, graph("z"), bob)
+
+
+def test_a_containers_admins_group_at_my_workspaces_is_bounded_and_reaches_only_it(h):
+    """ "<W> admins", a membership group of W owned by W, holding a generic policy at
+    ``${my workspaces}``: it reaches W alone (the owner filter), within W's bound."""
+    bob, members_of_w, _level, _access = _bounded_world(h, "a")
+    _join(h, members_of_w.id, bob.id)
+    members_of_w2 = _membership_group(h, W2)
+    _join(h, members_of_w2.id, bob.id)
+    with as_service_account("engine"):
+        admins = h.iam.create_group("W admins", scope=W, membership_of=W)
+        generic = h.iam.create_policy(
+            "Admin access",
+            {
+                "version": "2026-10-13",
+                "statements": [statement("Allow", [INSERT], [EVERY_GRAPH])],
+            },
+        )
+        h.iam.attach_policy(generic.id, admins.id, MY_CONTAINERS_SCOPE)
+    _join(h, admins.id, bob.id)
+    assert h.allowed(INSERT, graph("a"), bob)
+    assert not h.allowed(INSERT, graph("b"), bob)
+    assert not h.allowed(INSERT, graph("a", workspace="ws-2"), bob)

@@ -59,7 +59,12 @@ SERVICE = "nexus"
 # 16: ``builtin.self`` loses ``CreateOrganization`` and the personal ``CreateWorkspace``
 #     (no ``self_`` platform access row any more; ``nexus_config.personal_workspaces``
 #     gives the latter back as a self grant).
-VERSION = 16
+# 17: Owner no longer assigned (#1585): deleting a workspace of an organization is
+#     ``DeleteOrganizationWorkspace`` (admin, on the organization: its admins), deleting
+#     an organization ``DeletePlatformOrganization`` (on the platform-level
+#     ``organization_record``: no role's, the platform admin's); ``DeleteOrganization``
+#     deprecated (kept for ``delete_container``, which Nexus calls as ``api``).
+VERSION = 17
 
 _MODULES = (
     organizations,

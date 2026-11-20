@@ -340,3 +340,109 @@ def test_the_scoped_analytics_are_guarded_by_their_scope(table) -> None:
     assert found[("GET", f"{org}/access")] == {"ReadOrganizationAnalytics"}
     assert found[("GET", f"{workspace}/access")] == {"ReadWorkspaceAnalytics"}
     assert TYPES_BY_NAME[TYPE_OF["ReadAnalyticsConversation"]].policy_only
+
+
+# -- levels as groups (#1585) ------------------------------------------------------------
+
+# Who, in a world whose organization and workspace keep their people in groups:
+# a Viewer and a Member (their level, "<W> workspace", "<O> people"), a workspace admin
+# (Member, "<W> admins"; a Member of the organization), an org admin ("<O> admins"),
+# the platform admin and a stranger.
+GROUPED = ("viewer", "member", "wadmin", "oadmin", "root", "stranger")
+
+
+@pytest.fixture(scope="module")
+def grouped_world():
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import widen_offer
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import Offer
+    from naas_abi_core.engine.call_context import as_service_account
+
+    everything = list(KNOWN_FEATURE_KEYS)
+    nexus = NexusIam(FeatureFlagsConfig(enabled_features=everything), features_with_roles=False)
+    with nexus.installed():
+        org = nexus.grouped_org("org-1", "Org")
+        offer = Offer.of(features=everything)
+        with as_service_account("api"):
+            widen_offer(nexus.iam, org.access_policy_id, offer)
+        workspace = nexus.grouped_workspace("org-1", "ws-1", "WS", offer=offer).container
+        organization = org_container("org-1")
+        for person in GROUPED:
+            nexus.user(person)
+        nexus.platform_admin("root")
+
+        async def team() -> None:
+            await MEMBERSHIPS.grant("oadmin", "admin", organization)
+            for person, role in (("viewer", "viewer"), ("member", "member")):
+                await MEMBERSHIPS.grant(person, role, workspace)
+                await MEMBERSHIPS.grant(person, role, organization)
+            await MEMBERSHIPS.grant("wadmin", "admin", workspace)
+            await MEMBERSHIPS.grant("wadmin", "member", organization)
+
+        asyncio.run(team())
+        yield nexus
+
+
+def _grouped_expected(guard: Guard) -> tuple[bool, ...]:
+    """viewer, member, wadmin, oadmin, root, stranger, by the action's level, where it
+    is decided (the organization's own level or the workspace) and its feature (the
+    level's features; the org admin's through "<O> access", every one here)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import FEATURE_OF
+    from naas_abi.apps.nexus.apps.api.app.services.iam.levels import (
+        MEMBER_FEATURES,
+        VIEWER_FEATURES,
+    )
+
+    if guard.action in OWNER_ONLY_ACTIONS:
+        return (False, False, False, False, True, False)
+    kind = TYPES_BY_NAME[TYPE_OF[guard.action]]
+    if kind.placement == "platform":
+        viewer_reads = guard.action in PLATFORM_VIEWER_ACTIONS
+        return (viewer_reads,) * 4 + (True, False)
+    level = LEVEL_OF[guard.action]
+    reads = level in ("list", "read")
+    writes = reads or level == "write"
+    at_org = guard.org is not None
+    viewer, member = reads, writes
+    wadmin = writes if at_org else True
+    oadmin = True
+    feature = FEATURE_OF.get(guard.action) if guard.feature is None else guard.feature
+    if feature is not None and not at_org:
+        viewer = viewer and feature in VIEWER_FEATURES
+        member = member and feature in MEMBER_FEATURES
+    return (viewer, member, wadmin, oadmin, True, False)
+
+
+@pytest.mark.asyncio
+async def test_guards_decide_by_level_for_every_level_in_groups(table, grouped_world) -> None:
+    """Viewer, Member, workspace admin, org admin, platform admin and a stranger,
+    every one through groups: nothing attached to a person."""
+    wrong = []
+    for key, guard in _guards(table):
+        kind = TYPES_BY_NAME[TYPE_OF[guard.action]]
+        if kind.personal:
+            continue
+        request = _request(guard)
+        seen = []
+        for user in GROUPED:
+            try:
+                await guard(request, SimpleNamespace(id=user))
+                seen.append(True)
+            except AuthzDenied:
+                seen.append(False)
+        if tuple(seen) != _grouped_expected(guard):
+            wrong.append((key, guard.action, seen, _grouped_expected(guard)))
+    assert wrong == []
+
+
+def test_deleting_is_the_org_admins_and_the_platform_admins(table) -> None:
+    """Owner is no longer assigned (#1585): a workspace of an organization is deleted
+    by its admins, an organization by the platform admin."""
+    workspace = {d.action for d in _declared(table[("DELETE", "/api/workspaces/{workspace_id}")])}
+    assert workspace == {"DeleteOrganizationWorkspace", "DeleteWorkspace"}
+    org = {d.action for d in _declared(table[("DELETE", "/api/organizations/{org_id}")])}
+    assert org == {"DeletePlatformOrganization"}
+    assert LEVEL_OF["DeleteOrganizationWorkspace"] == "admin"
+    assert TYPES_BY_NAME[TYPE_OF["DeletePlatformOrganization"]].placement == "platform"

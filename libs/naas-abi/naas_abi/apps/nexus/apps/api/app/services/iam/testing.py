@@ -220,6 +220,56 @@ class NexusIam:
             self.iam.attach_policy(policy.id, principal)
         return policy.id
 
+    # -- levels as groups (#1585) ----------------------------------------------------
+
+    def grouped_org(self, org: str, label: str | None = None) -> Any:
+        """An organization registered with its defaults made as Nexus makes them
+        (``container_defaults.make_org``: "<O> access", "<O> admins", "<O> people"),
+        remembered as its record: its memberships are groups. Returns the record."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+            CONTAINER_DEFAULTS,
+            make_org,
+        )
+
+        self.org(org)
+        with as_service_account("api"):
+            record = make_org(self.iam, org, label or org.title())
+        CONTAINER_DEFAULTS.remember(record)
+        return record
+
+    def grouped_workspace(
+        self, org: str | None, workspace: str, label: str | None = None, *, offer: Any = None
+    ) -> Any:
+        """A workspace registered with its defaults made as Nexus makes them ("<W>
+        access" holding ``offer``, a ``workspace_offer.Offer``; "<W> workspace", "<W>
+        admins"), its organization's first when it has none. Returns the record."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+            CONTAINER_DEFAULTS,
+            make_workspace,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+            org_container,
+        )
+
+        parent = None
+        if org is not None:
+            org_record = CONTAINER_DEFAULTS._known.get(org_container(org))
+            if org_record is None:
+                org_record = self.grouped_org(org)
+            parent = org_record.access_policy_id
+        self.workspace(org, workspace)
+        with as_service_account("api"):
+            record = make_workspace(
+                self.iam,
+                org,
+                workspace,
+                label or workspace.title(),
+                parent=parent,
+                offer=offer,
+            )
+        CONTAINER_DEFAULTS.remember(record)
+        return record
+
     def platform_admin(self, user_id: str) -> None:
         with as_service_account("api"):
             principal = self.iam.ensure_user(LEGACY_NEXUS_ISSUER, user_id, provider="nexus")
@@ -248,17 +298,28 @@ class NexusIam:
         """Make this Nexus's IAM, and ``flags`` the deployment's features; the
         container cache of the authorizer starts empty."""
         from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+        from naas_abi.apps.nexus.apps.api.app.services.iam import model_sets
+        from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+            CONTAINER_DEFAULTS,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.iam.levels import LEVELS
+
+        def forget() -> None:
+            self.authz.forget_workspaces()
+            LEVELS.forget()
+            model_sets.forget()
+            CONTAINER_DEFAULTS.forget_grouped()
 
         previous = runtime.configure(lambda: self.iam)
         live = live_settings()
         previous_flags = live.feature_flags
         live.feature_flags = self.flags
-        self.authz.forget_workspaces()
+        forget()
         try:
             with use_call_context(self.context(None)):
                 yield self
         finally:
-            self.authz.forget_workspaces()
+            forget()
             live.feature_flags = previous_flags
             runtime.configure(previous)
 

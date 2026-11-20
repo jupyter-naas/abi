@@ -1,20 +1,35 @@
-"""Memberships are IAM's role attachments: the only record of who
-holds which role in an organization or a workspace.
+"""Memberships: who works where, and at which level (#1585, levels as groups).
 
-A role is ``builtin.<role>`` attached to the user's principal at the container of
-the organization (``abi:nexus:organization/<org>``) or of the workspace
-(``…/nexus:workspace/<workspace>``); an organization's owners and admins also hold
-theirs below it (``abi:nexus:organization/<org>/*``), which reaches each of its
-workspaces.
-A Nexus user the built-in login created holds IAM's user of issuer
-``urn:abi:nexus`` (subject: its Nexus id); a user of an identity provider is its
-principal id (``usr_…``) itself.
+In an organization or a workspace whose defaults are groups (``container_defaults``,
+``grouped``), a person holds nothing directly:
+
+- **where**: "<W> workspace" (a membership group of W), "<O> people" (of O);
+- **what**: their level, one choice applying everywhere: "Members" or "Viewers"
+  (``levels``); and "<W> admins" / "<O> admins" for who administers W or O.
+
+The role-based API (``grant``, ``revoke``, ``roles_of``…) is kept for its callers
+(the people service's ``AccessGateway``, the routes) and is mapped onto the groups
+(``grant``'s table). A role is read back from what IAM holds: a ``builtin.<role>``
+attached to the person, or to one of their groups, at a scope, or at
+``${my workspaces}`` (each of their membership containers, within the group's owner).
+
+A container recorded before #1585 (its "<X> members" group) keeps the roles of
+before: ``builtin.<role>`` attached to the user's principal at the organization's or
+the workspace's container, an organization's owners and admins mirrored below it
+(``<org container>/*``), until the access move (#1587) converts it.
+
+A Nexus user the built-in login created holds IAM's user of issuer ``urn:abi:nexus``
+(subject: its Nexus id); a user of an identity provider is its principal id
+(``usr_…``) itself.
 
 Reads run as ``api`` for no user, after the route authorized its caller with the
-Nexus action (``ListWorkspaceMembers``). Changes run as ``api`` on behalf of the
-caller, so IAM checks them too: an admin cannot grant or take away ``owner``
-(bug c), however the API is called. Seeding and the owner of a new org or
-workspace are granted as ``api`` for no user.
+Nexus action (``ListWorkspaceMembers``). A change is checked as the caller (``api``
+on their behalf: IAM's ``iam:AddGroupMember`` / ``iam:RemoveGroupMember`` on each
+group, ``iam:DetachPolicy`` on each role of before), then the container's groups
+are written as ``api`` for no user (the first membership of someone who belongs to
+nothing yet is Nexus's to make: core "The first tie") and the level on the caller's
+behalf (IAM's level-group rule decides it and audits it). Seeding and the admin of
+a new organization or workspace are written as ``api`` for no user.
 """
 
 from __future__ import annotations
@@ -27,7 +42,11 @@ from typing import Any, TypeVar
 
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, Authz
-from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import CONTAINER_DEFAULTS
+from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+    CONTAINER_DEFAULTS,
+    DefaultsRecord,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.levels import LEVELS, MEMBER, VIEWER, Levels
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     ORGANIZATION,
     PLATFORM,
@@ -49,7 +68,12 @@ from naas_abi_core.services.iam.IAMPorts import (
     PermissionDeniedError,
     ResourceNotFoundError,
 )
-from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER, attachment_resource
+from naas_abi_core.services.iam.IAMService import (
+    LEGACY_NEXUS_ISSUER,
+    attachment_resource,
+    group_resource,
+)
+from naas_abi_core.services.iam.names import is_membership_scope, within_owner
 from starlette.concurrency import run_in_threadpool
 
 _T = TypeVar("_T")
@@ -70,12 +94,27 @@ class MembershipDenied(PermissionError):
     """IAM refused a change of roles to the caller."""
 
 
+class LastOrgAdminError(ValueError):
+    """The change would leave the organization with no admin (an Org Admin, or an
+    owner of before): 409."""
+
+    def __init__(self, scope: str) -> None:
+        super().__init__(f"{scope} keeps at least one admin")
+        self.scope = scope
+
+    def __str__(self) -> str:
+        return "last_org_admin"
+
+
 @dataclass(frozen=True)
 class Member:
     user_id: str
     role: str
     principal_id: str
     since: datetime | None = None
+    # Their level ("member", "viewer"), one choice for every container; None when
+    # they are in no level group (a role of before, held directly).
+    level: str | None = None
 
 
 @dataclass(frozen=True)
@@ -96,6 +135,8 @@ class DirectoryEntry:
     workspace_ids: tuple[str, ...] = ()
     org_wide: bool = False
     since: datetime | None = None
+    # Their level ("member", "viewer"; #1585), one choice for every workspace.
+    level: str | None = None
 
 
 def wide_scope(scope: str) -> str | None:
@@ -134,6 +175,7 @@ def directories_of(by_scope: dict[str, list[Member]]) -> dict[str, list[Director
     wide: dict[tuple[str, str], Member] = {}
     workspaces: dict[tuple[str, str], set[str]] = {}
     seen: dict[tuple[str, str], Member] = {}
+    levels: dict[str, str] = {}
     for scope, members in by_scope.items():
         org = org_of(scope)
         if org is None:
@@ -149,6 +191,8 @@ def directories_of(by_scope: dict[str, list[Member]]) -> dict[str, list[Director
             target = {}
         for member in members:
             key = (org, member.user_id)
+            if member.level is not None:
+                levels[member.user_id] = member.level
             if workspace is not None:
                 workspaces.setdefault(key, set()).add(workspace)
             else:
@@ -171,6 +215,7 @@ def directories_of(by_scope: dict[str, list[Member]]) -> dict[str, list[Director
                 workspace_ids=tuple(sorted(workspaces.get(key, ()))),
                 org_wide=key in wide,
                 since=earliest.since,
+                level=levels.get(user_id),
             )
         )
     return {
@@ -180,6 +225,124 @@ def directories_of(by_scope: dict[str, list[Member]]) -> dict[str, list[Director
         )
         for org, entries in found.items()
     }
+
+
+@dataclass(frozen=True)
+class _Plan:
+    """A change of one person's groups at one container (``Memberships._plan``)."""
+
+    principal_id: str
+    joins: list[str]
+    leaves: list[str]
+    level_join: str | None
+    level_leave: str | None
+    # ``(policy, scope)``: roles of before at the container, and their mirror below
+    # an organization (made as ``api``, taken as ``api``).
+    detach: list[tuple[str, str]]
+    mirrored: list[tuple[str, str]]
+    # At an organization: whether the person is its admin afterwards.
+    org_admin_after: bool | None = None
+
+
+class _Reading:
+    """One read of who holds what through groups, as ``api`` (IAM's thread): the
+    groups, their members and the people's membership containers, each read once."""
+
+    def __init__(self, iam: Any) -> None:
+        self.iam = iam
+        self._groups: dict[str, Any] = {}
+        self._members: dict[str, list[str]] = {}
+        self._containers: dict[str, list[str]] = {}
+        self._levels: Levels | None = None
+
+    def group(self, group_id: str) -> Any:
+        if group_id not in self._groups:
+            with as_service_account("api"):
+                try:
+                    self._groups[group_id] = self.iam.get_group(group_id)
+                except (IAMNotFoundError, ResourceNotFoundError):
+                    self._groups[group_id] = None
+        return self._groups[group_id]
+
+    def members(self, group_id: str) -> list[str]:
+        if group_id not in self._members:
+            with as_service_account("api"):
+                try:
+                    self._members[group_id] = list(self.iam.list_group_members(group_id))
+                except (IAMNotFoundError, ResourceNotFoundError):
+                    self._members[group_id] = []
+        return self._members[group_id]
+
+    def containers(self, principal_id: str) -> list[str]:
+        """The containers ``principal_id`` is a member of (its membership groups)."""
+        if principal_id not in self._containers:
+            with as_service_account("api"):
+                self._containers[principal_id] = sorted(
+                    {m.container for m in self.iam.list_memberships(principal_id)}
+                )
+        return self._containers[principal_id]
+
+    def levels(self) -> Levels | None:
+        """The levels, never made by a read (None while nobody made them)."""
+        if self._levels is None:
+            self._levels = LEVELS.peek(self.iam)
+        return self._levels
+
+    def reached_through(self, group_id: str, scope: str) -> list[tuple[str, str]]:
+        """``(member, container)`` a group's attachment at ``scope`` reaches: each
+        member at ``scope``, or at ``${my workspaces}`` at each of their membership
+        containers within the group's owner. A deleted group reaches nothing."""
+        group = self.group(group_id)
+        if group is None or group.status == "deleted":
+            return []
+        found: list[tuple[str, str]] = []
+        for member in self.members(group_id):
+            if not is_membership_scope(scope):
+                found.append((member, scope))
+                continue
+            for container in self.containers(member):
+                if within_owner(group.owner_scope, container):
+                    found.append((member, container))
+        return found
+
+    def roles_of(self, principal_id: str) -> dict[str, list[str]]:
+        """``{scope: [role]}`` the principal holds: its own role attachments and
+        those of its groups (``reached_through``)."""
+        held: dict[str, list[str]] = {}
+        with as_service_account("api"):
+            own = self.iam.list_attachments(principal_id=principal_id)
+            groups = self.iam.list_principal_groups(principal_id)
+        for attachment in own:
+            role = role_of_policy(attachment.policy_id)
+            if role is not None and attachment.scope and not is_membership_scope(attachment.scope):
+                held.setdefault(attachment.scope, []).append(role)
+        for group in groups:
+            self._groups.setdefault(str(group.id), group)
+            with as_service_account("api"):
+                attachments = self.iam.list_attachments(principal_id=group.id)
+            for attachment in attachments:
+                role = role_of_policy(attachment.policy_id)
+                if role is None or not attachment.scope:
+                    continue
+                if not is_membership_scope(attachment.scope):
+                    held.setdefault(attachment.scope, []).append(role)
+                    continue
+                for container in self.containers(principal_id):
+                    if within_owner(group.owner_scope, container):
+                        held.setdefault(container, []).append(role)
+        return held
+
+    def levels_of(self, principals: Any) -> dict[str, str]:
+        """``{principal: level}`` of those in a level group, the higher first."""
+        levels = self.levels()
+        if levels is None:
+            return {}
+        found: dict[str, str] = {}
+        for level, group_id in ((VIEWER, levels.viewers), (MEMBER, levels.members)):
+            for member in self.members(group_id):
+                found[member] = level
+        wanted = set(principals)
+        return {p: level for p, level in found.items() if p in wanted}
 
 
 class Memberships:
@@ -301,22 +464,39 @@ class Memberships:
     ) -> dict[str, list[Member]]:
         """Who holds a role at each container (at ``scope`` alone when given, at the
         containers of ``org`` alone when given), each with the highest they hold
-        there, in one pass over the roles' attachments: the one reading of who holds
+        there and their level, in one pass over the roles' attachments: to a person,
+        and to a group (each of its members; at ``${my workspaces}``, each member's
+        membership containers within the group's owner). The one reading of who holds
         what, for ``members`` and the default groups (``container_defaults``). A
         principal Nexus cannot name is left out. In IAM's thread (``iam`` is the
         service)."""
+        reading = _Reading(iam)
         held: dict[tuple[str, str], list[str]] = {}
         since: dict[tuple[str, str], datetime] = {}
+
+        def add(where: str, principal_id: str, role: str, at: datetime | None) -> None:
+            if scope is not None and where != scope:
+                return
+            if org is not None and org_of(where) != org:
+                return  # named only for the org asked for: each name is a read
+            key = (where, principal_id)
+            held.setdefault(key, []).append(role)
+            if at is not None:
+                since[key] = min(at, since.get(key, at))
+
         for role, policy in _POLICY_OF.items():
             for attachment in iam.list_attachments(policy_id=policy):
-                if attachment.scope is None or (scope is not None and attachment.scope != scope):
+                if attachment.scope is None:
                     continue
-                if org is not None and org_of(attachment.scope) != org:
-                    continue  # named only for the org asked for: each name is a read
-                key = (attachment.scope, attachment.principal_id)
-                held.setdefault(key, []).append(role)
-                if attachment.created_at is not None:
-                    since[key] = min(attachment.created_at, since.get(key, attachment.created_at))
+                if not attachment.principal_id.startswith("grp_"):
+                    if not is_membership_scope(attachment.scope):
+                        add(attachment.scope, attachment.principal_id, role, attachment.created_at)
+                    continue
+                for member, where in reading.reached_through(
+                    attachment.principal_id, attachment.scope
+                ):
+                    add(where, member, role, None)
+        levels = reading.levels_of(principal for _where, principal in held)
         users: dict[str, str | None] = {}
         found: dict[str, list[Member]] = {}
         for (where, principal_id), names in held.items():
@@ -330,7 +510,11 @@ class Memberships:
                 continue
             found.setdefault(where, []).append(
                 Member(
-                    user_id, best(names) or "viewer", principal_id, since.get((where, principal_id))
+                    user_id,
+                    best(names) or "viewer",
+                    principal_id,
+                    since.get((where, principal_id)),
+                    levels.get(principal_id),
                 )
             )
         return {
@@ -356,9 +540,17 @@ class Memberships:
 
         def work(iam: Any) -> set[str]:
             found: set[str] = set()
-            for attachment in iam.list_attachments(policy_id=roles.PLATFORM_ADMIN):
+            principals = {
+                a.principal_id
+                for a in iam.list_attachments(policy_id=roles.PLATFORM_ADMIN)
+                if not a.principal_id.startswith("grp_")
+            }
+            levels = LEVELS.peek(iam)
+            if levels is not None:
+                principals |= set(iam.list_group_members(levels.platform_admins))
+            for principal_id in principals:
                 try:
-                    found.add(self._user_id(iam, attachment.principal_id))
+                    found.add(self._user_id(iam, principal_id))
                 except (IAMNotFoundError, ResourceNotFoundError):
                     continue
             return found
@@ -374,9 +566,22 @@ class Memberships:
             principal_id = self._find_principal(iam, user_id, vouched=vouched)
             if principal_id is None:
                 raise UnknownUserError(user_id)
+            group = LEVELS.get(iam).platform_admins
             if on:
-                iam.attach_policy(roles.PLATFORM_ADMIN, principal_id)
-            else:
+                # "Platform admins" holds builtin.platform_admin (#1585).
+                iam.add_group_member(group, principal_id)
+                return
+            with as_service_account("api"):  # the whole truth, to take back both
+                direct = any(
+                    a.scope is None
+                    for a in iam.list_attachments(
+                        principal_id=principal_id, policy_id=roles.PLATFORM_ADMIN
+                    )
+                )
+                member = principal_id in iam.list_group_members(group)
+            if member:
+                iam.remove_group_member(group, principal_id)
+            if direct:  # one attached before #1585
                 iam.detach_policy(roles.PLATFORM_ADMIN, principal_id)
 
         await self._run(work, as_api=by is None, user=by)
@@ -435,11 +640,7 @@ class Memberships:
             principal_id = self._find_principal(iam, user_id, vouched=vouched)
             if principal_id is None:
                 return {}  # no such user: no roles, and nothing is created
-            held: dict[str, list[str]] = {}
-            for attachment in iam.list_attachments(principal_id=principal_id):
-                role = role_of_policy(attachment.policy_id)
-                if role is not None and attachment.scope is not None:
-                    held.setdefault(attachment.scope, []).append(role)
+            held = _Reading(iam).roles_of(principal_id)
             return {scope: best(names) or "viewer" for scope, names in held.items()}
 
         return await self._run(work)
@@ -512,23 +713,180 @@ class Memberships:
             except (PermissionDeniedError, ResourceNotFoundError) as exc:
                 raise MembershipDenied(role) from exc
 
+    # -- in groups (#1585) ----------------------------------------------------------
+
+    def _plan(
+        self, iam: Any, principal_id: str, role: str | None, scope: str, record: DefaultsRecord
+    ) -> _Plan:
+        """What giving ``role`` at ``scope`` (None: taking every role there) changes
+        in the groups of ``record``'s container (``grant``'s table), and the roles
+        of before held there that the groups replace. As ``api``: the whole truth."""
+        levels = LEVELS.get(iam)
+        role = "admin" if role == "owner" else role  # Owner is no longer assigned
+        membership, admins = str(record.members_group_id), str(record.admins_group_id)
+        with as_service_account("api"):
+            mine = {str(g.id) for g in iam.list_principal_groups(principal_id)}
+        wanted: list[str] = []
+        unwanted: list[str] = [membership, admins] if role is None else []
+        if role is not None:
+            wanted.append(membership)
+            (wanted if role == "admin" else unwanted).append(admins)
+        target: str | None = None
+        if role in ("member", "viewer") or (role == "admin" and is_workspace_container(scope)):
+            # A workspace admin is a Member with "<W> admins"; an org admin keeps
+            # their level (none, or the one they have).
+            target = MEMBER if role in ("admin", "member") else VIEWER
+        level_join = level_leave = None
+        if target is not None:
+            if levels.group_of(target) not in mine:
+                level_join = levels.group_of(target)
+            other = levels.group_of(VIEWER if target == MEMBER else MEMBER)
+            if other in mine:
+                level_leave = other
+        detach = [(_POLICY_OF[r], scope) for r in self._held(iam, principal_id, scope)]
+        wide = wide_scope(scope)
+        mirrored = (
+            [(_POLICY_OF[r], wide) for r in self._held(iam, principal_id, wide)] if wide else []
+        )
+        return _Plan(
+            principal_id=principal_id,
+            joins=[g for g in wanted if g not in mine],
+            leaves=[g for g in unwanted if g in mine],
+            level_join=level_join,
+            level_leave=level_leave,
+            detach=detach,
+            mirrored=mirrored,
+            org_admin_after=role == "admin" if is_org_container(scope) else None,
+        )
+
+    def _require_plan(self, iam: Any, plan: _Plan, scope: str) -> None:
+        """The caller may make ``plan``, or ``MembershipDenied``: each group's member
+        change on the group as its container names it, a level change on the level
+        group as named in the container (IAM's level-group rule), each role of before
+        detached. In the caller's context; nothing is changed."""
+        needed = [("iam:AddGroupMember", group_resource(g, scope)) for g in plan.joins]
+        needed += [("iam:RemoveGroupMember", group_resource(g, scope)) for g in plan.leaves]
+        needed += [
+            ("iam:DetachPolicy", attachment_resource(policy, plan.principal_id, where))
+            for policy, where in plan.detach
+        ]
+        try:
+            for action, resource in needed:
+                iam.require(action, resource)
+            for action, group in (
+                ("iam:AddGroupMember", plan.level_join),
+                ("iam:RemoveGroupMember", plan.level_leave),
+            ):
+                if group is not None and not (
+                    iam.authorize(action, group_resource(group)).allowed
+                    or iam.authorize(action, group_resource(group, scope)).allowed
+                ):
+                    raise PermissionDeniedError(action, group_resource(group, scope))
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            raise MembershipDenied(str(exc)) from exc
+
+    def _keep_an_org_admin(self, iam: Any, principal_id: str, scope: str, after: bool) -> None:
+        """``LastOrgAdminError`` when ``principal_id``, an admin of the organization
+        ``scope`` (or an owner of before), would stop being one (``after``) and no
+        other admin is left."""
+        if not is_org_container(scope) or after:
+            return
+        with as_service_account("api"):  # the whole truth, whoever asks
+            admins = [
+                m.principal_id
+                for m in self.members_by_scope(iam, scope).get(scope, [])
+                if m.role in INHERITING_ROLES
+            ]
+        if principal_id in admins and all(p == principal_id for p in admins):
+            raise LastOrgAdminError(scope)
+
+    def _apply_plan(self, iam: Any, plan: _Plan, *, by: Any = None) -> bool:
+        """Make ``plan`` as ``api`` for no user (it was checked as the caller): the
+        membership group first (the person's tie), then the level, then what is left
+        and the roles of before. Whether anything changed."""
+        with as_service_account("api"):
+            for group in plan.joins:
+                iam.add_group_member(group, plan.principal_id)
+            if plan.level_join:
+                iam.add_group_member(plan.level_join, plan.principal_id)
+            if plan.level_leave:
+                iam.remove_group_member(plan.level_leave, plan.principal_id)
+            for group in plan.leaves:
+                iam.remove_group_member(group, plan.principal_id)
+            for policy, where in [*plan.detach, *plan.mirrored]:
+                iam.detach_policy(policy, plan.principal_id, where)
+            self._sync_admin_models(iam, plan.principal_id)
+        if plan.level_join or plan.level_leave:
+            logger.info(
+                f"Level of {plan.principal_id}: joined {plan.level_join}, left "
+                f"{plan.level_leave}, by {getattr(by, 'id', by) or 'the system'}"
+            )
+        return bool(
+            plan.joins
+            or plan.leaves
+            or plan.level_join
+            or plan.level_leave
+            or plan.detach
+            or plan.mirrored
+        )
+
+    @staticmethod
+    def _sync_admin_models(iam: Any, principal_id: str) -> None:
+        """Keep the person in "Workspace admins" (every model) while they are in a
+        group holding ``builtin.admin`` ("<W> admins", "<O> admins"). As ``api``."""
+        levels = LEVELS.get(iam)
+        groups = iam.list_principal_groups(principal_id)
+        admin = any(
+            a.policy_id == roles.ADMIN
+            for g in groups
+            if str(g.id) != levels.workspace_admins
+            for a in iam.list_attachments(principal_id=g.id)
+        )
+        member = any(str(g.id) == levels.workspace_admins for g in groups)
+        if admin and not member:
+            iam.add_group_member(levels.workspace_admins, principal_id)
+        elif member and not admin:
+            iam.remove_group_member(levels.workspace_admins, principal_id)
+
+    async def level_of(self, user_id: str) -> str | None:
+        """The person's level ("member", "viewer"), or None."""
+        vouched = await self._vouched(user_id)
+
+        def work(iam: Any) -> str | None:
+            principal_id = self._find_principal(iam, user_id, vouched=vouched)
+            if principal_id is None:
+                return None
+            return _Reading(iam).levels_of([principal_id]).get(principal_id)
+
+        return await self._run(work)
+
+    # -- changes (the role-based API) -------------------------------------------------
+
     async def check(self, user_id: str, role: str | None, scope: str, *, by: Any = None) -> None:
         """Raise ``MembershipDenied`` unless ``by`` may give the user ``role`` at
-        ``scope`` (``None``: take their roles away), changing nothing. Callers
-        with rules of their own (an owner must remain) ask this first, so the
-        caller's lack of rights is what they hear about."""
+        ``scope`` (``None``: take their roles away), changing nothing; and
+        ``LastOrgAdminError`` when it would leave an organization with no admin.
+        Callers with rules of their own (an owner of before must remain) ask this
+        first, so the caller's lack of rights is what they hear about."""
 
         vouched = await self._vouched(user_id)
+        record = await CONTAINER_DEFAULTS.grouped_record(scope)
 
         def work(iam: Any) -> None:
             principal_id = self._find_principal(iam, user_id, vouched=vouched)
             if principal_id is None:
                 return  # no such user: nothing is held, nothing to refuse
+            if record is not None:
+                plan = self._plan(iam, principal_id, role, scope, record)
+                self._require_plan(iam, plan, scope)
+                self._keep_an_org_admin(iam, principal_id, scope, bool(plan.org_admin_after))
+                return
             held = self._held(iam, principal_id, scope)
             needed = [("iam:DetachPolicy", other) for other in held if other != role]
             if role is not None and role not in held:
                 needed.append(("iam:AttachPolicy", role))
             self._require_all(iam, principal_id, scope, needed)
+            self._keep_an_org_admin(iam, principal_id, scope, role in INHERITING_ROLES)
 
         await self._run(work, as_api=by is None, user=by)
 
@@ -542,17 +900,42 @@ class Memberships:
     ) -> None:
         """Hold ``role`` at ``scope`` and no other role there.
 
+        In a grouped container (#1585) the role is mapped onto its groups:
+
+        | role at a workspace W | groups |
+        |---|---|
+        | viewer | "Viewers" (level), "<W> workspace"; not "<W> admins" |
+        | member | "Members" (level), "<W> workspace"; not "<W> admins" |
+        | admin, owner | "Members" (level), "<W> workspace", "<W> admins" |
+
+        | role at an organization O | groups |
+        |---|---|
+        | viewer, member | "<O> people", and that level; not "<O> admins" |
+        | admin, owner | "<O> people", "<O> admins"; the level unchanged |
+
+        A level is one choice: giving viewer or member somewhere changes it
+        everywhere. The roles of before held at the scope are detached. Owner is no
+        longer assigned (an admin is made). Elsewhere, ``builtin.<role>`` attached at
+        the scope, as before.
+
         ``by``: the user making the change, whose rights IAM checks; ``None`` for
-        the system (seeding, the owner of what was just created).
+        the system (seeding, the admin of what was just created).
         """
         if role not in _RANK:
             raise ValueError(f"Unknown role {role!r}")
 
         if not await self._vouched(user_id):
             raise UnknownUserError(user_id)
+        record = await CONTAINER_DEFAULTS.grouped_record(scope)
 
         def work(iam: Any) -> None:
             principal_id = self._principal_id(iam, user_id)
+            if record is not None:
+                plan = self._plan(iam, principal_id, role, scope, record)
+                self._require_plan(iam, plan, scope)
+                self._keep_an_org_admin(iam, principal_id, scope, bool(plan.org_admin_after))
+                self._apply_plan(iam, plan, by=by)
+                return
             held = self._held(iam, principal_id, scope)
             needed = [("iam:DetachPolicy", other) for other in held if other != role]
             if role not in held:
@@ -560,6 +943,7 @@ class Memberships:
             # Every change is checked before the first is made: a refused
             # demotion must not leave the extra role it would have added.
             self._require_all(iam, principal_id, scope, needed)
+            self._keep_an_org_admin(iam, principal_id, scope, role in INHERITING_ROLES)
             iam.attach_policy(_POLICY_OF[role], principal_id, scope)
             for other in held:
                 if other != role:
@@ -572,8 +956,12 @@ class Memberships:
     async def seed(self, entries: list[tuple[str, str, str]], *, replace: bool) -> tuple[int, int]:
         """Grant ``(user id, role, scope)`` entries as the system: the config's
         declarations (``replace``: the role named wins) or the migration of old
-        membership rows (kept where IAM already holds a role). Returns
-        ``(granted, kept)``."""
+        membership rows (kept where IAM already holds a role). In a grouped
+        container, as ``grant`` maps it. Returns ``(granted, kept)``."""
+        records = {
+            scope: await CONTAINER_DEFAULTS.grouped_record(scope)
+            for scope in dict.fromkeys(scope for _u, _r, scope in entries)
+        }
 
         def work(iam: Any) -> tuple[int, int]:
             granted = kept = 0
@@ -581,6 +969,18 @@ class Memberships:
                 if role not in _RANK:
                     raise ValueError(f"Unknown role {role!r}")
                 principal_id = self._principal_id(iam, user_id)
+                record = records.get(scope)
+                if record is not None:
+                    held_now = _Reading(iam).roles_of(principal_id).get(scope, [])
+                    if held_now and not replace:
+                        kept += 1
+                        continue
+                    plan = self._plan(iam, principal_id, role, scope, record)
+                    if self._apply_plan(iam, plan):
+                        granted += 1
+                    else:
+                        kept += 1
+                    continue
                 held = self._held(iam, principal_id, scope)
                 if (held and not replace) or held == [role]:
                     kept += 1
@@ -600,16 +1000,26 @@ class Memberships:
         return result
 
     async def revoke(self, user_id: str, scope: str, *, by: Any = None) -> bool:
-        """Drop every role the user holds at ``scope``. True when there was one."""
+        """Drop every role the user holds at ``scope`` (in a grouped container: leave
+        its membership and admins groups; the level stays, it is the person's). True
+        when there was one. ``LastOrgAdminError`` for an organization's last admin."""
 
         vouched = await self._vouched(user_id)
+        record = await CONTAINER_DEFAULTS.grouped_record(scope)
 
         def work(iam: Any) -> bool:
             principal_id = self._find_principal(iam, user_id, vouched=vouched)
             if principal_id is None:
                 return False
+            if record is not None:
+                plan = self._plan(iam, principal_id, None, scope, record)
+                self._require_plan(iam, plan, scope)
+                self._keep_an_org_admin(iam, principal_id, scope, False)
+                return self._apply_plan(iam, plan, by=by)
             held = self._held(iam, principal_id, scope)
             self._require_all(iam, principal_id, scope, [("iam:DetachPolicy", r) for r in held])
+            if held:
+                self._keep_an_org_admin(iam, principal_id, scope, False)
             for role in held:
                 iam.detach_policy(_POLICY_OF[role], principal_id, scope)
             self.mirror_org_wide(iam, principal_id, scope, None)
@@ -670,6 +1080,7 @@ MEMBERSHIPS = Memberships()
 
 __all__ = [
     "MEMBERSHIPS",
+    "LastOrgAdminError",
     "ROLE_NAMES",
     "DirectoryEntry",
     "Member",

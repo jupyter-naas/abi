@@ -48,7 +48,7 @@ def test_its_admins_read_it_and_a_member_does_not(client):
     body = found.json()
     assert [row["key"] for row in body["features"]] == ["chat", "files", "marketplace"]
     assert body["access_policy"]["name"] == "Alpha access"
-    assert body["members_group"]["name"] == "Alpha members"
+    assert body["members_group"]["name"] == "Alpha workspace"
     assert client.get(PATH, headers={"x-user": "dave"}).status_code == 403
 
 

@@ -172,6 +172,7 @@ def _member_record(
         name=user.name,
         created_at=member.since,
         principal_id=member.principal_id,
+        level=member.level,
         bio=profile.bio if profile.bio is not None else user.bio,
         avatar=profile.avatar,
         organization=profile.organization,
@@ -340,10 +341,11 @@ class OrganizationService:
         # failure undoes what was done (the compensation of create_workspace).
         try:
             scope = await self.memberships.register_org(record.id)
-            await self.memberships.grant(owner_id, "owner", scope)
             # Its access policy (nothing, the platform admin widens it) and its
-            # members and admins groups, the owner in both.
+            # groups first; its creator is its first admin (owner is no longer
+            # assigned, #1585).
             await self.defaults.org_created(defaults_store_of(self.adapter), record.id, name)
+            await self.memberships.grant(owner_id, "admin", scope)
         except Exception:
             await self._undo_create(record.id)
             raise
