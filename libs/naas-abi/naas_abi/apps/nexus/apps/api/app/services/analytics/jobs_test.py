@@ -677,6 +677,102 @@ async def test_messages_written_after_the_first_pass_get_their_facts(sessions) -
     assert tools == ["search"] and feedback == ["like"]
 
 
+async def _add_message(sessions, message_id: str, at: datetime) -> None:
+    at = at.replace(tzinfo=None)
+    async with sessions() as db:
+        if await db.get(ConversationModel, "conv-1") is None:
+            db.add(
+                ConversationModel(
+                    id="conv-1",
+                    workspace_id="ws-1",
+                    user_id="alice",
+                    title="T",
+                    agent="aia",
+                    created_at=at,
+                    updated_at=at,
+                )
+            )
+            await db.flush()
+        db.add(
+            MessageModel(
+                id=message_id,
+                conversation_id="conv-1",
+                role="assistant",
+                content="hi",
+                created_at=at,
+                metadata_=json.dumps({"steps": [{"tool_name": "search"}], "feedback": "like"}),
+            )
+        )
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_a_long_message_pass_keeps_its_claim(sessions, monkeypatch) -> None:
+    """The pass renews its claim at every batch: however long it runs, no other process
+    takes it over, while one that died is taken over once its claim lapses."""
+    from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.secondary import (
+        message_facts,
+    )
+
+    running = f"{jobs_module.MESSAGE_FACTS_JOB}.running"
+    claim = timedelta(seconds=jobs_module.MESSAGE_FACTS_CLAIM_SECONDS)
+    for index in range(3):
+        await _add_message(sessions, f"m-{index}", NOW - timedelta(days=1))
+    clock = {"now": NOW}
+    jobs = AnalyticsJobs(sessions, now=lambda: clock["now"])
+    index_message_facts = message_facts.index_message_facts
+    renewed: list[datetime | None] = []
+
+    async def slow(db, since, *, after_batch=None, **_):
+        port = jobs_module.AnalyticsSecondaryAdapterPostgresEvents(db)
+
+        async def tick(done: int) -> None:
+            # Each batch takes as long as a whole claim lasts.
+            clock["now"] += claim
+            assert after_batch is not None
+            await after_batch(done)
+            renewed.append(await port.job_last_run(running))
+
+        return await index_message_facts(db, since, batch=1, after_batch=tick)
+
+    monkeypatch.setattr(message_facts, "index_message_facts", slow)
+    assert await jobs.index_messages() == 3
+    assert renewed == [(NOW + claim * n).replace(tzinfo=None) for n in (1, 2, 3)]
+
+    end = clock["now"].replace(tzinfo=None)
+    async with sessions() as db:
+        port = jobs_module.AnalyticsSecondaryAdapterPostgresEvents(db)
+        # The start is kept apart from the claim, which moved with every batch.
+        assert await port.job_last_run(jobs_module.MESSAGE_FACTS_STARTED) == NOW.replace(
+            tzinfo=None
+        )
+        every = jobs_module.MESSAGE_FACTS_CLAIM_SECONDS
+        # Renewed a moment ago: held. Not renewed for a whole claim: taken over.
+        assert not await port.claim_job(running, now=end + claim / 2, every=every)
+        assert await port.claim_job(running, now=end + claim, every=every)
+
+
+@pytest.mark.asyncio
+async def test_the_recheck_covers_what_was_written_during_a_long_first_pass(sessions) -> None:
+    """The recheck starts from when the first pass started, not from its last renewal:
+    a message an old process wrote while the pass ran gets its facts."""
+    clock = {"now": NOW}
+    jobs = AnalyticsJobs(sessions, now=lambda: clock["now"])
+    assert await jobs.index_messages() == 0
+    async with sessions() as db:
+        # The pass renewed its claim for 40 minutes before it ended.
+        await jobs_module.AnalyticsSecondaryAdapterPostgresEvents(db).renew_job(
+            f"{jobs_module.MESSAGE_FACTS_JOB}.running",
+            now=(NOW + timedelta(minutes=40)).replace(tzinfo=None),
+        )
+        await db.commit()
+    await _add_message(sessions, "m-1", NOW + timedelta(minutes=5))
+    clock["now"] = NOW + jobs_module.MESSAGE_FACTS_RECHECK_DELAY
+    assert await jobs.recheck_messages() == 1
+    async with sessions() as db:
+        assert (await db.execute(select(MessageModel.feedback))).scalars().all() == ["like"]
+
+
 # -- page titles ------------------------------------------------------------------
 
 

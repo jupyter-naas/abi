@@ -413,6 +413,11 @@ class AnalyticsSecondaryAdapterPostgresEvents(AnalyticsEventPort):
         )
         return bool(getattr(result, "rowcount", 0))
 
+    async def renew_job(self, name: str, *, now: datetime) -> None:
+        await self.db.execute(
+            update(AnalyticsJobModel).where(AnalyticsJobModel.name == name).values(last_run_at=now)
+        )
+
 
 # ---------------------------------------------------------------------------
 # Reads

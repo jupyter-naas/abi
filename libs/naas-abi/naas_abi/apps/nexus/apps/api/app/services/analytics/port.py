@@ -594,6 +594,12 @@ class AnalyticsEventPort(ABC):
         finds it never ran or last ran at least ``every`` seconds ago."""
         raise NotImplementedError
 
+    @abstractmethod
+    async def renew_job(self, name: str, *, now: datetime) -> None:
+        """Keep the claim of a long job held: its run is at ``now`` (the process that
+        claimed it, still working)."""
+        raise NotImplementedError
+
 
 class AnalyticsQueryPort(ABC):
     """Read side: one bounded SQL query per figure, over the rollups of a scope and

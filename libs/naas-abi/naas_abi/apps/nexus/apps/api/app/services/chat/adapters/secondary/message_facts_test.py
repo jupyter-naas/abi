@@ -120,8 +120,61 @@ async def test_older_messages_are_indexed_once(db) -> None:
     await db.commit()
     assert await index_message_facts(db, datetime(2026, 10, 1), batch=1) == 1
     assert await _tools(db, "old") == {"search": 2, "sql": 1}
-    old = (await db.execute(select(MessageModel).where(MessageModel.id == "old"))).scalar_one()
+    old = (
+        await db.execute(
+            select(MessageModel)
+            .where(MessageModel.id == "old")
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
     assert old.feedback == "like"
     # Run again: the same facts, not twice the tools.
     assert await index_message_facts(db, datetime(2026, 10, 1)) == 1
     assert await _tools(db, "old") == {"search": 2, "sql": 1}
+
+
+@pytest.mark.asyncio
+async def test_a_pass_goes_batch_by_batch_and_rewrites_stale_facts(db) -> None:
+    """Several batches, each committed after ``after_batch``; a message whose facts
+    no longer match its metadata gets them rewritten (feedback cleared, tools replaced),
+    and a message without tools gets none."""
+    for index, meta in enumerate(
+        [
+            {**STEPS, "feedback": "like"},
+            {"feedback": "dislike", "feedback_type": "slow"},
+            {"steps": [{"tool_name": "sql"}]},
+        ]
+    ):
+        db.add(
+            MessageModel(
+                id=f"m-{index}",
+                conversation_id="c",
+                role="assistant",
+                content="…",
+                metadata_=json.dumps(meta),
+                created_at=T0,
+            )
+        )
+    await db.flush()
+    # Stale facts on m-2: a feedback and a tool its metadata no longer holds.
+    stale = (await db.execute(select(MessageModel).where(MessageModel.id == "m-2"))).scalar_one()
+    stale.feedback = "like"
+    db.add(MessageToolModel(message_id="m-2", tool_name="search", uses=4))
+    await db.commit()
+
+    seen: list[int] = []
+
+    async def after_batch(done: int) -> None:
+        seen.append(done)
+
+    assert await index_message_facts(db, T0, batch=2, after_batch=after_batch) == 3
+    assert seen == [2, 3]
+    rows = await db.execute(
+        select(MessageModel.id, MessageModel.feedback, MessageModel.feedback_type).order_by(
+            MessageModel.id
+        )
+    )
+    assert rows.all() == [("m-0", "like", None), ("m-1", "dislike", "slow"), ("m-2", None, None)]
+    assert await _tools(db, "m-0") == {"search": 2, "sql": 1}
+    assert await _tools(db, "m-1") == {}
+    assert await _tools(db, "m-2") == {"sql": 1}

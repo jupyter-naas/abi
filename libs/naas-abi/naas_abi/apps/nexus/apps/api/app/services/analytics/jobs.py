@@ -19,7 +19,9 @@
   that run started get them again ``MESSAGE_FACTS_RECHECK_DELAY`` later
   (``MESSAGE_FACTS_RECHECK_JOB``: a rolling deploy's old processes write messages
   without their facts until they stop). Each is asked at each upkeep until recorded
-  as done: a failed run is retried once its claim lapses (an hour).
+  as done: a failed run is retried once its claim lapses (an hour). The message passes
+  renew their claim at every batch and lapse after ``MESSAGE_FACTS_CLAIM_SECONDS``, so
+  a long pass is never taken over while it runs, and one that died is taken over soon.
 * **Legacy cleanup** (once, ``LEGACY_CLEANUP_JOB``, ``LEGACY_CLEANUP_DELAY`` after the
   backfill, asked at each upkeep): the legacy events are replayed again (idempotent:
   what a rolling deploy's old processes wrote since the backfill is counted too), then
@@ -77,9 +79,13 @@ DRAIN_SECONDS = 5.0
 BATCH = 500
 MESSAGE_FACTS_JOB = "message_facts_v1"
 MESSAGE_FACTS_RECHECK_JOB = "message_facts_v2"
+MESSAGE_FACTS_STARTED = "message_facts_v1.started"
 MESSAGE_FACTS_RECHECK_DELAY = timedelta(minutes=30)
 # Messages since a little before the first pass started (clocks of processes differ).
 MESSAGE_FACTS_RECHECK_MARGIN = timedelta(minutes=10)
+# A message pass renews its claim at every batch (about a second); a claim not renewed
+# for this long belongs to a process that died, and another takes the pass over.
+MESSAGE_FACTS_CLAIM_SECONDS = 600.0
 LEGACY_CLEANUP_JOB = "legacy_storage_cleanup_v1"
 LEGACY_CLEANUP_DELAY = timedelta(minutes=30)
 HEAL_JOB = "heal_recent"
@@ -385,6 +391,21 @@ class AnalyticsJobs:
         )
         return applied
 
+    def _renewing(
+        self, port: AnalyticsSecondaryAdapterPostgresEvents, running: str
+    ) -> Callable[[int], Awaitable[None]]:
+        """What a message pass runs after each batch: its claim renewed (committed with
+        the batch), and its progress logged now and then."""
+        logged = [0]
+
+        async def renew(done: int) -> None:
+            await port.renew_job(running, now=self._naive_now())
+            if done - logged[0] >= 50_000:
+                logged[0] = done
+                logger.info("[analytics] %s: %d messages indexed so far", running, done)
+
+        return renew
+
     async def index_messages(self) -> int | None:
         """Once: the facts of the messages of the last 45 days (written before the
         chat adapter kept them)."""
@@ -396,14 +417,20 @@ class AnalyticsJobs:
             port = AnalyticsSecondaryAdapterPostgresEvents(db)
             if await port.job_last_run(MESSAGE_FACTS_JOB) is not None:
                 return None
-            # One process at a time (another takes over an hour after one that died).
-            claimed = await port.claim_job(
-                f"{MESSAGE_FACTS_JOB}.running", now=self._naive_now(), every=3600.0
-            )
+            # One process at a time; it renews the claim at every batch.
+            running = f"{MESSAGE_FACTS_JOB}.running"
+            now = self._naive_now()
+            claimed = await port.claim_job(running, now=now, every=MESSAGE_FACTS_CLAIM_SECONDS)
+            if claimed and await port.job_last_run(MESSAGE_FACTS_STARTED) is None:
+                # When the first pass first started: the recheck covers what was
+                # written since (the claim itself moves at every batch).
+                await port.record_job_run(MESSAGE_FACTS_STARTED, now)
             await db.commit()
             if not claimed:
                 return None
-            done = await index_message_facts(db, self._cutoff())
+            done = await index_message_facts(
+                db, self._cutoff(), after_batch=self._renewing(port, running)
+            )
             await port.record_job_run(MESSAGE_FACTS_JOB, self._naive_now())
             await db.commit()
         return done
@@ -423,14 +450,23 @@ class AnalyticsJobs:
             first_done = await port.job_last_run(MESSAGE_FACTS_JOB)
             if first_done is None or first_done > self._naive_now() - MESSAGE_FACTS_RECHECK_DELAY:
                 return None
-            started = await port.job_last_run(f"{MESSAGE_FACTS_JOB}.running") or first_done
+            started = (
+                await port.job_last_run(MESSAGE_FACTS_STARTED)
+                or await port.job_last_run(f"{MESSAGE_FACTS_JOB}.running")
+                or first_done
+            )
+            running = f"{MESSAGE_FACTS_RECHECK_JOB}.running"
             claimed = await port.claim_job(
-                f"{MESSAGE_FACTS_RECHECK_JOB}.running", now=self._naive_now(), every=3600.0
+                running, now=self._naive_now(), every=MESSAGE_FACTS_CLAIM_SECONDS
             )
             await db.commit()
             if not claimed:
                 return None
-            done = await index_message_facts(db, started - MESSAGE_FACTS_RECHECK_MARGIN)
+            done = await index_message_facts(
+                db,
+                started - MESSAGE_FACTS_RECHECK_MARGIN,
+                after_batch=self._renewing(port, running),
+            )
             await port.record_job_run(MESSAGE_FACTS_RECHECK_JOB, self._naive_now())
             await db.commit()
         return done

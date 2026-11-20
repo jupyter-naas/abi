@@ -138,7 +138,12 @@ the removal of the app and its object-storage files #1536.
    (`message_facts_v2`: a rolling deploy's old processes write messages without their
    facts until they stop). Each is asked at every upkeep (five minutes) until recorded
    as done, so a failed run is retried once its claim lapses, without waiting for a
-   restart. Daily, across processes (`claim_job`): raw `analytics_events` older than 45
+   restart. The message passes are set-based (per batch of 1,000: one read of ids and
+   metadata, one delete, one `executemany` update, one insert; about 0.08 ms a message
+   on PostgreSQL 16, against 3.7 ms row by row) and renew their claim at every batch:
+   a long pass is never taken over while it runs, and one whose process died is taken
+   over ten minutes later. The recheck starts from when the first pass started
+   (`message_facts_v1.started`), not from its last renewal. Daily, across processes (`claim_job`): raw `analytics_events` older than 45
    days are deleted; the rollups stay. Thirty minutes after the backfill, once
    (`legacy_storage_cleanup_v1`, claimed), the legacy events are replayed again and the
    removed app's object-storage files are deleted (#1536, see Consequences).
