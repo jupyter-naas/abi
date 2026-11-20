@@ -121,6 +121,116 @@
 
 <!-- version list -->
 
+## v7.1.0 (2026-11-20)
+
+### Bug Fixes
+
+- **nexus**: Seeds make only the configured people no provider signs in yet
+  ([#1570](https://github.com/jupyter-naas/abi/pull/1570),
+  [`b29a328`](https://github.com/jupyter-naas/abi/commit/b29a328c01462b050025c6ad3a94611c6674b00e))
+
+- **nexus**: Settings scopes go by what they are
+  ([`a93ed89`](https://github.com/jupyter-naas/abi/commit/a93ed8902e7150a4021dbbb117fe3adba6ed6456))
+
+- **nexus-web**: Add people keeps focus after a pick, aria-controls only while open
+  ([#1569](https://github.com/jupyter-naas/abi/pull/1569),
+  [`d0d178b`](https://github.com/jupyter-naas/abi/commit/d0d178b5f5c6357f16cf231b007fcaf344d86e08))
+
+- **nexus-web**: Drives sits under Resources in Platform Settings
+  ([`9819e8c`](https://github.com/jupyter-naas/abi/commit/9819e8c2d2eea2655a700392d93c4dc118d3bc42))
+
+- **nexus-web**: Help opens to every workspace member, whatever features they hold
+  ([`ba23bf8`](https://github.com/jupyter-naas/abi/commit/ba23bf80efc8d3958128ef5c1a2930dac1ccda11))
+
+- **nexus-web**: Platform Settings > Users shows no IAM ID column
+  ([`6d9ea32`](https://github.com/jupyter-naas/abi/commit/6d9ea321e332ef476331ab2b5e1a830304f917c5))
+
+- **nexus-web**: The avatar opens Account settings, as #1581 has it
+  ([`59d8c3c`](https://github.com/jupyter-naas/abi/commit/59d8c3ccf05b000ace6eba46d10268831b4a8032))
+
+- **nexus-web**: The settings refactor of #1581 beside the account menu and Analytics
+  ([`034e404`](https://github.com/jupyter-naas/abi/commit/034e40414cc504c21008d042057761904caea68e))
+
+- **people**: A link keeps the person's org profile; the identity graph sync holds no connection
+  while IAM answers
+  ([`75f2b36`](https://github.com/jupyter-naas/abi/commit/75f2b36db8ef8be72c7cf1e786111413ecd8039c))
+
+- **people**: Count an address once whatever the case of its stored email
+  ([#1566](https://github.com/jupyter-naas/abi/pull/1566),
+  [`274dea9`](https://github.com/jupyter-naas/abi/commit/274dea9781dcdf4138d7b64d8e9ee7f3c89455d1))
+
+- **people**: Link the person a creation collides with; ADR for invited rows
+  ([`d2db0f3`](https://github.com/jupyter-naas/abi/commit/d2db0f3b49e130a41aa82b8997c28feadd5f9cb9))
+
+- **tools,cli**: Agent admin invite tools and the CLI on the people routes
+  ([`ed60399`](https://github.com/jupyter-naas/abi/commit/ed60399ef1810a5662999922243ca2ec2f460032))
+
+### Features
+
+- **accounts**: The platform invite makes a real invited account
+  ([`5b441d6`](https://github.com/jupyter-naas/abi/commit/5b441d69868fff19dabf9b3bcbc1fdbd3d65e4e7))
+
+- **iam**: Derive each organization's directory from role attachments
+  ([`90425a7`](https://github.com/jupyter-naas/abi/commit/90425a784b8e5ed0799f996390d0e77005d54d3b))
+
+- **nexus**: Configured users are invited people of their provider
+  ([#1570](https://github.com/jupyter-naas/abi/pull/1570),
+  [`ed6a47d`](https://github.com/jupyter-naas/abi/commit/ed6a47db2f75ae30f918a880c0e45674b2ce5afc))
+
+- **nexus**: Infrastructure is a Settings category, Layers and Diagrams
+  ([`75c5eef`](https://github.com/jupyter-naas/abi/commit/75c5eef707f668b1adf4b151f32f29a9b8fef4f8))
+
+- **nexus**: Org directory in member lists, workspace member search and add, invites on the people
+  service
+  ([`ef998cf`](https://github.com/jupyter-naas/abi/commit/ef998cf6406e6c37d51c7ebb71ce7b262107b958))
+
+- **nexus**: Pending invitations become invited users
+  ([#1570](https://github.com/jupyter-naas/abi/pull/1570),
+  [`6ec2bd5`](https://github.com/jupyter-naas/abi/commit/6ec2bd50163bbb4f55784577c234072d4ba864de))
+
+- **nexus-web**: Access lists look like Platform Settings > Users
+  ([`386498f`](https://github.com/jupyter-naas/abi/commit/386498f8009c0c3fdbaeb7c173b37cc2866c81c5))
+
+- **nexus-web**: Add people by search, shared create-user form, Invited status
+  ([#1569](https://github.com/jupyter-naas/abi/pull/1569),
+  [`29aa4f0`](https://github.com/jupyter-naas/abi/commit/29aa4f05b93b00c5c9f9166395bab6eaa0246221))
+
+- **nexus-web**: Switch organization and workspace atop the Settings column
+  ([`4e2ae51`](https://github.com/jupyter-naas/abi/commit/4e2ae51e4c42d5598f5afe45945368c1c57f553e))
+
+- **nexus-web**: Workspace and organization Members become Users
+  ([`54f1778`](https://github.com/jupyter-naas/abi/commit/54f177832994dbadc6d901ad28cc85bd063765a6))
+
+- **org**: Remove someone with workspace access only from the organization
+  ([#1566](https://github.com/jupyter-naas/abi/pull/1566),
+  [`fe2fc4b`](https://github.com/jupyter-naas/abi/commit/fe2fc4bfe5a3bc426a4afcdff6b63e51243d3166))
+
+- **people**: PeopleService creates or links platform users
+  ([`255501b`](https://github.com/jupyter-naas/abi/commit/255501b13dd96d9bac2050c780f6d013c651ed98))
+
+- **people**: Users.status invited → active, activated at the first sign-in
+  ([`b960aaa`](https://github.com/jupyter-naas/abi/commit/b960aaa6062a226805bbbc35ea943f42873eb21a))
+
+- **people**: Wire the people service into the member routes and tools
+  ([#1566](https://github.com/jupyter-naas/abi/pull/1566),
+  [`0bbb838`](https://github.com/jupyter-naas/abi/commit/0bbb83866653b76bdc39a4038186e0cb68739bcb))
+
+### Performance Improvements
+
+- **iam**: One org's directory names only that org's people
+  ([`4d01695`](https://github.com/jupyter-naas/abi/commit/4d016955cfc35861cd77eb2e458707d3f9b47a2d))
+
+### Refactoring
+
+- **nexus-web**: One search picker for Files and the Settings switchers
+  ([`598b614`](https://github.com/jupyter-naas/abi/commit/598b614e237c5bb0ea391f9054ca9a91bd037f1c))
+
+### Testing
+
+- **nexus-web**: Platform Settings lists Drives under Resources
+  ([`67d7615`](https://github.com/jupyter-naas/abi/commit/67d7615dc4f32b563771b155b2b559b8169c9315))
+
+
 ## v7.0.0 (2026-11-20)
 
 ### Bug Fixes
