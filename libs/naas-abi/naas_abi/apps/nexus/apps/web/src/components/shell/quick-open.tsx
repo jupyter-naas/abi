@@ -22,6 +22,7 @@ import {
 } from '@/lib/quick-open';
 import { useAppsStore } from '@/stores/apps';
 import { useFilesStore } from '@/stores/files';
+import { filesNavigationQuery } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import { officeCreateKindFromHref, pushOfficeCreate } from '@/components/office/office-create-state';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useOpensWorkspaceSettings } from '@/hooks/use-workspace-settings-access';
@@ -251,21 +252,22 @@ export function QuickOpen() {
         return;
       }
       if (action.kind === 'file') {
-        if (action.type === 'folder') {
-          setStarredNavigation({ source: action.source, path: action.path });
-        } else {
-          const parentPath = action.path.includes('/')
+        // The URL of where it goes (a bare /files would open the default view once it lands).
+        const folderPath = action.type === 'folder'
+          ? action.path
+          : action.path.includes('/')
             ? action.path.substring(0, action.path.lastIndexOf('/'))
             : '';
-          setStarredNavigation({
-            source: action.source,
-            path: parentPath,
-            previewPath: action.path,
-          });
-        }
+        const url = filesNavigationQuery(useFilesStore.getState(), { source: action.source, path: folderPath });
+        setStarredNavigation({
+          source: action.source,
+          path: folderPath,
+          ...(action.type === 'folder' ? {} : { previewPath: action.path }),
+          url,
+        });
         setActiveSource(action.source);
         setActivePanelSection('files');
-        router.push(getWorkspacePath(currentWorkspaceId, '/files'));
+        router.push(`${getWorkspacePath(currentWorkspaceId, '/files')}?${url}`);
         close();
         return;
       }

@@ -46,6 +46,8 @@ export interface StarredNavigation {
   source: string;
   path: string;
   previewPath?: string; // for files: open preview after navigating to parent folder
+  /** The Files query its caller pushes (`filesNavigationQuery`); none when it pushes no URL. */
+  url?: string;
 }
 
 const STARRED_STORAGE_KEY = 'nexus-starred-files';

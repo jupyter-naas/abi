@@ -183,10 +183,16 @@ export function filesUrlQuery(state: FilesUrlState): string {
   return params.toString();
 }
 
-/** `search` with the Files keys set to `state` (and dropped where `filesUrlQuery` drops them), other parameters kept. */
+/** The parameters that say what the page opens: its state and a file to preview. */
+const FILES_NAVIGATION_KEYS = [...FILES_URL_KEYS, 'preview'] as const;
+
+/**
+ * `search` with the Files keys set to `state` (and dropped where `filesUrlQuery` drops
+ * them), the preview dropped (the page writes the folder it shows), other parameters kept.
+ */
 export function filesUrlSearch(search: string, state: FilesUrlState): string {
   const params = new URLSearchParams(search.replace(/^\?/, ''));
-  for (const key of FILES_URL_KEYS) params.delete(key);
+  for (const key of FILES_NAVIGATION_KEYS) params.delete(key);
   for (const [key, value] of new URLSearchParams(filesUrlQuery(state))) params.set(key, value);
   const query = params.toString();
   return query ? `?${query}` : '';
@@ -211,4 +217,33 @@ export function filesNavigationFromUrl(search: string | null | undefined): {
   }
   const { folderPath, previewPath } = filesDeepLinkFolderAndPreview(state.path);
   return { state, folderPath, previewPath: previewPath ?? null };
+}
+
+/**
+ * What a Files URL opens, as a comparable string: its Files keys and preview in one order,
+ * other parameters (`spacing`) left out. Two URLs with the same key open the same place.
+ */
+export function filesUrlKey(search: string): string {
+  const params = new URLSearchParams(search.replace(/^\?/, ''));
+  const kept = new URLSearchParams();
+  for (const key of FILES_NAVIGATION_KEYS) {
+    const value = params.get(key);
+    if (value !== null) kept.set(key, value);
+  }
+  return kept.toString();
+}
+
+/**
+ * The Files query a navigation into `to` (sidebar tree, starred item, search, Home) opens,
+ * from the current drive and View picker. As `setActiveSource`: under All Views a view
+ * opens inside it, with one view chosen the view becomes the choice.
+ */
+export function filesNavigationQuery(
+  current: { activeDrive: FilesDrive; viewChoice: FilesSource },
+  to: { source: string; path: string },
+): string {
+  const source = filesSourceFrom(to.source) ?? ALL_VIEWS;
+  const view = current.viewChoice === ALL_VIEWS || source === ALL_VIEWS ? ALL_VIEWS : source;
+  const path = (to.path || '').replace(/^\/+|\/+$/g, '');
+  return filesUrlQuery({ drive: current.activeDrive, view, source, path });
 }
