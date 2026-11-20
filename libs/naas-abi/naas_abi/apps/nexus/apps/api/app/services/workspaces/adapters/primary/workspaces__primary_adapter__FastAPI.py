@@ -834,7 +834,7 @@ async def add_workspace_member(
     if person is None:
         raise HTTPException(status_code=404, detail="User not found")
     workspace = await service.get_workspace(workspace_id)
-    await check_rate_limit(f"email:{person.email}", _INVITE_LIMIT)
+    await check_rate_limit(f"email:{person.email.lower()}", _INVITE_LIMIT)
     await check_invitation_mail_quota(
         workspace.organization_id if workspace else None, workspace_id
     )
@@ -925,7 +925,7 @@ async def resend_workspace_member_invite(
     # The person's own limit first: a refused resend spends nothing else.
     await check_rate_limit(f"invitation:{user_id}", RESEND_LIMIT, limit=1)
     await check_rate_limit(get_rate_limit_identifier(request, current_user.id), _INVITE_LIMIT)
-    await check_rate_limit(f"email:{user.email}", _INVITE_LIMIT)
+    await check_rate_limit(f"email:{user.email.lower()}", _INVITE_LIMIT)
     await check_invitation_mail_quota(
         workspace.organization_id if workspace else None, workspace_id
     )

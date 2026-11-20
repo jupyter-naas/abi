@@ -1190,7 +1190,7 @@ async def resend_org_member_invite(
         get_rate_limit_identifier(request, current_user.id),
         "/api/organizations/members/invite",
     )
-    await check_rate_limit(f"email:{user.email}", "/api/organizations/members/invite")
+    await check_rate_limit(f"email:{user.email.lower()}", "/api/organizations/members/invite")
     await check_invitation_mail_quota(org_id, None)
     with people_errors(_member_denied):
         sent = await people.resend(user_id=user_id, by=current_user)

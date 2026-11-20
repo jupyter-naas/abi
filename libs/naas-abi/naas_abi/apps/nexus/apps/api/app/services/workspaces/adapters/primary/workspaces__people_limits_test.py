@@ -7,6 +7,8 @@ its own table); the people service is the in-memory one."""
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 import pytest_asyncio
 from naas_abi.apps.nexus.apps.api.app.services import rate_limit
@@ -67,6 +69,21 @@ async def test_adding_someone_counts_against_the_inviter_the_address_and_the_org
     assert await _counted("user:admin") == [invite]
     assert await _counted("email:flora@example.com") == [invite]
     assert await _counted("org:org-1") == [rate_limit.INVITATION_MAIL]
+
+
+@pytest.mark.asyncio
+async def test_an_address_counts_as_one_whatever_its_case(limited) -> None:
+    """A row from before the people directory may keep its email's capitals: its
+    counter is the invite route's, which lowercases the address."""
+    limited.people.users["flora"] = replace(
+        limited.people.users["flora"], email="Flora@Example.com"
+    )
+    async with limited.as_("admin") as http:
+        added = await http.post(
+            "/api/workspaces/ws-1/members", json={"user_id": "flora", "role": "viewer"}
+        )
+    assert added.status_code == 201, added.text
+    assert await _counted("email:flora@example.com") == ["/api/workspaces/members/invite"]
 
 
 @pytest.mark.asyncio
