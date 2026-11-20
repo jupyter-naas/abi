@@ -91,6 +91,7 @@ _WILDCARD_TYPE = {
     "iam:DeletePolicy": "policy",
     "iam:ListGroups": "group",
     "iam:CreateGroup": "group",
+    "iam:UpdateGroup": "group",
     "iam:DeleteGroup": "group",
     "iam:AddGroupMember": "group",
     "iam:RemoveGroupMember": "group",
@@ -790,6 +791,13 @@ class IamAdminService:
             lambda s: views.principal_view(s.create_group(name, scope=owner)),
             detail=owner or "platform group",
         )
+
+    async def rename_group(self, user: Any, group_id: str, name: str) -> dict[str, Any]:
+        def rename(session: IIAMService) -> dict[str, Any]:
+            session.update_group(group_id, name=name)
+            return self._group_view(session, group_id)
+
+        return await self._change(user, "update_group", group_id, rename, detail=name)
 
     async def delete_group(self, user: Any, group_id: str) -> None:
         await self._change(user, "delete_group", group_id, lambda s: s.delete_group(group_id))

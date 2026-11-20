@@ -125,6 +125,10 @@ class GroupCreateBody(BaseModel):
     scope: str | None = None
 
 
+class GroupRenameBody(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+
+
 class IdpMappingBody(BaseModel):
     provider: str = Field(min_length=1, max_length=32)
     claim_value: str = Field(min_length=1, max_length=256)
@@ -437,6 +441,13 @@ async def create_group(
     body: GroupCreateBody, user: User = Signed, service: IamAdminService = Service
 ) -> dict[str, Any]:
     return await _call(service.create_group(user, body.name, body.scope))
+
+
+@router.patch("/groups/{group_id}", dependencies=[declares("iam:UpdateGroup")])
+async def rename_group(
+    group_id: str, body: GroupRenameBody, user: User = Signed, service: IamAdminService = Service
+) -> dict[str, Any]:
+    return await _call(service.rename_group(user, group_id, body.name.strip()))
 
 
 @router.delete("/groups/{group_id}", status_code=204, dependencies=[declares("iam:DeleteGroup")])

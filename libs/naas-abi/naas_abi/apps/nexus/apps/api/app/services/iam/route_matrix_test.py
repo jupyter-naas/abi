@@ -194,6 +194,19 @@ def test_the_feature_access_routes_declare_what_they_authorize(table) -> None:
     assert found == FEATURE_ACCESS_ROUTES
 
 
+# Access › Groups: IAM decides each change on the group, at the scope that owns it.
+GROUP_ROUTES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("POST", "/api/iam/admin/groups"): ("iam:CreateGroup",),
+    ("PATCH", "/api/iam/admin/groups/{group_id}"): ("iam:UpdateGroup",),
+    ("DELETE", "/api/iam/admin/groups/{group_id}"): ("iam:DeleteGroup",),
+}
+
+
+def test_the_group_routes_declare_what_they_authorize(table) -> None:
+    found = {key: tuple(d.action for d in _declared(table[key])) for key in GROUP_ROUTES}
+    assert found == GROUP_ROUTES
+
+
 def test_a_write_method_never_authorizes_only_a_read(table) -> None:
     offenders = []
     for key, calls in table.items():

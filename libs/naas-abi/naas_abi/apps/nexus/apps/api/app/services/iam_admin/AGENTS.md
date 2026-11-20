@@ -69,7 +69,7 @@ Nexus adds no role check of its own.
   `GET /principals/{id}/groups` (IAM's `list_principal_groups`: the groups of the principal the caller may
   `iam:GetGroup`, at every level; empty, not a 403, for a principal they see nothing of),
   `POST /principals/{id}/suspend|resume`
-- `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, which names that organization's container, is the owner), `GET|DELETE /groups/{id}`, `PUT|DELETE /groups/{id}/members/{member}`,
+- `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, which names that organization's container, is the owner), `GET|DELETE /groups/{id}`, `PATCH /groups/{id}` (`{name}`: a rename, IAM's `update_group`, `iam:UpdateGroup`), `PUT|DELETE /groups/{id}/members/{member}`,
   `PUT|DELETE /groups/{id}/idp-mappings`
 - `GET|POST /service-accounts`, `DELETE /service-accounts/{id}`, `GET|POST /service-accounts/{id}/keys`,
   `DELETE …/keys/{key}`, `POST …/keys/{key}/rotate`
