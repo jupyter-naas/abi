@@ -1,45 +1,12 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown, Layers, Search, Users, X, type LucideIcon } from 'lucide-react';
+import { useDismiss } from '@/hooks/use-dismiss';
 import { cn } from '@/lib/utils';
 import { Avatar } from './avatar';
 import { ALL } from './scope';
 import type { UsersDirectoryEntry, WorkspacesDirectoryEntry } from './types';
-
-/**
- * Closes a menu on an outside click, on focus leaving it (Tab), or on Escape, which hands
- * the focus back to its trigger (`setOpen` is a state setter: stable).
- */
-function useDismiss(open: boolean, setOpen: (open: boolean) => void) {
-  const ref = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const outside = (target: EventTarget | null) =>
-      !!ref.current && !(target instanceof Node && ref.current.contains(target));
-    const onDown = (e: MouseEvent) => {
-      if (outside(e.target)) setOpen(false);
-    };
-    const onFocus = (e: FocusEvent) => {
-      if (outside(e.target)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('focusin', onFocus);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('focusin', onFocus);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open, setOpen]);
-  return { ref, triggerRef };
-}
 
 const triggerClass = (active: boolean) =>
   cn(

@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { activeSettingsHref, type SettingsLevel } from './settings-levels';
 import { SettingsLayoutNav } from './settings-layout-nav';
 import { SettingsNavItem } from './settings-shell';
+import { SettingsScopeSwitcher } from './settings-scope-switcher';
 
 /** A count on a link that wants attention, and what it counts. */
 export type SettingsLinkBadge = { text: string; title: string };
@@ -26,6 +27,7 @@ export function SettingsLevelsNav({
 
   return (
     <SettingsLayoutNav title={level?.label ?? 'Settings'} resizable={!mobileList}>
+      {(level?.id === 'workspace' || level?.id === 'organization') && <SettingsScopeSwitcher />}
       {level?.groups.map((group, index) => (
         <div key={group.label ?? index} className="settings-level-group">
           {group.label && <h2 className="settings-level-group-title">{group.label}</h2>}
