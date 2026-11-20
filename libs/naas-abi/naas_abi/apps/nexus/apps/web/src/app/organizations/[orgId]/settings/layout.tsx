@@ -2,21 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useParams, useRouter } from 'next/navigation';
-import { Building2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useRememberSettingsPath } from '@/hooks/use-remember-settings-scope';
+import { useSettingsTabs } from '@/hooks/use-settings-levels';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { opensRolesAndPermissions } from '@/components/access/access-sections';
+import { opensAccess } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
 import { useReadsAnalytics } from '@/hooks/use-analytics-access';
-import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
-import {
-  SettingsLayoutRoot,
-  SettingsNavItem,
-  useWorkspaceReturnPath,
-} from '@/components/settings/settings-shell';
+import { SettingsLevelsNav } from '@/components/settings/settings-levels-nav';
+import { SettingsLayoutRoot, useWorkspaceReturnPath } from '@/components/settings/settings-shell';
 import { SettingsShellHeader } from '@/components/settings/settings-shell-header';
 import { SettingsNoAccess } from '@/components/settings/settings-no-access';
 import {
@@ -25,34 +21,11 @@ import {
   orgSettingsIndexPath,
   orgSettingsNavForRole,
   orgSettingsSectionPath,
-  type OrgSettingsNavItem,
 } from './lib/nav';
 import { parseOrgSettingsRoute } from './lib/org-settings-route';
 import './org-settings-layout.css';
 
-function NavItem({
-  item,
-  pathname,
-  orgId,
-  mobileList = false,
-}: {
-  item: OrgSettingsNavItem;
-  pathname: string;
-  orgId: string;
-  mobileList?: boolean;
-}) {
-  const fullHref = orgSettingsSectionPath(orgId, item.slug);
-  const isActive = pathname === fullHref || pathname.startsWith(`${fullHref}/`);
-  return (
-    <SettingsNavItem
-      href={fullHref}
-      label={item.label}
-      icon={item.icon}
-      active={isActive}
-      chevron={mobileList}
-    />
-  );
-}
+const MEMBER_PAGE = /^\/organizations\/[^/]+\/settings\/users\/(?!new(?:[/?#]|$))[^/?#]+/;
 
 export default function OrganizationSettingsLayout({
   children,
@@ -69,13 +42,13 @@ export default function OrganizationSettingsLayout({
   // Whether the organization was read (its answer, or a refusal): the role is known.
   const roleKnown = !!orgId && viewer?.orgId === orgId;
   const viewerRole = roleKnown ? viewer.role : null;
-  // Roles & permissions is shown to whoever would see a section of it at the organization.
+  // Each page of Access is shown to whoever IAM lets open it at the organization.
   const { access, loading: accessLoading } = useIamAccess(orgId ? organizationContainer(orgId) : undefined, undefined, {
     skip: !orgId,
   });
-  const holdsIam = opensRolesAndPermissions(access);
+  const holdsIam = opensAccess(access, 'organization');
   // The Settings tabs' rule, for this organization: its owners and admins, or whoever IAM
-  // shows a Roles & permissions section here. Anyone else sees no section.
+  // shows a page of Access here. Anyone else sees no section.
   const settingsAccess = orgSettingsAccess({
     role: viewerRole,
     roleKnown,
@@ -85,16 +58,20 @@ export default function OrganizationSettingsLayout({
   // Analytics is shown once the API says the caller may read the organization's.
   const readsAnalytics = useReadsAnalytics(orgId ? { kind: 'organization', orgId } : null);
   const visibleNav = useMemo(
-    () => orgSettingsNavForRole(viewerRole, { holdsIam, readsAnalytics }),
-    [viewerRole, holdsIam, readsAnalytics]
+    () => orgSettingsNavForRole(viewerRole, { access, readsAnalytics }),
+    [viewerRole, access, readsAnalytics]
   );
+  const navOrganization = useMemo(() => ({ id: orgId, items: visibleNav }), [orgId, visibleNav]);
   const sectionHrefs = useMemo(
     () => (orgId ? visibleNav.map((item) => orgSettingsSectionPath(orgId, item.slug)) : []),
     [orgId, visibleNav]
   );
   useDevRouteWarmup(sectionHrefs);
   const isMobile = useIsMobile();
+  const { tabs, level } = useSettingsTabs({ organization: navOrganization, mobile: isMobile });
   const { isDetail, section, sectionLabel } = parseOrgSettingsRoute(pathname);
+  // A member's page (`users/<id>`): whoever opens Access here sees what they hold there.
+  const memberPage = section === 'users' && MEMBER_PAGE.test(pathname ?? '');
   const showMobileList = isMobile && !isDetail;
   const showMobileDetail = isMobile && isDetail;
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
@@ -108,11 +85,11 @@ export default function OrganizationSettingsLayout({
   const [layoutKey, setLayoutKey] = useState(0);
 
   // Reopened only once its section opens: not while the role or the access is read, not
-  // refused, not the index, nor a section that sends the caller to Roles & permissions.
+  // refused, not the index, nor a section that sends the caller to Access.
   const sectionOpens =
     !!sectionLabel &&
     (settingsAccess === 'admin' || settingsAccess === 'iam') &&
-    !orgSectionRedirect({ section, role: viewerRole, roleKnown, holdsIam, accessSettled: !accessLoading });
+    !orgSectionRedirect({ section, memberPage, role: viewerRole, roleKnown, access, accessSettled: !accessLoading });
   useRememberSettingsPath(sectionOpens ? pathname : null);
 
   useEffect(() => {
@@ -157,13 +134,14 @@ export default function OrganizationSettingsLayout({
     if (!orgId) return;
     const target = orgSectionRedirect({
       section,
+      memberPage,
       role: viewerRole,
       roleKnown,
-      holdsIam,
+      access,
       accessSettled: !accessLoading,
     });
     if (target) router.replace(orgSettingsSectionPath(orgId, target));
-  }, [orgId, viewerRole, roleKnown, section, holdsIam, accessLoading, router]);
+  }, [orgId, viewerRole, roleKnown, section, memberPage, access, accessLoading, router]);
 
   const workspaceHref = useWorkspaceReturnPath(
     currentWorkspaceId ? `/workspace/${currentWorkspaceId}/maps` : '/',
@@ -186,14 +164,10 @@ export default function OrganizationSettingsLayout({
     <SettingsLayoutRoot key={layoutKey} brand={orgColors} borderRadius={borderRadius}>
       <div className="org-settings-layout-left">
       <SettingsShellHeader
-        scopeTitle="Organization"
-        detailTitle={sectionLabel}
-        showScopeSwitcher={!showMobileDetail}
-        icon={Building2}
+        detailTitle={showMobileDetail ? sectionLabel : null}
+        tabs={showMobileDetail ? undefined : tabs}
         onBack={handleBack}
-        backAriaLabel={
-          showMobileDetail ? 'Back to organization settings' : 'Back to workspace'
-        }
+        backAriaLabel={showMobileDetail ? 'Back to settings' : 'Back to workspace'}
       />
 
       <div
@@ -206,21 +180,7 @@ export default function OrganizationSettingsLayout({
               : 'org-settings-layout-body'
         }
       >
-        {showNav && (
-          <SettingsLayoutNav title="Organization Settings" resizable={!showMobileList}>
-            <ul className="settings-layout-nav-list">
-              {visibleNav.map((item) => (
-                <NavItem
-                  key={item.slug}
-                  item={item}
-                  pathname={pathname}
-                  orgId={orgId}
-                  mobileList={showMobileList}
-                />
-              ))}
-            </ul>
-          </SettingsLayoutNav>
-        )}
+        {showNav && <SettingsLevelsNav level={level} mobileList={showMobileList} />}
 
         {showMain && (
           <div className="org-settings-layout-main">

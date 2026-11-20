@@ -117,7 +117,7 @@ describe('PlatformUsers', () => {
     const { fetcher } = api();
     const navigate = await render({ fetcher });
     await mounted!.click(row('usr_bob').querySelector('td'));
-    expect(navigate).toHaveBeenCalledWith('/settings/roles?section=people&person=usr_bob');
+    expect(navigate).toHaveBeenCalledWith('/settings/users/usr_bob');
     navigate.mockClear();
     await mounted!.click(row('invited:new@example.com').querySelector('td'));
     expect(navigate).not.toHaveBeenCalled();

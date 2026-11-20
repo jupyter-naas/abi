@@ -9,7 +9,7 @@ import {
 } from './system-tabs';
 
 describe('system views', () => {
-  it('lists the pages in order, Events last, Access gone to Roles & permissions and Data to the services', () => {
+  it('lists the pages in order, Events last, Access gone to Platform › Access and Data to the services', () => {
     expect(SYSTEM_VIEWS.map((v) => v.id)).toEqual([
       'overview',
       'services',
@@ -50,7 +50,7 @@ describe('system views', () => {
       '/settings/system/jobs?run=ops.billing%2Fsync%3A4'
     );
     expect(go('tab=traces&trace=abc&span=d')).toBe('/settings/activity/traces?trace=abc&span=d');
-    expect(go('tab=access')).toBe('/settings/roles');
+    expect(go('tab=access')).toBe('/settings/access');
     expect(go('tab=data&service=cache')).toBe('/settings/data/cache');
   });
 });

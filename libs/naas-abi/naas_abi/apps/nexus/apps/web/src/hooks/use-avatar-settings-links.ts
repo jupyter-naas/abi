@@ -3,7 +3,7 @@
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
-import { useWorkspaceSettingsAccess } from '@/hooks/use-workspace-settings-access';
+import { useWorkspaceSettingsAccessView } from '@/hooks/use-workspace-settings-access';
 import { settingsLandingPath } from '@/components/shell/settings-nav';
 import { isWorkspaceSettingsPath, settingsReturnPath } from '@/lib/settings-scope-path';
 
@@ -14,9 +14,9 @@ import { isWorkspaceSettingsPath, settingsReturnPath } from '@/lib/settings-scop
  */
 export function useSettingsHref(): string {
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
-  const access = useWorkspaceSettingsAccess();
+  const { access, iam } = useWorkspaceSettingsAccessView();
   const opensWorkspace = !!workspaceId && (access === 'all' || access === 'iam');
-  const fallback = opensWorkspace ? `/workspace/${workspaceId}${settingsLandingPath(access)}` : '/account/profile';
+  const fallback = opensWorkspace ? `/workspace/${workspaceId}${settingsLandingPath(access, iam)}` : '/account/profile';
   const remembered = settingsReturnPath(fallback);
   const elsewhere = isWorkspaceSettingsPath(remembered) && !remembered.startsWith(`/workspace/${workspaceId}/`);
   return elsewhere ? fallback : remembered;

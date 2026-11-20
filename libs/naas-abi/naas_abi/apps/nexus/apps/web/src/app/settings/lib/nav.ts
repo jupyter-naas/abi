@@ -8,19 +8,23 @@ import {
   Braces,
   Building2,
   Cable,
+  ClipboardList,
   Cpu,
+  FlaskConical,
   Gauge,
   GitBranch,
   Globe,
   HardDrive,
   Hash,
   History,
+  IdCardLanyard,
   KeyRound,
   Layers,
   LockKeyhole,
   Mail,
   MessagesSquare,
   Network,
+  PackageCheck,
   Radar,
   Radio,
   ScrollText,
@@ -30,14 +34,16 @@ import {
   Table2,
   TerminalSquare,
   Users,
+  UsersRound,
   Waypoints,
   Workflow,
   Zap,
 } from 'lucide-react';
+import { platformAccessPath } from '@/components/access/access-paths';
+import { ACCESS_SECTIONS, type AccessSection } from '@/components/access/access-sections';
 import {
   INFRASTRUCTURE_DIAGRAMS_PATH,
   INFRASTRUCTURE_LAYERS_PATH,
-  ROLES_PATH,
   SYSTEM_VIEWS,
   systemViewPath,
   type SystemView,
@@ -57,16 +63,16 @@ import { SERVICE_PAGES, servicePagePath, servicePagesIn } from './service-pages'
  * none. The API checks every call itself: this only decides what is shown.
  *
  * The groups answer one question each, in the order an administrator asks them: what the
- * platform is and who has access (Administration), is it running (System, with the map
- * of the code), what happened (Activity), what is connected (Resources), what is stored
- * (Data). Each page has one home.
+ * platform is and who is on it (Administration), who may do what (Access: the policies,
+ * where rights come from, then the groups and accounts that hold them), is it running
+ * (System, with the map of the code), what happened (Activity), what is connected
+ * (Resources), what is stored (Data). Each page has one home.
  */
 
-/** What an item needs: one action, or any platform-level `iam:` action. */
-export type PlatformSettingsNeed = { action: string } | { anyOf: 'iam' };
+/** What an item needs: one action, or any of several. */
+export type PlatformSettingsNeed = { action: string } | { anyOf: readonly string[] };
 
 export const READ_SYSTEM: PlatformSettingsNeed = { action: 'nexus:ReadSystem' };
-export const ANY_IAM_ACTION: PlatformSettingsNeed = { anyOf: 'iam' };
 
 export type PlatformSettingsNavItem = {
   id: string;
@@ -166,12 +172,14 @@ export const ORGANIZATIONS_ITEM: PlatformSettingsNavItem = {
   needs: READ_SYSTEM,
 };
 
+/** The accounts, and each person's page: what they hold, at every level. Whoever may list
+ *  who holds what (`iam:ListAttachments`) opens it too: the people who hold something. */
 export const USERS_ITEM: PlatformSettingsNavItem = {
   id: 'users',
   label: 'Users',
   href: PLATFORM_USERS_PATH,
   icon: Users,
-  needs: { action: 'nexus:ListUsers' },
+  needs: { anyOf: ['nexus:ListUsers', 'iam:ListAttachments'] },
 };
 
 /** The storage backends: where the platform stores files (read-only). */
@@ -183,13 +191,23 @@ export const DRIVES_ITEM: PlatformSettingsNavItem = {
   needs: { action: 'nexus:ListDrives' },
 };
 
-export const ROLES_ITEM: PlatformSettingsNavItem = {
-  id: 'roles',
-  label: 'Roles & permissions',
-  href: ROLES_PATH,
-  icon: KeyRound,
-  needs: ANY_IAM_ACTION,
+const ACCESS_ICONS: Record<AccessSection, LucideIcon> = {
+  policies: KeyRound,
+  groups: UsersRound,
+  'service-accounts': IdCardLanyard,
+  approvals: PackageCheck,
+  simulator: FlaskConical,
+  audit: ClipboardList,
 };
+
+/** Each page of Access, opened by the action that lists what it shows (`ACCESS_SECTIONS`). */
+export const ACCESS_ITEMS: PlatformSettingsNavItem[] = ACCESS_SECTIONS.map((section) => ({
+  id: `access-${section.id}`,
+  label: section.label,
+  href: platformAccessPath(section.id),
+  icon: ACCESS_ICONS[section.id],
+  needs: { anyOf: section.needs },
+}));
 
 /** The ABI code as layered planes, then as a diagram: the same snapshot, two views. */
 export const LAYERS_ITEM: PlatformSettingsNavItem = {
@@ -210,19 +228,19 @@ export const DIAGRAMS_ITEM: PlatformSettingsNavItem = {
 
 // Discovery sits by Modules, Bus by NATS and the Event store by Events: each shows the
 // same things as its neighbour, until the two pages are one.
-/** Pages laid out like the organization's settings pages: padded, width capped
- * (Administration: General, Organizations, Users, Roles & permissions, Drives). The other
- * pages (System, Activity, Resources, Data) lay out their own panes edge to edge;
- * Nexus tables have their own layout. */
+/** Pages that keep the shell's padding (Administration: General, Organizations, Users,
+ * Drives; and Access). The other pages (System, Activity, Resources, Data)
+ * lay out their own panes with their own padding; Nexus tables have their own layout.
+ * No page is width-capped anymore: the centered column is retired everywhere. */
 const PADDED_ITEM_IDS: ReadonlySet<string> = new Set([
   GENERAL_ITEM.id,
   ORGANIZATIONS_ITEM.id,
   USERS_ITEM.id,
-  ROLES_ITEM.id,
   DRIVES_ITEM.id,
+  ...ACCESS_ITEMS.map((item) => item.id),
 ]);
 
-/** Whether a page lays out its own panes edge to edge (no padding, no width cap). */
+/** Whether a page lays out its own panes (its own padding, no shell padding). */
 export function laysOutOwnPanes(item: Pick<PlatformSettingsNavItem, 'id'>): boolean {
   return item.id !== NEXUS_TABLES_ITEM.id && !PADDED_ITEM_IDS.has(item.id);
 }
@@ -230,8 +248,9 @@ export function laysOutOwnPanes(item: Pick<PlatformSettingsNavItem, 'id'>): bool
 export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
   {
     label: 'Administration',
-    items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM, ROLES_ITEM, DRIVES_ITEM],
+    items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM, DRIVES_ITEM],
   },
+  { label: 'Access', items: ACCESS_ITEMS },
   {
     label: 'System',
     items: [
@@ -271,7 +290,7 @@ export const platformSettingsNav: PlatformSettingsNavItem[] = platformSettingsGr
 export function holds(needs: PlatformSettingsNeed, actions: PlatformActions | null): boolean {
   if (!actions) return false;
   if ('action' in needs) return actions[needs.action] === true;
-  return Object.entries(actions).some(([action, allowed]) => allowed && action.startsWith('iam:'));
+  return needs.anyOf.some((action) => actions[action] === true);
 }
 
 /** The groups the caller may open, empty groups left out. */

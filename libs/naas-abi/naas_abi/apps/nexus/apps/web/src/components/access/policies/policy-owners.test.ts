@@ -14,11 +14,11 @@ describe('policy owners', () => {
     expect(ownedBy('Platform')).toBe('Owned by the platform');
   });
 
-  it('links to the owner’s Roles & permissions, on its Policies at the policy', () => {
-    expect(ownerHref('abi:', 'pol_1')).toBe('/settings/roles?section=policies&policy=pol_1');
-    expect(ownerHref(ORG, 'pol_1')).toBe('/organizations/acme/settings/roles?section=policies&policy=pol_1');
-    expect(ownerHref(WS, 'pol_1')).toBe('/workspace/ws-1/settings/permissions?section=policies&policy=pol_1');
-    expect(ownerHref('abi:nexus:workspace/solo')).toBe('/workspace/solo/settings/permissions?section=policies');
+  it('links to the policy’s page at its owner, Policies with none named', () => {
+    expect(ownerHref('abi:', 'pol_1')).toBe('/settings/access/policies/pol_1');
+    expect(ownerHref(ORG, 'pol_1')).toBe('/organizations/acme/settings/policies/pol_1');
+    expect(ownerHref(WS, 'pol_1')).toBe('/workspace/ws-1/settings/policies/pol_1');
+    expect(ownerHref('abi:nexus:workspace/solo')).toBe('/workspace/solo/settings/policies');
     // A container another module declares has no settings page.
     expect(ownerHref(`${WS}/crm:project/p1`, 'pol_1')).toBeNull();
   });

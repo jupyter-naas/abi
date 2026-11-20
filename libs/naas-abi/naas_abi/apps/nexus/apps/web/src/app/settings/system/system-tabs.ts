@@ -3,6 +3,7 @@
  * `/settings/system[/<view>]`, and the Activity group at `/settings/activity/<view>`.
  * No React here: src/middleware.ts imports it.
  */
+import { PLATFORM_ACCESS_PATH } from '@/components/access/access-paths';
 import { SECTION_PATHS, servicePagePath } from '../lib/service-pages';
 
 export type SystemView =
@@ -19,7 +20,8 @@ export type SystemView =
 export const SYSTEM_PATH = SECTION_PATHS.system;
 export const ACTIVITY_PATH = SECTION_PATHS.activity;
 
-/** Roles & permissions, which was System's Access tab. */
+/** Roles & permissions, which was System's Access tab: Platform › Access now
+ *  (`components/access/access-paths.ts`), its address redirected. */
 export const ROLES_PATH = '/settings/roles';
 
 /** The map of the ABI code, one page per view (Settings › Platform › System). */
@@ -71,7 +73,7 @@ export function legacyDataPath(params: URLSearchParams): string {
 
 /**
  * Where an old System link (`/workspace/<id>/admin/system?tab=<tab>`) goes now: the
- * tab's page, its other query parameters kept. Access is Roles & permissions, Data the
+ * tab's page, its other query parameters kept. Access is Platform › Access, Data the
  * service's page; a missing or unknown tab is the overview.
  */
 export function legacySystemTabPath(params: URLSearchParams): string {
@@ -80,7 +82,7 @@ export function legacySystemTabPath(params: URLSearchParams): string {
   rest.delete('tab');
   if (tab === 'data') return legacyDataPath(rest);
   const path =
-    tab === 'access' ? ROLES_PATH : systemViewPath(isSystemView(tab) && tab !== 'events' ? tab : 'overview');
+    tab === 'access' ? PLATFORM_ACCESS_PATH : systemViewPath(isSystemView(tab) && tab !== 'events' ? tab : 'overview');
   const query = rest.toString();
   return query ? `${path}?${query}` : path;
 }

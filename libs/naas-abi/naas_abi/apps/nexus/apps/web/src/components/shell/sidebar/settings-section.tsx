@@ -9,7 +9,6 @@ import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 import { SETTINGS_GROUPS, visibleSettingsGroups, workspaceOrganization } from '@/components/shell/settings-nav';
 import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
-import { opensRolesAndPermissions } from '@/components/access/access-sections';
 import { workspaceContainer } from '@/components/access/access-scope';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
 import { useReadsAnalytics } from '@/hooks/use-analytics-access';
@@ -21,8 +20,8 @@ export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean;
   const { resources } = useWorkspaceResources(currentWorkspaceId);
   const workspace = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId));
   const basePath = getWorkspacePath(currentWorkspaceId, '/settings');
-  // Roles & permissions is shown to whoever would see a section of it in the workspace; asked
-  // once the workspace (and so its organization) is known.
+  // Each Access page is shown to whoever IAM lets open it in the workspace; asked once the
+  // workspace (and so its organization) is known.
   const { access } = useIamAccess(
     workspace ? workspaceContainer(workspaceOrganization(workspace), workspace.id) : undefined,
     undefined,
@@ -32,7 +31,7 @@ export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean;
   const readsAnalytics = useReadsAnalytics(workspace ? { kind: 'workspace', workspaceId: workspace.id } : null);
   // Only what the caller may use here (the features they hold, the module resources they may use).
   const groups = visibleSettingsGroups(resources, flags, SETTINGS_GROUPS, {
-    holdsIam: !!workspace && opensRolesAndPermissions(access),
+    access: workspace ? access : null,
     readsAnalytics,
   });
 

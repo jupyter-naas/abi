@@ -96,16 +96,32 @@ describe('workspace settings by URL (UJ-W1)', () => {
     expect(text).toContain('You have no access to these settings');
   });
 
-  it('send someone holding only iam: rights there to Roles & permissions', async () => {
+  it('send someone holding only iam: rights there to the first Access page they hold', async () => {
     state.settingsByRole = false;
     state.access = { actions: { 'iam:ListPolicies': true } };
     const text = await render();
     expect(text).not.toContain('GENERAL PAGE');
-    expect(state.replaced).toEqual(['/workspace/ws-1/settings/permissions']);
-    state.path = '/workspace/ws-1/settings/permissions';
+    expect(state.replaced).toEqual(['/workspace/ws-1/settings/policies']);
+    for (const path of ['/workspace/ws-1/settings/policies', '/workspace/ws-1/settings/policies/pol_1', '/workspace/ws-1/settings/members/usr_bob']) {
+      state.path = path;
+      await mounted?.unmount();
+      mounted = null;
+      expect(await render()).toContain('GENERAL PAGE');
+    }
+    state.path = '/workspace/ws-1/settings/general';
+  });
+
+  it('send someone IAM lets list only the groups there to Groups, never to Policies', async () => {
+    state.settingsByRole = false;
+    state.access = { actions: { 'iam:ListGroups': true } };
+    await render();
+    expect(state.replaced).toEqual(['/workspace/ws-1/settings/groups']);
+    state.replaced = [];
+    state.path = '/workspace/ws-1/settings/policies';
     await mounted?.unmount();
     mounted = null;
-    expect(await render()).toContain('GENERAL PAGE');
+    await render();
+    expect(state.replaced).toEqual(['/workspace/ws-1/settings/groups']);
     state.path = '/workspace/ws-1/settings/general';
   });
 });
@@ -120,7 +136,7 @@ describe('the workspace settings page Settings reopens', () => {
     await mounted?.unmount();
     state.access = { actions: { 'iam:ListPolicies': true } };
     await render();
-    expect(state.replaced).toEqual(['/workspace/ws-1/settings/permissions']);
+    expect(state.replaced).toEqual(['/workspace/ws-1/settings/policies']);
     expect(settingsReturnPath('nothing')).toBe('nothing');
 
     await mounted?.unmount();
