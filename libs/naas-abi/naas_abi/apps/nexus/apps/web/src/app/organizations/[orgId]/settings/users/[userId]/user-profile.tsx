@@ -23,6 +23,7 @@ import {
   type MemberProfileField,
   type OrgRoleChoice,
 } from './member-details';
+import { MemberAccess } from './member-access';
 import '@/app/account/profile/profile.css';
 import '../users.css';
 
@@ -96,6 +97,7 @@ export default function OrgUserProfilePage() {
   const [details, setDetails] = useState<MemberDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [refused, setRefused] = useState(false);
   const [draft, setDraft] = useState(emptyDraft);
   const [orgRole, setOrgRole] = useState<OrgRoleChoice>('member');
   const [error, setError] = useState('');
@@ -112,7 +114,8 @@ export default function OrgUserProfilePage() {
         `/api/organizations/${orgId}/members/${encodeURIComponent(userId)}`
       );
       if (res.status === 403) {
-        router.replace(orgSettingsSectionPath(orgId, 'users'));
+        // Not an admin here: whoever opens the organization's Access still sees what they hold.
+        setRefused(true);
         return;
       }
       if (!res.ok) {
@@ -133,7 +136,7 @@ export default function OrgUserProfilePage() {
     } finally {
       setLoading(false);
     }
-  }, [orgId, userId, router]);
+  }, [orgId, userId]);
 
   useEffect(() => {
     if (orgId && userId) void load();
@@ -142,9 +145,14 @@ export default function OrgUserProfilePage() {
   if (loading) return <p className="text-sm text-muted-foreground">Loading user...</p>;
   if (!details) {
     return (
-      <div className="org-settings-users-alert" role="alert">
-        <AlertCircle size={16} />
-        <span>{loadError || 'User not found.'}</span>
+      <div className="account-profile-page">
+        {!refused && (
+          <div className="org-settings-users-alert" role="alert">
+            <AlertCircle size={16} />
+            <span>{loadError || 'User not found.'}</span>
+          </div>
+        )}
+        <MemberAccess orgId={orgId} personId={userId} />
       </div>
     );
   }
@@ -519,6 +527,7 @@ export default function OrgUserProfilePage() {
           )}
         </div>
       </section>
+      <MemberAccess orgId={orgId} personId={member.principal_id || member.user_id} />
       {confirmDialog}
     </div>
   );

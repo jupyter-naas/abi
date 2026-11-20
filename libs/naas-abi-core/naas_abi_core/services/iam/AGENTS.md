@@ -178,6 +178,10 @@ attachments `att_`). Ids never change and are never reused.
   or a registered container. Its name carries it (`<owner>/iam:group/<id>`, see
   "Resource names"), so the admins of that container manage it. Groups cannot contain
   groups.
+- **Renaming** a group is `update_group(group_id, name=)`, decided as `iam:UpdateGroup`
+  on its name at its owner scope (an `admin` action: `builtin.admin` and `builtin.owner`
+  of the scope, the platform admin, and the Nexus API account hold it). Its id, owner,
+  members and attachments stay; a deleted group is not found.
 - **Static members** are users or service accounts, kept in IAM. A group owned by a
   container holds only **users of its top container** (the first step of its owner's
   path: an organisation for its workspaces' groups): users with an attachment of their
@@ -1057,7 +1061,7 @@ attachment per scope.
 |---|---|---|
 | `builtin.viewer` | every `list` and `read` action | every `policy_only` type; the whole `iam` catalog; every module scope type |
 | `builtin.member` | viewer, plus every `write` action | every `policy_only` type; the whole `iam` catalog; every module scope type |
-| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}/iam:policy/*` and `${scope}/iam:group/*`); `iam:ListAttachments` on `${scope}/iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}/iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere; one owned above is listed there only where it is attached at the scope or above, "Service API"); `iam:ViewAs` on `${scope}/iam:view_as/*` (a statement of its own: "Viewing as a principal") | every `policy_only` type; every module scope type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; every `owner_only` action |
+| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `UpdateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}/iam:policy/*` and `${scope}/iam:group/*`); `iam:ListAttachments` on `${scope}/iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}/iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere; one owned above is listed there only where it is attached at the scope or above, "Service API"); `iam:ViewAs` on `${scope}/iam:view_as/*` (a statement of its own: "Viewing as a principal") | every `policy_only` type; every module scope type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; every `owner_only` action |
 | `builtin.owner` | admin (`iam:ViewAs` included), plus every action on every `attachment/…` (owner included) and every `owner_only` action | every `policy_only` type; every module scope type; `iam:MapIdpGroup`, `iam:UnmapIdpGroup` |
 | `builtin.platform_admin` | `*` on `*` (attached without scope) | sealed resources |
 | `builtin.self` | held implicitly by every user (no attachment row, unknown users included; `explain` shows it with no attachment id) | none |
@@ -1733,8 +1737,8 @@ registered `abi_lower` (every letter; its own `lower()` folds ASCII only), Postg
 finds a person; filtered by `iam:ListPrincipals`
 like the list),
 `suspend_principal`, `resume_principal`, `delete_principal` (keeps the id, drops
-attachments and memberships), groups (`create_group`, `add_group_member`,
-`map_idp_group`, ...; groups cannot contain groups; `create_group(name, scope=)`, its
+attachments and memberships), groups (`create_group`, `update_group` (a rename),
+`add_group_member`, `map_idp_group`, ...; groups cannot contain groups; `create_group(name, scope=)`, its
 owner a container or the platform; `list_principal_groups(principal_id)`: the groups a
 principal is a member of, at every level, each kept only where the caller may
 `iam:GetGroup` it, as reading its members takes, so it tells no one a membership they could

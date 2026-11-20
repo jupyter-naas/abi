@@ -199,23 +199,6 @@ describe('PeopleView', () => {
     expect(field('Open Xavier')).toBeNull();
   });
 
-  it('shows the person’s page in place of the table', async () => {
-    const api = peopleApi({
-      principalGroups: vi.fn().mockResolvedValue({ items: [] }),
-      listAttachments: vi.fn().mockResolvedValue({ items: [recruiters] }),
-      resources: vi.fn().mockResolvedValue({ items: [] }),
-      access: vi.fn().mockResolvedValue({ actions: {} }),
-    });
-    const onClosePerson = vi.fn();
-    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), person: { id: 'usr_bob', label: 'Bob' }, onClosePerson });
-    await mounted.flush();
-    await mounted.flush();
-    expect(document.querySelector('[data-person-page="usr_bob"]')).not.toBeNull();
-    expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'usr_bob' });
-    await mounted.click(button('People & roles') ?? null);
-    expect(onClosePerson).toHaveBeenCalled();
-  });
-
   it('finds anyone at the platform, by a search IAM answers, not only those holding something there', async () => {
     const root = attachment({ id: 'att_root', policy_id: 'builtin.platform_admin', principal_id: 'usr_root', principal: principal({ id: 'usr_root', display_name: 'Root' }), scope: null });
     const carol = principal({ id: 'usr_carol', display_name: 'Carol', email: 'carol@example.com' });

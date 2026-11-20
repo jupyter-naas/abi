@@ -694,6 +694,24 @@ class ListGroupsResponse(_message.Message):
     next_after: str
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., groups: _Optional[_Iterable[_Union[Principal, _Mapping]]] = ..., next_after: _Optional[str] = ...) -> None: ...
 
+class UpdateGroupRequest(_message.Message):
+    __slots__ = ("context", "group_id", "name")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    GROUP_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    group_id: str
+    name: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., group_id: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
+
+class UpdateGroupResponse(_message.Message):
+    __slots__ = ("error", "group")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    GROUP_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    group: Principal
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., group: _Optional[_Union[Principal, _Mapping]] = ...) -> None: ...
+
 class DeleteGroupRequest(_message.Message):
     __slots__ = ("context", "group_id")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]

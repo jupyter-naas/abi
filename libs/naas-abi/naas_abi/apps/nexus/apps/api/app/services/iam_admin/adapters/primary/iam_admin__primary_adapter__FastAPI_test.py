@@ -1009,6 +1009,32 @@ def test_a_workspace_admin_manages_its_own_policies_and_groups(world, ws2):
     assert world.audit.phases("create_policy")[-1] == "failed"
 
 
+def patch(world, path, user="root", **body):
+    return world.client.patch(f"/api/iam/admin{path}", json=body, headers=as_(user))
+
+
+def test_a_workspace_admin_renames_its_groups_and_no_one_else_does(world, ws2):
+    group = post(world, "/groups", "ws2admin", name="analysts", scope=ws2).json()
+    colleague = _principal_id(world, "colleague")
+    put(world, f"/groups/{group['id']}/members/{colleague}", "ws2admin")
+    assert get(world, f"/access?scope={ws2}", "ws2admin").json()["actions"]["iam:UpdateGroup"]
+
+    renamed = patch(world, f"/groups/{group['id']}", "ws2admin", name="  readers ")
+    assert renamed.status_code == 200, renamed.text
+    body = renamed.json()
+    assert (body["id"], body["name"], body["owner_scope"]) == (group["id"], "readers", ws2)
+    assert [m["id"] for m in body["members"]] == [colleague]
+    assert get(world, f"/groups/{group['id']}", "ws2admin").json()["name"] == "readers"
+    assert world.audit.phases("update_group") == ["requested", "succeeded"]
+
+    assert patch(world, f"/groups/{group['id']}", "ws2admin", name="").status_code == 422
+    assert patch(world, f"/groups/{group['id']}", "ws2admin", name="   ").status_code in (400, 422)
+    for user in ("colleague", "outsider"):
+        assert patch(world, f"/groups/{group['id']}", user, name="x").status_code in (403, 404)
+    assert not get(world, f"/access?scope={ws2}", "colleague").json()["actions"]["iam:UpdateGroup"]
+    assert get(world, f"/groups/{group['id']}", "ws2admin").json()["name"] == "readers"
+
+
 def test_an_org_admin_manages_its_workspaces_policies_and_groups(world, ws2):
     policy = post(
         world, "/policies", "ws2admin", name="readers", document=SCOPED_READER, scope=ws2

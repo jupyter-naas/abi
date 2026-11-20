@@ -1021,6 +1021,18 @@ class ContainerDefaultModel(Base):
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
 
 
+class WorkspaceFeaturePolicyModel(Base):
+    """The policy Workspace settings > General writes for a feature of a workspace
+    ("Feature · <name>", ``services/feature_access``). IAM holds it; this says which."""
+
+    __tablename__ = "workspace_feature_policies"
+
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    feature = Column(String(64), primary_key=True)
+    policy_id = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
 class ProvisionedIdentityModel(Base):
     """An account ABI made at an identity provider (an invitation's provisioning,
     ``services/invites``): only those are changed or deleted there by Platform

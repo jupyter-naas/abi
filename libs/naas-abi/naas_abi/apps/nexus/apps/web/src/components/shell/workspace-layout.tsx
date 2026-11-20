@@ -26,6 +26,7 @@ import { PresenceIndicator } from '@/components/presence-indicator';
 import { getWorkspacePath } from './sidebar/utils';
 import { pathNeedsAgentCatalog } from '@/lib/feature-access';
 import { rememberWorkspacePath } from '@/lib/workspace-return-path';
+import { isWorkspaceSettingsPath } from '@/lib/settings-scope-path';
 import { loadOrgBranding, resolveWorkspaceOrgId } from '@/lib/org-branding';
 import { OfficeCreateOverlay } from '@/components/office/office-create-overlay';
 
@@ -286,6 +287,15 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   useEffect(() => {
     if (showMobileDetail) setMoreOpen(false);
   }, [showMobileDetail]);
+
+  // Settings is one full-screen shell at every level: the workspace's chrome steps aside.
+  if (isWorkspaceSettingsPath(pathname)) {
+    return (
+      <div style={themeStyles} data-org-branded="true">
+        {children}
+      </div>
+    );
+  }
 
   if (isMobile) {
     return (

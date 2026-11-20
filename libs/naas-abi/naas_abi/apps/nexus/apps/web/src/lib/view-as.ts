@@ -3,6 +3,7 @@
  * the small rules the web keeps for it. The server decides who may view whom and answers everything
  * as the person; the web starts and stops the view, reloads around it, and keeps nothing of it.
  */
+import { platformPersonPath, workspacePersonPath } from '@/components/access/access-paths';
 import { getApiUrl } from '@/lib/config';
 import { getWorkspaceHomePath } from '@/lib/feature-access';
 import { authFetch } from '@/stores/auth';
@@ -73,12 +74,9 @@ export function viewLanding(workspaceId: string): string {
   return getWorkspaceHomePath(encodeURIComponent(workspaceId));
 }
 
-/** The person's page, as the level the view was started from shows it. */
+/** The person's page: under the viewed workspace's Members, else under Platform › Users. */
 export function personPagePath(personId: string, view?: { workspaceId: string } | null): string {
-  const query = `?section=people&person=${encodeURIComponent(personId)}`;
-  return view?.workspaceId
-    ? `/workspace/${encodeURIComponent(view.workspaceId)}/settings/permissions${query}`
-    : `/settings/roles${query}`;
+  return view?.workspaceId ? workspacePersonPath(view.workspaceId, personId) : platformPersonPath(personId);
 }
 
 /**

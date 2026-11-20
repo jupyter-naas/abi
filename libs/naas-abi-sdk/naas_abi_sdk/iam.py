@@ -108,6 +108,13 @@ class IamClient:
             "abi.iam.v1.list_groups", request, pb.ListGroupsResponse
         )
 
+    async def update_group(
+        self, request: pb.UpdateGroupRequest
+    ) -> pb.UpdateGroupResponse:
+        return await self._transport.call(
+            "abi.iam.v1.update_group", request, pb.UpdateGroupResponse
+        )
+
     async def delete_group(
         self, request: pb.DeleteGroupRequest
     ) -> pb.DeleteGroupResponse:

@@ -39,7 +39,7 @@ describe('parseOrgSettingsRoute', () => {
       orgId: 'org-1',
       isDetail: true,
       section: 'users',
-      sectionLabel: 'Users',
+      sectionLabel: 'Members',
     });
   });
 
@@ -51,17 +51,25 @@ describe('parseOrgSettingsRoute', () => {
       orgId: 'org-1',
       isDetail: true,
       section: 'users',
-      sectionLabel: 'Users',
+      sectionLabel: 'Members',
     });
   });
 
-  it('labels the roles section', () => {
-    expect(parseOrgSettingsRoute('/organizations/org-1/settings/roles')).toEqual({
+  it('labels the Access sections, a policy’s and a group’s page too', () => {
+    expect(parseOrgSettingsRoute('/organizations/org-1/settings/policies')).toEqual({
       isOrgSettingsRoute: true,
       orgId: 'org-1',
       isDetail: true,
-      section: 'roles',
-      sectionLabel: 'Roles & permissions',
+      section: 'policies',
+      sectionLabel: 'Policies',
+    });
+    expect(parseOrgSettingsRoute('/organizations/org-1/settings/policies/builtin.owner')).toMatchObject({
+      section: 'policies',
+      sectionLabel: 'Policies',
+    });
+    expect(parseOrgSettingsRoute('/organizations/org-1/settings/groups/grp_1')).toMatchObject({
+      section: 'groups',
+      sectionLabel: 'Groups',
     });
   });
 

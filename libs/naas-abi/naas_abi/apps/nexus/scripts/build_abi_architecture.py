@@ -205,7 +205,7 @@ def main():
         "--output",
         type=Path,
         default=Path(__file__).resolve().parents[1]
-        / "apps/web/src/app/workspace/[workspaceId]/settings/infrastructure/abi-architecture.json",
+        / "apps/web/src/app/settings/system/infrastructure/abi-architecture.json",
     )
     args = parser.parse_args()
     libs = args.libs.resolve()

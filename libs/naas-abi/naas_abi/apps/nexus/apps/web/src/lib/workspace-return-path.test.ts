@@ -29,4 +29,10 @@ describe('workspace return path', () => {
     rememberWorkspacePath('/settings/users');
     expect(workspaceReturnPath('/', null)).toBe('/');
   });
+
+  it('ignores the workspace settings, which are settings, not a page to go back to', () => {
+    rememberWorkspacePath('/workspace/ws-1/maps');
+    rememberWorkspacePath('/workspace/ws-1/settings/agents');
+    expect(workspaceReturnPath('/workspace/ws-1/chat', 'ws-1')).toBe('/workspace/ws-1/maps');
+  });
 });

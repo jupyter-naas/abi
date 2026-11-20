@@ -1,16 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FileCog, Package, SlidersHorizontal } from 'lucide-react';
+import { FileCog, Package } from 'lucide-react';
 import {
   SettingsEmpty,
   SettingsNotice,
   SettingsSection,
 } from '@/components/settings/settings-ui';
 import { authFetch } from '@/stores/auth';
-import { featureLabel } from '@/lib/feature-labels';
 import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { describeModuleResources } from '@/lib/workspace-resources';
+import { FeatureAccess } from './feature-access';
 
 interface SeedRow {
   kind: string;
@@ -38,16 +38,13 @@ const SEED_KIND_LABELS: Record<string, string> = {
   basemap: 'Basemap',
 };
 
-// Features by name (label), A to Z.
-const byLabel = (a: string, b: string) => featureLabel(a).localeCompare(featureLabel(b));
-
 /**
- * Features, Modules and Config preseeding (Settings > General, admins), read-only. Features are
- * the deployment's enabled ones (`/configuration`); Modules are what you may use here
- * (`/resources`: each module with the agents, apps, workflows and pipelines IAM lets you use).
- * Who may use what is decided by policies alone, on Roles & permissions: there is no workspace
- * set and no on/off switch. The seeds are owned by
- * ``nexus_config.organizations[].workspaces[]`` in the config and follow it after an API restart.
+ * Features, Modules and Config preseeding (Settings > General, admins). Features are who may use
+ * each enabled feature here (`feature-access.tsx`: each choice a policy the API writes, so
+ * policies stay the one place access is decided, on Access › Policies too); Modules are what you
+ * may use here (`/resources`: each module with the agents, apps, workflows and pipelines IAM lets
+ * you use), read-only. The seeds are owned by ``nexus_config.organizations[].workspaces[]`` in
+ * the config and follow it after an API restart.
  */
 export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string }) {
   const [config, setConfig] = useState<WorkspaceConfiguration | null>(null);
@@ -80,40 +77,11 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
     };
   }, [workspaceId]);
 
-  const features = [...(config?.features ?? [])].sort(byLabel);
-
   return (
     <>
       {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
 
-      <SettingsSection
-        title={
-          <span className="flex items-center gap-2">
-            <SlidersHorizontal size={16} className="text-muted-foreground" />
-            Features
-          </span>
-        }
-        description="The features this deployment enables. Who may use each one here is decided by policies, on Roles & permissions."
-      >
-        {!config ? (
-          !error && <p className="text-sm text-muted-foreground">Loading features...</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {features.length === 0 ? (
-              <span className="text-sm text-muted-foreground">No features.</span>
-            ) : (
-              features.map((feature) => (
-                <span
-                  key={feature}
-                  className="border border-border px-2 py-0.5 text-xs text-foreground"
-                >
-                  {featureLabel(feature)}
-                </span>
-              ))
-            )}
-          </div>
-        )}
-      </SettingsSection>
+      <FeatureAccess workspaceId={workspaceId} />
 
       <SettingsSection
         title={

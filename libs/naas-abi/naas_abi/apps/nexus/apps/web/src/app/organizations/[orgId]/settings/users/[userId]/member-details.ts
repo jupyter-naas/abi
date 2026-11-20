@@ -39,6 +39,8 @@ export interface MemberDetails {
     id: string;
     organization_id: string;
     user_id: string;
+    /** Their IAM principal: an account linked from the old login has another id in IAM. */
+    principal_id?: string | null;
     /** Null: no org role, only access to some of the organization's workspaces. */
     role: 'owner' | 'admin' | 'member' | null;
     /** Where they are linked to the organization from (an older answer has none: an org role). */

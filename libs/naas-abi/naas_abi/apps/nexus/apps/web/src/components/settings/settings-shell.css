@@ -26,6 +26,145 @@
   --workspace-accent-hsl: 160 84% 45%;
 }
 
+/* Help and Log out, at the right of the header on every level; a phone shows their
+   icons alone (their names are their aria-labels). */
+.settings-header-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+  padding-left: var(--space-3);
+}
+
+.settings-header-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-2);
+  border: none;
+  border-radius: 0;
+  background-color: transparent;
+  color: var(--muted-foreground-hex);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.settings-header-action:hover {
+  background-color: var(--muted-bg-hex);
+  color: var(--foreground-hex);
+}
+
+/* Logging out loses nothing: red only under the pointer. */
+.settings-header-logout:hover {
+  background-color: color-mix(in srgb, var(--destructive-hex) 8%, transparent);
+  color: var(--destructive-hex);
+}
+
+@media (max-width: 767px) {
+  .settings-header-action {
+    padding: var(--space-2);
+  }
+
+  .settings-header-action-label {
+    display: none;
+  }
+}
+
+/* The levels of Settings (Platform, Organization, Workspace, Account), one tab each,
+   under the header. On a phone they scroll sideways. */
+.settings-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border-hex);
+  background-color: var(--surface-subtle-hex);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.settings-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-tab {
+  flex-shrink: 0;
+  max-width: 280px;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 2px solid transparent;
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.settings-tab:hover {
+  color: var(--foreground-hex);
+}
+
+.settings-tab-active,
+.settings-tab-active:hover {
+  border-bottom-color: var(--color-primary);
+  color: var(--foreground-hex);
+}
+
+@media (max-width: 767px) {
+  .settings-tabs {
+    padding: 0 var(--space-3);
+  }
+}
+
+/* The column of Settings: the pages of the tab's level, in groups (Platform › System,
+   Workspace › Features); a level's first group is named by its tab. */
+.settings-level-group + .settings-level-group {
+  margin-top: var(--space-4);
+}
+
+.settings-level-group-title {
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--muted-foreground-hex);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-level-group .org-settings-nav-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A page that lays out its own panes: the whole area, edge to edge. */
+.org-settings-layout-main.settings-main-full {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.org-settings-layout-content.settings-content-full {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+}
+
 /* A count on a nav item that wants attention (e.g. failed job runs). */
 .settings-nav-item-badge {
   display: inline-flex;

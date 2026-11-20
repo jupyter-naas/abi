@@ -77,13 +77,26 @@ async function open(can: (a: string) => boolean, over: Record<string, unknown> =
 }
 
 describe('PoliciesView', () => {
-  it('lists policies and marks the managed ones', async () => {
+  it('lists policies, the built-in roles among them marked built-in and read-only', async () => {
     await open(() => true);
     const managed = document.querySelector('[data-policy="builtin.viewer"]');
-    expect(managed?.textContent).toContain('managed');
+    expect(managed?.textContent).toContain('built-in');
+    expect(managed?.querySelector('[data-managed]')?.getAttribute('data-managed')).toBe('built-in');
     expect(document.querySelector('[data-policy="pol_1"]')?.textContent).toContain('Graph reader');
     expect(document.querySelector('[aria-label="Delete Viewer"]')).toBeNull();
     expect(document.querySelector('[aria-label="Delete Graph reader"]')).not.toBeNull();
+  });
+
+  it('marks a feature policy General › Features writes, and no other', async () => {
+    const feature = { ...readerPolicy, id: 'pol_feat', name: 'Feature · Chat', managed_from: 'general' as const };
+    await open(() => true, {
+      listPolicies: vi.fn().mockResolvedValue({ items: [readerPolicy, feature], next_after: null }),
+    });
+    expect(document.querySelector('[data-policy="pol_feat"] [data-managed-from]')?.textContent).toBe(
+      'managed from General',
+    );
+    expect(document.querySelector('[data-policy="pol_1"] [data-managed-from]')).toBeNull();
+    expect(document.querySelector('[aria-label="Delete Feature · Chat"]')).not.toBeNull();
   });
 
   it('opens a managed policy read-only', async () => {
@@ -602,7 +615,7 @@ describe('PoliciesView: a policy owned at another level', () => {
     await validated();
     const owner = document.querySelector('[data-policy="pol_w"] [data-policy-owner]');
     expect(owner?.textContent).toBe('Workspace Alpha (Acme)');
-    expect(owner?.querySelector('a')?.getAttribute('href')).toBe('/workspace/ws-1/settings/permissions?section=policies&policy=pol_w');
+    expect(owner?.querySelector('a')?.getAttribute('href')).toBe('/workspace/ws-1/settings/policies/pol_w');
   });
 
   it('is edited by the platform admin from Platform settings, at its owner', async () => {
@@ -674,7 +687,7 @@ describe('PoliciesView: a policy owned at another level', () => {
     expect(ownerNote()?.textContent).toContain('Owned by workspace Alpha (Acme).');
     expect(ownerNote()?.textContent).toContain('read-only here');
     expect(ownerNote()?.querySelector('a')?.getAttribute('href')).toBe(
-      '/workspace/ws-1/settings/permissions?section=policies&policy=pol_w',
+      '/workspace/ws-1/settings/policies/pol_w',
     );
     expect(api.publishers).not.toHaveBeenCalled();
   });
@@ -697,7 +710,7 @@ describe('PoliciesView: a policy owned at another level', () => {
   it('opens the policy a link names, once the list is read', async () => {
     await mounted?.unmount();
     const api = fake({ listPolicies: vi.fn().mockResolvedValue({ items: [readerPolicy], next_after: null }) });
-    mounted = await mount(PoliciesView, { api, can: () => true, scope: PLATFORM_ACCESS_SCOPE, directory: EMPTY_DIRECTORY, openPolicy: 'pol_1' });
+    mounted = await mount(PoliciesView, { api, can: () => true, scope: PLATFORM_ACCESS_SCOPE, directory: EMPTY_DIRECTORY, focus: 'pol_1' });
     await validated();
     expect(document.querySelector('[aria-label="Policy Graph reader"]')).not.toBeNull();
   });

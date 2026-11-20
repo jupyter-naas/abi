@@ -40,8 +40,8 @@ function higher(a: BuiltInRole | null, b: BuiltInRole | null): BuiltInRole | nul
 }
 
 /**
- * The rows of People & roles. ``attachments`` are those at the scope, ``members`` the scope's
- * people (none at the platform), ``groups`` the groups holding something there, with their
+ * The people of a scope and what they hold. ``attachments`` are those at the scope,
+ * ``members`` the scope's people (none at the platform), ``groups`` the groups holding something there, with their
  * members. A user is a row once, whether a member, a holder or only reached through a group.
  */
 export function peopleAt(attachments: AttachmentView[], members: ScopeMember[], groups: GroupView[]): PersonRow[] {

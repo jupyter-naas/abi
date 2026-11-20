@@ -123,7 +123,7 @@ describe('A person’s page', () => {
     );
     // A policy links to itself at its owner.
     const link = row('pol_bfo', DEMO)?.querySelector('a');
-    expect(link?.getAttribute('href')).toBe('/workspace/demo/settings/permissions?section=policies&policy=pol_bfo');
+    expect(link?.getAttribute('href')).toBe('/workspace/demo/settings/policies/pol_bfo');
     // Through a group: which, opening its page.
     const through = row('pol_w', WS);
     expect(through?.getAttribute('data-via')).toBe('grp_g');
@@ -202,7 +202,7 @@ describe('A person’s page', () => {
     expect(field('Role at Workspace W (Acme)')).not.toBeNull();
     // A policy of their workspace links to it there.
     expect(row('pol_w', WS)?.querySelector('a')?.getAttribute('href')).toBe(
-      '/workspace/ws-1/settings/permissions?section=policies&policy=pol_w',
+      '/workspace/ws-1/settings/policies/pol_w',
     );
   });
 

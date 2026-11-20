@@ -200,10 +200,11 @@ export function exportRow(user: AdminUser): string[] {
   ];
 }
 
-/** The person's page in Roles & permissions, where their access is seen and changed. */
+/** The person's page under Users (`/settings/users/<IAM id>`), where their access is seen and
+ *  changed. */
 export function personHref(user: AdminUser): string | null {
   if (!user.principal_id) return null;
-  return `/settings/roles?section=people&person=${encodeURIComponent(user.principal_id)}`;
+  return `${PLATFORM_USERS_PATH}/${encodeURIComponent(user.principal_id)}`;
 }
 
 export function isSelf(user: AdminUser, selfId: string | null | undefined): boolean {

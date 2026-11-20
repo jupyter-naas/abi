@@ -389,9 +389,13 @@ class OrganizationService:
         updates: OrganizationUpdateInput,
     ) -> OrganizationRecord | None:
         """A new slug is refused when another organization holds it or the
-        configuration names it (``OrganizationSlugAlreadyExistsError``)."""
+        configuration names it (``OrganizationSlugAlreadyExistsError``). A new name
+        renames its access policy and default groups (``ContainerDefaults.renamed``)."""
+        before = None
+        if updates.name is not None:
+            before = await self.adapter.get_organization_by_id(org_id=org_id)
         if "slug" in (updates.set_fields or ()) or updates.slug is not None:
-            current = await self.adapter.get_organization_by_id(org_id=org_id)
+            current = before or await self.adapter.get_organization_by_id(org_id=org_id)
             if current is None:
                 return None
             slug = updates.slug
@@ -402,7 +406,15 @@ class OrganizationService:
                 or await self.adapter.organization_slug_exists(slug=slug)
             ):
                 raise OrganizationSlugAlreadyExistsError(slug=slug)
-        return await self.adapter.update_organization(org_id=org_id, updates=updates)
+        updated = await self.adapter.update_organization(org_id=org_id, updates=updates)
+        if updated is not None and before is not None and updated.name != before.name:
+            await self.defaults.renamed(
+                defaults_store_of(self.adapter),
+                org_container(org_id),
+                updated.name,
+                previous=before.name,
+            )
+        return updated
 
     async def list_workspaces(self, org_id: str, user_id: str) -> list[OrganizationWorkspaceRecord]:
         """The org's workspaces the user may list (``nexus:ListWorkspaces``)."""

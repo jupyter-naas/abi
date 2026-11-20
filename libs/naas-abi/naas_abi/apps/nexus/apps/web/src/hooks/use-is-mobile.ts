@@ -5,6 +5,11 @@ import { useEffect, useState } from 'react';
 /** Tailwind `md` breakpoint: below this we use the mobile shell. */
 export const MOBILE_BREAKPOINT_PX = 768;
 
+/** The viewport, read now (client only): for an effect that must not act on useIsMobile's first `false`. */
+export function isMobileViewport(breakpointPx: number = MOBILE_BREAKPOINT_PX): boolean {
+  return window.matchMedia(`(max-width: ${breakpointPx - 1}px)`).matches;
+}
+
 /**
  * True when the viewport is below `md`. SSR-safe: starts false, then updates
  * after mount so desktop hydration is not forced into the mobile tree.

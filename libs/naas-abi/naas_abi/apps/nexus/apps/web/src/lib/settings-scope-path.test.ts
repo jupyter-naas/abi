@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  rememberSettingsScopePath,
+  forgetSettingsPaths,
+  isWorkspaceSettingsPath,
+  rememberSettingsPath,
+  settingsLevelReturnPath,
+  settingsReturnPath,
   settingsScopeFromPathname,
-  settingsScopeReturnPath,
-  scopeKeysEqual,
 } from './settings-scope-path';
 
 describe('settingsScopeFromPathname', () => {
@@ -22,47 +24,49 @@ describe('settingsScopeFromPathname', () => {
       kind: 'workspace',
       workspaceId: 'ws-1',
     });
+    expect(isWorkspaceSettingsPath('/workspace/ws-1/settings/general')).toBe(true);
+    expect(isWorkspaceSettingsPath('/workspace/ws-1/chat')).toBe(false);
   });
 });
 
-describe('rememberSettingsScopePath', () => {
+describe('the last Settings pages', () => {
   afterEach(() => {
     sessionStorage.clear();
   });
 
-  it('remembers and restores per scope', () => {
-    rememberSettingsScopePath({ kind: 'account' }, '/account/appearance');
-    rememberSettingsScopePath({ kind: 'platform' }, '/settings/roles');
-    rememberSettingsScopePath({ kind: 'organization', orgId: 'acme' }, '/organizations/acme/settings/users');
-
-    expect(settingsScopeReturnPath({ kind: 'account' }, '/account/profile')).toBe('/account/appearance');
-    expect(settingsScopeReturnPath({ kind: 'platform' }, '/settings')).toBe('/settings/roles');
-    expect(settingsScopeReturnPath({ kind: 'organization', orgId: 'acme' }, '/organizations/acme/settings')).toBe(
-      '/organizations/acme/settings/users'
-    );
+  it('reopens the last Settings page, whatever its level', () => {
+    rememberSettingsPath('/account/appearance');
+    rememberSettingsPath('/organizations/acme/settings/users');
+    expect(settingsReturnPath('/account/profile')).toBe('/organizations/acme/settings/users');
   });
 
-  it('rejects paths outside the scope', () => {
-    rememberSettingsScopePath({ kind: 'account' }, '/settings/users');
-    expect(settingsScopeReturnPath({ kind: 'account' }, '/account/profile')).toBe('/account/profile');
+  it('keeps the last page of each level, for its tab', () => {
+    rememberSettingsPath('/settings/system/jobs');
+    rememberSettingsPath('/workspace/ws-1/settings/agents');
+    rememberSettingsPath('/account/appearance');
+    expect(settingsLevelReturnPath('platform')).toBe('/settings/system/jobs');
+    expect(settingsLevelReturnPath('workspace')).toBe('/workspace/ws-1/settings/agents');
+    expect(settingsLevelReturnPath('account')).toBe('/account/appearance');
+    expect(settingsLevelReturnPath('organization')).toBeNull();
   });
 
-  it('keeps organization paths separate per org', () => {
-    rememberSettingsScopePath({ kind: 'organization', orgId: 'a' }, '/organizations/a/settings/general');
-    rememberSettingsScopePath({ kind: 'organization', orgId: 'b' }, '/organizations/b/settings/users');
-    expect(settingsScopeReturnPath({ kind: 'organization', orgId: 'b' }, '/organizations/b/settings')).toBe(
-      '/organizations/b/settings/users'
-    );
+  it('falls back when nothing was visited, or the stored path is not a settings page', () => {
+    expect(settingsReturnPath('/account/profile')).toBe('/account/profile');
+    rememberSettingsPath('/workspace/ws-1/chat');
+    rememberSettingsPath('//evil.example/account');
+    expect(settingsReturnPath('/account/profile')).toBe('/account/profile');
+    sessionStorage.setItem('nexus-settings-return-path:level:platform', '/workspace/ws-1/settings/general');
+    expect(settingsLevelReturnPath('platform')).toBeNull();
   });
-});
 
-describe('scopeKeysEqual', () => {
-  it('compares organization ids', () => {
-    expect(
-      scopeKeysEqual({ kind: 'organization', orgId: 'x' }, { kind: 'organization', orgId: 'x' })
-    ).toBe(true);
-    expect(
-      scopeKeysEqual({ kind: 'organization', orgId: 'x' }, { kind: 'organization', orgId: 'y' })
-    ).toBe(false);
+  it('forgets them all at sign-out, the Console\'s old one too, so the next person starts from their own landing', () => {
+    rememberSettingsPath('/organizations/acme/settings/users');
+    rememberSettingsPath('/settings/users');
+    sessionStorage.setItem('nexus-settings-return-path:console', '/settings/system/jobs');
+    forgetSettingsPaths();
+    expect(settingsReturnPath('/account/profile')).toBe('/account/profile');
+    expect(settingsLevelReturnPath('organization')).toBeNull();
+    expect(settingsLevelReturnPath('platform')).toBeNull();
+    expect(sessionStorage.length).toBe(0);
   });
 });

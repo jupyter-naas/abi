@@ -131,6 +131,13 @@ def nexus_resource(
     )
 
 
+def scoped_resource(type_name: str, id: str) -> str:
+    """``${scope}/nexus:<type>/<id>``: a Nexus resource as a policy written at a
+    scope names it, in whichever container the policy is attached at."""
+    within = nexus_resource(type_name, container=PLATFORM, id=id).removeprefix(PLATFORM)
+    return "${scope}/" + within
+
+
 __all__ = [
     "ORGANIZATION",
     "PLATFORM",
@@ -143,6 +150,7 @@ __all__ = [
     "org_below",
     "org_container",
     "org_of",
+    "scoped_resource",
     "workspace_container",
     "workspace_of",
 ]
