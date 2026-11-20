@@ -208,6 +208,7 @@ function WorkspaceRow({
     <button
       type="button"
       onClick={() => onPick(workspace)}
+      aria-current={current ? 'true' : undefined}
       className={cn(
         'flex w-full items-center gap-3 py-1.5 pl-2 pr-4 text-left text-sm transition-colors',
         shellTokens.sidebar.listRow,
