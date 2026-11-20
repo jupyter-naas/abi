@@ -139,6 +139,14 @@ def apply_access_settings(iam: Any) -> None:
             model_sets.ensure_configured(iam)
     except Exception:  # noqa: BLE001 - the API starts; the sets are made at the next start
         logger.exception("The model-set policies could not be made")
+    # The level groups and the generic level policies (#1585), kept as written.
+    from naas_abi.apps.nexus.apps.api.app.services.iam.levels import LEVELS
+
+    try:
+        LEVELS.forget()
+        LEVELS.get(iam)
+    except Exception:  # noqa: BLE001 - made on first need otherwise
+        logger.exception("The level groups and policies could not be made")
 
 
 async def register_catalog() -> None:

@@ -140,7 +140,8 @@ async def test_seeding_keeps_a_persons_organization_of_a_configured_slug(
     # None of the configuration lands in it: no workspace, no configured owner.
     assert await _rows(nexus_db, WorkspaceModel, slug="acme-finance") == []
     members = await MEMBERSHIPS.members(org_container(mine))
-    assert [(m.user_id, m.role) for m in members] == [("pat", "owner")]
+    # Its creator is its admin (owner is no longer assigned, #1585).
+    assert [(m.user_id, m.role) for m in members] == [("pat", "admin")]
 
 
 @pytest.mark.asyncio

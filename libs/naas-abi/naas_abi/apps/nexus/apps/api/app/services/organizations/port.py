@@ -173,6 +173,8 @@ class OrganizationMemberRecord:
     source: str = "organization"
     # "invited" until their first sign-in, then "active" (the users row).
     status: str = "active"
+    # Their level ("member", "viewer"; #1585), one choice for every workspace.
+    level: str | None = None
 
 
 @dataclass

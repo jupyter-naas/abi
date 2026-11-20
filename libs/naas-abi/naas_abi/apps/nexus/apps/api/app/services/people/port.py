@@ -342,7 +342,13 @@ class AccessGateway(ABC):
         """``{scope: role}`` the user holds directly."""
 
     @abstractmethod
-    async def grant_role(self, user_id: str, role: str, scope: str, *, by: str) -> None: ...
+    async def grant_role(self, user_id: str, role: str, scope: str, *, by: str) -> None:
+        """Give ``role`` at ``scope``. Where the container keeps its people in groups
+        (#1585) the role is mapped onto them (``Memberships.grant``): viewer or member
+        at a workspace W, the level group plus "<W> workspace"; admin (owner, which is
+        no longer assigned), Member plus "<W> admins" plus "<W> workspace"; at an
+        organization O, "<O> people" and the level, or "<O> admins". S6 (#1589)
+        replaces this role-based contract with levels and groups."""
 
     @abstractmethod
     async def revoke_role(self, user_id: str, scope: str) -> None:

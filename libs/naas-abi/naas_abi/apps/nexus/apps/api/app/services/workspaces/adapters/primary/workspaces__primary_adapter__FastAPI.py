@@ -52,6 +52,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MembershipDenied,
     UnknownUserError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_of
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
 )
@@ -176,6 +177,11 @@ class WorkspaceCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     slug: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$")
     organization_id: str | None = None
+    # The workspace's first admin (#1585): joins "<W> admins" and "<W> workspace".
+    # Defaults to the creator; in an organization, one of its people.
+    admin_id: str | None = None
+    # Deprecated: read as ``admin_id`` when that is not given (owner is no longer
+    # assigned).
     owner_id: str | None = None
     catalog_seed: WorkspaceCatalogSeedInput | None = None
     logo_url: str | None = None
@@ -219,6 +225,10 @@ class WorkspaceMember(BaseModel):
     principal_id: str | None = None
     # "invited" until their first sign-in, then "active".
     status: str = "active"
+    # Workspace · Level (#1585): their level ("member", "viewer"), one choice for every
+    # workspace; ``role`` "admin" when they administer this one. None: a role of
+    # before, held directly.
+    level: str | None = None
 
 
 class MemberProfileInput(BaseModel):
@@ -443,19 +453,19 @@ async def create_workspace(
         id=workspace_id,
         denied="Only organization owners and admins can create workspaces",
     )
-    owner_id = workspace.owner_id or current_user.id
-    if not workspace.organization_id and owner_id != current_user.id:
+    # A workspace is created with an admin (#1585): the one named, else the creator.
+    admin_id = workspace.admin_id or workspace.owner_id or current_user.id
+    if not workspace.organization_id and admin_id != current_user.id:
         raise HTTPException(
             status_code=400, detail="A personal workspace belongs to the user who creates it"
         )
-    if workspace.organization_id and owner_id != current_user.id:
-        member_role = await org_service.get_organization_role(
-            user_id=owner_id, org_id=workspace.organization_id
-        )
-        if member_role is None:
+    if workspace.organization_id and admin_id != current_user.id:
+        # One of the organization's people (its directory: its members and those
+        # of its workspaces), never anyone of the platform.
+        if not await org_service.in_directory(workspace.organization_id, admin_id):
             raise HTTPException(
                 status_code=400,
-                detail="Workspace owner must be a member of the organization",
+                detail="The workspace admin must be a person of the organization",
             )
     catalog_seed = (
         workspace.catalog_seed.model_dump(exclude_none=True)
@@ -467,7 +477,7 @@ async def create_workspace(
             WorkspaceCreateInput(
                 name=workspace.name,
                 slug=workspace.slug,
-                owner_id=owner_id,
+                owner_id=admin_id,
                 organization_id=workspace.organization_id,
                 logo_url=workspace.logo_url,
                 logo_emoji=workspace.logo_emoji,
@@ -486,7 +496,7 @@ async def create_workspace(
     except WorkspaceSlugAlreadyExistsError as exc:
         raise HTTPException(status_code=400, detail="Slug already exists") from exc
     except UnknownUserError as exc:
-        raise HTTPException(status_code=400, detail="Workspace owner is not a known user") from exc
+        raise HTTPException(status_code=400, detail="Workspace admin is not a known user") from exc
     # What IAM derives from the new workspace: the kernel resources its roles
     # reach (drives, caches, drafts). Failing undoes the workspace: never
     # placements without it. Its catalog seed installs; it grants nothing.
@@ -504,24 +514,48 @@ async def create_workspace(
         agent_service=registry.agents,
     )
     flags = await _feature_flags(current_user, [record]) or {}
+    role = (
+        "admin"
+        if admin_id == current_user.id
+        else await service.get_workspace_role(current_user.id, record.id)
+    )
     return _to_schema(
         record,
-        "owner",
+        role,
         feature_flags=flags.get(record.id),
     )
 
 
 @router.delete(
     "/{workspace_id}",
-    dependencies=[
-        guard("DeleteWorkspace", denied="Only the workspace owner can delete the workspace")
-    ],
+    dependencies=[declares("DeleteOrganizationWorkspace"), declares("DeleteWorkspace")],
 )
 async def delete_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> dict[str, str]:
+    # Owner is no longer assigned (#1585): a workspace of an organization is deleted
+    # by the organization's admins (DeleteOrganizationWorkspace, on the organization);
+    # one in none by the platform admin (DeleteWorkspace, which no role holds).
+    container = await authz.AUTHZ.container_of(workspace_id)
+    if container is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    org_id = org_of(container)
+    if org_id:
+        await authz.require(
+            "DeleteOrganizationWorkspace",
+            user=current_user,
+            org=org_id,
+            denied="Only the organization's admins can delete its workspaces",
+        )
+    else:
+        await authz.require(
+            "DeleteWorkspace",
+            user=current_user,
+            workspace=workspace_id,
+            denied="Only the platform administrators can delete this workspace",
+        )
     deleted = await service.delete_workspace(workspace_id=workspace_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -705,6 +739,7 @@ def _member_view(row: WorkspaceMemberRecord) -> WorkspaceMember:
         source=row.source,
         principal_id=row.principal_id,
         status=row.status,
+        level=row.level,
     )
 
 

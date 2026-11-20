@@ -588,7 +588,19 @@ class IAMService(IIAMService, PolicySource):
         # The roles reached at a container that brings the platform companions,
         # through ${my workspaces}: (role, group holding it, membership group).
         companion_roles: list[tuple[str, str | None, str]] = []
+        # A container's bounds: what its membership groups hold at it bounds what
+        # ${my workspaces} grants there, and grants nothing itself ("Bounds").
+        bounds_at = self._membership_bounds(held, fresh=fresh)
         for attachment, group in held:
+            if self._is_bound(attachment, group):
+                statements += [
+                    effective
+                    for effective in self._statements_of(
+                        attachment.policy_id, attachment, group, fresh=fresh
+                    )
+                    if effective.statement.effect == "Deny"
+                ]
+                continue
             if not is_membership_scope(attachment.scope):
                 statements += self._statements_of(
                     attachment.policy_id, attachment, group, fresh=fresh
@@ -612,15 +624,20 @@ class IAMService(IIAMService, PolicySource):
                     if effective.statement.effect == "Deny"
                 ]
             for container, membership_group in reached:
-                statements += [
-                    replace(effective, membership_group=membership_group)
-                    for effective in self._statements_of(
-                        attachment.policy_id,
-                        replace(attachment, scope=container),
-                        group,
-                        fresh=fresh,
-                    )
-                ]
+                statements += self._bounded(
+                    [
+                        replace(effective, membership_group=membership_group)
+                        for effective in self._statements_of(
+                            attachment.policy_id,
+                            replace(attachment, scope=container),
+                            group,
+                            fresh=fresh,
+                        )
+                    ],
+                    attachment.policy_id,
+                    bounds_at.get(container, ()),
+                    fresh=fresh,
+                )
                 if attachment.policy_id in roles.ROLES and self._brings_companions(
                     container
                 ):
@@ -652,6 +669,82 @@ class IAMService(IIAMService, PolicySource):
             if (bound := bind_variables(effective.statement, variables)) is not None
         ]
         return Subject(principal.id, status, tuple(statements))
+
+    def _is_bound(self, attachment: Attachment, group: str | None) -> bool:
+        """Whether ``attachment`` is a bound: held by a membership group at the
+        container it is a membership group of ("Bounds")."""
+        if group is None or attachment.scope is None:
+            return False
+        found = self._find_group(group)
+        return found is not None and found.membership_of == attachment.scope
+
+    def _membership_bounds(
+        self, held: Sequence[tuple[Attachment, str | None]], *, fresh: bool = False
+    ) -> dict[str, list[tuple[Bound, ...]]]:
+        """For each container, the bounds its membership groups hold there (of
+        ``held``): each policy with its chain, nearest first. One a chain that
+        cannot be read whole lets nothing through."""
+        found: dict[str, list[tuple[Bound, ...]]] = {}
+        for attachment, group in held:
+            if not self._is_bound(attachment, group):
+                continue
+            policy = (
+                self._load_policy(attachment.policy_id)
+                if fresh
+                else self._cached_policy(attachment.policy_id)
+            )
+            if policy is None:
+                bounds: tuple[Bound, ...] = (Bound(attachment.policy_id, ()),)
+            else:
+                chain, whole = self._chain(policy, fresh=fresh)
+                bounds = tuple(
+                    Bound(
+                        bounding.id,
+                        tuple(
+                            (index, statement)
+                            for index, statement in enumerate(
+                                bounding.document.statements
+                            )
+                            if statement.effect == "Allow"
+                        )
+                        if whole
+                        else (),
+                    )
+                    for bounding in (policy, *chain)
+                )
+            found.setdefault(str(attachment.scope), []).append(bounds)
+        return found
+
+    def _bounded(
+        self,
+        statements: list[EffectiveStatement],
+        policy_id: str,
+        bounds: Sequence[tuple[Bound, ...]],
+        *,
+        fresh: bool = False,
+    ) -> list[EffectiveStatement]:
+        """The statements a ``${my workspaces}`` policy gives at a container,
+        its Allows within the container's ``bounds`` (one copy per bound: any of
+        them lets an Allow through). A built-in role is not bounded: generated
+        from the catalogs, it holds no module scope and no policy-only type,
+        which are what a bound offers. With no bound, as given."""
+        if not bounds:
+            return statements
+        policy = (
+            self._load_policy(policy_id) if fresh else self._cached_policy(policy_id)
+        )
+        if policy is None or policy.managed:
+            return statements
+        found: list[EffectiveStatement] = []
+        for effective in statements:
+            if effective.statement.effect != "Allow":
+                found.append(effective)
+                continue
+            found += [
+                replace(effective, bounds=(*effective.bounds, *bound))
+                for bound in bounds
+            ]
+        return found
 
     def _memberships(
         self, principal: CallPrincipal, record: PrincipalRecord | None
@@ -2048,7 +2141,11 @@ class IAMService(IIAMService, PolicySource):
                     f"Group {group_id} belongs to {group.owner_scope}: it holds "
                     "users only (a module's account is approved by its manifest)"
                 )
-            if not self._belongs_to(member_id, top):
+            # The first tie: a first-party account acting for no user (Nexus,
+            # after its route authorized the change) adds a person who belongs to
+            # nothing yet to a membership group, which then ties them to it.
+            first_tie = group.membership_of is not None and self._old_grammar_writer()
+            if not first_tie and not self._belongs_to(member_id, top):
                 # Answered as for an unknown principal: whether one exists
                 # outside the group's container is not the caller's to learn.
                 raise IAMNotFoundError(f"Principal {member_id} not found")
