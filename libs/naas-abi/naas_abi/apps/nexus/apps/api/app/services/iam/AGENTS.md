@@ -248,6 +248,11 @@ policy tree of issue #1413's journeys:
   decision. Its admins edit it with the builder within "<O> access" (core's `grantable` answers the editor of a
   sub-policy), and every change is checked as any: they give only what they hold. A workspace in no organization has
   no organization's to be within: its access has no parent and allows nothing until the platform admin widens it.
+- **The names follow the container's.** Renaming an organization or a workspace renames its access policy (name and
+  description) and its two groups (`ContainerDefaults.renamed`, `align_names`, IAM's `update_group`), and every start
+  repairs what an older rename left (`align_all`, in `migrate`). Only what the system made is renamed: a name equal to
+  the one made from the previous name, or from a label the access policy's description, as made, still carries (each
+  `{label}` of its template is read back); a name a person chose, or a description they rewrote, stays.
 - **Who sees a hidden item.** Each person uses what their own policies give them, whatever their role. Hiding an item
   in "<W> access" takes it from whoever holds it through "<W> access" or below it ("<W> admins", member policies).
   Whoever holds it from above keeps it: the org's admins and owners (through "<O> access" below the organization), a
