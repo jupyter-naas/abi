@@ -18,6 +18,7 @@ from .nexus_client import (
 from .org import invite_body
 
 _NEXUS_OIDC = "naas_abi.apps.nexus.apps.api.app.services.oidc"
+_NEXUS_INVITES_RUNTIME = "naas_abi.apps.nexus.apps.api.app.services.invites.runtime"
 
 
 @click.group("user")
@@ -247,6 +248,68 @@ def user_migrate(
     if failed:
         raise click.ClickException(
             f"{len(failed)} user(s) could not be moved: see above"
+        )
+
+
+@user.command("migrate-invitations")
+@click.option(
+    "--database-url",
+    envvar="DATABASE_URL",
+    default=None,
+    help="Nexus's database (default: nexus_config.database_url of the project's configuration).",
+)
+@click.option(
+    "--apply",
+    is_flag=True,
+    default=False,
+    help="Move them. Without it: a dry run that lists the pending invitations.",
+)
+@click.pass_context
+def user_migrate_invitations(
+    ctx: click.Context, database_url: str | None, apply: bool
+) -> None:
+    """Make every pending invitation an invited user, with the same access.
+
+    Nexus does it once at start; run it again when a provider did not answer
+    then. Each person gets a user row (invited until their first sign-in), the
+    roles and policies the invitation held, and the invitation's pending grants
+    are withdrawn. Running it twice changes nothing.
+    """
+    from .iam import _services
+
+    migrate = importlib.import_module(_NEXUS_INVITES_RUNTIME).migrate_from_cli
+    url = database_url or _configured_database_url()
+    with _services(ctx) as services:
+        pending, report = asyncio.run(migrate(url, services, apply=apply))
+    print_table(
+        [
+            {
+                "invitation": i.id,
+                "email": i.email,
+                "provider": i.provider,
+                "organization": i.organization_id or "",
+                "workspace": i.workspace_id or "",
+            }
+            for i in pending
+        ],
+        ["invitation", "email", "provider", "organization", "workspace"],
+        title="Pending invitations" + ("" if apply else " (dry run)"),
+    )
+    if report is None:
+        click.echo("Dry run: nothing changed. Run again with --apply.", err=True)
+        return
+    click.echo(
+        f"migrated={report.migrated} bound={report.bound} unbound={report.unbound} "
+        f"linked={report.linked} deferred={report.deferred}"
+    )
+    for item in report.skipped:
+        click.echo(f"skipped: {item}", err=True)
+    for item in report.failed:
+        click.echo(f"failed: {item}", err=True)
+    if report.failed or report.deferred:
+        raise click.ClickException(
+            f"{len(report.failed)} failed, {report.deferred} waiting for their provider: "
+            "run it again"
         )
 
 

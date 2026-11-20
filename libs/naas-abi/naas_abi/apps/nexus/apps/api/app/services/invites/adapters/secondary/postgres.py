@@ -194,6 +194,14 @@ class InvitationSecondaryAdapterPostgres(InvitationPersistencePort):
     async def mark_revoked(self, invitation_id: str, *, now: datetime) -> bool:
         return await self._transition(invitation_id, status="revoked", updated_at=now)
 
+    async def mark_migrated(self, invitation_id: str, *, user_id: str, now: datetime) -> bool:
+        return await self._transition(
+            invitation_id, status="migrated", accepted_user_id=user_id, updated_at=now
+        )
+
+    async def provisioned_by_nexus(self, provider: str, subject: str) -> bool:
+        return await self.db.get(ProvisionedIdentityModel, (provider, subject)) is not None
+
     async def record_provisioned(
         self, provider: str, subject: str, email: str, *, now: datetime
     ) -> None:

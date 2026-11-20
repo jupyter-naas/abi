@@ -274,7 +274,9 @@ class _Identity:
     ) -> None:
         from types import SimpleNamespace
 
-        self._info = SimpleNamespace(name="builtin", provisioning=provisioning)
+        self._info = SimpleNamespace(
+            name="builtin", provisioning=provisioning, issuer="https://idp.example"
+        )
         self.people = set(existing)
         self.provisioned: list[tuple[str, str, str | None]] = []
 
@@ -417,3 +419,73 @@ def test_user_invite_without_an_org_role_needs_a_workspace(runner: CliRunner) ->
     )
     assert result.exit_code != 0
     assert "--no-org-role needs --workspace" in result.output
+
+
+def _pending_invitation(url: str) -> None:
+    import asyncio
+    import importlib
+    from datetime import datetime
+
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    InvitationModel = importlib.import_module(
+        "naas_abi.apps.nexus.apps.api.app.models"
+    ).InvitationModel
+
+    async def make() -> None:
+        engine = create_async_engine(url)
+        now = datetime(2026, 11, 19)
+        async with AsyncSession(engine) as db:
+            db.add(
+                InvitationModel(
+                    id="inv-dan",
+                    email="dan@example.com",
+                    provider="builtin",
+                    grant_ids="[]",
+                    status="pending",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            await db.commit()
+        await engine.dispose()
+
+    asyncio.run(make())
+
+
+def _migrate_invitations(
+    runner: CliRunner, nexus_db: str, identity: _Identity, *args: str
+):
+    from types import SimpleNamespace
+
+    return runner.invoke(
+        _main,
+        ["user", "migrate-invitations", "--database-url", nexus_db, *args],
+        obj={
+            "services_opener": lambda: (
+                SimpleNamespace(identity=identity, iam=None),
+                lambda: None,
+            )
+        },
+    )
+
+
+def test_migrate_invitations_lists_then_moves_them_once(
+    runner: CliRunner, nexus_db: str
+) -> None:
+    _pending_invitation(nexus_db)
+    identity = _Identity()
+
+    dry = _migrate_invitations(runner, nexus_db, identity)
+    assert dry.exit_code == 0, dry.output
+    assert "dan@example.com" in dry.output and "Dry run" in dry.output
+
+    applied = _migrate_invitations(runner, nexus_db, identity, "--apply")
+    assert applied.exit_code == 0, applied.output
+    # No account at the provider yet: an invited row its verified sign-in binds.
+    assert "migrated=1 bound=0 unbound=1" in applied.output
+
+    again = _migrate_invitations(runner, nexus_db, identity, "--apply")
+    assert again.exit_code == 0, again.output
+    assert "migrated=0 bound=0 unbound=0 linked=0" in again.output
+    assert "dan@example.com" not in again.output

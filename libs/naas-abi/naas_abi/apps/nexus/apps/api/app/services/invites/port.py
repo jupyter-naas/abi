@@ -9,7 +9,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
-InvitationStatus = Literal["pending", "accepted", "revoked"]
+# ``migrated``: the invitation became an invited person of the people directory
+# (``services/people``) when Nexus was upgraded (``migration.py``).
+InvitationStatus = Literal["pending", "accepted", "revoked", "migrated"]
 # What an organization admin may set about a person when inviting them: their
 # profile in that organization, written at their first sign-in.
 PROFILE_FIELDS = ("organization", "job_title", "bio", "service_line", "country", "interest")
@@ -192,6 +194,16 @@ class InvitationPersistencePort(ABC):
 
     @abstractmethod
     async def mark_revoked(self, invitation_id: str, *, now: datetime) -> bool: ...
+
+    @abstractmethod
+    async def mark_migrated(self, invitation_id: str, *, user_id: str, now: datetime) -> bool:
+        """Pending → ``migrated``, once: the invitation is the ``users`` row
+        ``user_id`` now (``migration.py``). True when this call took it."""
+
+    @abstractmethod
+    async def provisioned_by_nexus(self, provider: str, subject: str) -> bool:
+        """Whether an invitation made this account at ``provider``
+        (``provisioned_identities``)."""
 
     @abstractmethod
     async def record_provisioned(
