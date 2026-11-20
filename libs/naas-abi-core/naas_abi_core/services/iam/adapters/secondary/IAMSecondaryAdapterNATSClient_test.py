@@ -29,11 +29,12 @@ from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStor
 from naas_abi_core.services.iam.IAMPorts import (
     IAMConflictError,
     IAMNotFoundError,
+    Membership,
     PermissionDeniedError,
     RevisionConflictError,
 )
 from naas_abi_core.services.iam.IAMService import IAMService
-from naas_abi_core.services.iam.names import PLATFORM, UNRESOLVED
+from naas_abi_core.services.iam.names import MY_CONTAINERS_SCOPE, PLATFORM, UNRESOLVED
 from naas_abi_core.services.iam.tests import grant_contract as grants
 from naas_abi_core.services.iam.tests import owned_scope_contract as owned
 from naas_abi_core.services.iam.tests import sub_policy_contract as subs
@@ -207,9 +208,7 @@ def test_a_listing_over_nats_is_the_callers(iam_host):
         )
     ):
         page = user.list_resources("triple_store", "graph", scope=ws1, limit=1)
-        assert [(i.name, i.id, i.label) for i in page.items] == [
-            (graph("a"), "a", "A")
-        ]
+        assert [(i.name, i.id, i.label) for i in page.items] == [(graph("a"), "a", "A")]
         assert page.listed and page.next_cursor == graph("a")
         rest = user.list_resources(
             "triple_store", "graph", scope=ws1, cursor=page.next_cursor
@@ -278,6 +277,32 @@ def test_administration_round_trip(iam_host):
     assert engine.list_placements("document") == [placement]
     assert engine.delete_placement("document", "nexus-ws-1/*") is True
     assert engine.register_catalog(TRIPLE_STORE.to_dict()) is True
+
+
+@BROKER
+def test_membership_groups_round_trip(iam_host):
+    engine = iam_host.client("engine")
+    ws1 = _register(iam_host, "ws-1")
+    bob = engine.ensure_user("https://idp.example", "bob")
+    of_ws1 = engine.create_group("ws-1 workspace", membership_of=ws1)
+    assert (of_ws1.membership_of, of_ws1.level_group) == (ws1, False)
+    level = engine.create_group("members", level=True)
+    assert level.level_group and engine.get_group(level.id).level_group
+    engine.attach_policy(roles.MEMBER, level.id, MY_CONTAINERS_SCOPE)
+    engine.add_group_member(level.id, bob.id)
+    engine.add_group_member(of_ws1.id, bob.id)
+    assert engine.list_memberships(bob.id) == [Membership(of_ws1.id, ws1)]
+    assert engine.list_container_members(ws1) == [bob.id]
+    explanation = engine.explain("triple_store:Insert", graph("a"), principal_id=bob.id)
+    assert explanation.allowed and explanation.statement is not None
+    assert explanation.statement.via_group == level.id
+    assert explanation.statement.membership_group == of_ws1.id
+    unmarked = engine.mark_group(of_ws1.id, membership_of=None)
+    assert unmarked.membership_of is None
+    assert engine.list_container_members(ws1) == []
+    assert not engine.explain(
+        "triple_store:Insert", graph("a"), principal_id=bob.id
+    ).allowed
 
 
 @BROKER

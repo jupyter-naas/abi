@@ -40,7 +40,15 @@ SETS_TABLE = (
     "workspace VARCHAR(64) NOT NULL, modules TEXT, features TEXT, "
     "PRIMARY KEY (org, workspace))"
 )
+# Version 6 had no membership or level groups.
+NO_MEMBERSHIPS = (
+    "DROP INDEX {schema}iam_principals_membership",
+    "ALTER TABLE {schema}iam_principals DROP COLUMN membership_of",
+    "ALTER TABLE {schema}iam_principals DROP COLUMN level_group",
+)
+DOWNGRADE_TO_6 = (*NO_MEMBERSHIPS, "UPDATE {schema}iam_state SET schema_version = 6")
 NO_CONTAINERS = (
+    *NO_MEMBERSHIPS,
     "DROP TABLE {schema}iam_containers",
     "ALTER TABLE {schema}iam_placements DROP COLUMN container",
 )
@@ -58,13 +66,13 @@ DOWNGRADE_TO_3 = (
     "UPDATE {schema}iam_state SET schema_version = 3",
 )
 DOWNGRADE = (
-    *DOWNGRADE_TO_3[:4],
+    *DOWNGRADE_TO_3[:-2],
     "ALTER TABLE {schema}iam_policies DROP COLUMN owner_scope",
     "ALTER TABLE {schema}iam_principals DROP COLUMN owner_scope",
     "UPDATE {schema}iam_state SET schema_version = 1",
 )
 DOWNGRADE_TO_2 = (
-    *DOWNGRADE_TO_3[:4],
+    *DOWNGRADE_TO_3[:-2],
     "UPDATE {schema}iam_state SET schema_version = 2",
 )
 
@@ -140,7 +148,7 @@ def check_upgrade(
     again = open_store()
     try:
         assert again.get_principal(bound.id).owner_scope == "abi:org-1:-"
-        assert SCHEMA_VERSION == 6
+        assert SCHEMA_VERSION == 7
         assert again.legacy_scope_sets() == []
     finally:
         again.close()
@@ -345,6 +353,32 @@ def check_upgrade_from_5(
     try:
         assert again.list_placements()[1] == Placement("document", "nexus-ws-1", WS)
         assert set(again.rewrite_names(_Rewriter()).values()) == {0}
-        assert SCHEMA_VERSION == 6
+        assert SCHEMA_VERSION == 7
+    finally:
+        again.close()
+
+
+def check_upgrade_from_6(
+    open_store: Callable[[], IAMStoreSQL], execute: Callable[[str], None]
+) -> None:
+    """A store of version 6 has no membership or level group: every group keeps
+    its members and is neither; markers are stored once upgraded."""
+    store = open_store()
+    team = store.create_principal(group("team"))
+    store.close()
+    for statement in DOWNGRADE_TO_6:
+        execute(statement)
+    upgraded = open_store()
+    try:
+        kept = upgraded.get_principal(team.id)
+        assert (kept.membership_of, kept.level_group) == (None, False)
+        upgraded.update_principal(replace(kept, membership_of=WS, level_group=True))
+        assert upgraded.membership_groups(WS) == [team.id]
+    finally:
+        upgraded.close()
+    again = open_store()
+    try:
+        assert again.get_principal(team.id).membership_of == WS
+        assert again.get_principal(team.id).level_group is True
     finally:
         again.close()

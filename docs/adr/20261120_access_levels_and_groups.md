@@ -63,6 +63,7 @@ Administrators reason about people in two axes: **where** someone works (a works
    - A level policy attached once to its level group therefore applies only where the person is a member.
    - `explain` names both groups.
    - Rejected alternative: Nexus keeping hidden per-person role attachments in step with the groups. That means two sources of truth, which drift when a group is changed outside Nexus, and a second migration to reach this model later.
+   - As built (#1584): a group carries `membership_of` (a registered container at or below its owner) and `level_group`; the scope is `names.MY_CONTAINERS_SCOPE`. A policy there applies only within the owners of the policy and of the group holding it, so an organisation's level group never reaches another organisation. Attaching there is the platform's (the attachment is named at the platform), and so is marking a level group. Joining or leaving a level group is allowed to whoever may change the group's members as it is named in one of the person's containers, without the held check of its `${my workspaces}` policies, and is audited (`IAMService.add_audit_listener`).
 
 5. **Capability groups** add one thing to a level. Examples: "Workflow runners" for a Member, and "Models · all" for every model.
 
