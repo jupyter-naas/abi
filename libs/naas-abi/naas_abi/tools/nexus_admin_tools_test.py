@@ -156,9 +156,13 @@ class _People:
         )
 
 
-def _invoke_with(people: Any, tool: str, args: dict[str, Any], **services: Any) -> Any:
+def _invoke_with(
+    people: Any, tool: str, args: dict[str, Any], *, limited: Any = None, **services: Any
+) -> Any:
     async def fake_with_db(fn):  # type: ignore[no-untyped-def]
         return await fn(MagicMock())
+
+    limits = AsyncMock(return_value=limited)
 
     auth = MagicMock()
     auth.get_user = AsyncMock(return_value=MagicMock(email="me@naas.ai", name="Me"))
@@ -168,6 +172,7 @@ def _invoke_with(people: Any, tool: str, args: dict[str, Any], **services: Any) 
             stack.enter_context(patch.object(mod, "_people_service", return_value=people))
             stack.enter_context(patch.object(mod, "_auth_service", return_value=auth))
             stack.enter_context(patch.object(mod, "_with_db", side_effect=fake_with_db))
+            stack.enter_context(patch.object(mod, "_invite_limits", limits))
             for name, service in services.items():
                 stack.enter_context(patch.object(mod, name, return_value=service))
             return _tools_by_name()[tool].invoke(args)
@@ -232,29 +237,67 @@ def test_invite_organization_member_gives_the_org_and_workspace_roles() -> None:
 
 
 def test_a_refusal_of_the_people_service_is_reported_not_raised() -> None:
-    class AlreadyMemberError(Exception):
-        pass
+    from naas_abi.apps.nexus.apps.api.app.services.people.port import AlreadyMemberError
 
     out = _invoke_with(
-        _People(AlreadyMemberError("already")),
+        _People(AlreadyMemberError("usr-9", "already")),
         "invite_workspace_member",
         {"email": "a@naas.ai", "workspace_id": "ws-1"},
         _workspace_service=_workspaces(),
     )
 
-    assert out == {"error": "already", "email": "a@naas.ai"}
+    assert out == {"error": "Already a member", "email": "a@naas.ai"}
 
 
-def test_without_a_people_service_the_tool_says_so() -> None:
-    from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
-        PeopleServiceUnavailableError,
-    )
+def test_an_invitation_past_the_invite_limits_is_reported_and_nobody_is_asked() -> None:
+    people = _People()
 
     out = _invoke_with(
-        _People(PeopleServiceUnavailableError("not wired")),
+        people,
         "invite_workspace_member",
         {"email": "a@naas.ai", "workspace_id": "ws-1"},
+        limited={
+            "error": "Too many attempts. Please try again in 5 minutes.",
+            "email": "a@naas.ai",
+        },
         _workspace_service=_workspaces(),
     )
 
-    assert "not available" in out["error"]
+    assert out["error"].startswith("Too many attempts")
+    assert people.asked == []
+
+
+def test_the_invite_limits_are_the_routes_own(monkeypatch) -> None:
+    """The asking user's and the address's counters of the invite route, and the
+    organization's day of invitation mail."""
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services import rate_limit
+
+    seen: list[tuple[Any, ...]] = []
+
+    async def counted(identifier, endpoint, *_args, **_kwargs):
+        seen.append((identifier, endpoint))
+
+    async def quota(organization_id, workspace_id):
+        seen.append(("quota", organization_id, workspace_id))
+
+    monkeypatch.setattr(rate_limit, "check_rate_limit", counted)
+    monkeypatch.setattr(rate_limit, "check_invitation_mail_quota", quota)
+
+    out = asyncio.run(
+        mod._invite_limits(
+            "user-admin",
+            "a@naas.ai",
+            endpoint="/api/workspaces/members/invite",
+            organization_id="org-1",
+            workspace_id="ws-1",
+        )
+    )
+
+    assert out is None
+    assert seen == [
+        ("user:user-admin", "/api/workspaces/members/invite"),
+        ("email:a@naas.ai", "/api/workspaces/members/invite"),
+        ("quota", "org-1", "ws-1"),
+    ]

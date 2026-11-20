@@ -213,6 +213,11 @@ interface OrganizationState {
   ) => Promise<OrganizationMember | null>;
   removeMemberAvatar: (orgId: string, userId: string) => Promise<OrganizationMember | null>;
   removeMember: (orgId: string, userId: string) => Promise<boolean>;
+  /**
+   * Remove someone from the organization in one step: every workspace of it and any org role
+   * (their account stays). Returns the workspaces they left.
+   */
+  removeFromOrganization: (orgId: string, userId: string) => Promise<string[]>;
 }
 
 export interface OrganizationInvite {
@@ -616,5 +621,23 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
       console.error('Failed to remove member:', error);
       throw error;
     }
+  },
+
+  removeFromOrganization: async (orgId: string, userId: string): Promise<string[]> => {
+    const response = await authFetch(
+      `/api/organizations/${orgId}/members/${encodeURIComponent(userId)}/access`,
+      { method: 'DELETE' }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to remove this user from the organization');
+    }
+    set((state) => ({
+      membersCache: {
+        ...state.membersCache,
+        [orgId]: (state.membersCache[orgId] || []).filter((m) => m.userId !== userId),
+      },
+    }));
+    return Array.isArray(data.workspace_ids) ? data.workspace_ids : [];
   },
 }));

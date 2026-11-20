@@ -59,6 +59,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationService,
 )
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+    RESEND_LIMIT,
     check_invitation_mail_quota,
     check_rate_limit,
     get_rate_limit_identifier,
@@ -114,6 +115,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 router.include_router(resource_access_router)
+
+
+# The workspace invite routes' counters (per inviting user, per address).
+_INVITE_LIMIT = "/api/workspaces/members/invite"
 
 
 def _member_denied(role: str) -> HTTPException:
@@ -817,15 +822,22 @@ async def add_workspace_member(
     """Add someone of the organization's directory with the role (and policies)
     chosen, now, and notify them. Nobody outside the directory is found (404, as
     for an unknown id); someone already in the workspace is a 409. No org role is
-    granted."""
-    await check_rate_limit(
-        get_rate_limit_identifier(request, current_user.id), "/api/workspaces/members/invite"
-    )
+    granted. The notice counts as an invitation mail: the inviting user's, the
+    address's and the organization's day limits apply."""
+    await check_rate_limit(get_rate_limit_identifier(request, current_user.id), _INVITE_LIMIT)
     entry = await service.directory_entry(workspace_id, body.user_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="User not found")
     if workspace_id in entry.workspace_ids or entry.org_wide:
         raise HTTPException(status_code=409, detail="Already a member of this workspace")
+    person = await people.get(body.user_id)
+    if person is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    workspace = await service.get_workspace(workspace_id)
+    await check_rate_limit(f"email:{person.email.lower()}", _INVITE_LIMIT)
+    await check_invitation_mail_quota(
+        workspace.organization_id if workspace else None, workspace_id
+    )
     with people_errors(_member_denied):
         user = await people.add_existing(
             user_id=body.user_id,
@@ -834,8 +846,8 @@ async def add_workspace_member(
             may_grant_owner=await _may_grant_owner(service, current_user, workspace_id),
         )
     member = await _added_member(service, workspace_id=workspace_id, user=user, role=body.role)
-    # The service sends the "added" notice (``add_existing``) and raises when it cannot.
-    return {"member": member.model_dump(mode="json"), "sign_in_email_sent": True}
+    # Whether the notice (or, to someone who never signed in, the invitation) went.
+    return {"member": member.model_dump(mode="json"), "sign_in_email_sent": user.sign_in_email_sent}
 
 
 def _profile_of(profile: Any) -> dict[str, str]:
@@ -862,11 +874,8 @@ async def invite_workspace_member(
     give them the role (and policies) in this workspace only: no org role. The
     answer is the same either way."""
     email = invite.email.lower().strip()
-    await check_rate_limit(
-        get_rate_limit_identifier(request, current_user.id),
-        "/api/workspaces/members/invite",
-    )
-    await check_rate_limit(f"email:{email}", "/api/workspaces/members/invite")
+    await check_rate_limit(get_rate_limit_identifier(request, current_user.id), _INVITE_LIMIT)
+    await check_rate_limit(f"email:{email}", _INVITE_LIMIT)
     workspace = await service.get_workspace(workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -902,10 +911,9 @@ async def resend_workspace_member_invite(
     service: WorkspaceService = Depends(get_workspace_service),
     people: PeopleServicePort = Depends(get_people_service),
 ) -> dict[str, bool]:
-    """Send an invited member their sign-in mail again; 409 once they signed in."""
-    await check_rate_limit(
-        get_rate_limit_identifier(request, current_user.id), "/api/workspaces/members/invite"
-    )
+    """Send an invited member their sign-in mail again; 409 once they signed in.
+    Once a window for one person, then the invite limits (inviting user, address,
+    the organization's day of mail)."""
     if await _find_workspace_member(service, workspace_id=workspace_id, user_id=user_id) is None:
         raise HTTPException(status_code=404, detail="Member not found")
     workspace = await service.get_workspace(workspace_id)
@@ -914,6 +922,10 @@ async def resend_workspace_member_invite(
         raise HTTPException(status_code=404, detail="Member not found")
     if people_status(user.status) != UserStatus.INVITED:
         raise HTTPException(status_code=409, detail="This member has already signed in")
+    # The person's own limit first: a refused resend spends nothing else.
+    await check_rate_limit(f"invitation:{user_id}", RESEND_LIMIT, limit=1)
+    await check_rate_limit(get_rate_limit_identifier(request, current_user.id), _INVITE_LIMIT)
+    await check_rate_limit(f"email:{user.email.lower()}", _INVITE_LIMIT)
     await check_invitation_mail_quota(
         workspace.organization_id if workspace else None, workspace_id
     )

@@ -25,7 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MembershipDenied
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container, workspace_of
 from naas_abi.apps.nexus.apps.api.app.services.organizations import domain_proof
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
@@ -41,11 +41,13 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationDomainAlreadyExistsError,
     OrganizationDomainNotAllowedError,
     OrganizationHasWorkspacesError,
+    OrganizationOwnerRemovalError,
     OrganizationService,
     OrganizationSlugAlreadyExistsError,
     new_org_id,
 )
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+    RESEND_LIMIT,
     check_invitation_mail_quota,
     check_rate_limit,
     get_rate_limit_identifier,
@@ -1173,11 +1175,8 @@ async def resend_org_member_invite(
     people: PeopleServicePort = Depends(get_people_service),
 ) -> dict[str, bool]:
     """Send an invited member of the directory their sign-in mail again; 409 once
-    they signed in."""
-    await check_rate_limit(
-        get_rate_limit_identifier(request, current_user.id),
-        "/api/organizations/members/invite",
-    )
+    they signed in. Once a window for one person, then the invite limits
+    (inviting user, address, the organization's day of mail)."""
     if not await service.in_directory(org_id, user_id):
         raise HTTPException(status_code=404, detail="Member not found")
     user = await people.get(user_id)
@@ -1185,6 +1184,13 @@ async def resend_org_member_invite(
         raise HTTPException(status_code=404, detail="Member not found")
     if people_status(user.status) != UserStatus.INVITED:
         raise HTTPException(status_code=409, detail="This member has already signed in")
+    # The person's own limit first: a refused resend spends nothing else.
+    await check_rate_limit(f"invitation:{user_id}", RESEND_LIMIT, limit=1)
+    await check_rate_limit(
+        get_rate_limit_identifier(request, current_user.id),
+        "/api/organizations/members/invite",
+    )
+    await check_rate_limit(f"email:{user.email.lower()}", "/api/organizations/members/invite")
     await check_invitation_mail_quota(org_id, None)
     with people_errors(_member_denied):
         sent = await people.resend(user_id=user_id, by=current_user)
@@ -1395,6 +1401,56 @@ async def remove_org_member(
         raise HTTPException(status_code=404, detail="Member not found")
     await _sync_member_drive(db, object_storage, user_id)
     return {"message": "Member removed successfully"}
+
+
+@router.delete(
+    "/{org_id}/members/{user_id}/access",
+    dependencies=[
+        guard(
+            "RemoveOrganizationMember",
+            org="org_id",
+            id="user_id",
+            denied="Only admins can remove members",
+        )
+    ],
+)
+async def remove_org_member_access(
+    org_id: str,
+    user_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    db: AsyncSession = Depends(get_db),
+    object_storage: ObjectStorageService = Depends(_get_object_storage),
+) -> dict:
+    """Remove someone from the organization in one step: their role in every
+    workspace of it and any org role (Org settings › Users › Remove from
+    organization, for people with workspace access only). Their platform account
+    stays. An org owner is refused, so the last owner never leaves; a workspace's
+    last owner too (409). ``DELETE /members/{user_id}`` takes the org role alone."""
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot remove yourself from the organization")
+    try:
+        left = await service.remove_from_organization(
+            org_id=org_id, user_id=user_id, by=current_user
+        )
+    except OrganizationOwnerRemovalError as exc:
+        raise HTTPException(status_code=400, detail="Cannot remove the organization owner") from exc
+    except LastOwnerError as exc:
+        names = {ws.id: ws.name for ws in await service.list_all_workspaces(org_id=org_id)}
+        workspace = workspace_of(exc.scope) or ""
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"They are the last owner of {names.get(workspace, workspace)}: "
+                "give it another owner first"
+            ),
+        ) from exc
+    except MembershipDenied as exc:
+        raise _member_denied(str(exc)) from exc
+    if left is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    await _sync_member_drive(db, object_storage, user_id)
+    return {"message": "Removed from the organization", "workspace_ids": left}
 
 
 @router.get(

@@ -426,6 +426,7 @@ Org **Users** and workspace **Members** are UI channels over the same Nexus HTTP
 | List org users | `GET /api/organizations/{orgId}/members` | Org member |
 | Add org user (create-on-invite) | `POST /api/organizations/{orgId}/members/invite` `{email, role, name?, workspace_id?, workspace_role?}` | Org owner/admin |
 | Update / remove org user | `PATCH` / `DELETE` `/api/organizations/{orgId}/members/{userId}` | Org owner/admin |
+| Remove from organization (every workspace of the org and any org role, in one step) | `DELETE /api/organizations/{orgId}/members/{userId}/access` | Org owner/admin (`RemoveOrganizationMember`) |
 | List workspace members | `GET /api/workspaces/{id}/members` | Workspace member |
 | Invite workspace member (create-on-invite) | `POST /api/workspaces/{id}/members/invite` `{email, role, name?}` | Workspace owner/admin |
 
@@ -433,6 +434,7 @@ Notes:
 
 - Invite of an email with **no account** goes through an identity provider (`services/invites`): the provider makes the person, IAM holds the roles, the first sign-in claims them; with no provider configured it answers 400. Someone who **already has an account** is added directly and told by an email with a sign-in link (no code: the provider mails it). Optional `workspace_id` on org invite also adds workspace membership.
 - UI must hide or disable Add / Invite for non-admins; API still returns `403`.
+- **Remove from organization** (Org settings › Users, the row's remove button and the user's page): someone with workspace access only (no org role) leaves every workspace of the organization in one step (`DELETE …/members/{userId}/access`, `OrganizationService.remove_from_organization`); their platform account stays, with what they hold in other organizations. A member with an org role loses the org role (`DELETE …/members/{userId}`) and keeps their workspace access, so the list is read again after a removal. An org owner is never removed this way (400: demoted first by an owner, so the last owner never leaves), nor oneself; a workspace's last owner is a 409 that names the workspace. Every change is checked by IAM before the first is made, so a refusal changes nothing. The confirm dialog says what is taken and what stays (`removalConfirmation`, `users-model.ts`).
 - **Agents:** `invite_organization_member` / `invite_workspace_member` in `naas_abi/tools/nexus_admin_tools.py` use the same create-on-invite path in-process.
 
 Web entry points: `organizations/[orgId]/settings/users/`, workspace `organization/users/`, workspace `settings/members/`. Store: `stores/organization.ts`.

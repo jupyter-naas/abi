@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { changedProfileFields, type MemberOrganizationProfile } from './member-details';
 import { saveMemberChanges } from './member-details';
+import { initialOrgRole, orgRoleChanged } from './member-details';
 
 const saved: MemberOrganizationProfile = {
   organization: null,
@@ -67,5 +68,27 @@ describe('saveMemberChanges', () => {
     const failed = await saveMemberChanges({ profile: () => Promise.reject(new Error('Too long')), role, refreshed: vi.fn() });
     expect(failed).toBe('The profile was not saved: Too long');
     expect(role).not.toHaveBeenCalled();
+  });
+});
+
+describe('the org role of someone with workspace access only', () => {
+  it('starts at none, and saving a profile leaves it at none', () => {
+    expect(initialOrgRole(null)).toBe('');
+    expect(orgRoleChanged('', null, true)).toBe(false);
+  });
+
+  it('is given when an org role is picked', () => {
+    expect(orgRoleChanged('member', null, true)).toBe(true);
+    expect(orgRoleChanged('admin', null, true)).toBe(true);
+  });
+});
+
+describe('the org role of a member', () => {
+  it('starts at their role and changes only when another is picked', () => {
+    expect(initialOrgRole('admin')).toBe('admin');
+    expect(initialOrgRole('member')).toBe('member');
+    expect(orgRoleChanged('member', 'member', true)).toBe(false);
+    expect(orgRoleChanged('admin', 'member', true)).toBe(true);
+    expect(orgRoleChanged('admin', 'member', false)).toBe(false);
   });
 });

@@ -475,6 +475,8 @@ async def test_add_existing_attaches_and_tells_them(world):
     user = await world.service.add_existing(user_id="carl", grants=(WS,), by=ADMIN)
     assert user.id == "carl" and world.access.roles["carl"] == {WS_SCOPE: "member"}
     assert len(world.mailer.notices) == 1
+    # Still the person (a ``PlatformUser``), and whether the notice went.
+    assert isinstance(user, PlatformUser) and user.sign_in_email_sent is True
 
     with pytest.raises(AlreadyMemberError):
         await world.service.add_existing(user_id="carl", grants=(WS,), by=ADMIN)
@@ -548,3 +550,54 @@ async def test_provision_asks_nothing_of_a_provider_that_manages_its_people(worl
     assert world.store.provisioned == set()
     with pytest.raises(UnknownUserError):
         await world.service.provision("ghost")
+
+
+@pytest.mark.asyncio
+async def test_add_existing_says_when_the_notice_could_not_be_sent(world):
+    async def down(**_kwargs):
+        raise RuntimeError("smtp down")
+
+    world.mailer.added = down
+    world.store.rows["carl"] = PlatformUser(
+        "carl", "carl@example.com", "Carl", UserStatus.ACTIVE, "x"
+    )
+    user = await world.service.add_existing(user_id="carl", grants=(WS,), by=ADMIN)
+    # The membership stands; the answer says nobody was told.
+    assert world.access.roles["carl"] == {WS_SCOPE: "member"}
+    assert user.sign_in_email_sent is False
+
+
+@pytest.mark.asyncio
+async def test_adding_someone_invited_sends_their_invitation_again_and_says_so(world):
+    world.store.rows["dan"] = PlatformUser(
+        "dan", "dan@example.com", "Dan", UserStatus.INVITED, "builtin"
+    )
+    user = await world.service.add_existing(user_id="dan", grants=(WS,), by=ADMIN)
+    assert user.sign_in_email_sent is True
+    assert [i[0] for i in world.mailer.invitations] == ["dan@example.com"]
+    assert world.mailer.notices == []
+
+
+@pytest.mark.asyncio
+async def test_creating_and_linking_both_name_the_provider_they_sign_in_with(world):
+    created = await _create(world)
+    assert created.provider == BUILTIN
+    world.store.rows["carl"] = PlatformUser(
+        "carl", "carl@example.com", "Carl", UserStatus.ACTIVE, "builtin"
+    )
+    linked = await _create(world, email="carl@example.com")
+    assert linked.provider == BUILTIN
+    # A provider no longer configured is not named, and the link stands.
+    world.store.rows["erin"] = PlatformUser(
+        "erin", "erin@example.com", "Erin", UserStatus.ACTIVE, "gone"
+    )
+    gone = await _create(world, email="erin@example.com")
+    assert gone.provider is None and world.access.roles["erin"] == {WS_SCOPE: "member"}
+
+
+@pytest.mark.asyncio
+async def test_a_creation_with_no_grant_writes_no_organization_profile(world):
+    """An organization's profile is written only with a grant it gave (a platform
+    invitation names none)."""
+    await _create(world, grants=(), organization_id="org-1", profile={"job_title": "Spy"})
+    assert world.store.profiles == {}

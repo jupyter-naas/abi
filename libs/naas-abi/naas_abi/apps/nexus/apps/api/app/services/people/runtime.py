@@ -1,11 +1,16 @@
 """Build the people service of a request from the engine's identity and IAM,
-Nexus's database and the mail; tests ``configure`` another runtime."""
+Nexus's database and the mail; tests ``configure`` another runtime.
+
+Every caller gets the service from here: the member routes (``get_people_service``),
+the agent's admin tools and the platform invitation (``RUNTIME.service(db)``). A
+test installs a ``PeopleRuntime`` over fake gateways, or any ``PeopleFactory``
+(``workspaces/people_testing.py``'s in-memory service), for all of them at once."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import Depends
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
@@ -38,6 +43,12 @@ def now_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+class PeopleFactory(Protocol):
+    """What makes the people service of a database session."""
+
+    def service(self, db: AsyncSession) -> Any: ...
+
+
 class PeopleRuntime:
     def __init__(
         self,
@@ -62,10 +73,10 @@ class PeopleRuntime:
         )
 
 
-RUNTIME = PeopleRuntime()
+RUNTIME: PeopleFactory = PeopleRuntime()
 
 
-def configure(runtime: PeopleRuntime) -> PeopleRuntime:
+def configure(runtime: PeopleFactory) -> PeopleFactory:
     """Replace the runtime (tests); returns the previous one."""
     global RUNTIME
     previous, RUNTIME = RUNTIME, runtime
@@ -74,4 +85,5 @@ def configure(runtime: PeopleRuntime) -> PeopleRuntime:
 
 def get_people_service(db: AsyncSession = Depends(get_db)) -> PeopleService:
     """The people service of a request (a route dependency)."""
-    return RUNTIME.service(db)
+    service: PeopleService = RUNTIME.service(db)
+    return service

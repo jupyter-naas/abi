@@ -21,9 +21,13 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     best,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    is_workspace_container,
     nexus_resource,
+    org_below,
     org_container,
+    org_of,
     workspace_container,
+    workspace_of,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.domain_proof import (
     domain_token,
@@ -124,6 +128,18 @@ class LastOwnerError(ValueError):
 
     def __str__(self) -> str:
         return "last_owner"
+
+
+@dataclass
+class OrganizationOwnerRemovalError(ValueError):
+    """An org owner is not removed from the organization: demoted first, by an owner
+    (so the last owner never leaves)."""
+
+    org_id: str
+    user_id: str
+
+    def __str__(self) -> str:
+        return "owner_removal"
 
 
 def new_org_id() -> str:
@@ -545,6 +561,51 @@ class OrganizationService:
         if held is None or held == "owner":
             return False
         return await self.memberships.revoke(user_id, scope, by=by)
+
+    async def remove_from_organization(
+        self, org_id: str, user_id: str, *, by: Any
+    ) -> list[str] | None:
+        """Take the person out of the organization in one step: every role they hold
+        at its container, below it and at each of its workspaces' containers, on
+        behalf of ``by`` (IAM decides each). Their account, and what they hold in
+        other organizations, stay. Returns the workspaces they left; None when they
+        are not in the organization's directory.
+
+        An org owner is refused (``OrganizationOwnerRemovalError``: an owner is
+        demoted first, so the last one never leaves this way); a workspace's last
+        owner is ``LastOwnerError``. Every change is checked before the first is
+        made, so a refusal leaves everything as it was."""
+        org_scope, below = org_container(org_id), org_below(org_id)
+        held = {
+            scope: role
+            for scope, role in (await self.memberships.roles_of(user_id)).items()
+            if scope in (org_scope, below)
+            or (is_workspace_container(scope) and org_of(scope) == org_id)
+        }
+        if not held:
+            return None
+        if "owner" in (held.get(org_scope), held.get(below)):
+            raise OrganizationOwnerRemovalError(org_id=org_id, user_id=user_id)
+        workspaces = sorted(scope for scope in held if scope not in (org_scope, below))
+        # The caller's rights first, so that is what a caller who lacks them hears.
+        for scope in ([org_scope] if org_scope in held else []) + workspaces:
+            await self.memberships.check(user_id, None, scope, by=by)
+        for scope in workspaces:
+            if held[scope] == "owner":
+                await self._keep_an_owner(scope, user_id)
+        left: list[str] = []
+        for scope in workspaces:
+            await self.memberships.revoke(user_id, scope, by=by)
+            left.append(workspace_of(scope) or scope)
+        if org_scope in held:
+            # Detaches the role below the organization with it (``mirror_org_wide``).
+            await self.memberships.revoke(user_id, org_scope, by=by)
+        elif below in held:
+            # A role below the organization with none at it (attached by hand): taken
+            # as ``api``, on the authority the route checked (RemoveOrganizationMember
+            # at the organization); an org admin holds nothing below it to detach.
+            await self.memberships.revoke(user_id, below)
+        return left
 
     async def _keep_an_owner(self, scope: str, leaving: str) -> None:
         owners = [m for m in await self.memberships.members(scope) if m.role == "owner"]

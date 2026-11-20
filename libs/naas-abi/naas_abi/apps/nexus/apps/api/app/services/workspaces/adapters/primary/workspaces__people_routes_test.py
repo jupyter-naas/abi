@@ -33,12 +33,18 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, w
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.primary import (
     organizations__primary_adapter__FastAPI as organizations_module,
 )
+from naas_abi.apps.nexus.apps.api.app.services.people.port import (
+    AlreadyMemberError,
+    EmailTakenError,
+    NoProviderError,
+    ProvisioningFailedError,
+    RetiredIdentityError,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary import (
     workspaces__primary_adapter__FastAPI as workspaces_module,
 )
-from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import get_people_service
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_testing import (
-    AlreadyMemberError,
+    installed,
     team_people,
 )
 
@@ -107,7 +113,6 @@ async def api(team, nexus_db, monkeypatch):
             await db.commit()
 
     app.dependency_overrides[get_db] = session
-    app.dependency_overrides[get_people_service] = lambda: people
     app.dependency_overrides[organizations_module._get_object_storage] = lambda: object()
     app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(
         id=current["id"], email=f"{current['id']}@example.com", name=current["id"].title()
@@ -117,7 +122,8 @@ async def api(team, nexus_db, monkeypatch):
         current["id"] = user
         return AsyncClient(transport=ASGITransport(app=app), base_url="http://t")
 
-    return SimpleNamespace(as_=as_, people=people)
+    with installed(people):
+        yield SimpleNamespace(as_=as_, people=people)
 
 
 async def role(user: str, scope: str) -> str | None:
@@ -204,6 +210,18 @@ async def test_adding_a_candidate_grants_the_workspace_role_only(api) -> None:
 
 
 @pytest.mark.asyncio
+async def test_an_add_says_whether_the_person_was_told(api) -> None:
+    """The notice is the service's to send: the answer says what happened."""
+    api.people.sent = False
+    async with api.as_("admin") as http:
+        added = await http.post(
+            "/api/workspaces/ws-1/members", json={"user_id": "flora", "role": "viewer"}
+        )
+    assert added.status_code == 201, added.text
+    assert added.json()["sign_in_email_sent"] is False
+
+
+@pytest.mark.asyncio
 async def test_a_workspace_only_person_is_never_given_an_org_role(api) -> None:
     async with api.as_("admin") as http:
         added = await http.post("/api/workspaces/ws-1/members", json={"user_id": "flo"})
@@ -277,6 +295,13 @@ async def test_creating_and_linking_answer_alike(api) -> None:
         assert set(body["user"]) == {"id", "email", "name", "status"}
         assert body["status"] == "added"
         assert body["member"]["role"] == "viewer"
+        # The provider they sign in with, as the invitation routes answered it.
+        assert body["provider"] == {
+            "name": "nexus",
+            "display_name": "Nexus",
+            "provisioning": "builtin",
+            "managed_in_provider": False,
+        }
     # Someone of another organization is linked: one account, the workspace role
     # only, nothing in this organization.
     assert linked.json()["user"]["id"] == "outsider"
@@ -300,16 +325,13 @@ async def test_inviting_a_member_again_is_a_conflict(api) -> None:
 
 @pytest.mark.asyncio
 async def test_the_people_services_refusals_are_http_answers(api, monkeypatch) -> None:
-    class NoProviderError(Exception):
-        pass
-
-    class ProvisioningFailedError(Exception):
-        pass
-
     for error, status in (
         (NoProviderError("none"), 422),
         (ProvisioningFailedError("down"), 502),
-        (AlreadyMemberError("x"), 409),
+        (AlreadyMemberError("x", "scope"), 409),
+        (RetiredIdentityError("retired"), 409),
+        (EmailTakenError("z@example.org"), 409),
+        (ValueError("Enter a valid email address"), 400),
     ):
 
         async def refuse(*_args, error=error, **_kwargs):
@@ -469,3 +491,97 @@ async def test_an_invalid_request_the_service_refuses_is_a_400(api, monkeypatch)
         )
     assert got.status_code == 400
     assert "is a role" in got.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_only_persons_details_are_the_org_admins_to_read(api) -> None:
+    """Org › Users lists them, and links to their page: it serves them, with no org
+    role, as someone reached through a workspace."""
+    async with api.as_("admin") as http:
+        details = await http.get("/api/organizations/org-1/members/flo")
+        outside = await http.get("/api/organizations/org-1/members/outsider")
+    async with api.as_("wsadmin") as http:
+        refused = await http.get("/api/organizations/org-1/members/flo")
+    assert details.status_code == 200, details.text
+    body = details.json()
+    assert (body["member"]["role"], body["member"]["source"]) == (None, "workspace")
+    assert body["member"]["status"] == "active"
+    assert [(w["id"], w["role"]) for w in body["workspaces"] if w["role"]] == [("ws-2", "viewer")]
+    assert outside.status_code == 404
+    assert refused.status_code == 403
+
+
+# -- remove from organization --------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_only_person_is_removed_from_the_organization_in_one_step(api) -> None:
+    """Org settings › Users › Remove from organization: every workspace of the org
+    in one step. Their account stays, and so does what they hold elsewhere."""
+    await MEMBERSHIPS.grant("flo", "viewer", WS1)
+    await MEMBERSHIPS.grant("flo", "member", workspace_container("org-2", "ws-9"))
+    async with api.as_("admin") as http:
+        # Not an org role to take (the org-role removal is the other route).
+        org_role_only = await http.delete("/api/organizations/org-1/members/flo")
+        removed = await http.delete("/api/organizations/org-1/members/flo/access")
+        directory = (await http.get("/api/organizations/org-1/members")).json()
+        again = await http.delete("/api/organizations/org-1/members/flo/access")
+    assert org_role_only.status_code == 404
+    assert removed.status_code == 200, removed.text
+    assert sorted(removed.json()["workspace_ids"]) == ["ws-1", "ws-2"]
+    assert "flo" not in {m["user_id"] for m in directory}
+    assert await MEMBERSHIPS.roles_of("flo") == {workspace_container("org-2", "ws-9"): "member"}
+    assert again.status_code == 404
+    assert await api.people.get("flo") is not None
+
+
+@pytest.mark.asyncio
+async def test_removing_from_the_organization_takes_any_org_role_too(api) -> None:
+    async with api.as_("admin") as http:
+        removed = await http.delete("/api/organizations/org-1/members/member/access")
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["workspace_ids"] == ["ws-1"]
+    assert await role("member", ORG) is None and await role("member", WS1) is None
+
+
+@pytest.mark.asyncio
+async def test_an_org_owner_is_never_removed_from_the_organization_this_way(api) -> None:
+    async with api.as_("admin") as http:
+        refused = await http.delete("/api/organizations/org-1/members/owner/access")
+    async with api.as_("owner") as http:
+        themselves = await http.delete("/api/organizations/org-1/members/owner/access")
+    assert refused.status_code == 400, refused.text
+    assert themselves.status_code == 400, themselves.text
+    assert await role("owner", ORG) == "owner" and await role("owner", WS1) == "owner"
+
+
+@pytest.mark.asyncio
+async def test_only_who_may_remove_org_members_removes_from_the_organization(api) -> None:
+    for user in ("wsadmin", "member", "stranger"):
+        async with api.as_(user) as http:
+            refused = await http.delete("/api/organizations/org-1/members/flo/access")
+        assert refused.status_code == 403, (user, refused.text)
+    assert await role("flo", WS2) == "viewer"
+    async with api.as_("admin") as http:
+        outside = await http.delete("/api/organizations/org-1/members/outsider/access")
+    assert outside.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_owner_leaves_only_by_an_owner_and_never_as_the_last(api) -> None:
+    """Every change is checked before the first: a refusal changes nothing."""
+    await MEMBERSHIPS.grant("flo", "owner", WS2)
+    await MEMBERSHIPS.grant("flo", "member", WS1)
+    async with api.as_("admin") as http:
+        by_admin = await http.delete("/api/organizations/org-1/members/flo/access")
+    async with api.as_("owner") as http:
+        last = await http.delete("/api/organizations/org-1/members/flo/access")
+    assert by_admin.status_code == 403, by_admin.text
+    assert last.status_code == 409, last.text
+    assert "WS-2" in last.json()["detail"]
+    assert await role("flo", WS2) == "owner" and await role("flo", WS1) == "member"
+    await MEMBERSHIPS.grant("owner", "owner", WS2)
+    async with api.as_("owner") as http:
+        removed = await http.delete("/api/organizations/org-1/members/flo/access")
+    assert removed.status_code == 200, removed.text
+    assert await role("flo", WS2) is None and await role("flo", WS1) is None
