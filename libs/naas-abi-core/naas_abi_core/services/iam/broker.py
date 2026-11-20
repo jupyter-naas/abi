@@ -160,6 +160,7 @@ IAM_OPERATIONS = (
     "token",
     "unbind_idp_group",
     "unmap_idp_group",
+    "update_group",
     "update_policy",
 )
 # naas_abi_sdk.broker_control.OPERATIONS (a test keeps them in step).

@@ -1363,6 +1363,11 @@ class IIAMService(ABC):
         attachments."""
 
     @abstractmethod
+    def update_group(self, group_id: str, *, name: str) -> PrincipalRecord:
+        """Rename a group (``iam:UpdateGroup``): its id, owner, members and
+        attachments stay."""
+
+    @abstractmethod
     def delete_group(self, group_id: str) -> PrincipalRecord: ...
 
     @abstractmethod

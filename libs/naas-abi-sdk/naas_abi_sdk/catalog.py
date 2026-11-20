@@ -76,6 +76,7 @@ OPERATIONS = {
         "create_group",
         "get_group",
         "list_groups",
+        "update_group",
         "delete_group",
         "add_group_member",
         "remove_group_member",

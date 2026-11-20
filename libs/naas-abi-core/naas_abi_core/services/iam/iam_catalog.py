@@ -51,7 +51,8 @@ CATALOG = ActionCatalog(
     # rewrite of the names before them (RewriteNames); PutScope and
     # DeleteScope authorize nothing but the reading of the legacy sets.
     # 9: viewing as a principal (``view_as``, ViewAs), in process only.
-    version=9,
+    # 10: renaming a group (UpdateGroup).
+    version=10,
     resource_types=(
         ResourceType("principal", id="opaque", placement="platform"),
         ResourceType(
@@ -138,6 +139,7 @@ CATALOG = ActionCatalog(
         # more than the viewer. In process only: no subject.
         _action("ViewAs", "admin", ("view_as",)),
         _action("CreateGroup", "admin", ("group",), "create_group", creates=True),
+        _action("UpdateGroup", "admin", ("group",), "update_group"),
         _action("DeleteGroup", "admin", ("group",), "delete_group"),
         _action("AddGroupMember", "admin", ("group",), "add_group_member"),
         _action("RemoveGroupMember", "admin", ("group",), "remove_group_member"),
