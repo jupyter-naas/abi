@@ -22,7 +22,9 @@ export type SettingsLinkGroup = { label: string | null; links: SettingsLink[] };
 
 export type SettingsLevel = { id: string; label: string; groups: SettingsLinkGroup[] };
 
-export type SettingsOrganization = { id: string; name: string; items: OrgSettingsNavItem[] };
+/** `current`: the current workspace's organization. Any other is named in the heading, so
+ *  "Organization" never stands for one the workspace is not in. */
+export type SettingsOrganization = { id: string; name: string; items: OrgSettingsNavItem[]; current: boolean };
 
 export type SettingsLevelsInput = {
   account: AccountSettingsNavItem[];
@@ -72,7 +74,7 @@ export function settingsLevels(input: SettingsLevelsInput): SettingsLevel[] {
     if (others.length > 0) groups.push({ label: 'Other organizations', links: others });
     levels.push({
       id: 'organization',
-      label: others.length > 0 ? `Organization · ${organization.name}` : 'Organization',
+      label: others.length > 0 || !organization.current ? `Organization · ${organization.name}` : 'Organization',
       groups,
     });
   } else if (others.length > 0) {

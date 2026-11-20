@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  forgetSettingsPaths,
   isWorkspaceSettingsPath,
   rememberSettingsPath,
   settingsReturnPath,
@@ -50,5 +51,13 @@ describe('the last Settings and Console pages', () => {
     rememberSettingsPath('settings', '/workspace/ws-1/chat');
     rememberSettingsPath('settings', '//evil.example/account');
     expect(settingsReturnPath('settings', '/account/profile')).toBe('/account/profile');
+  });
+
+  it('forgets both at sign-out, so the next person starts from their own landing', () => {
+    rememberSettingsPath('settings', '/organizations/acme/settings/users');
+    rememberSettingsPath('console', '/settings/system/jobs');
+    forgetSettingsPaths();
+    expect(settingsReturnPath('settings', '/account/profile')).toBe('/account/profile');
+    expect(settingsReturnPath('console', '/settings/system')).toBe('/settings/system');
   });
 });

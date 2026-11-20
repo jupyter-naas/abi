@@ -40,6 +40,17 @@ export function settingsReturnPath(area: SettingsArea, fallback: string): string
   return fallback;
 }
 
+/** At sign-out: the next person to sign in on this tab starts from their own landing. */
+export function forgetSettingsPaths(): void {
+  try {
+    for (const area of ['settings', 'console'] satisfies SettingsArea[]) {
+      window.sessionStorage.removeItem(`${PREFIX}:${area}`);
+    }
+  } catch {
+    // Storage blocked.
+  }
+}
+
 const ACCOUNT_PATH = /^\/account(?:\/([^/?#]+))?/;
 const ORG_SETTINGS_PATH = /^\/organizations\/([^/]+)\/settings/;
 const WORKSPACE_SETTINGS_PATH = /^\/workspace\/([^/]+)\/settings/;
