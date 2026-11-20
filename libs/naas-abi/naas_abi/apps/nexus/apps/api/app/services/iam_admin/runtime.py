@@ -21,10 +21,14 @@ Provider = Callable[[], IamAdminService]
 
 def _default() -> IamAdminService:
     from naas_abi.apps.nexus.apps.api.app.core import database
+    from naas_abi.apps.nexus.apps.api.app.services.feature_access.adapters.secondary.postgres import (  # noqa: E501
+        SqlFeaturePolicyStore,
+    )
 
     return IamAdminService(
         EngineIamGateway(),
         SqlAdminAuditLog(lambda: database.async_engine, prefix=AUDIT_PREFIX),
+        managed_from=SqlFeaturePolicyStore(lambda: database.AsyncSessionLocal()).managed_among,
     )
 
 

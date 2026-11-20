@@ -113,6 +113,12 @@ _ENTRIES: list[PlatformTableEntry] = [
             "admins groups, by container.",
         ),
         (
+            "workspace_feature_policies",
+            "Feature policies",
+            "The policy Workspace settings > General writes for each feature of a workspace "
+            "(who may use it there).",
+        ),
+        (
             "provisioned_identities",
             "Accounts ABI made at identity providers",
             "The accounts an invitation created at a provider: only those are deactivated or "
