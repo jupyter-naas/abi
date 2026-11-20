@@ -16,6 +16,7 @@ import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { usePublishFeatureResource } from '@/stores/feature-pane';
+import { useFeature } from '@/hooks/use-feature';
 import { usePrompt } from '@/components/ui/dialogs';
 import { useDocumentTitleDetail } from '@/contexts/tenant-context';
 import { appEditorPath, appProjectsApi, type AppProject } from '@/lib/app-projects';
@@ -454,6 +455,8 @@ export default function AppsPage() {
   const [projects, setProjects] = useState<AppProject[]>([]);
   const [projectError, setProjectError] = useState<string | null>(null);
   const { prompt, dialog: promptDialog } = usePrompt();
+  // Copying a module app makes an app project: the "apps" feature's.
+  const canCreateApps = useFeature('apps');
 
   const views = useAppViews(urlWorkspaceId);
 
@@ -621,7 +624,7 @@ export default function AppsPage() {
           projects={projects}
           onBack={handleClose}
           onNewApp={() => void handleNewApp()}
-          onEdit={(target) => void handleEditModuleApp(target)}
+          onEdit={canCreateApps ? (target) => void handleEditModuleApp(target) : undefined}
           onOpenProject={(project) => router.push(appEditorPath(urlWorkspaceId, project.slug))}
         />
       </div>

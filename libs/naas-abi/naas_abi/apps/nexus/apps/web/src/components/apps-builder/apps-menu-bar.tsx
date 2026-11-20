@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
+import { useFeature } from '@/hooks/use-feature';
 import { cn } from '@/lib/utils';
 
 type MenuKey = 'file' | 'edit' | null;
@@ -116,7 +117,10 @@ function MenuDropdown({
 }
 
 export interface AppsMenuBarProps {
-  /** File → New App. Omitted or disabled, the item greys out rather than vanishing. */
+  /**
+   * File → New App. Omitted or disabled, the item greys out rather than vanishing; a member
+   * without the "apps" feature (app projects) has no New App at all.
+   */
   onNewApp?: () => void;
   newAppDisabled?: boolean;
   /** Extra File entries appended under a separator (the open app adds "All apps"). */
@@ -149,6 +153,7 @@ export function AppsMenuBar({
   leading,
   trailing,
 }: AppsMenuBarProps) {
+  const canCreateApps = useFeature('apps');
   const [openMenu, setOpenMenu] = useState<MenuKey>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -167,14 +172,20 @@ export function AppsMenuBar({
     };
   }, []);
 
+  const newAppItems: AppsMenuEntry[] = canCreateApps
+    ? [
+        {
+          id: 'new',
+          label: 'New App',
+          disabled: !onNewApp || newAppDisabled,
+          onSelect: () => onNewApp?.(),
+        },
+      ]
+    : [];
   const fileItems: AppsMenuEntry[] = [
-    {
-      id: 'new',
-      label: 'New App',
-      disabled: !onNewApp || newAppDisabled,
-      onSelect: () => onNewApp?.(),
-    },
-    ...(fileExtras?.length ? [{ id: 'sep-extras', separator: true }, ...fileExtras] : []),
+    ...newAppItems,
+    ...(newAppItems.length && fileExtras?.length ? [{ id: 'sep-extras', separator: true }] : []),
+    ...(fileExtras ?? []),
   ];
 
   return (
@@ -185,13 +196,15 @@ export function AppsMenuBar({
     >
       {leading}
       <span className="mr-1 hidden text-xs font-semibold text-foreground sm:inline">Apps</span>
-      <MenuDropdown
-        label="File"
-        menuKey="file"
-        open={openMenu === 'file'}
-        onOpenChange={(open) => setOpenMenu(open ? 'file' : null)}
-        items={fileItems}
-      />
+      {fileItems.length ? (
+        <MenuDropdown
+          label="File"
+          menuKey="file"
+          open={openMenu === 'file'}
+          onOpenChange={(open) => setOpenMenu(open ? 'file' : null)}
+          items={fileItems}
+        />
+      ) : null}
       {editItems?.length || editDisabled ? (
         <MenuDropdown
           label="Edit"
