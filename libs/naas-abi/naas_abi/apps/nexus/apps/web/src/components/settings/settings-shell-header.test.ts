@@ -18,6 +18,7 @@ vi.mock('@/stores/auth', async (importOriginal) => ({
   useAuthStore: (select: (s: unknown) => unknown) => select({ logout: session.logout }),
 }));
 
+import { FEATURE_KEYS, isWorkspacePathAllowed } from '@/lib/feature-access';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { escapeLeavesSettings, SettingsShellHeader } from './settings-shell-header';
 
@@ -121,6 +122,17 @@ describe('SettingsShellHeader', () => {
       await mounted?.unmount();
       mounted = null;
     }
+  });
+
+  it('has Help for a member holding only chat and files, and Help opens for them', async () => {
+    useWorkspaceStore.setState({ currentWorkspaceId: 'ws-1' });
+    await header(() => undefined);
+    const href = mounted?.host.querySelector('a[aria-label="Help"]')?.getAttribute('href') ?? '';
+    expect(href).toBe('/workspace/ws-1/help');
+    const workspaceFlags = Object.fromEntries(
+      FEATURE_KEYS.map((feature) => [feature, feature === 'chat' || feature === 'files']),
+    );
+    expect(isWorkspacePathAllowed({ pathname: href, role: 'member', workspaceFlags })).toBe(true);
   });
 
   it('logs out as the session always did, then goes to the sign-in page', async () => {
