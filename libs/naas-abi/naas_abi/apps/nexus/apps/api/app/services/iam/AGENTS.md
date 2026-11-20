@@ -16,7 +16,8 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `catalog/` | The `nexus` action catalog: one module per router family (`dsl.py` builds types and actions with a **level**), aggregated by `__init__.py` into `NEXUS_CATALOG`, `FEATURE_OF`, `TYPE_OF`, `LEVEL_OF` |
 | `authz.py` | `AUTHZ.require / allowed / decide / filter / name`: builds the resource name in its container (`where`, `container_of`: a workspace's container as IAM registered it, cached), checks `UseFeature` first, maps a refusal to `AuthzDenied` (an `HTTPException`: 403, or 404 for another user's personal resource). `ModuleScope` and `require_scope / allowed_scope / decide_scope / filter_scopes / scope_allowed_in_any` decide module scopes; `upgrading()` refuses every module scope and feature until the sets are policies |
 | `guards.py` | `guard(action, ...)`, a route dependency that decides before the body is read; `declares(action)` for routes that authorize inline. The matrix test reads both |
-| `memberships.py` | `MEMBERSHIPS`: roles are `builtin.<role>` attachments at the organization's container and the workspace's; registers and deletes the containers (`register_org`, `register_workspace`, `drop_scope`); reads as `api`, changes as `api` on behalf of the caller |
+| `memberships.py` | `MEMBERSHIPS`: who works where and at which level ("Levels as groups"). In a grouped container the role-based API (`grant`, `revoke`, `check`, `seed`, `roles_of`, `members`, `org_directory`) reads and changes the groups ("<W> workspace", "<W> admins", "<O> people", "<O> admins", the level groups); in one recorded before #1585, `builtin.<role>` attachments as before. `level_of`, `LastOrgAdminError` (409); registers and deletes the containers (`register_org`, `register_workspace`, `drop_scope`); reads as `api`, changes checked as the caller then written as `api` |
+| `levels.py` | The level groups ("Viewers", "Members"), "Workspace admins" (every model), "Platform admins" and the generic level policies ("Viewer access", "Member access", "Workspace admin access"): `LEVELS.get` (made on first need and at start), `LEVELS.peek` (reads, never made), `level_document` |
 | `names.py` | Every name Nexus builds, through core's `names`: `org_container`, `workspace_container`, `org_below`, `nexus_resource(type, container=, id=)`, and their readers `org_of`, `workspace_of` |
 | `legacy_names.py` | The old grammar's `NO_ORG`, `org_scope`, `workspace_scope`: only for the start-up moves that predate container paths |
 | `placements.py` | Which workspace (or organization: `Placement.organization`) owns the kernel resources Nexus keeps (`placement_source`, `place`, `place_existing`) |
@@ -30,17 +31,18 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `workspace_offer.py` | "<W> access" as an allow-list ("Ceilings as allow-lists"): `Offer`, `offer_document`, `offer_of`, `with_offer`, `in_offer_form`, `offer_from_seed`, `seeded_offer` |
 | `model_sets.py` | "Models · member", "Models · all", "Models · embeddings" (platform policies kept in step with `nexus_config.models.member_set` at start, `ensure_configured`); `level_model_policy_ids(iam, level)` for the level groups |
 | `capabilities.py` | Capability groups made on demand (`ensure_capability`): an organization's "Workflow runners", the platform's "Models · all" |
-| `container_defaults.py` | Each organization's and workspace's access policy and its members and admins groups ("Access policies and default groups"): made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), kept in step with the roles (`sync_scope`, from `MEMBERSHIPS`), forgotten with it (`dropped`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
+| `container_defaults.py` | Each organization's and workspace's access policy and groups ("Access policies and default groups"): "<O> access", "<O> admins", "<O> people"; "<W> access" (W's bound), "<W> workspace", "<W> admins"; made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), forgotten with it (`dropped`); `grouped` / `grouped_record` (whether its people are groups, #1585); a container recorded before #1585 keeps its "<X> members" and admins in step with the roles (`sync_scope`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
 | `../invites/migration.py` | Startup, once (background, after the moves): each pending Nexus invitation becomes an invited `users` row holding what its pending grants held, attached as `api` for no user (they were authorized at invitation), the grants withdrawn (`iam_migrations` `invitations_to_people_v1`, `abi user migrate-invitations`; `services/invites/AGENTS.md`) |
 | `module_moves.py` | Startup, once, after `container_names_v1`: a module scope a remote module serves now (`MOVES`: the X app, `app/naas_abi_marketplace.applications.x/x_proxy` to `app/applications.x/x_proxy`) renamed in policy documents and keys' narrowing (`iam.rewrite_names(MovedScopes)`, `iam_migrations` `module_moves_v1`): a pattern naming the old item names the new one, a wildcard over the old module gets the new item beside it, one already reaching it is left. Nexus's rows of the app id: migration `0072_remote_x_app.sql` |
 | `runtime.py` | Where Nexus gets IAM (the engine's); tests install their own with `configure` |
 | `testing.py`, `../../conftest.py` | `NexusIam` (a real IAM on the memory store) and the `nexus_iam` / `team` / `nexus_db` fixtures |
-| `route_matrix_test.py` | Every route declares its action; write methods never authorize only a read (the reads sent by POST are `view_as/reads_by_post.py`'s `READS_BY_POST`, one list the read-only guard of a view reads too); every `guard` is decided by level for viewer, member, admin, owner, stranger |
+| `route_matrix_test.py` | Every route declares its action; write methods never authorize only a read (the reads sent by POST are `view_as/reads_by_post.py`'s `READS_BY_POST`, one list the read-only guard of a view reads too); every `guard` is decided by level for viewer, member, admin, owner, stranger (roles of before), and for a Viewer, a Member, a workspace admin, an org admin, the platform admin and a stranger through groups (#1585) |
 
 ## Rules
 
 - **Level is the whole role model.** `list`/`read` actions are a viewer's, `write` a member's, `admin` an admin's;
-  owners alone delete workspaces and organizations. A state change is never below `write`. IAM generates the
+  an organization's admins delete its workspaces (`DeleteOrganizationWorkspace`), the platform admin organizations
+  (`DeletePlatformOrganization`): owner is no longer assigned (#1585). A state change is never below `write`. IAM generates the
   built-in roles from the catalog, so choosing the level is choosing who may.
 - **A route declares its action once**, in the decorator: `dependencies=[guard("PutFile", id=("drive", "path"))]`.
   Where the workspace is in the body or the resource is named only after loading it, call `await authz.require(...)`
@@ -49,8 +51,10 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 - **Features** (`UseFeature`) come from policies only, never from a role. An action of a flagged section carries
   its `feature=` in the catalog; the API refuses it where the user lacks the feature. A feature outside
   `enabled_features` is usable by nobody.
-- **Memberships change through `MEMBERSHIPS`** only: an admin cannot grant, demote or remove an owner, and the last
-  owner stays (IAM answers, whichever API is used). An org owner or admin also holds their role below the
+- **Memberships change through `MEMBERSHIPS`** only ("Levels as groups"): in a grouped container they are groups,
+  never a person's attachment, and the last Org Admin of an organization stays (`LastOrgAdminError`, 409). In a
+  container recorded before #1585 an admin cannot grant, demote or remove an owner of before, and the last owner stays
+  (IAM answers, whichever API is used). An org owner or admin of before also holds their role below the
   organization (`<org container>/*`, kept by `Memberships.mirror_org_wide` and `sync_org_wide_roles` at start): that
   is how they reach every workspace of the org; org members and viewers inherit nothing. Creating a workspace needs
   `CreateWorkspace` on the new workspace's name as placed, `<org container>/nexus:workspace/<new id>` (an org owner's
@@ -71,8 +75,8 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
   decision of `AUTHZ`; never rebuild a context for the same user without it.
 - **The IdP admin app is not a role's:** the platform viewer and member policies and a module's bootstrap Deny
   `discovery:OpenApp` on `app/*/idp/admin`. Do not widen `OpenApp` for a role without it.
-- **Deleting an organization** (`DELETE /api/organizations/{org}`, `DeleteOrganization` on its container: its owners
-  and the platform admin) is refused with 409 while it has workspaces, naming each ("Organization O still has
+- **Deleting an organization** (`DELETE /api/organizations/{org}`, `DeletePlatformOrganization` on the
+  platform-level `abi:nexus:organization_record/<org>`: the platform admin's alone, #1585) is refused with 409 while it has workspaces, naming each ("Organization O still has
   workspaces: Alpha (ws-…). Delete them first"): deleting their data with it is not this route's to decide. Otherwise
   its row goes (members and domains with it), then its IAM container with what it owns (`drop_scope`), then its
   access policy, the platform's (`ContainerDefaults.dropped`). The row is held for writing first
@@ -147,8 +151,8 @@ module per router family:
 
 | Module | Resource types |
 |---|---|
-| `organizations.py` | `organization` (a container: `CreateOrganization` `creates`, `DeleteOrganization` `deletes` and `owner_only`), `member`, `domain`, `billing`; no user's `CreateOrganization` (catalog 16: the platform admins') |
-| `workspaces.py` | `workspace` (a container with `platform_companions`: `CreateWorkspace` `creates`, `DeleteWorkspace` `deletes` and `owner_only`), `member`, `server`, `resource_access`; the personal `CreateWorkspace` is a self grant only with `nexus_config.personal_workspaces` |
+| `organizations.py` | `organization` (a container: `CreateOrganization` `creates`, `DeleteOrganization` `deletes` and `owner_only`, deprecated: no route asks for it), `organization_record` (platform: `DeletePlatformOrganization`, no role's), `DeleteOrganizationWorkspace` (admin, on the organization), `member`, `domain`, `billing`; no user's `CreateOrganization` (catalog 16: the platform admins') |
+| `workspaces.py` | `workspace` (a container with `platform_companions`: `CreateWorkspace` `creates`, `DeleteWorkspace` `deletes` and `owner_only`: a workspace in no organization), `member`, `server`, `resource_access`; the personal `CreateWorkspace` is a self grant only with `nexus_config.personal_workspaces` |
 | `features.py` | `feature/<key>` (`UseFeature`), `policy_only`: no role holds it |
 | `chat.py`, `agents.py`, `apps.py`, `workflows.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` (`ListModuleScopes`); `workflow` (its settings: listed, deprecated switch) |
 | `files.py`, `datasets.py`, `office.py` | `file` (drive + path; Organization Files' `ListOrgFiles`, `GetOrgFile`, and admin-level `PutOrgFile`, `DeleteOrgFile` on `<org>/nexus:file/organization/<path>`), `my_file`, `user_storage`, `root_storage`, `platform_file` (Platform Files: `ListPlatformFiles`, `GetPlatformFile`, `PutPlatformFile`, `DeletePlatformFile`) and `system_file` (System Files: `ListObjectStoreFiles`, `GetObjectStoreFile`, `PutObjectStoreFile`, `DeleteObjectStoreFile`), both platform-level and `policy_only`; `dataset`; `project` (slides, documents, sheets) |
@@ -178,7 +182,7 @@ a catalog, run the route matrix.
   (`Memberships.drop_scope`, IAM's `delete_container`) deletes the policies and groups it owns, every
   attachment and placement at it, and everything below it (an org's workspaces).
 - **What the roles leave out is the catalog's to say** (core's `services/iam/AGENTS.md`, "Action catalogs"):
-  the `feature`, `platform_file` and `system_file` types are `policy_only`, `DeleteWorkspace` and `DeleteOrganization` are `owner_only`, and the
+  the `feature`, `platform_file` and `system_file` types are `policy_only`, `DeleteWorkspace` and `DeleteOrganization` are `owner_only` (and owner is no longer assigned: the platform admin's), and the
   platform rows the roles' platform companions reach of Nexus (creating an organization, provider models, a
   user's own files and storage) are the catalog's `PLATFORM_ACCESS` (`catalog/organizations.py`,
   `settings.py`, `files.py`). Core's `roles.py` names no Nexus action or type.
@@ -237,14 +241,19 @@ a catalog, run the route matrix.
 ## Access policies and default groups
 
 Every organization and every workspace has its own access policy and two groups (`container_defaults.py`), the
-policy tree of issue #1413's journeys:
+policy tree of issue #1413's journeys, the groups of #1585 ("Levels as groups"):
 
-| What | Owner | Parent | Made with | Attached |
+| What | Owner | Parent | Made with | Held |
 |---|---|---|---|---|
-| "<O> access" | the platform | none | allows nothing (`Nothing`, an Allow no name matches) | to "<O> admins", below the organization (`<O>/*`) |
-| "<W> access" | the workspace | "<O> access"; none for a workspace in no organization | allows nothing | to "<W> admins", at the workspace |
-| "<X> members" | X | | every user holding a role at X itself | nothing by default |
-| "<X> admins" | X | | its admins and owners | the access policy |
+| "<O> access" | the platform | none | allows nothing (`Nothing`, an Allow no name matches) | by "<O> admins", below the organization (`<O>/*`) |
+| "<W> access" | the workspace | "<O> access"; none for a workspace in no organization | its offer (`workspace_offer`) | by "<W> workspace" at W: **W's bound** (core "Bounds"), not a grant |
+| "<W> workspace" | W, a membership group of W | | its people | "<W> access" at W (the bound) |
+| "<W> admins" | W, a membership group of W | | its admins | `builtin.admin` and "Workspace admin access" at `${my workspaces}` (W alone: its owner) |
+| "<O> people" | O, a membership group of O | | the organization's people | `builtin.viewer` and "Viewer access" at `${my workspaces}` |
+| "<O> admins" | O | | its admins | "<O> access" below O, `builtin.admin` at O and below it |
+
+A container recorded before #1585 has "<X> members" (every user holding a role at X itself) in place of its
+membership group, and its "<X> admins" holds the access policy: its groups follow its roles (below) until #1587.
 
 - **"<O> access" is what an organization may use**: the platform admin widens it (agents of chosen modules, apps,
   features). Its admins and owners hold it in every workspace of the organization and derive from it. A widening is
@@ -269,7 +278,8 @@ policy tree of issue #1413's journeys:
   Whoever holds it from above keeps it: the org's admins and owners (through "<O> access" below the organization), a
   workspace owner an org admin gave "<O> access" at the workspace, the platform admin. That is also who may show it
   again: someone who holds an item may give it back to the workspace; someone who lost it with it may not.
-- **The groups follow the roles** held at the container itself (an org-wide mirror below an organization is not
+- **Before #1585, the groups followed the roles** held at the container itself (a grouped container's are the
+  memberships themselves, `sync_scope` leaves them) (an org-wide mirror below an organization is not
   "at" its workspaces): `MEMBERSHIPS._notify` calls `ContainerDefaults.sync_scope` after every grant, seed, revoke and
   claimed invitation (`invites/runtime.py` names the organization too), which makes the groups' members the role
   holders (a member added by hand is removed). The joins and leaves are written as `api` for no user, after the role
@@ -296,6 +306,48 @@ policy tree of issue #1413's journeys:
   one (a workspace's is found by its owner, the workspace).
 - **Names.** The access policy and the groups keep the name the organization or workspace had when they were made:
   renaming it renames neither (IAM groups have no rename; a policy may be renamed by hand).
+
+## Levels as groups (#1585)
+
+ADR `docs/adr/20261120_access_levels_and_groups.md`. **Where** someone works is a membership group, **what** they do
+there is a level. Nothing is attached to a person.
+
+| Level | Groups | What they hold |
+|---|---|---|
+| Viewer | "Viewers" (level, platform) + "<W> workspace" | `builtin.viewer` and "Viewer access" (features apps, datasets; `module:OpenApp`) at `${my workspaces}`; "Models · embeddings" |
+| Member | "Members" (level, platform) + "<W> workspace" | `builtin.member` and "Member access" (features apps, chat, files, datasets, graph, maps, ontology, search; `UseAgent`, `OpenApp`) at `${my workspaces}`; "Models · member", "Models · embeddings" |
+| Workspace admin | Member + "<W> admins" | `builtin.admin` and "Workspace admin access" (every feature; agents, apps, workflows, pipelines) at `${my workspaces}`, W alone; "Workspace admins" (platform): "Models · all" |
+| Org admin | "<O> admins" (+ "<O> people") | "<O> access" below O, `builtin.admin` at O and below it; "Workspace admins" |
+| Platform admin | "Platform admins" (platform) | `builtin.platform_admin`; `set_platform_admin` (`users.is_superadmin`) |
+
+- **A level is a pair** (`levels.py`): the built-in role (the catalog's actions by level, regenerated by IAM, with the
+  platform companion IAM derives through `${my workspaces}`) and the generic level policy (features and module scopes
+  by type, `${scope}/module:agent/*`, never an instance). Written once, the platform's, kept as written at each start.
+- **Bounded by the workspace's offer.** "<W> workspace" holds "<W> access" at W: core makes it W's bound, so a level
+  policy (and any customer policy at `${my workspaces}`, "Workflow runners" included) gives at W only what W offers;
+  built-in roles are not bounded (they hold no module scope or feature). A Viewer uses W's apps, a Member its agents
+  and apps, a workspace admin its workflows and pipelines too, each only the features both their level and W's offer
+  name. An org admin uses "<O> access" in every workspace of O (the organization's offer, not W's).
+- **The role-based API is mapped** (`Memberships.grant`; S6 #1589 rewrites the people contract): viewer or member at
+  W → the level group plus "<W> workspace", not "<W> admins"; admin or owner (no longer assigned) → "Members" plus
+  "<W> workspace" plus "<W> admins"; at O: viewer or member → "<O> people" and the level, admin or owner → "<O>
+  people" and "<O> admins" (level unchanged). A level is one choice: giving one anywhere changes it everywhere. The
+  roles of before held at the scope (and their mirror below O) are detached; nothing else of before is converted
+  (#1587). `revoke` leaves the container's groups and keeps the level.
+- **Who may.** Checked as the caller first (`_require_plan`: `iam:AddGroupMember` / `iam:RemoveGroupMember` on each
+  group as its container names it; a level group on its platform name or as named in the container, IAM's level rule;
+  `iam:DetachPolicy` on each role of before), then written as `api` for no user: the membership group first (the
+  person's first tie to an organization is Nexus's to make: core "The first tie"), then the level, then what is left.
+  A level change is logged with who asked. The last Org Admin stays: `LastOrgAdminError` (409).
+- **Reads** (`roles_of`, `members`, `org_directory`, `effective_roles`, `/access`) count a role attached to the person
+  or to one of their groups, at a scope or at `${my workspaces}` (their membership containers within the group's
+  owner). `Member.level` and `DirectoryEntry.level` give Workspace · Level (the member lists' `level`). A read never
+  makes the level groups (`LEVELS.peek`).
+- **Workspace creation** takes `admin_id` (default the creator; in an organization, someone of its directory, else
+  400), who joins "<W> admins" and "<W> workspace"; the defaults are made before the grant.
+- **Shared graph grants** (`graph_grants.py`) follow the groups: `.read` to whoever belongs to W, `.write` to its
+  admins (and, in a container of before, its members). A group W owns receives attachments at W only, always at a
+  scope, and a scoped one keeps only `${scope}` names, so they stay unscoped attachments to each holder, kept in step.
 
 ### The upgrade (`container_defaults_v1`)
 
@@ -647,6 +699,13 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   a workspace made after the upgrade use what "<W> access" allows; those of an upgraded one keep what the move gave
   them until an administrator attaches it. #414 had left groups made with a workspace out of scope; the owner brought
   them in.
+- **Levels as groups, bounded by the workspace's offer** (#1585). *Decision:* where is a membership group, what a level
+  (a built-in role and a generic level policy held by a level group at `${my workspaces}`), and "<W> access" held
+  by "<W> workspace" is W's bound (core's rule: a membership group's attachment at its own container). Owner is no
+  longer assigned. *Consequences:* a person holds group memberships only; a level policy is written once and narrowed
+  per workspace by its offer; workspace admins hold theirs at `${my workspaces}` from W's own group, so W alone; an
+  org admin uses the organization's offer; members and viewers lose shared-graph writes in grouped workspaces;
+  containers recorded before keep attachments until #1587.
 - **Organization Files is decided at the organization.** *Decision* (#1511): `naas_abi/organization-drive/<org>`
   is the organization's: its object storage is placed in the organization's container (`Placement.organization`,
   `files/placement.py`), and the files API decides on `<org>/nexus:file/organization/<path>` with its own actions,
@@ -673,8 +732,8 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   `docs/adr/20261119_file_views_by_iam.md`.
 - **An organization with workspaces is not deleted.** *Decision:* `DELETE /api/organizations/{org}` refuses (409) one
   that still has workspaces, naming them, rather than deleting them with it. The issue left it open (UJ-P1); this is
-  the default until the owner says otherwise. *Consequences:* its owners delete its workspaces first (`DeleteWorkspace`,
-  owner-only); the platform admin may too.
+  the default until the owner says otherwise. *Consequences:* its admins delete its workspaces first
+  (`DeleteOrganizationWorkspace`, #1585); the platform admin may too, and deletes the organization.
 
 ## Tests
 

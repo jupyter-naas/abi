@@ -21,6 +21,13 @@ TYPES = (
     # never blocks the catalog's registration (IAM refuses dropping an action a
     # policy names); they authorize nothing.
     rtype("role_features", id="singleton"),
+    # An organization as the platform keeps it (``abi:nexus:organization_record/<org>``):
+    # platform-level, no role reaches it, so deleting one is the platform admin's (#1585).
+    rtype(
+        "organization_record",
+        platform=True,
+        description="An organization as the platform keeps it: deleting one.",
+    ),
 )
 
 ACTIONS = (
@@ -29,7 +36,30 @@ ACTIONS = (
     # Checked on the new organization's name, ``abi:nexus:organization/<new id>``.
     action("CreateOrganization", "write", "organization", creates=True),
     action("UpdateOrganization", "admin", "organization"),
-    action("DeleteOrganization", "admin", "organization", owner_only=True, deletes=True),
+    # Deprecated (#1585): no route asks for it; it stays the action IAM's
+    # ``delete_container`` checks (Nexus calls it as ``api``).
+    action(
+        "DeleteOrganization",
+        "admin",
+        "organization",
+        owner_only=True,
+        deletes=True,
+        description="Deprecated: deleting an organization is DeletePlatformOrganization.",
+    ),
+    # Deleting an organization is the platform admin's: no role reaches the type.
+    action(
+        "DeletePlatformOrganization",
+        "admin",
+        "organization_record",
+        description="Delete an organization (the platform admin's).",
+    ),
+    # Deleting one of its workspaces is the organization's admins' (on the organization).
+    action(
+        "DeleteOrganizationWorkspace",
+        "admin",
+        "organization",
+        description="Delete a workspace of the organization (its admins).",
+    ),
     # The org's full workspace catalog, every workspace and its memberships.
     action("ListOrganizationCatalog", "admin", "organization"),
     action("ListOrganizationMembers", "admin", "member"),

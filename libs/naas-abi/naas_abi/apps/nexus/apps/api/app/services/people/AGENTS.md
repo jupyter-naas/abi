@@ -38,6 +38,12 @@ interface the organization and workspace routes code against).
   changed one). `created` is internal: routes answer both the same way. A role already held at a grant's scope
   is `AlreadyMemberError` (409). The profile is written only with a grant (never about someone the call gave
   nothing).
+- **Roles land in groups** (#1585). `AccessGateway.grant_role` keeps its role-based shape until S6 (#1589), and
+  `MEMBERSHIPS.grant` maps it where the container keeps its people in groups: viewer or member at a workspace W →
+  the level group ("Viewers", "Members") plus "<W> workspace"; admin (or owner, no longer assigned) → "Members" plus
+  "<W> admins" plus "<W> workspace"; at an organization O → "<O> people" and the level, or "<O> admins". A level is
+  one choice for every workspace. Nothing is attached to the person; the roles of before held at that scope are
+  detached. A container recorded before #1585 keeps attaching `builtin.<role>` until #1587 converts it.
 - **The routes keep the limits**: the per-inviter and per-address rate limits and the organization's
   `invitation_mails_per_day` are checked by the routes before they call; `resend` and `add_existing` check no
   scope, the route does (the target is in its directory).

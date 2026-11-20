@@ -309,6 +309,8 @@ class OrganizationMember(BaseModel):
     # Their IAM principal, which the access pages link to (an account linked from
     # the old login has another id there).
     principal_id: str | None = None
+    # Their level ("member", "viewer"; #1585), one choice for every workspace.
+    level: str | None = None
     user_created: bool = False
     sign_in_email_sent: bool = False
     workspace_member_id: str | None = None
@@ -638,11 +640,12 @@ async def update_organization(
 @router.delete(
     "/{org_id}",
     dependencies=[
+        # The platform admin's (#1585): on the platform-level organization_record.
         guard(
-            "DeleteOrganization",
+            "DeletePlatformOrganization",
             workspace=None,
-            org="org_id",
-            denied="Only the organization's owners and the platform administrators can delete it",
+            id="org_id",
+            denied="Only the platform administrators can delete an organization",
         )
     ],
 )

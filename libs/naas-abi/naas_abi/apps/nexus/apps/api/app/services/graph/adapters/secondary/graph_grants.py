@@ -7,15 +7,18 @@ them (``graph_placements``). What a workspace *shares* or is *given* does:
 
 * ``workspace.<ws>.graphs.read``: Allow the list and read actions of the graphs
   the workspace reads or writes, and Deny what the workspace closes (creating
-  graphs, its own graphs when it excludes them). Held by every member.
+  graphs, its own graphs when it excludes them). Held by every one of its people
+  ("<W> workspace", #1585).
 * ``workspace.<ws>.graphs.write``: Allow ``Insert`` and ``Remove`` on the
-  graphs it may write. Held by members, admins and owners, never by viewers.
+  graphs it may write. Held by its admins ("<W> admins"); in a workspace whose
+  roles are still attachments (before #1587), by its members, admins and owners.
 
 A grant onto another workspace's graph cannot be attached at the workspace's
-container (a scoped attachment keeps only ``${scope}/`` resources), so each holder
-is attached the policy itself, without scope: the policy is named for the
-workspace and held only while the user holds a role there. ``sync_members``
-keeps the holders in step with the workspace's memberships.
+container (a scoped attachment keeps only ``${scope}/`` resources), nor to its
+groups (a group a workspace owns receives attachments at it only, always at a
+scope), so each holder is attached the policy itself, without scope: the policy is
+named for the workspace and held only while the user belongs there.
+``sync_members`` keeps the holders in step with the workspace's groups.
 
 Sharing never gives lifecycle control: ``ClearGraph`` and ``DropGraph`` stay
 with the workspace that owns the graph.
@@ -53,6 +56,7 @@ READ = "read"
 WRITE = "write"
 # Roles that may write what the workspace shares for writing (a viewer never does).
 WRITER_ROLES = frozenset({"owner", "admin", "member"})
+ADMIN_ROLES = frozenset({"owner", "admin"})
 
 
 def _actions(*levels: str, creates: bool = False) -> list[str]:
@@ -255,7 +259,13 @@ class GraphGrants:
             return set(), set()
         members = await MEMBERSHIPS.members(container)
         readers = {m.principal_id for m in members}
-        writers = {m.principal_id for m in members if m.role in WRITER_ROLES}
+        # Its admins write ("<W> admins"); a member with no level holds a role of
+        # before (an attachment), which wrote until the access move (#1587).
+        writers = {
+            m.principal_id
+            for m in members
+            if m.role in ADMIN_ROLES or (m.role in WRITER_ROLES and m.level is None)
+        }
         return readers, writers
 
     async def apply(

@@ -205,8 +205,11 @@ async def test_members_and_admins_hold_their_own_level(api) -> None:
             await http.patch("/api/workspaces/ws-1", json={"name": "Renamed"})
         ).status_code == 200
         assert (await http.get("/api/workspaces/ws-1/servers")).status_code == 200
-        assert (await http.delete("/api/workspaces/ws-1")).status_code == 403  # the owner's
-    async with api("owner") as http:
+    # Deleting a workspace of an organization is its org admins' (#1585): the team's
+    # admin is one (an admin of org-1 too), the workspace's member is not.
+    async with api("member") as http:
+        assert (await http.delete("/api/workspaces/ws-1")).status_code == 403
+    async with api("admin") as http:
         assert (await http.delete("/api/workspaces/ws-1")).status_code == 200
         assert await role("owner", WS) is None  # the scope's roles went with it
 
@@ -231,11 +234,73 @@ async def test_a_workspace_is_created_only_in_an_organization_the_caller_may(api
         assert made.status_code == 200, made.text
         created = made.json()
         assert created["organization_id"] == "org-1"
-        assert created["current_user_role"] == "owner"
-    # The creator owns it, nobody else holds a role there.
+        assert created["current_user_role"] == "admin"
+    # The creator is its admin (owner is no longer assigned), nobody else holds a role there.
     scope = workspace_container("org-1", created["id"])
-    assert await role("admin", scope) == "owner"
+    assert await role("admin", scope) == "admin"
     assert await role("owner", scope) is None
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_is_created_with_an_admin_the_creator_by_default(api) -> None:
+    """#1585: the create takes ``admin_id`` (a person of the organization), else the
+    creator; the admin joins "<W> admins" and "<W> workspace", nothing attached."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
+    from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+        CONTAINER_DEFAULTS,
+    )
+
+    async def groups_of(user: str, scope: str) -> tuple[set[str], list]:
+        record = await CONTAINER_DEFAULTS.record_of(scope)
+        assert record is not None
+        iam = runtime.iam()
+        principal = await MEMBERSHIPS.principal_id(user)
+        with as_service_account("api"):
+            names = {
+                name
+                for group_id, name in (
+                    (record.members_group_id, "workspace"),
+                    (record.admins_group_id, "admins"),
+                )
+                if principal in iam.list_group_members(group_id)
+            }
+            held = [
+                (a.policy_id, a.scope)
+                for a in iam.list_attachments(principal_id=principal)
+                if a.scope == scope
+            ]
+        return names, held
+
+    async with api("admin") as http:
+        mine = await http.post(
+            "/api/workspaces", json={"name": "Mine", "slug": "mine", "organization_id": "org-1"}
+        )
+        assert mine.status_code == 200, mine.text
+        theirs = await http.post(
+            "/api/workspaces",
+            json={
+                "name": "Theirs",
+                "slug": "theirs",
+                "organization_id": "org-1",
+                "admin_id": "member",
+            },
+        )
+        assert theirs.status_code == 200, theirs.text
+        # Someone of no organization's directory is refused.
+        outside = await http.post(
+            "/api/workspaces",
+            json={"name": "Out", "slug": "out", "organization_id": "org-1", "admin_id": "bob"},
+        )
+        assert outside.status_code == 400
+        assert "person of the organization" in outside.json()["detail"]
+    mine_scope = workspace_container("org-1", mine.json()["id"])
+    theirs_scope = workspace_container("org-1", theirs.json()["id"])
+    assert await groups_of("admin", mine_scope) == ({"workspace", "admins"}, [])
+    assert await groups_of("member", theirs_scope) == ({"workspace", "admins"}, [])
+    assert await role("member", theirs_scope) == "admin"
+    # The creator administers the organization (a role of before here): not a member of
+    # the one made for someone else, but reaching it from the organization.
+    assert (await groups_of("admin", theirs_scope))[0] == set()
 
 
 @pytest.mark.asyncio
