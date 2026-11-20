@@ -130,6 +130,15 @@ def run_workspace_admin(iam: IAMService, as_user: AsUser) -> None:
         )
         updated = admin.update_policy(policy.id, expected_revision=1, name="readers")
         assert updated.name == "readers" and updated.owner_scope == WS1
+        renamed = admin.update_group(group.id, name="ws-1 readers")
+        assert renamed.name == "ws-1 readers" and renamed.owner_scope == WS1
+        assert admin.get_group(group.id).name == "ws-1 readers"
+        assert sorted(admin.list_group_members(group.id)) == sorted(
+            [t.member.id, t.colleague.id]
+        )
+        assert [a.policy_id for a in admin.list_attachments(principal_id=group.id)] == [
+            policy.id
+        ]
         assert [
             p.id for p in admin.list_policies(scope=WS1).items if not p.managed
         ] == [policy.id]
@@ -142,6 +151,7 @@ def run_workspace_admin(iam: IAMService, as_user: AsUser) -> None:
             lambda: admin.delete_policy(t.ws2_policy),
             lambda: admin.get_group(t.ws2_group),
             lambda: admin.add_group_member(t.ws2_group, t.member.id),
+            lambda: admin.update_group(t.ws2_group, name="x"),
             lambda: admin.delete_group(t.ws2_group),
             lambda: admin.create_policy("mine", reader(), scope=WS2),
             lambda: admin.create_group("mine", scope=WS2),
@@ -183,6 +193,7 @@ def run_org_admin(iam: IAMService, as_user: AsUser) -> None:
         assert admin.get_policy(t.ws2_policy).owner_scope == WS2
         admin.update_policy(t.ws2_policy, expected_revision=1, description="by the org")
         admin.add_group_member(t.ws2_group, t.colleague.id)
+        assert admin.update_group(t.ws2_group, name="by the org").name == "by the org"
         admin.attach_policy(t.ws2_policy, t.ws2_group, WS2)
         org_policy = admin.create_policy("org readers", reader(), scope=ORG_SCOPE)
         org_group = admin.create_group("org analysts", scope=ORG_SCOPE)
@@ -219,6 +230,7 @@ def run_members_and_viewers(iam: IAMService, as_user: AsUser) -> None:
                 lambda: session.create_group("x", scope=WS1),
                 lambda: session.get_policy(t.ws2_policy),
                 lambda: session.get_group(t.ws2_group),
+                lambda: session.update_group(t.ws2_group, name="x"),
                 lambda: session.attach_policy(roles.VIEWER, t.outsider.id, WS1),
                 lambda who=who: session.detach_policy(roles.VIEWER, who.id, WS1),
             ):

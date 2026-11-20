@@ -654,6 +654,7 @@ def api_policy(registry: CatalogRegistry | None = None) -> Policy:
                 "iam:CreateGroup",
                 "iam:GetGroup",
                 "iam:ListGroups",
+                "iam:UpdateGroup",
                 "iam:DeleteGroup",
                 "iam:AddGroupMember",
                 "iam:RemoveGroupMember",

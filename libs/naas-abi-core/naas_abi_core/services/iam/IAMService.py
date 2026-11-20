@@ -1607,6 +1607,21 @@ class IAMService(IIAMService, PolicySource):
             after,
         )
 
+    def update_group(self, group_id: str, *, name: str) -> PrincipalRecord:
+        """Rename a group, decided on its name at its owner scope like the rest
+        of its CRUD. A deleted group is not found; the same name changes
+        nothing."""
+        if not name or not name.strip():
+            raise ValueError("A group needs a name")
+        group = self._require_group("iam:UpdateGroup", group_id)
+        if group.status == "deleted":
+            raise IAMNotFoundError(f"Group {group_id} not found")
+        if group.name == name:
+            return group
+        record = self.store.update_principal(replace(group, name=name))
+        self._changed()
+        return record
+
     def delete_group(self, group_id: str) -> PrincipalRecord:
         group = self._require_group("iam:DeleteGroup", group_id)
         if group.status == "deleted":

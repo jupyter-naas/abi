@@ -221,6 +221,11 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             response.next_after if response.HasField("next_after") else None,
         )
 
+    def update_group(self, group_id: str, *, name: str) -> PrincipalRecord:
+        return codec.principal_from_pb(
+            self._request("update_group", group_id=group_id, name=name).group
+        )
+
     def delete_group(self, group_id: str) -> PrincipalRecord:
         return codec.principal_from_pb(
             self._request("delete_group", group_id=group_id).group
