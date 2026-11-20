@@ -1,31 +1,44 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, Layers, Search, Users, X, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar } from './avatar';
 import { ALL } from './scope';
 import type { UsersDirectoryEntry, WorkspacesDirectoryEntry } from './types';
 
-/** Closes a menu on an outside click or Escape (`setOpen` is a state setter: stable). */
+/**
+ * Closes a menu on an outside click, on focus leaving it (Tab), or on Escape, which hands
+ * the focus back to its trigger (`setOpen` is a state setter: stable).
+ */
 function useDismiss(open: boolean, setOpen: (open: boolean) => void) {
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
+    const outside = (target: EventTarget | null) =>
+      !!ref.current && !(target instanceof Node && ref.current.contains(target));
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (outside(e.target)) setOpen(false);
+    };
+    const onFocus = (e: FocusEvent) => {
+      if (outside(e.target)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key !== 'Escape') return;
+      setOpen(false);
+      triggerRef.current?.focus();
     };
     document.addEventListener('mousedown', onDown);
+    document.addEventListener('focusin', onFocus);
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('focusin', onFocus);
       document.removeEventListener('keydown', onKey);
     };
   }, [open, setOpen]);
-  return ref;
+  return { ref, triggerRef };
 }
 
 const triggerClass = (active: boolean) =>
@@ -68,7 +81,8 @@ function SearchableFilter({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const ref = useDismiss(open, setOpen);
+  const { ref, triggerRef } = useDismiss(open, setOpen);
+  const panelId = useId();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -84,11 +98,20 @@ function SearchableFilter({
     onChange(id);
     setOpen(false);
     setQuery('');
+    triggerRef.current?.focus();
   };
 
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((v) => !v)} className={triggerClass(picked)} aria-expanded={open}>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={triggerClass(picked)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+      >
         <Icon size={14} className="flex-shrink-0 text-muted-foreground" />
         <span className="truncate font-medium">{label}</span>
         <ChevronDown size={14} className="flex-shrink-0 text-muted-foreground" />
@@ -106,11 +129,17 @@ function SearchableFilter({
       )}
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-72 border border-border bg-popover p-1.5 text-popover-foreground shadow-lg">
+        <div
+          id={panelId}
+          role="dialog"
+          aria-label={`Filter: ${allLabel}`}
+          className="absolute left-0 top-full z-50 mt-1.5 w-72 border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
+        >
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               autoFocus
+              aria-label={searchPlaceholder.replace(/…$/, '')}
               placeholder={searchPlaceholder}
               value={query}
               onChange={(e) => setQuery(e.target.value)}

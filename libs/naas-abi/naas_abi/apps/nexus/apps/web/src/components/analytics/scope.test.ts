@@ -9,6 +9,7 @@ import {
   analyticsUrl,
   initialAnalyticsFilters,
   isAnalyticsPeriod,
+  keepUserInWorkspace,
   periodGranularity,
   scopeHasWorkspaces,
   type AnalyticsFilters,
@@ -80,5 +81,29 @@ describe('analytics periods', () => {
     expect(periodGranularity('yesterday')).toBe('hour');
     expect(periodGranularity('this_week')).toBe('day');
     expect(periodGranularity('this_month')).toBe('day');
+  });
+});
+
+describe('keepUserInWorkspace', () => {
+  const directory = [
+    { user_id: 'u-ann', user_email: 'ann@example.com', workspace_ids: ['ws-1'] },
+    { user_id: 'u-bob', user_email: 'bob@example.com', workspace_ids: ['ws-1', 'ws-2'] },
+  ];
+  const base = { ...initialAnalyticsFilters(), workspaceId: 'ws-1' };
+
+  it('lets a picked user go when the new workspace is not theirs', () => {
+    expect(keepUserInWorkspace({ ...base, userId: 'u-ann' }, 'ws-2', directory)).toMatchObject({
+      workspaceId: 'ws-2',
+      userId: ALL,
+    });
+  });
+
+  it('keeps a picked user who is a member of the new workspace', () => {
+    expect(keepUserInWorkspace({ ...base, userId: 'u-bob' }, 'ws-2', directory).userId).toBe('u-bob');
+  });
+
+  it('keeps the user when every workspace is picked, and keeps "all users"', () => {
+    expect(keepUserInWorkspace({ ...base, userId: 'u-ann' }, ALL, directory).userId).toBe('u-ann');
+    expect(keepUserInWorkspace(base, 'ws-2', directory).userId).toBe(ALL);
   });
 });

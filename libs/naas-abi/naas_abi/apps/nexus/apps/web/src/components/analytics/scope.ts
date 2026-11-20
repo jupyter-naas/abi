@@ -6,7 +6,7 @@
  *   (one of the org's workspaces) and `user_id`.
  * - Workspace: `/api/workspaces/{workspace_id}/analytics/...`, filtered by `user_id` only.
  */
-import type { AnalyticsGranularity, AnalyticsPeriod } from './types';
+import type { AnalyticsGranularity, AnalyticsPeriod, UsersDirectoryEntry } from './types';
 
 export type AnalyticsScope =
   | { kind: 'organization'; orgId: string }
@@ -34,6 +34,22 @@ export const DEFAULT_PERIOD: AnalyticsPeriod = 'today';
 
 export function initialAnalyticsFilters(): AnalyticsFilters {
   return { period: DEFAULT_PERIOD, userId: ALL, workspaceId: ALL };
+}
+
+/**
+ * The filters once `workspaceId` is picked: a picked user who is not a member of that
+ * workspace is let go (the user list only offers its members).
+ */
+export function keepUserInWorkspace(
+  filters: AnalyticsFilters,
+  workspaceId: string,
+  directory: UsersDirectoryEntry[]
+): AnalyticsFilters {
+  const member =
+    filters.userId === ALL ||
+    workspaceId === ALL ||
+    directory.some((u) => u.user_id === filters.userId && u.workspace_ids.includes(workspaceId));
+  return { ...filters, workspaceId, userId: member ? filters.userId : ALL };
 }
 
 export function isAnalyticsPeriod(value: unknown): value is AnalyticsPeriod {

@@ -11,6 +11,7 @@ import {
   ALL,
   DEFAULT_PERIOD,
   initialAnalyticsFilters,
+  keepUserInWorkspace,
   periodGranularity,
   scopeHasWorkspaces,
   type AnalyticsFilters,
@@ -100,7 +101,7 @@ export function AnalyticsSection({ scope }: { scope: AnalyticsScope }) {
         {hasWorkspaces && (
           <WorkspaceFilter
             value={filters.workspaceId}
-            onChange={(workspaceId) => setFilters((f) => ({ ...f, workspaceId }))}
+            onChange={(workspaceId) => setFilters((f) => keepUserInWorkspace(f, workspaceId, directory))}
             workspaces={workspaces.data?.directory ?? []}
           />
         )}
