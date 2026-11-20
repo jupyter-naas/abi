@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
+import { modelBrandIcon } from '@/lib/model-icons';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -317,7 +318,11 @@ export function ModelsPanel() {
   };
 
   const renderImage = (model: Model, provider: Provider | undefined) => {
-    const raw = model.image ?? provider?.logo_url ?? null;
+    // The brand icon (Anthropic, Mistral…), keyed by model id / canonical id,
+    // beats whatever image URL the catalog carries: hotlinked provider logos
+    // are inconsistent, and one provider (OpenRouter) fronts every brand.
+    const brandIcon = modelBrandIcon(model.model_id, model.canonical_id);
+    const raw = brandIcon?.url ?? model.image ?? provider?.logo_url ?? null;
     const src = raw ? (raw.startsWith('http') ? raw : `${getApiBase()}${raw}`) : null;
     // Wrapped in a flex box so the fixed-size square stays vertically centered
     // and never stretches, regardless of how tall the row grows (e.g. when the
@@ -330,7 +335,7 @@ export function ModelsPanel() {
             <img
               src={src}
               alt={model.name ?? model.provider_id}
-              className="h-full w-full object-contain p-0.5"
+              className={cn('h-full w-full object-contain p-0.5', brandIcon?.mono && 'dark:invert')}
             />
           ) : (
             <Cloud size={18} className="text-muted-foreground" />
