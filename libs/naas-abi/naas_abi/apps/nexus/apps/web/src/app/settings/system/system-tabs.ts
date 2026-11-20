@@ -20,10 +20,6 @@ export type SystemView =
 export const SYSTEM_PATH = SECTION_PATHS.system;
 export const ACTIVITY_PATH = SECTION_PATHS.activity;
 
-/** Roles & permissions, which was System's Access tab: Platform › Access now
- *  (`components/access/access-paths.ts`), its address redirected. */
-export const ROLES_PATH = '/settings/roles';
-
 /** The map of the ABI code, one page per view (Settings › Platform › System). */
 export const INFRASTRUCTURE_LAYERS_PATH = `${SYSTEM_PATH}/layers`;
 export const INFRASTRUCTURE_DIAGRAMS_PATH = `${SYSTEM_PATH}/diagrams`;
