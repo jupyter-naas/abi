@@ -232,6 +232,7 @@ function GroupDetail({
   const [member, setMember] = useState('');
   const [provider, setProvider] = useState('');
   const [claim, setClaim] = useState('');
+  const [renaming, setRenaming] = useState<string | null>(null);
   const mapsIdp = can('iam:MapIdpGroup') || can('iam:UnmapIdpGroup');
 
   // Every attachment of the group, at every level: IAM lists those the caller may (an
@@ -279,6 +280,17 @@ function GroupDetail({
     };
   }, [api, can, directory, scope, groupId, loadHeld, loadProviders, mapsIdp, nonce]);
 
+  const rename = async (value: string) => {
+    try {
+      setGroup(await api.renameGroup(groupId, value));
+      setRenaming(null);
+      setError(null);
+      await onChanged();
+    } catch (e) {
+      setError(message(e));
+    }
+  };
+
   const run = async (call: () => Promise<GroupView>) => {
     try {
       setGroup(await call());
@@ -307,11 +319,37 @@ function GroupDetail({
   return (
     <div className="access-group-detail" data-group-detail={group.id}>
       <header className="access-person-header">
-        <h3 className="access-person-name">{group.name ?? group.id}</h3>
+        {renaming === null ? (
+          <h3 className="access-person-name">{group.name ?? group.id}</h3>
+        ) : (
+          <form
+            className="access-group-create"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const value = renaming.trim();
+              if (!value) return;
+              if (value === group.name) setRenaming(null);
+              else void rename(value);
+            }}
+          >
+            <input className="access-input access-input-grow" aria-label="New group name" maxLength={128} value={renaming} onChange={(e) => setRenaming(e.target.value)} />
+            <button type="submit" className="access-button access-button-primary" disabled={!renaming.trim()}>
+              Save name
+            </button>
+            <button type="button" className="access-button" onClick={() => setRenaming(null)}>
+              Cancel
+            </button>
+          </form>
+        )}
         <span className="access-people-sub" data-group-owner="">
           Owned by {levelLabel(group.owner_scope ?? PLATFORM, names)}
         </span>
         <code className="access-mono">{group.id}</code>
+        {owned && can('iam:UpdateGroup') && renaming === null && (
+          <button type="button" className="access-button" aria-label={`Rename ${group.name ?? group.id}`} onClick={() => setRenaming(group.name ?? '')}>
+            Rename
+          </button>
+        )}
       </header>
       {error && <p className="access-source-note" role="alert">{error}</p>}
 

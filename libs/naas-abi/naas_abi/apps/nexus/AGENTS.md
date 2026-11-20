@@ -779,6 +779,8 @@ One set of components manages access at every level: `apps/web/src/components/ac
 | Workspace settings › Access › Policies, Groups (`workspace/[workspaceId]/settings/{policies,groups}/`, `workspace-access.tsx`) | `/workspace/<ws>/settings/<page>[/<id>]` | the workspace (`abi:nexus:organization/<org>/nexus:workspace/<ws>`, `abi:nexus:workspace/<ws>` for a personal one) | whoever IAM lets open the page there (`needs: <page>` in `components/shell/settings-nav.tsx`); Members stays everyone's door |
 | Workspace settings › Members › a member (`members/[personId]/`) | `/workspace/<ws>/settings/members/<IAM id>` | the workspace | its admins, and an `iam` holder there |
 
+A group's page (`components/access/groups/groups.tsx`) renames a group the level owns for whoever may `iam:UpdateGroup` (`PATCH /api/iam/admin/groups/{id}`). The access policy and the two groups of an organization or a workspace follow its name on their own (`apps/api/app/services/iam/AGENTS.md`, "Access policies and default groups"): rename the container, not them.
+
 ```
 src/components/access/
 ├── access-page.tsx             # AccessPage({ section, scopes, focus, hrefs }): one page of Access, the scope picker, what its address opens

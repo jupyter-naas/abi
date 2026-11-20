@@ -30,6 +30,7 @@ const LEVEL = [
   'iam:DetachPolicy',
   'iam:ListGroups',
   'iam:CreateGroup',
+  'iam:UpdateGroup',
   'iam:DeleteGroup',
   'iam:AddGroupMember',
   'iam:RemoveGroupMember',
