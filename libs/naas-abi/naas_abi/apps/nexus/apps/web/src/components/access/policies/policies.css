@@ -164,6 +164,7 @@
 .access-policy-badge {
   margin-left: var(--space-2);
   padding: 0 var(--space-2);
+  white-space: nowrap;
   border: 1px solid var(--border-hex);
   font-size: var(--font-size-xs);
   color: var(--muted-foreground-hex);
