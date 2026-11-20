@@ -568,7 +568,7 @@ async def get_workspace_configuration(
     ``seeds`` lists what ``nexus_config.organizations[].workspaces[]`` preloads
     for this workspace slug, read from the loaded config on each call.
     ``features`` are the deployment's enabled ones; who uses each is a policy's
-    (Roles & permissions).
+    (General › Features writes one per feature, ``/feature-access``; Access › Policies).
     """
     record = await service.get_workspace(workspace_id=workspace_id)
     if record is None:

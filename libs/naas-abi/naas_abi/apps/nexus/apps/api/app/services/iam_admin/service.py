@@ -36,6 +36,7 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
     AdminAuditLog,
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources_service import run_audited
+from naas_abi_core import logger
 from naas_abi_core.engine.call_context import current_call_context
 from naas_abi_core.services.iam import roles
 from naas_abi_core.services.iam.IAMPorts import (
@@ -136,6 +137,9 @@ PLATFORM_NEXUS_ACTIONS: tuple[str, ...] = (*ACCOUNT_ACTIONS, *DRIVE_ACTIONS)
 # Each module's key and the ``module`` catalog types it exposes (its agents, apps,
 # workflows, pipelines), for ``publishers``.
 ModuleTypes = Callable[[], Awaitable[Mapping[str, Collection[str]]]]
+# Of these policy ids, those Workspace settings > General writes (``services/feature_access``):
+# marked "managed from General" where policies are listed.
+ManagedFrom = Callable[[Collection[str]], Awaitable[Mapping[str, str]]]
 
 
 async def _module_types() -> Mapping[str, Collection[str]]:
@@ -155,11 +159,26 @@ class IamAdminService:
         *,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         modules: ModuleTypes = _module_types,
+        managed_from: ManagedFrom | None = None,
     ) -> None:
         self._gateway = gateway
         self._audit = audit
         self._clock = clock
         self._modules = modules
+        self._managed_from = managed_from
+
+    async def _mark_managed(self, policies: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Each policy view with ``managed_from``: ``general`` for one Workspace settings >
+        General writes, else None. Shown only: a failed read marks none (logged)."""
+        found: Mapping[str, str] = {}
+        if self._managed_from is not None and policies:
+            try:
+                found = await self._managed_from([p["id"] for p in policies])
+            except Exception:  # noqa: BLE001 - a mark only, never a failed listing
+                logger.warning("The policies General manages could not be read", exc_info=True)
+        for policy in policies:
+            policy["managed_from"] = "general" if policy["id"] in found else None
+        return policies
 
     # -- plumbing ---------------------------------------------------------------------
 
@@ -449,7 +468,9 @@ class IamAdminService:
                 "next_after": page.next_after,
             }
 
-        return await self._read(user, read)
+        found = await self._read(user, read)
+        await self._mark_managed(found["items"])
+        return found
 
     async def get_policy(self, user: Any, policy_id: str) -> dict[str, Any]:
         """A policy, with its parent (named for whoever sees its id) and the
@@ -466,7 +487,9 @@ class IamAdminService:
                 ],
             }
 
-        return await self._read(user, read)
+        found = await self._read(user, read)
+        await self._mark_managed([found])
+        return found
 
     async def create_policy(
         self,
