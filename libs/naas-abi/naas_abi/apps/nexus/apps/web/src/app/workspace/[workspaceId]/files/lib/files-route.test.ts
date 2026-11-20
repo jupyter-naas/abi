@@ -4,6 +4,8 @@ import {
   filesBrowseHref,
   filesNavigationFromUrl,
   filesStateFromUrl,
+  filesNavigationQuery,
+  filesUrlKey,
   filesUrlQuery,
   filesUrlSearch,
   filesBrowsePath,
@@ -306,6 +308,56 @@ describe('filesUrlSearch', () => {
         path: '',
       }),
     ).toBe('?spacing=compact&drive=all&view=all&source=workspace-files');
+  });
+
+  it('drops the preview: the page writes the folder it shows, not the file a link opened', () => {
+    expect(
+      filesUrlSearch('?drive=all&view=all&source=workspace-files&path=finance&preview=finance/q3.pdf', {
+        drive: 'all',
+        view: 'all',
+        source: 'workspace-files',
+        path: 'finance',
+      }),
+    ).toBe('?drive=all&view=all&source=workspace-files&path=finance');
+  });
+});
+
+describe('filesUrlKey', () => {
+  it('keeps only the Files keys and the preview, in one order', () => {
+    expect(filesUrlKey('?spacing=compact&path=finance&source=workspace-files&view=all&drive=all')).toBe(
+      'drive=all&view=all&source=workspace-files&path=finance',
+    );
+    expect(filesUrlKey('drive=all&view=all&preview=a.pdf&spacing=cozy')).toBe('drive=all&view=all&preview=a.pdf');
+  });
+
+  it('is empty for a bare /files or a URL with other parameters only', () => {
+    expect(filesUrlKey('')).toBe('');
+    expect(filesUrlKey('?spacing=compact')).toBe('');
+  });
+});
+
+describe('filesNavigationQuery', () => {
+  it('opens a view inside All Views when All Views is the choice', () => {
+    expect(
+      filesNavigationQuery({ activeDrive: 'all', viewChoice: 'all' }, { source: 'workspace-files', path: '/finance/q3/' }),
+    ).toBe('drive=all&view=all&source=workspace-files&path=finance%2Fq3');
+  });
+
+  it('makes the view the choice when one view is chosen', () => {
+    expect(
+      filesNavigationQuery({ activeDrive: 'all', viewChoice: 'my-files' }, { source: 'workspace-files', path: '' }),
+    ).toBe('drive=all&view=workspace-files&source=workspace-files');
+  });
+
+  it('reads an old drive source as the view it became', () => {
+    expect(filesNavigationQuery({ activeDrive: 'all', viewChoice: 'all' }, { source: 'workspace', path: 'hr' })).toBe(
+      'drive=all&view=all&source=workspace-files&path=hr',
+    );
+  });
+
+  it('is the query the page reads back as the same navigation', () => {
+    const query = filesNavigationQuery({ activeDrive: 'all', viewChoice: 'all' }, { source: 'platform-files', path: 'shared/docs' });
+    expect(filesStateFromUrl(query)).toEqual({ drive: 'all', view: 'all', source: 'platform-files', path: 'shared/docs' });
   });
 });
 

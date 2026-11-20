@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { File, Folder, MessageSquare } from 'lucide-react';
 import { appsPath } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
-import { filesBrowsePath } from '@/app/workspace/[workspaceId]/files/lib/files-route';
+import { filesBrowsePath, filesNavigationQuery } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import { Header } from '@/components/shell/header';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { useFeature } from '@/hooks/use-feature';
@@ -100,21 +100,22 @@ export default function HomePage() {
   const openStarred = useCallback(
     (item: StarredItem) => {
       if (!currentWorkspaceId) return;
-      if (item.type === 'folder') {
-        setStarredNavigation({ source: item.source, path: item.path });
-      } else {
-        const parentPath = item.path.includes('/')
+      const folderPath = item.type === 'folder'
+        ? item.path
+        : item.path.includes('/')
           ? item.path.substring(0, item.path.lastIndexOf('/'))
           : '';
-        setStarredNavigation({
-          source: item.source,
-          path: parentPath,
-          previewPath: item.path,
-        });
-      }
+      // The URL of where it goes (a bare /files would open the default view once it lands).
+      const url = filesNavigationQuery(useFilesStore.getState(), { source: item.source, path: folderPath });
+      setStarredNavigation({
+        source: item.source,
+        path: folderPath,
+        ...(item.type === 'folder' ? {} : { previewPath: item.path }),
+        url,
+      });
       setActivePanelSection('files');
       router.push(
-        isMobile ? filesBrowsePath(currentWorkspaceId) : getWorkspacePath(currentWorkspaceId, '/files'),
+        `${isMobile ? filesBrowsePath(currentWorkspaceId) : getWorkspacePath(currentWorkspaceId, '/files')}?${url}`,
       );
     },
     [
