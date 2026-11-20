@@ -69,8 +69,8 @@ const usePlatformSettingsAccessStore = createPlatformSettingsAccessStore();
 
 /**
  * What the signed-in user may open in Platform Settings. The shell asks again each
- * time it mounts (`fresh`); the account menu reuses the last answer for this user,
- * and asks again after an error. `retry` asks now.
+ * time it mounts (`fresh`); other callers (the Settings tabs) reuse the last answer for
+ * this user, and ask again after an error. `retry` asks now.
  */
 export function usePlatformSettingsAccess({ fresh = false }: { fresh?: boolean } = {}): {
   status: PlatformSettingsAccessStatus;

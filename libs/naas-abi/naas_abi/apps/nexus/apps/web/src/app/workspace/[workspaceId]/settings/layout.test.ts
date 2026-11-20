@@ -68,6 +68,8 @@ describe('workspace settings by URL (UJ-W1)', () => {
     expect(text).toContain('GENERAL PAGE');
     expect(text).toContain('SETTINGS COLUMN');
     expect(text).toContain('Settings');
+    expect(mounted?.host.querySelector('header [aria-label="Help"]')).not.toBeNull();
+    expect(mounted?.host.querySelector('header [aria-label="Log out"]')).not.toBeNull();
   });
 
   it('list Settings on a phone at the index, and open one page at a time', async () => {

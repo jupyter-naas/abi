@@ -44,7 +44,7 @@ export default function OrganizationSettingsLayout({
     skip: !orgId,
   });
   const holdsIam = opensRolesAndPermissions(access);
-  // The account menu's rule, for this organization: its owners and admins, or whoever IAM
+  // The Settings tabs' rule, for this organization: its owners and admins, or whoever IAM
   // shows a Roles & permissions section here. Anyone else sees no section.
   const settingsAccess = orgSettingsAccess({
     role: viewerRole,

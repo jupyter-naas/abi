@@ -1,24 +1,17 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useWarmAvatarSettingsLinks } from '@/hooks/use-avatar-settings-links';
-import { AccountMenuPanel, UserAvatar } from '../account-menu';
+import { ACCOUNT_SETTINGS_PATH, accountSettingsLabel, UserAvatar } from '../user-avatar';
 
-const MENU_GAP_PX = 8;
-const MENU_WIDTH_PX = 256;
-
+/** The avatar at the bottom of the dock: it opens Settings on the Account tab. */
 export function DockProfile({ labeled }: { labeled: boolean }) {
   const [mounted, setMounted] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [openedFromKeyboard, setOpenedFromKeyboard] = useState(false);
-  const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const user = useAuthStore((s) => s.user);
-  // The menu's Organization and Platform entries are read now, not when it opens.
+  // The Settings tabs' access reads start now, not when Settings opens.
   useWarmAvatarSettingsLinks();
   const displayUser = mounted ? user : null;
   const name = displayUser?.name || 'User';
@@ -27,94 +20,20 @@ export function DockProfile({ labeled }: { labeled: boolean }) {
     setMounted(true);
   }, []);
 
-  const placeMenu = () => {
-    const btn = btnRef.current;
-    if (!btn) return;
-    const rect = btn.getBoundingClientRect();
-    setPos({
-      left: Math.min(rect.right + MENU_GAP_PX, window.innerWidth - MENU_WIDTH_PX - MENU_GAP_PX),
-      bottom: Math.max(MENU_GAP_PX, window.innerHeight - rect.bottom),
-    });
-  };
-
-  const toggle = (event: React.MouseEvent) => {
-    if (open) {
-      setOpen(false);
-      return;
-    }
-    placeMenu();
-    // Enter and Space click with no pointer: detail is 0.
-    setOpenedFromKeyboard(event.detail === 0);
-    setOpen(true);
-  };
-
-  useEffect(() => {
-    if (!open) return;
-
-    // Escape and Tab close the menu and hand focus back to the avatar.
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' && e.key !== 'Tab') return;
-      e.preventDefault();
-      setOpen(false);
-      btnRef.current?.focus();
-    };
-    const onPointerDown = (e: PointerEvent) => {
-      const target = e.target as Node;
-      if (btnRef.current?.contains(target) || menuRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    const onReposition = () => placeMenu();
-
-    window.addEventListener('keydown', onKey);
-    document.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('resize', onReposition);
-
-    const btn = btnRef.current;
-    const observer = btn ? new ResizeObserver(onReposition) : null;
-    if (btn && observer) observer.observe(btn);
-
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.removeEventListener('pointerdown', onPointerDown);
-      window.removeEventListener('resize', onReposition);
-      observer?.disconnect();
-    };
-  }, [open]);
-
   return (
-    <>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={toggle}
-        aria-label={name === 'User' ? 'Account menu' : `${name}, account menu`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title={!labeled ? name : undefined}
-        className={cn(
-          'flex items-center rounded-lg outline-none focus-visible:ring-0',
-          'hover:bg-workspace-accent-10',
-          open ? 'bg-workspace-accent-10' : '',
-          labeled ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center',
-        )}
-      >
-        <UserAvatar user={displayUser} className="h-8 w-8 flex-shrink-0" alt="" />
-        {labeled && (
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{name}</span>
-        )}
-      </button>
-      {open && mounted && pos && createPortal(
-        <div ref={menuRef}>
-          <AccountMenuPanel
-            user={displayUser}
-            onClose={() => setOpen(false)}
-            focusFirstItem={openedFromKeyboard}
-            className="fixed origin-bottom-left"
-            style={{ left: pos.left, bottom: pos.bottom }}
-          />
-        </div>,
-        document.body,
+    <Link
+      href={ACCOUNT_SETTINGS_PATH}
+      aria-label={accountSettingsLabel(displayUser?.name)}
+      className={cn(
+        'flex items-center rounded-lg outline-none focus-visible:ring-0',
+        'hover:bg-workspace-accent-10',
+        labeled ? 'w-full gap-3 px-3 py-2' : 'h-10 w-10 justify-center',
       )}
-    </>
+    >
+      <UserAvatar user={displayUser} className="h-8 w-8 flex-shrink-0" alt="" />
+      {labeled && (
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{name}</span>
+      )}
+    </Link>
   );
 }

@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import Link from 'next/link';
 import {
   ArrowLeft, X,
 } from 'lucide-react';
@@ -16,7 +17,7 @@ import { WorkspaceMark, WorkspaceMarkFrame } from '../workspace-mark';
 import { WorkspacesSection } from '../sidebar/workspaces-section';
 import { useShellTitle } from '../shell-title';
 import { resolveMobileTopBarTitle } from './mobile-top-bar-title';
-import { AccountMenuPanel, UserAvatar } from '../account-menu';
+import { ACCOUNT_SETTINGS_PATH, accountSettingsLabel, UserAvatar } from '../user-avatar';
 
 type MobileTopBarProps = {
   /** Top-level tab chrome, or an immersive detail view (chat thread, file browser). */
@@ -41,9 +42,6 @@ export function MobileTopBar({
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [profilePos, setProfilePos] = useState({ top: 0, right: 0 });
-  const profileBtnRef = useRef<HTMLButtonElement>(null);
 
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
@@ -54,7 +52,7 @@ export function MobileTopBar({
   const setMobilePendingChatSlug = useWorkspaceStore((s) => s.setMobilePendingChatSlug);
 
   const user = useAuthStore((s) => s.user);
-  // The menu's Organization and Platform entries are read now, not when it opens.
+  // The Settings tabs' access reads start now, not when Settings opens.
   useWarmAvatarSettingsLinks();
   const { title: pageTitle } = useShellTitle();
 
@@ -97,16 +95,7 @@ export function MobileTopBar({
   });
 
   const openWorkspaceSheet = () => {
-    setProfileOpen(false);
     setWorkspaceOpen(true);
-  };
-
-  const openProfileMenu = () => {
-    if (!profileBtnRef.current) return;
-    const rect = profileBtnRef.current.getBoundingClientRect();
-    setProfilePos({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) });
-    setWorkspaceOpen(false);
-    setProfileOpen(true);
   };
 
   return (
@@ -161,17 +150,13 @@ export function MobileTopBar({
 
         {/* Profile only on list / top-level tabs. Detail views stay immersive. */}
         {variant === 'top' && (
-          <button
-            ref={profileBtnRef}
-            type="button"
-            onClick={openProfileMenu}
+          <Link
+            href={ACCOUNT_SETTINGS_PATH}
             className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full"
-            aria-label="Account menu"
-            aria-haspopup="menu"
-            aria-expanded={profileOpen}
+            aria-label={accountSettingsLabel(user?.name)}
           >
             <UserAvatar user={user} className="h-8 w-8" alt="" />
-          </button>
+          </Link>
         )}
       </header>
 
@@ -211,19 +196,6 @@ export function MobileTopBar({
               <WorkspacesSection onPicked={() => setWorkspaceOpen(false)} />
             </div>
           </div>
-        </div>,
-        document.body
-      )}
-
-      {profileOpen && mounted && createPortal(
-        <div>
-          <div className="fixed inset-0 z-[299]" onClick={() => setProfileOpen(false)} />
-          <AccountMenuPanel
-            user={user}
-            onClose={() => setProfileOpen(false)}
-            className="fixed origin-top-right"
-            style={{ top: profilePos.top, right: profilePos.right }}
-          />
         </div>,
         document.body
       )}

@@ -2,7 +2,11 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Settings } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, HelpCircle, LogOut, Settings } from 'lucide-react';
+import { getWorkspacePath } from '@/components/shell/sidebar/utils';
+import { useAuthStore } from '@/stores/auth';
+import { useWorkspaceStore } from '@/stores/workspace';
 import type { SettingsTab } from './settings-levels';
 
 // Open layers that take Esc for themselves: dialogs, menus, listboxes, popovers.
@@ -36,6 +40,10 @@ export function SettingsShellHeader({
   onBack: () => void;
   backAriaLabel: string;
 }) {
+  const router = useRouter();
+  const logout = useAuthStore((s) => s.logout);
+  const helpHref = getWorkspacePath(useWorkspaceStore((s) => s.currentWorkspaceId), '/help');
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!escapeLeavesSettings(event)) return;
@@ -61,6 +69,25 @@ export function SettingsShellHeader({
           <div className="org-settings-layout-header-meta">
             <Settings size={16} className="org-settings-layout-header-icon" />
             <h1 className="org-settings-layout-header-title">{detailTitle ?? 'Settings'}</h1>
+          </div>
+          {/* The session's actions, at every level (a phone shows their icons alone). */}
+          <div className="settings-header-actions">
+            <Link href={helpHref} className="settings-header-action" aria-label="Help">
+              <HelpCircle size={16} />
+              <span className="settings-header-action-label">Help</span>
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                router.push('/auth/login');
+              }}
+              className="settings-header-action settings-header-logout"
+              aria-label="Log out"
+            >
+              <LogOut size={16} />
+              <span className="settings-header-action-label">Log out</span>
+            </button>
           </div>
         </div>
       </header>

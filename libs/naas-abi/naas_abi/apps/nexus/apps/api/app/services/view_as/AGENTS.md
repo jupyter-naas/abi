@@ -119,7 +119,7 @@ the request state. A bearer credential (an API key, a session token) never carri
 - **What the web does not ask in a view** (the organization's people and the other workspaces are outside it, so the
   web has nothing to show and asks nothing): the organization's members and workspaces (the Owner and Group pickers of
   Settings › General show the current value: the owner is named from the workspace's own members, the group is the
-  workspace's), the organizations list and each organization's access (the account menu hides Organization settings),
+  workspace's), the organizations list and each organization's access (Settings shows no Organization tab),
   a person read by id (`GET /api/iam/admin/principals/{id}`: the person's page names them by their rows) and the
   analytics events (the viewer's page views are not the person's activity). The Roles & permissions pages ask nothing
   above the viewed workspace: the person's page reads their (and their groups') attachments with `scope` set to the
@@ -265,8 +265,7 @@ settings › Roles & permissions › Audit, beside IAM's:
   (above) or are not asked in a view; the banner shows an identical refusal once (the last call renews it), so a page
   that still makes a refused read shows one notice, not one per call. A refusal of what the viewer did (a save, a
   message) keeps its notice with the server's words. Consequences: opening Home, Chat, Settings › General, Roles &
-  permissions, an app, Files and the account pages shows no notice; the account menu has no Organization settings
-  entry in a view.
+  permissions, an app, Files and the account pages shows no notice; Settings has no Organization tab in a view.
 - **The workspace's Roles & permissions pages name the workspace by `scope`.** Decision: an IAM admin read is held to
   the viewed workspace by its `scope` (the container or below), and a group read by id by its owner. Consequences: the
   page opens in a view with the tabs the person sees (People & roles, Groups, Policies) and decides every button as the

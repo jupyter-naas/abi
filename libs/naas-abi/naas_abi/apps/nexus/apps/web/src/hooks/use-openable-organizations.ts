@@ -39,8 +39,8 @@ export interface OpenableOrganizationsState {
 }
 
 /**
- * The organizations whose settings open for the caller, shared by the avatar menu and
- * the settings column: one call in flight per user, kept across mounts. A failed
+ * The organizations whose settings open for the caller, warmed by the avatar and read by
+ * the Settings tabs: one call in flight per user, kept across mounts. A failed
  * read keeps the last list this user had.
  */
 export function createOpenableOrganizationsStore(fetcher: Fetcher = authFetch, now: () => number = Date.now) {

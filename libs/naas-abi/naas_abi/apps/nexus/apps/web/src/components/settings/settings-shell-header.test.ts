@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
 import type { SettingsTab } from './settings-levels';
 
+const session = vi.hoisted(() => ({ logout: vi.fn(), pushed: [] as string[] }));
+
 vi.mock('next/link', async () => {
   const { createElement } = await import('react');
   return {
@@ -10,7 +12,13 @@ vi.mock('next/link', async () => {
       createElement('a', { href, ...rest }, children as never),
   };
 });
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: (to: string) => session.pushed.push(to) }) }));
+vi.mock('@/stores/auth', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/stores/auth')>()),
+  useAuthStore: (select: (s: unknown) => unknown) => select({ logout: session.logout }),
+}));
 
+import { useWorkspaceStore } from '@/stores/workspace';
 import { escapeLeavesSettings, SettingsShellHeader } from './settings-shell-header';
 
 function escapeFrom(target: EventTarget): KeyboardEvent {
@@ -96,6 +104,32 @@ describe('SettingsShellHeader', () => {
     expect(tabs.map((tab) => [tab.textContent, tab.getAttribute('href')])).toEqual(TABS.map((tab) => [tab.label, tab.href]));
     const current = tabs.filter((tab) => tab.getAttribute('aria-current') === 'true').map((tab) => tab.textContent);
     expect(current).toEqual(['Workspace']);
+  });
+
+  it('has Help and Log out at the right of the bar, at every level and on a phone\'s page', async () => {
+    useWorkspaceStore.setState({ currentWorkspaceId: 'ws-1' });
+    const levels: { tabs?: SettingsTab[]; detailTitle?: string }[] = [
+      ...TABS.map((active) => ({ tabs: TABS.map((tab) => ({ ...tab, active: tab.id === active.id })) })),
+      { tabs: [] },
+      { detailTitle: 'Members' },
+    ];
+    for (const props of levels) {
+      await header(() => undefined, props);
+      const actions = mounted?.host.querySelector('header .settings-header-actions');
+      expect(actions?.querySelector('a[aria-label="Help"]')?.getAttribute('href')).toBe('/workspace/ws-1/help');
+      expect(actions?.querySelector('button[aria-label="Log out"]')).not.toBeNull();
+      await mounted?.unmount();
+      mounted = null;
+    }
+  });
+
+  it('logs out as the session always did, then goes to the sign-in page', async () => {
+    session.logout.mockClear();
+    session.pushed = [];
+    await header(() => undefined, { tabs: TABS });
+    await mounted?.click(mounted.host.querySelector('button[aria-label="Log out"]'));
+    expect(session.logout).toHaveBeenCalledTimes(1);
+    expect(session.pushed).toEqual(['/auth/login']);
   });
 
   it('has no tab bar without tabs (one level, or a page on a phone)', async () => {

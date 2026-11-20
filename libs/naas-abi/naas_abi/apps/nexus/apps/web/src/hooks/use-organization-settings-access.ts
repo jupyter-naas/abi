@@ -137,7 +137,7 @@ export function createOrganizationSettingsAccessStore(fetcher: Fetcher = authFet
 
 const useOrganizationSettingsAccessStore = createOrganizationSettingsAccessStore();
 
-/** Whether the account menu shows Organization Settings: false while checking. Asked
+/** Whether Organization settings open for the caller somewhere: false while checking. Asked
  *  again when the user changes or the last read failed. */
 export function useOrganizationSettingsAccess(): boolean {
   const userId = useAuthStore((s) => s.user?.id ?? 'session');

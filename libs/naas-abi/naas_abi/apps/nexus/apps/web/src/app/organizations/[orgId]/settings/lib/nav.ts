@@ -39,7 +39,7 @@ export function isOrgAdminRole(role: string | null | undefined): boolean {
 }
 
 /**
- * Whether Organization settings opens for the caller here, as the account menu decides
+ * Whether Organization settings opens for the caller here, as the Settings tabs decide
  * it (`hooks/use-organization-settings-access.ts`, `opensOrganization`): `admin` for its
  * owners and admins (every section), `iam` for someone else IAM shows a Roles & permissions
  * section (that section alone), `none` for anyone else (no section: the pages say so),
