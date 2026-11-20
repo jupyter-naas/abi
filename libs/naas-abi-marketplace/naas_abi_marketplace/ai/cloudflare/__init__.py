@@ -14,7 +14,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 class ABIModule(BaseModule):
     name: str = "Cloudflare"
     description: str = "Cloudflare Workers AI for running foundation models at the edge with low latency."
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/cloudflare.png"
+    logo_url: str = "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@2.10.0/dark/cloudflare-color.png"
     tags: list[str] = ['cloudflare', 'workers ai', 'edge']
     slug: str = "cloudflare"
     dependencies: ModuleDependencies = ModuleDependencies(

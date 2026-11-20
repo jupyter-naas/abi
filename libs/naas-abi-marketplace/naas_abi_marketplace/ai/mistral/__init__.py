@@ -14,7 +14,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 class ABIModule(BaseModule):
     name: str = "Mistral"
     description: str = "Mistral's flagship model with enhanced code generation, mathematics, and reasoning capabilities."
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/mistral.png"
+    logo_url: str = "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@2.10.0/dark/mistral-color.png"
     tags: list[str] = ['mistral', 'code', 'language model']
     slug: str = "mistral"
     dependencies: ModuleDependencies = ModuleDependencies(

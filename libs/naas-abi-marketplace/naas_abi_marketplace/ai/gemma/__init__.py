@@ -11,7 +11,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 class ABIModule(BaseModule):
     name: str = "Gemma"
     description: str = "Google's lightweight, open Gemma models for efficient language understanding and generation."
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemma.png"
+    logo_url: str = "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@2.10.0/dark/gemma-color.png"
     tags: list[str] = ["google", "gemma", "open source"]
     slug: str = "gemma"
     dependencies: ModuleDependencies = ModuleDependencies(

@@ -14,7 +14,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 class ABIModule(BaseModule):
     name: str = "Azure"
     description: str = "Microsoft Azure's cloud platform for deploying AI models and cognitive services."
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/azure.png"
+    logo_url: str = "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@2.10.0/dark/azure-color.png"
     tags: list[str] = ['microsoft', 'azure', 'cloud']
     slug: str = "azure"
     dependencies: ModuleDependencies = ModuleDependencies(

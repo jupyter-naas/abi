@@ -17,7 +17,7 @@ from pydantic import SecretStr
 class ABIModule(BaseModule):
     name: str = "Anthropic"
     description: str = "Anthropic's AI safety company providing Claude models for safe and beneficial AI."
-    logo_url: str = "https://pbs.twimg.com/media/G-K9zwhXoAIMN7W.png"
+    logo_url: str = "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@2.10.0/dark/claude-color.png"
     tags: list[str] = ["anthropic", "claude", "language model"]
     slug: str = "anthropic"
     dependencies: ModuleDependencies = ModuleDependencies(

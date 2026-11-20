@@ -14,7 +14,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 class ABIModule(BaseModule):
     name: str = "OpenAI"
     description: str = "OpenAI's API for GPT models, embeddings, and image generation capabilities."
-    logo_url: str = "https://logosandtypes.com/wp-content/uploads/2022/07/OpenAI.png"
+    logo_url: str = "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@2.10.0/light/openai.png"
     tags: list[str] = ['openai', 'gpt', 'language model']
     slug: str = "openai"
     dependencies: ModuleDependencies = ModuleDependencies(

@@ -11,7 +11,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 class ABIModule(BaseModule):
     name: str = "Llama"
     description: str = "Meta's latest Llama model with 70B parameters, optimized for instruction-following and conversational dialogue."
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/llama.jpeg"
+    logo_url: str = "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@2.10.0/dark/meta-color.png"
     tags: list[str] = ["meta", "llama", "open source"]
     slug: str = "llama"
     dependencies: ModuleDependencies = ModuleDependencies(

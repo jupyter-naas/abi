@@ -11,7 +11,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 class ABIModule(BaseModule):
     name: str = "DeepSeek"
     description: str = "DeepSeek's open-source models for advanced reasoning, mathematics, and problem-solving."
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/deepseek.png"
+    logo_url: str = "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@2.10.0/dark/deepseek-color.png"
     tags: list[str] = ["deepseek", "reasoning", "open source"]
     slug: str = "deepseek"
     dependencies: ModuleDependencies = ModuleDependencies(

@@ -42,7 +42,7 @@ class ABIModule(BaseModule):
         "keys, no cloud calls, and no data leaving the machine."
     )
     logo_url: str = (
-        "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/ollama_100x100.png"
+        "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@2.10.0/light/ollama.png"
     )
     tags: list[str] = ["ollama", "local", "open source", "offline", "privacy"]
     slug: str = "ollama"

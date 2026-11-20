@@ -14,7 +14,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 class ABIModule(BaseModule):
     name: str = "Nvidia"
     description: str = "NVIDIA NIM for deploying optimized AI models on NVIDIA accelerated infrastructure."
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/nvidia.png"
+    logo_url: str = "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@2.10.0/dark/nvidia-color.png"
     tags: list[str] = ['nvidia', 'nim', 'foundation models']
     slug: str = "nvidia"
     dependencies: ModuleDependencies = ModuleDependencies(

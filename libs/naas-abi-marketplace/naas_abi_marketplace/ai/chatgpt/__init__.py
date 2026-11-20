@@ -17,7 +17,7 @@ from pydantic import SecretStr
 class ABIModule(BaseModule):
     name: str = "ChatGPT"
     description: str = "OpenAI's ChatGPT for web search, image analysis, and general-purpose AI assistance."
-    logo_url: str = "https://logosandtypes.com/wp-content/uploads/2022/07/OpenAI.png"
+    logo_url: str = "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png@2.10.0/light/openai.png"
     tags: list[str] = ["openai", "chatgpt", "language model"]
     slug: str = "chatgpt"
     dependencies: ModuleDependencies = ModuleDependencies(
