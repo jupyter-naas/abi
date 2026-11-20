@@ -55,16 +55,17 @@ describe('org settings nav › Analytics', () => {
   it('shows no Analytics to a member or someone with no role, whatever the API says', () => {
     for (const role of ['member', null]) {
       expect(orgSettingsNavForRole(role, { readsAnalytics: true }).map((item) => item.slug)).not.toContain('analytics');
-      expect(orgSettingsNavForRole(role, { holdsIam: true, readsAnalytics: true }).map((item) => item.slug)).toEqual([
-        'roles',
+      expect(orgSettingsNavForRole(role, { access: BOTH, readsAnalytics: true }).map((item) => item.slug)).toEqual([
+        'policies',
+        'groups',
       ]);
     }
   });
 
-  it('lists Analytics after Roles & permissions', () => {
+  it('lists Analytics after Members, before the Access pages', () => {
     expect(
-      orgSettingsNavForRole('owner', { holdsIam: true, readsAnalytics: true }).map((item) => item.slug)
-    ).toEqual(['general', 'branding', 'workspaces', 'users', 'roles', 'analytics']);
+      orgSettingsNavForRole('owner', { access: BOTH, readsAnalytics: true }).map((item) => item.slug)
+    ).toEqual(['general', 'branding', 'workspaces', 'users', 'analytics', 'policies', 'groups']);
   });
 });
 

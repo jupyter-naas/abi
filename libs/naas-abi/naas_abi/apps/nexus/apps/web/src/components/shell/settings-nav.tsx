@@ -162,7 +162,9 @@ export function visibleSettingsGroups(
 
 /** The pages of Access the caller opens in the workspace, in order. */
 export function accessSettingsItems(access: AccessView | null, groups: SettingsNavGroup[] = SETTINGS_GROUPS): SettingsNavItem[] {
-  return groups.flatMap((group) => group.items).filter((item) => !!item.needs && opensSection(access, item.needs));
+  return groups
+    .flatMap((group) => group.items)
+    .filter((item) => !!item.needs && item.needs !== 'analytics' && opensSection(access, item.needs));
 }
 
 /**
@@ -201,8 +203,9 @@ export function settingsPageOpens(
   if (access === 'all') return true;
   if (access === 'none') return false;
   if (PERSON_PAGE.test(path)) return true;
+  // An Access page opens to an iam: holder; Analytics is a settings page of the role's.
   const needs = settingsItemFor(path, groups)?.needs;
-  return !!needs && opensSection(iam, needs);
+  return !!needs && needs !== 'analytics' && opensSection(iam, needs);
 }
 
 /** Where the settings land for `access`: General, or for an `iam:` holder the first page of
