@@ -97,25 +97,25 @@ export function AnalyticsSection({ scope }: { scope: AnalyticsScope }) {
   return (
     <div className="space-y-6 text-foreground">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <PeriodControl
-          value={filters.period}
-          onChange={(period) => setFilters((f) => ({ ...f, period }))}
-          timeZone={timeZone}
-        />
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           <UserFilter
             value={filters.userId}
             onChange={(userId) => setFilters((f) => ({ ...f, userId }))}
             users={userOptions}
           />
-          {hasWorkspaces && (
-            <WorkspaceFilter
-              value={filters.workspaceId}
-              onChange={(workspaceId) => setFilters((f) => ({ ...f, workspaceId }))}
-              workspaces={workspaces.data?.directory ?? []}
-            />
-          )}
+          <PeriodControl
+            value={filters.period}
+            onChange={(period) => setFilters((f) => ({ ...f, period }))}
+            timeZone={timeZone}
+          />
         </div>
+        {hasWorkspaces && (
+          <WorkspaceFilter
+            value={filters.workspaceId}
+            onChange={(workspaceId) => setFilters((f) => ({ ...f, workspaceId }))}
+            workspaces={workspaces.data?.directory ?? []}
+          />
+        )}
       </div>
 
       <nav aria-label="Analytics views" className="flex flex-wrap items-center gap-1 border-b border-border">
