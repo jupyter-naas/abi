@@ -42,7 +42,7 @@
   "devDependencies": {
     "@cloudflare/next-on-pages": "^1.13.0",
     "@types/leaflet": "^1.9.21",
-    "@types/node": "^20.11.0",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@types/three": "^0.187.0",
