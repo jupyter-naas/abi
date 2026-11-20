@@ -19,6 +19,7 @@ import {
   type CatalogSeedDraft,
 } from '../workspace-instances-section';
 import { useAuthStore } from '@/stores/auth';
+import { workspaceCreateBody } from '@/lib/access-model/workspace-create';
 import { slugify, WORKSPACE_SLUG } from './slug';
 import '@/app/account/profile/profile.css';
 import '@/app/workspace/[workspaceId]/settings/general/general.css';
@@ -46,8 +47,11 @@ async function readApiError(response: Response, fallback: string): Promise<strin
  * organization's groups, or typed as a new one. The logo is uploaded right
  * after the workspace exists, into Workspace Files
  * (``.settings/logos/logo.<ext>``); the desk wallpaper is set in General
- * once the workspace exists. No feature is picked here: what people may use
- * in it is what their policies grant (`nexus:UseFeature`), like agents.
+ * once the workspace exists. The workspace admin is picked from the
+ * organization's people, the creator by default (`admin_id`): they join
+ * "<W> admins" and "<W> workspace". No Owner is picked: nothing assigns it.
+ * No feature is picked here: what the workspace offers is its access policy,
+ * "<W> access", edited once it exists.
  */
 export default function OrgCreateWorkspacePage() {
   const params = useParams();
@@ -66,7 +70,7 @@ export default function OrgCreateWorkspacePage() {
   const [accentColor, setAccentColor] = useState(DEFAULT_THEME.accentColor ?? '');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState('');
-  const [ownerId, setOwnerId] = useState('');
+  const [adminId, setAdminId] = useState('');
   const [catalogSeedDraft, setCatalogSeedDraft] = useState<CatalogSeedDraft>({});
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
@@ -123,8 +127,8 @@ export default function OrgCreateWorkspacePage() {
   }, [orgId]);
 
   useEffect(() => {
-    if (currentUserId && !ownerId) setOwnerId(currentUserId);
-  }, [currentUserId, ownerId]);
+    if (currentUserId && !adminId) setAdminId(currentUserId);
+  }, [currentUserId, adminId]);
 
   useEffect(() => {
     if (!logoFile) {
@@ -166,17 +170,20 @@ export default function OrgCreateWorkspacePage() {
       const res = await authFetch('/api/workspaces', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: trimmedName,
-          slug: effectiveSlug,
-          organization_id: orgId,
-          owner_id: ownerId || currentUserId || undefined,
-          workspace_group: group.trim() || null,
-          description: description.trim() || null,
-          primary_color: primaryColor,
-          accent_color: accentColor || null,
-          catalog_seed,
-        }),
+        body: JSON.stringify(
+          workspaceCreateBody({
+            name: trimmedName,
+            slug: effectiveSlug,
+            organizationId: orgId,
+            adminId,
+            creatorId: currentUserId,
+            group,
+            description,
+            primaryColor,
+            accentColor,
+            catalogSeed: catalog_seed,
+          })
+        ),
       });
       if (!res.ok) {
         throw new Error(await readApiError(res, `Failed to create the workspace (HTTP ${res.status}).`));
@@ -212,7 +219,7 @@ export default function OrgCreateWorkspacePage() {
     <div className="workspace-general org-create-workspace space-y-6">
       <AccountPageHeader
         title="Create workspace"
-        subtitle="Add a workspace to this organization. Pick an owner and optional instances; org owners and admins reach every workspace."
+        subtitle="Add a workspace to this organization. Pick its workspace admin (you, by default) and optional instances; org admins reach every workspace."
         actions={
           <div className="org-create-workspace-actions">
             <button
@@ -325,13 +332,14 @@ export default function OrgCreateWorkspacePage() {
               disabled={creating}
             />
           </div>
-          <div className="account-profile-field">
-            <label className="account-profile-field-label">Owner</label>
+          <div className="account-profile-field" data-field="workspace-admin">
+            <label className="account-profile-field-label">Workspace admin</label>
             <WorkspaceOwnerSelect
               orgId={orgId}
-              value={ownerId}
-              onChange={setOwnerId}
+              value={adminId}
+              onChange={setAdminId}
               disabled={creating}
+              role="admin"
             />
           </div>
           <div className="account-profile-field">

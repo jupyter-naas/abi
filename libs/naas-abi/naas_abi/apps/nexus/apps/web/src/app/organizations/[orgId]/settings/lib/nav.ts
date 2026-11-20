@@ -38,8 +38,8 @@ export const orgSettingsNav: OrgSettingsNavItem[] = [
   // IAM decides (the access of the organization's scope), not the membership role.
   // The API decides (`ReadOrganizationAnalytics`, its owners and admins by default).
   { slug: 'analytics', label: 'Analytics', icon: BarChart3, needs: 'analytics' },
-  { slug: 'policies', label: 'Policies', icon: KeyRound, needs: 'policies', group: 'Access' },
   { slug: 'groups', label: 'Groups', icon: UsersRound, needs: 'groups', group: 'Access' },
+  { slug: 'policies', label: 'Policies', icon: KeyRound, needs: 'policies', group: 'Access' },
   { slug: 'domains', label: 'Domains', icon: Globe, adminOnly: true, hidden: true },
   { slug: 'servers', label: 'Servers', icon: Server, adminOnly: true, hidden: true },
   { slug: 'services', label: 'Services', icon: Boxes, adminOnly: true, hidden: true },

@@ -70,7 +70,15 @@ Nexus adds no role check of its own.
   `iam:GetGroup`, at every level; empty, not a 403, for a principal they see nothing of),
   `POST /principals/{id}/suspend|resume`
 - `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, which names that organization's container, is the owner), `GET|DELETE /groups/{id}`, `PATCH /groups/{id}` (`{name}`: a rename, IAM's `update_group`, `iam:UpdateGroup`), `PUT|DELETE /groups/{id}/members/{member}`,
-  `PUT|DELETE /groups/{id}/idp-mappings`
+  `PUT|DELETE /groups/{id}/idp-mappings`. A group's view carries its markers (core #1584): `membership_of`
+  (the container its members are members of, "<W> workspace") and `level_group` ("Viewers", "Members").
+- `GET /capabilities?scope=` (`iam:ListGroups` at the level) and `POST /capabilities` (`{capability, scope}`,
+  `iam:CreateGroup`): the capability groups (`../iam/capabilities.py`) of a level, an organization's "Workflow
+  runners" (a workspace's scope names its organization's) and the platform's "Models · all"; each
+  `{capability, name, owner_scope, group_id, policy_id, can_create}`. POST makes one on demand, idempotent, as
+  `api` (`IamGateway.capability`) once the caller is checked: `iam:CreateGroup` there, plus `iam:CreatePolicy`
+  there (Workflow runners) or `iam:AttachPolicy` at the platform (Models · all). Workflow runners is bounded by
+  "<O> access" (`org_access_of`, `container_defaults`); an organization without one is refused (422).
 - `GET|POST /service-accounts`, `DELETE /service-accounts/{id}`, `GET|POST /service-accounts/{id}/keys`,
   `DELETE …/keys/{key}`, `POST …/keys/{key}/rotate`
 - `GET /manifests?status=`, `POST /manifests/{principal}/{sha256}/approve` (optional narrowed `document`) and `/reject`
@@ -241,3 +249,7 @@ unattached one and a person holding nothing as empty lists to ws-2's and org-1's
 narrowed `/catalogs` on the same world, with listers registered for graphs, workspaces and features (`listed`
 fixture): a workspace admin's graphs, a stranger's empty pages, a disabled feature listed nowhere, and a user
 holding only agent A and `iam:CreatePolicy`.
+
+`adapters/primary/iam_admin__primary_adapter__FastAPI_capabilities_test.py` runs `/capabilities`: an org admin makes
+Workflow runners once (bounded by "<O> access"), a workspace page reads its organization's, a member and a
+stranger are refused, Models · all is the platform admin's, and a group's view carries its markers.

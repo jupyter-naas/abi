@@ -206,6 +206,19 @@ def test_the_group_routes_declare_what_they_authorize(table) -> None:
     assert found == GROUP_ROUTES
 
 
+# Access › Groups' capability groups (``iam/capabilities``): listed for whoever lists the
+# groups of the level, made (as ``api``) for whoever may create a group there.
+CAPABILITY_ROUTES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("GET", "/api/iam/admin/capabilities"): ("iam:ListGroups",),
+    ("POST", "/api/iam/admin/capabilities"): ("iam:CreateGroup",),
+}
+
+
+def test_the_capability_routes_declare_what_they_authorize(table) -> None:
+    found = {key: tuple(d.action for d in _declared(table[key])) for key in CAPABILITY_ROUTES}
+    assert found == CAPABILITY_ROUTES
+
+
 def test_a_write_method_never_authorizes_only_a_read(table) -> None:
     offenders = []
     for key, calls in table.items():

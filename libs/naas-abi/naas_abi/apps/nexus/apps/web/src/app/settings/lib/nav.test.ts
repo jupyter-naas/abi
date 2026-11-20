@@ -60,12 +60,13 @@ describe('platformSettingsGroups', () => {
       ['Users', '/settings/users'],
     ]);
     expect(items('Access')).toEqual([
-      ['Policies', '/settings/access/policies'],
       ['Groups', '/settings/access/groups'],
+      ['Policies', '/settings/access/policies'],
       ['Service accounts', '/settings/access/service-accounts'],
       ['Module approvals', '/settings/access/approvals'],
       ['Simulator', '/settings/access/simulator'],
       ['Audit', '/settings/access/audit'],
+      ['Models', '/settings/models'],
     ]);
     expect(items('System')).toEqual([
       ['Overview', '/settings/system'],
@@ -129,12 +130,13 @@ describe('platformSettingsGroups', () => {
       'access-simulator': ['iam:Explain'],
       'access-audit': ['nexus:ReadSystem'],
     };
+    const single: Record<string, string> = { drives: 'nexus:ListDrives', models: 'iam:ListPolicies' };
     for (const item of platformSettingsGroups.flatMap((group) => group.items)) {
       const expected =
         item.id === 'users'
           ? { anyOf: ['nexus:ListUsers', 'iam:ListAttachments'] }
-          : item.id === 'drives'
-            ? { action: 'nexus:ListDrives' }
+          : single[item.id]
+            ? { action: single[item.id] }
             : access[item.id]
             ? { anyOf: access[item.id] }
             : { action: 'nexus:ReadSystem' };
@@ -145,7 +147,7 @@ describe('platformSettingsGroups', () => {
 
 describe('what the caller sees', () => {
   it('shows a platform admin everything, General first', () => {
-    expect(ids(platformAdmin)).toHaveLength(38);
+    expect(ids(platformAdmin)).toHaveLength(39);
     expect(ids(platformAdmin)).toContain('users');
     expect(ids(platformAdmin)).toContain('drives');
     expect(visiblePlatformSettingsGroups(platformAdmin).map((group) => group.label)).toEqual(GROUPS);
@@ -153,7 +155,7 @@ describe('what the caller sees', () => {
   });
 
   it('shows a delegated IAM admin without nexus:ReadSystem only the Access pages IAM opens to them', () => {
-    expect(ids(delegatedIamAdmin)).toEqual(['access-policies']);
+    expect(ids(delegatedIamAdmin)).toEqual(['access-policies', 'models']);
     expect(visiblePlatformSettingsGroups(delegatedIamAdmin).map((group) => group.label)).toEqual(['Access']);
     expect(firstPlatformSettingsPath(delegatedIamAdmin)).toBe('/settings/access/policies');
     expect(ids(explainer)).toEqual(['access-simulator']);
@@ -199,7 +201,7 @@ describe('what the caller sees', () => {
   });
 
   it('opens an Access page on any of its actions, nothing else', () => {
-    const policies = ACCESS_ITEMS[0].needs;
+    const policies = ACCESS_ITEMS.find((item) => item.id === 'access-policies')!.needs;
     expect(holds(policies, { 'nexus:ReadSystem': true, 'iam:Explain': true })).toBe(false);
     expect(holds(policies, { 'iam:CreatePolicy': true })).toBe(true);
     expect(holds(policies, { 'iam:ListAttachments': true })).toBe(true);

@@ -11,6 +11,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from naas_abi.apps.nexus.apps.api.app.services.iam.capabilities import CapabilityGroup
 from naas_abi_core.services.iam.catalog import CatalogRegistry
 from naas_abi_core.services.iam.IAMPorts import IIAMService, Policy, PrincipalRecord
 
@@ -48,3 +49,17 @@ class IamGateway(ABC):
         ``scope`` (an attachment of its own within it: a membership, an accepted
         invitation), or is not a user. True for a principal IAM does not know:
         IAM answers for it."""
+
+    @abstractmethod
+    def capability(
+        self,
+        org_id: str | None,
+        capability: str,
+        *,
+        org_access: str | None = None,
+        create: bool = False,
+    ) -> CapabilityGroup | None:
+        """A capability group (``iam/capabilities``: an organization's "Workflow
+        runners", the platform's "Models · all") as ``api``: found, or made with
+        ``create`` (bounded by ``org_access``, "<O> access"). None when it was never
+        made and ``create`` is False. The caller is checked by the service first."""

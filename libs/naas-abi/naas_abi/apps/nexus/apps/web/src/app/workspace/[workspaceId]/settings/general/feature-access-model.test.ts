@@ -4,8 +4,6 @@ import {
   changesFrom,
   choicesOf,
   draftOf,
-  draftProblem,
-  offeredPrincipals,
   otherPolicies,
   rowNotes,
   sortedRows,
@@ -38,40 +36,20 @@ const STATE: Pick<FeatureAccessState, 'access_policy' | 'can'> = {
 
 describe('the draft of a row and the changes a save sends', () => {
   const chat = row({ key: 'chat', label: 'Chat', choice: 'everyone' });
-  const files = row({
-    key: 'files',
-    label: 'Files',
-    choice: 'only',
-    principals: [
-      { id: 'usr_bob', kind: 'user', name: 'Bob' },
-      { id: 'grp_ops', kind: 'group', name: 'Ops' },
-    ],
-  });
+  const files = row({ key: 'files', label: 'Files' });
   const marketplace = row({ key: 'marketplace', label: 'Marketplace' });
 
   it('starts from what each row holds, and sends nothing while nothing changed', () => {
-    expect(draftOf(files)).toEqual({ choice: 'only', principals: ['usr_bob', 'grp_ops'] });
-    const drafts = { chat: draftOf(chat), files: { choice: 'only' as const, principals: ['grp_ops', 'usr_bob'] } };
-    expect(changesFrom([chat, files, marketplace], drafts)).toEqual([]);
+    expect(draftOf(chat)).toEqual({ choice: 'everyone' });
+    expect(changesFrom([chat, files, marketplace], { chat: draftOf(chat), files: { choice: 'nobody' } })).toEqual([]);
   });
 
-  it('sends each changed row in one batch, the chosen principals only for Only…', () => {
-    const drafts = {
-      chat: { choice: 'nobody' as const, principals: [] },
-      files: { choice: 'only' as const, principals: ['usr_bob'] },
-      marketplace: { choice: 'only' as const, principals: ['usr_ann'] },
-    };
+  it('sends each changed row in one batch: Everyone or Nobody, never Only…', () => {
+    const drafts = { chat: { choice: 'nobody' as const }, files: { choice: 'everyone' as const } };
     expect(changesFrom([chat, files, marketplace], drafts)).toEqual([
       { feature: 'chat', choice: 'nobody' },
-      { feature: 'files', choice: 'only', principals: ['usr_bob'] },
-      { feature: 'marketplace', choice: 'only', principals: ['usr_ann'] },
+      { feature: 'files', choice: 'everyone' },
     ]);
-  });
-
-  it('refuses Only… with nobody chosen', () => {
-    expect(draftProblem(marketplace, { choice: 'only', principals: [] })).toBe('Choose who may use Marketplace.');
-    expect(draftProblem(marketplace, { choice: 'everyone', principals: [] })).toBeNull();
-    expect(draftProblem(marketplace, undefined)).toBeNull();
   });
 
   it('orders rows by name', () => {
@@ -80,8 +58,10 @@ describe('the draft of a row and the changes a save sends', () => {
 });
 
 describe('what a row may choose', () => {
-  it('an editable row offered here: all three', () => {
-    expect(choicesOf(row({ key: 'chat', label: 'Chat' })).map((c) => c.enabled)).toEqual([true, true, true]);
+  it('an editable row offered here: Everyone and Nobody, no Only…', () => {
+    const choices = choicesOf(row({ key: 'chat', label: 'Chat' }));
+    expect(choices.map((c) => c.value)).toEqual(['everyone', 'nobody']);
+    expect(choices.map((c) => c.enabled)).toEqual([true, true]);
   });
 
   it('a feature not offered here can only be taken back', () => {
@@ -94,9 +74,9 @@ describe('what a row may choose', () => {
     expect(choices.some((c) => c.enabled)).toBe(false);
   });
 
-  it('Nobody says platform administrators still see every feature', () => {
+  it('Nobody says platform admins still see every feature', () => {
     const nobody = choicesOf(row({ key: 'chat', label: 'Chat' })).find((c) => c.value === 'nobody');
-    expect(nobody?.hint).toMatch(/Platform administrators still see every feature/);
+    expect(nobody?.hint).toMatch(/Platform admins still see every feature/);
   });
 });
 
@@ -158,17 +138,5 @@ describe('the other policies naming a feature', () => {
       { text: 'Also granted by Chat + Files', href: ownerHref(SCOPE, 'pol_cf') },
       { text: 'Also granted by Marketplace (attached nowhere)', href: ownerHref(SCOPE, 'pol_mkt') },
     ]);
-  });
-});
-
-describe('who Only… may add', () => {
-  it('the members and groups not chosen yet, people first, by name', () => {
-    const candidates = [
-      { id: 'grp_ops', kind: 'group', name: 'Ops' },
-      { id: 'usr_zoe', kind: 'user', name: 'Zoe' },
-      { id: 'usr_ann', kind: 'user', name: 'Ann' },
-      { id: 'grp_all', kind: 'group', name: 'Alpha members' },
-    ];
-    expect(offeredPrincipals(candidates, ['usr_zoe']).map((p) => p.id)).toEqual(['usr_ann', 'grp_all', 'grp_ops']);
   });
 });

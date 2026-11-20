@@ -242,6 +242,39 @@ async def catalogs(
     return await _call(service.catalogs(user, scope, parent, derive=derive))
 
 
+# -- capability groups ----------------------------------------------------------------------
+
+
+@router.get("/capabilities", dependencies=[declares("iam:ListGroups")])
+async def capabilities(
+    scope: str | None = None,
+    user: User = Signed,
+    service: IamAdminService = Service,
+) -> dict[str, Any]:
+    """The capability groups of ``scope``'s level (an organization's "Workflow
+    runners", the platform's "Models · all"): made or not, and whether the caller may
+    make each."""
+    return await _call(service.capabilities(user, scope))
+
+
+class CapabilityBody(BaseModel):
+    capability: str = Field(min_length=1, max_length=64)
+    # An organization's container (a workspace's names its organization); the
+    # platform without one.
+    scope: str | None = None
+
+
+@router.post("/capabilities", dependencies=[declares("iam:CreateGroup")])
+async def ensure_capability(
+    body: CapabilityBody,
+    user: User = Signed,
+    service: IamAdminService = Service,
+) -> dict[str, Any]:
+    """Make a capability group on demand (idempotent), for whoever may create groups
+    (and the policy it holds) at its level."""
+    return await _call(service.ensure_capability(user, body.capability, body.scope))
+
+
 # -- policies -----------------------------------------------------------------------------
 
 

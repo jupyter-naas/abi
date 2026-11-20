@@ -23,6 +23,8 @@ import { scopeLabel } from '../attachments/attachments-model';
 import { holdingRows, levelLabel, scopesOf } from '../holdings/holdings-model';
 import { HoldingsTable } from '../holdings/holdings-table';
 import { useActionsAt, useContainerNames } from '../policies/policy-owners';
+import { GROUP_KIND_LABELS, groupKind, groupRank } from '@/lib/access-model/levels';
+import { AccessModelPanel } from './access-model-panel';
 import '../people/people.css';
 import './groups.css';
 
@@ -97,8 +99,16 @@ export function GroupsView({
   };
 
   const [creating, setCreating] = useState(false);
+  const kindOf = (g: PrincipalView) => GROUP_KIND_LABELS[groupKind(g)];
   const columns: ListColumn<PrincipalView>[] = [
     { id: 'name', label: 'Group', sortBy: (g) => (g.name ?? g.id).toLowerCase(), values: (g) => [g.name ?? g.id] },
+    {
+      id: 'kind',
+      label: 'Kind',
+      // The model's groups first (levels, admins, workspaces, people, capabilities), then custom.
+      sortBy: (g) => `${groupRank(groupKind(g))}-${(g.name ?? g.id).toLowerCase()}`,
+      values: (g) => [kindOf(g)],
+    },
     {
       id: 'owner',
       label: 'Owner',
@@ -115,7 +125,7 @@ export function GroupsView({
   const list = useListControls(groups, {
     searchText: (g) => [g.name, g.id, scopeLabel(g.owner_scope ?? PLATFORM)],
     columns,
-    initialSort: 'name',
+    initialSort: 'kind',
   });
   useAccessBadge(groups?.length ?? null, 'group');
 
@@ -202,6 +212,7 @@ export function GroupsView({
         </div>
       )}
       {creating && create}
+      <AccessModelPanel api={api} scope={scope} nonce={nonce} onOpenGroup={setSelected} onChanged={() => void load()} />
       <ListSearch
         value={list.search}
         onChange={list.setSearch}
@@ -227,6 +238,7 @@ export function GroupsView({
                 <td>
                   <NameCell name={group.name ?? group.id} detail={group.id} />
                 </td>
+                <td data-group-kind={groupKind(group)}>{kindOf(group)}</td>
                 <td>{scopeLabel(group.owner_scope ?? PLATFORM)}</td>
                 <td data-field="members">{counts[group.id] ?? '–'}</td>
                 <RowActions>

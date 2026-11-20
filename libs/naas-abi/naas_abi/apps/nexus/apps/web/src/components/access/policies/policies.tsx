@@ -17,8 +17,11 @@ import {
   type ListColumn,
 } from '../access-list';
 import { NEW_POLICY } from '../access-paths';
-import { PLATFORM, ownerOf } from '../access-scope';
+import { PLATFORM, ownerOf, parseScope } from '../access-scope';
+import { listedOnPolicies } from '../builtins';
+import { WorkspaceOfferEditor } from '../offer/offer-editor';
 import { roleOfPolicy } from '../roles/role-change';
+import { levelPolicyOf } from '@/lib/access-model/levels';
 import { PolicyAttachments } from './policy-attachments';
 import { PolicyEditor } from './policy-editor';
 import { ownerHref, usePolicyOwners } from './policy-owners';
@@ -47,6 +50,15 @@ export function managedMark(policy: Pick<PolicyView, 'id' | 'managed'>): string 
   if (policy.id.startsWith('builtin.')) return 'built-in';
   if (policy.id.startsWith('module.')) return 'module';
   return 'managed';
+}
+
+/** The workspace a policy is "<W> access" of: its owner is a workspace's container and its name
+ *  "<label> access" (`container_defaults`); the offer editor checks the id against `/offer`. */
+export function offerWorkspaceOf(policy: Pick<PolicyView, 'name' | 'owner_scope'>): string | null {
+  const parsed = parseScope(policy.owner_scope);
+  const last = parsed && !parsed.below ? parsed.containers[parsed.containers.length - 1] : null;
+  if (!last || last.service !== 'nexus' || last.type !== 'workspace') return null;
+  return policy.name.endsWith(' access') ? last.id : null;
 }
 
 /** The policies held at the scope, from its attachments: each once, with how many hold it. */
@@ -111,11 +123,12 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
     try {
       if (lists) {
         const page = await api.listPolicies(undefined, listedAt);
-        setPolicies(page.items);
+        // The automatic platform access and the service accounts' are not listed here.
+        setPolicies(page.items.filter(listedOnPolicies));
         setNext(page.next_after);
       } else if (holdsOnly) {
         const found = await api.listAttachments(scope.value ? { scope: scope.value } : {});
-        setHeld(heldPolicies(found.items.filter((a) => a.scope === scope.value)));
+        setHeld(heldPolicies(found.items.filter((a) => a.scope === scope.value)).filter(listedOnPolicies));
       }
       setError(null);
     } catch (e) {
@@ -131,7 +144,7 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
     if (!next) return;
     try {
       const page = await api.listPolicies(next, listedAt);
-      setPolicies((current) => [...(current ?? []), ...page.items]);
+      setPolicies((current) => [...(current ?? []), ...page.items.filter(listedOnPolicies)]);
       setNext(page.next_after);
     } catch (e) {
       setError(message(e));
@@ -215,8 +228,11 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
 
   // What the caller may do with a policy: IAM's answer at its owner (this level's is ``can``).
   const ownerOfPolicy = (policy: PolicyView) => owners[policy.owner_scope ?? PLATFORM];
-  const mayUpdate = (policy: PolicyView) => !policy.managed && !!ownerOfPolicy(policy)?.canUpdate;
-  const mayDelete = (policy: PolicyView) => !policy.managed && !!ownerOfPolicy(policy)?.canDelete;
+  // A generic level policy is written once for every workspace: read-only here (S2).
+  const mayUpdate = (policy: PolicyView) =>
+    !policy.managed && !levelPolicyOf(policy) && !!ownerOfPolicy(policy)?.canUpdate;
+  const mayDelete = (policy: PolicyView) =>
+    !policy.managed && !levelPolicyOf(policy) && !!ownerOfPolicy(policy)?.canDelete;
   const linkTo = (policy: PolicyView) => {
     const owner = ownerOfPolicy(policy);
     return owner?.opens ? ownerHref(owner.scope, policy.id) : null;
@@ -241,6 +257,27 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
             <PolicyAttachments api={api} policyId={selection.id} here={here} can={can} open={open} nonce={nonce} scope={scope} directory={directory} />
           </section>
         ) : (
+          <>
+          {selection.kind === 'policy' && levelPolicyOf(selection.policy) && (
+            <section className="access-policy-level" data-level-summary={levelPolicyOf(selection.policy)!.level}>
+              <h3 className="access-policy-title">What {selection.policy.name} grants</h3>
+              <p className="access-policy-muted">{levelPolicyOf(selection.policy)!.summary}</p>
+              <p className="access-policy-muted">
+                A generic level policy, written once and held by its level group: it applies only in the workspaces
+                each person belongs to. Read-only.
+              </p>
+            </section>
+          )}
+          {selection.kind === 'policy' && offerWorkspaceOf(selection.policy) && (
+            <WorkspaceOfferEditor
+              workspaceId={offerWorkspaceOf(selection.policy)!}
+              scope={selection.policy.owner_scope ?? here}
+              policyId={selection.policy.id}
+              workspaceName={selection.policy.name.replace(/ access$/, '')}
+              api={api}
+              nonce={nonce}
+            />
+          )}
           <PolicyEditor
             key={selection.kind === 'new' ? NEW_POLICY : `${selection.policy.id}@${selection.policy.revision}`}
             api={api}
@@ -262,6 +299,7 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
             open={open}
             nonce={nonce}
           />
+          </>
         )}
       </div>
     );
@@ -288,6 +326,24 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
                 title="Managed: IAM writes this policy, read-only"
               >
                 {managedMark(policy)}
+              </span>
+            )}
+            {levelPolicyOf(policy) && (
+              <span
+                className="platform-users-badge access-policy-badge"
+                data-level-policy={levelPolicyOf(policy)!.level}
+                title={levelPolicyOf(policy)!.summary}
+              >
+                level
+              </span>
+            )}
+            {offerWorkspaceOf(policy) && (
+              <span
+                className="platform-users-badge access-policy-badge"
+                data-workspace-offer=""
+                title="What the workspace offers: edited with toggles on its page"
+              >
+                workspace offer
               </span>
             )}
             {policy.managed_from === 'general' && (

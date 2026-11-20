@@ -344,7 +344,8 @@ and the names' moves, is the same before and after, and again changes nothing):
   holding a policy (a sub-policy of "<O> access") running every workflow and pipeline, attached at
   `${my workspaces}` (the workspaces of the organization its member belongs to, through their "<W>
   workspace" membership groups); "Models · all", the platform's (a group an organization
-  owns is attached only at a scope there, which never reaches a platform model).
+  owns is attached only at a scope there, which never reaches a platform model). The Access pages make
+  them on demand through `GET`/`POST /api/iam/admin/capabilities` (`../iam_admin/AGENTS.md`).
 - **`builtin.self`** (catalog 16): no `CreateOrganization`, no personal `CreateWorkspace`;
   `nexus_config.personal_workspaces: true` gives the latter back (`bootstrap.apply_access_settings`).
 

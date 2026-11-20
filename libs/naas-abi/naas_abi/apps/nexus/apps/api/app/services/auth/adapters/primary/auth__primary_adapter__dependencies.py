@@ -225,11 +225,11 @@ async def require_superadmin(
     action = "ReadSystem" if request.method in ("GET", "HEAD", "OPTIONS") else "ManageSystem"
     try:
         await authz_module.AUTHZ.require(
-            action, user=current_user, denied="Platform superadmin role required"
+            action, user=current_user, denied="Platform admin role required"
         )
     except authz_module.AuthzDenied as exc:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Platform superadmin role required"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Platform admin role required"
         ) from exc
     return current_user
 
