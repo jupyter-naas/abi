@@ -4,7 +4,7 @@ import {
   Bot,
   BrainCircuit,
   Network,
-  SlidersHorizontal,
+  Globe,
   Cpu,
   Download,
   KeyRound,
@@ -54,8 +54,8 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
     label: 'General',
     items: [
-      { href: '/settings/general', label: 'General', icon: SlidersHorizontal },
-      { href: '/settings/members', label: 'Members', icon: Users },
+      { href: '/settings/general', label: 'General', icon: Globe }, // the Organization's and Platform's icon
+      { href: '/settings/users', label: 'Users', icon: Users },
       { href: '/settings/analytics', label: 'Analytics', icon: BarChart3, needs: 'analytics' },
       { href: '/settings/secrets', label: 'Secrets', icon: Shield },
       { href: '/settings/export', label: 'Data Export', icon: Download },
@@ -102,8 +102,8 @@ export const DEFAULT_SETTINGS_PATH = SETTINGS_GROUPS[0].items[0].href;
 /** Policies, the page whoever holds only `iam:` rights in a workspace opens first. */
 export const POLICIES_SETTINGS_PATH = '/settings/policies';
 
-/** A person's page under Members (`/settings/members/<IAM id>`). */
-const PERSON_PAGE = /\/settings\/members\/[^/?#]+/;
+/** A person's page under Users (`/settings/users/<IAM id>`). */
+const PERSON_PAGE = /\/settings\/users\/[^/?#]+/;
 
 /**
  * Whether the workspace has what an entry manages. With the workspace's resources

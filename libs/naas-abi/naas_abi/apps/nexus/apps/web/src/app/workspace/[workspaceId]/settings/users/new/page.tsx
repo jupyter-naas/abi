@@ -24,7 +24,7 @@ function WorkspaceCreateUser() {
   const workspaceId = params.workspaceId as string;
   const workspace = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId));
   const organizationId = workspaceOrganization(workspace);
-  const membersPath = `/workspace/${workspaceId}/settings/members`;
+  const membersPath = `/workspace/${workspaceId}/settings/users`;
   const prefill = useMemo(() => createUserPrefill(search), [search]);
   const policyScope = useMemo(
     () => (workspace?.id ? workspaceAccessScope(organizationId, workspace.id).value : null),
@@ -50,7 +50,7 @@ function WorkspaceCreateUser() {
       prefill={prefill}
       policyScope={policyScope}
       subtitle="Add someone to this workspace. They are created at once and invited until they first sign in; an email that already has an account is linked to it. They join the organization's directory with no organization role."
-      back={{ href: membersPath, label: 'Members' }}
+      back={{ href: membersPath, label: 'Users' }}
       onCancel={() => router.push(membersPath)}
       onCreated={(created) => {
         // A warning is worth reading here; otherwise Members says who was added.

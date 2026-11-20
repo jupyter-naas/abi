@@ -88,7 +88,7 @@ describe('organization settings by URL (UJ-O1)', () => {
     state.access = { actions: { 'iam:ListPolicies': true } };
     const text = await render();
     expect(text).toContain('GENERAL PAGE');
-    expect(text).toContain('Members');
+    expect(text).toContain('Users');
     expect(text).toContain('Policies');
     expect(text).not.toContain('Roles & permissions');
     expect(mounted?.host.querySelector('header [aria-label="Help"]')).not.toBeNull();

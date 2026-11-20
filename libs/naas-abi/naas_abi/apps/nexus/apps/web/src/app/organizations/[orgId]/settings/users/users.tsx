@@ -527,8 +527,8 @@ export default function OrgUsersPage() {
     <div className="org-settings-users-page">
       <div className="org-settings-users-main">
         <OrgSettingsPageHeader
-          title="Members"
-          badge={`${members.length} ${members.length === 1 ? 'member' : 'members'}`}
+          title="Users"
+          badge={`${members.length} ${members.length === 1 ? 'user' : 'users'}`}
           subtitle="Manage who has access to this organization and its workspaces"
           actions={
             <>

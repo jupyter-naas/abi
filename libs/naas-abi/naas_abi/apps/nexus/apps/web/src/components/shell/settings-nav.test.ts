@@ -45,7 +45,7 @@ describe('workspace settings nav', () => {
       labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { access: actions && { actions } }));
     expect(shown(null)).not.toContain('Policies');
     expect(shown(null)).not.toContain('Groups');
-    expect(shown(null)).toContain('Members');
+    expect(shown(null)).toContain('Users');
     expect(shown({ 'iam:ListPolicies': true })).toContain('Policies');
     expect(shown({ 'iam:ListPolicies': true })).not.toContain('Groups');
     expect(shown({ 'iam:ListAttachments': true })).toContain('Policies');
@@ -147,8 +147,8 @@ describe('who opens a workspace\'s settings (UJ-W1)', () => {
     expect(settingsPageOpens(access, '/workspace/ws-1/settings/policies', undefined, policies)).toBe(true);
     expect(settingsPageOpens(access, '/workspace/ws-1/settings/policies/pol_1', undefined, policies)).toBe(true);
     expect(settingsPageOpens(access, '/workspace/ws-1/settings/groups', undefined, policies)).toBe(false);
-    expect(settingsPageOpens(access, '/workspace/ws-1/settings/members/usr_bob', undefined, policies)).toBe(true);
-    expect(settingsPageOpens(access, '/workspace/ws-1/settings/members', undefined, policies)).toBe(false);
+    expect(settingsPageOpens(access, '/workspace/ws-1/settings/users/usr_bob', undefined, policies)).toBe(true);
+    expect(settingsPageOpens(access, '/workspace/ws-1/settings/users', undefined, policies)).toBe(false);
     expect(settingsPageOpens(access, '/workspace/ws-1/settings/general', undefined, policies)).toBe(false);
     expect(settingsLandingPath(access, policies)).toBe('/settings/policies');
     expect(settingsLandingPath(access, { actions: { 'iam:ListGroups': true } })).toBe('/settings/groups');

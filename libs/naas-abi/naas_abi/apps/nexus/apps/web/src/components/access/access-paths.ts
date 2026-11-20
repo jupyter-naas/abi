@@ -7,7 +7,7 @@
  * - Organization: `/organizations/<org>/settings/{policies,groups}[/<id>]`; a person's page
  *   is under Members, `/organizations/<org>/settings/users/<id>`.
  * - Workspace: `/workspace/<ws>/settings/{policies,groups}[/<id>]`; a person's page is under
- *   Members, `/workspace/<ws>/settings/members/<IAM id>`.
+ *   Users, `/workspace/<ws>/settings/users/<IAM id>`.
  */
 import { PLATFORM_USERS_PATH } from '@/app/settings/users/users-model';
 import { parseScope, PLATFORM } from './access-scope';
@@ -47,7 +47,7 @@ export function organizationPersonPath(orgId: string, personId: string): string 
 }
 
 export function workspacePersonPath(workspaceId: string, personId: string): string {
-  return `/workspace/${encodeURIComponent(workspaceId)}/settings/members${tail(personId)}`;
+  return `/workspace/${encodeURIComponent(workspaceId)}/settings/users${tail(personId)}`;
 }
 
 function decoded(value: string): string {
@@ -154,7 +154,7 @@ export function oldAccessRedirect(pathname: string, search = ''): string | null 
   if (workspace) {
     const [, base] = workspace;
     if (target.people) {
-      return `${base}/settings/members${target.person ? tail(target.person) : ''}${query}`;
+      return `${base}/settings/users${target.person ? tail(target.person) : ''}${query}`;
     }
     const page = target.page === 'groups' ? 'groups' : 'policies';
     return `${base}/settings/${page}${target.page === page ? tail(target.id) : ''}${query}`;

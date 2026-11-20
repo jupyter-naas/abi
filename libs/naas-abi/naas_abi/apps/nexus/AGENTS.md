@@ -437,7 +437,7 @@ Notes:
 - **Remove from organization** (Org settings › Users, the row's remove button and the user's page): someone with workspace access only (no org role) leaves every workspace of the organization in one step (`DELETE …/members/{userId}/access`, `OrganizationService.remove_from_organization`); their platform account stays, with what they hold in other organizations. A member with an org role loses the org role (`DELETE …/members/{userId}`) and keeps their workspace access, so the list is read again after a removal. An org owner is never removed this way (400: demoted first by an owner, so the last owner never leaves), nor oneself; a workspace's last owner is a 409 that names the workspace. Every change is checked by IAM before the first is made, so a refusal changes nothing. The confirm dialog says what is taken and what stays (`removalConfirmation`, `users-model.ts`).
 - **Agents:** `invite_organization_member` / `invite_workspace_member` in `naas_abi/tools/nexus_admin_tools.py` use the same create-on-invite path in-process.
 
-Web entry points: `organizations/[orgId]/settings/users/`, workspace `organization/users/`, workspace `settings/members/`. Store: `stores/organization.ts`.
+Web entry points: `organizations/[orgId]/settings/users/`, workspace `organization/users/`, workspace `settings/users/` (once Members: `/settings/members[/...]` redirects there). Store: `stores/organization.ts`.
 
 A role change, on these pages as on a person's page, is `changeMemberRole` (`components/access/roles/role-change.ts`): the membership route of its level, the roles a page may give (`assignableRoles`) and the ones it never changes (`roleChangeable`: an owner's, one inherited from the organization, one's own). The pages keep invitations.
 
@@ -777,7 +777,7 @@ One set of components manages access at every level: `apps/web/src/components/ac
 | Organization settings › Access › Policies, Groups (`organizations/[orgId]/settings/{policies,groups}/`, `components/org-access.tsx`) | `/organizations/<org>/settings/<page>[/<id>][?in=<ws>]` | the organization, its workspaces one pick away | whoever IAM lets open the page at `abi:nexus:organization/<org>` (`needs: <page>` in `lib/nav.ts`), whatever their role |
 | Organization settings › Members › a member (`users/[userId]/member-access.tsx`) | `/organizations/<org>/settings/users/<id>` | the organization | its admins, and an `iam` holder there opening a holder's page |
 | Workspace settings › Access › Policies, Groups (`workspace/[workspaceId]/settings/{policies,groups}/`, `workspace-access.tsx`) | `/workspace/<ws>/settings/<page>[/<id>]` | the workspace (`abi:nexus:organization/<org>/nexus:workspace/<ws>`, `abi:nexus:workspace/<ws>` for a personal one) | whoever IAM lets open the page there (`needs: <page>` in `components/shell/settings-nav.tsx`); Members stays everyone's door |
-| Workspace settings › Members › a member (`members/[personId]/`) | `/workspace/<ws>/settings/members/<IAM id>` | the workspace | its admins, and an `iam` holder there |
+| Workspace settings › Users › a user (`users/[personId]/`) | `/workspace/<ws>/settings/users/<IAM id>` | the workspace | its admins, and an `iam` holder there |
 
 A group's page (`components/access/groups/groups.tsx`) renames a group the level owns for whoever may `iam:UpdateGroup` (`PATCH /api/iam/admin/groups/{id}`). The access policy and the two groups of an organization or a workspace follow its name on their own (`apps/api/app/services/iam/AGENTS.md`, "Access policies and default groups"): rename the container, not them.
 

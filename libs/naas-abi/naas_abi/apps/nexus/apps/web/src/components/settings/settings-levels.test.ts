@@ -39,10 +39,10 @@ describe('the levels of Settings', () => {
 
   it('goes from the widest level to the narrowest, each with only what the caller opens', () => {
     expect(titles(all)).toEqual(['Platform', 'Organization', 'Workspace', 'Account']);
-    expect(labels(all, 'organization')).toContain('Members');
+    expect(labels(all, 'organization')).toContain('Users');
     expect(labels(all, 'platform')).toEqual(expect.arrayContaining(['General', 'Organizations', 'Users', 'Jobs']));
     expect(labels(all, 'platform')).not.toContain('Roles & permissions');
-    expect(labels(all, 'organization')).toEqual(expect.arrayContaining(['Members', 'Policies', 'Groups']));
+    expect(labels(all, 'organization')).toEqual(expect.arrayContaining(['Users', 'Policies', 'Groups']));
     expect(labels(all, 'organization')).not.toContain('Roles & permissions');
   });
 

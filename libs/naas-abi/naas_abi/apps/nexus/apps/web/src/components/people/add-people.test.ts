@@ -186,6 +186,6 @@ describe('Add people', () => {
     expect(options().map((o) => o.textContent)).toEqual(["Create user 'zoe@other.org'"]);
     await key('ArrowDown');
     await key('Enter');
-    expect(navigate).toHaveBeenCalledWith('/workspace/ws-1/settings/members/new?email=zoe%40other.org');
+    expect(navigate).toHaveBeenCalledWith('/workspace/ws-1/settings/users/new?email=zoe%40other.org');
   });
 });

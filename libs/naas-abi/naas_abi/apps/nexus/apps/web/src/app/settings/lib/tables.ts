@@ -52,6 +52,8 @@ export function platformRowPath(table: string, rowId: string): string {
  */
 export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   'general',
+  // Workspace settings › Users, once Members: the old link goes to the workspace, then to Users.
+  // Users itself is no legacy link: bare `/settings/users` was and is Platform › Users.
   'members',
   'servers',
   'services',

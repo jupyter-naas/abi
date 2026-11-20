@@ -58,7 +58,9 @@ describe('table paths', () => {
       statSync(join(WORKSPACE_SETTINGS_DIR, name)).isDirectory()
     );
     expect(pages).toContain('infrastructure');
-    for (const page of pages) expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).toContain(page);
+    // Users (once Members, still a legacy link) is new under that name: bare /settings/users is Platform's.
+    for (const page of pages.filter((p) => p !== 'users')) expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).toContain(page);
+    expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).toContain('members');
   });
 
   it('knows every legacy workspace settings path', () => {
@@ -66,7 +68,7 @@ describe('table paths', () => {
     const workspaceSlugs = SETTINGS_GROUPS.flatMap((group) => group.items).map(
       (item) => item.href.replace(/^\/settings\//, '').split('/')[0]
     );
-    for (const slug of workspaceSlugs) expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).toContain(slug);
+    for (const slug of workspaceSlugs.filter((s) => s !== 'users')) expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).toContain(slug);
   });
 });
 

@@ -45,10 +45,10 @@ describe('the search text', () => {
 describe('the create page link', () => {
   it('prefills an email as the email, anything else as the name', () => {
     expect(createUserHref('ws-1', 'bob@example.com')).toBe(
-      '/workspace/ws-1/settings/members/new?email=bob%40example.com'
+      '/workspace/ws-1/settings/users/new?email=bob%40example.com'
     );
-    expect(createUserHref('ws-1', ' Bob Martin ')).toBe('/workspace/ws-1/settings/members/new?name=Bob+Martin');
-    expect(createUserHref('ws-1', '')).toBe('/workspace/ws-1/settings/members/new');
+    expect(createUserHref('ws-1', ' Bob Martin ')).toBe('/workspace/ws-1/settings/users/new?name=Bob+Martin');
+    expect(createUserHref('ws-1', '')).toBe('/workspace/ws-1/settings/users/new');
   });
 
   it('reads the prefill back', () => {
@@ -188,8 +188,8 @@ describe('a create (or link) answer', () => {
   });
 
   it('goes back to Members with who was added, worded there', () => {
-    const href = membersAddedHref('/workspace/ws-1/settings/members', readCreatedPerson(ADDED)!);
-    expect(href).toBe('/workspace/ws-1/settings/members?added=bob%40example.com&mailed=1');
+    const href = membersAddedHref('/workspace/ws-1/settings/users', readCreatedPerson(ADDED)!);
+    expect(href).toBe('/workspace/ws-1/settings/users?added=bob%40example.com&mailed=1');
     expect(addedNotice(new URL(href, 'https://x.test').searchParams)).toBe(
       'bob@example.com was added to this workspace. They were emailed a link to sign in.'
     );

@@ -95,7 +95,7 @@ function Members() {
   const [actionError, setActionError] = useState('');
   // Said once: a reload does not say it again.
   useEffect(() => {
-    if (search.get('added')) router.replace(`/workspace/${workspaceId}/settings/members`);
+    if (search.get('added')) router.replace(`/workspace/${workspaceId}/settings/users`);
     // Read on arrival only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -214,7 +214,7 @@ function Members() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="Members"
+        title="Users"
         badge={
           invitedCount > 0
             ? `${members.length - invitedCount} active · ${invitedCount} invited`

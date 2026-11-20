@@ -105,7 +105,7 @@ export function WorkspaceAccess({ section }: { section: ContainerAccessPage }) {
 export function WorkspacePerson() {
   const router = useRouter();
   const { workspaceId, scope } = useWorkspaceScope();
-  const personId = pageFocus(usePathname(), `/workspace/${workspaceId}/settings/members`);
+  const personId = pageFocus(usePathname(), `/workspace/${workspaceId}/settings/users`);
   const [nonce, setNonce] = useState(0);
   const navigate = useCallback((href: string) => router.push(href), [router]);
   const groupHref = useCallback((id: string) => workspaceAccessPath(workspaceId, 'groups', id), [workspaceId]);
@@ -124,8 +124,8 @@ export function WorkspacePerson() {
           nonce={nonce}
           navigate={navigate}
           groupHref={groupHref}
-          onBack={() => router.push(`/workspace/${workspaceId}/settings/members`)}
-          backLabel="Members"
+          onBack={() => router.push(`/workspace/${workspaceId}/settings/users`)}
+          backLabel="Users"
         />
       ) : (
         <p className="text-sm text-muted-foreground">Loading…</p>

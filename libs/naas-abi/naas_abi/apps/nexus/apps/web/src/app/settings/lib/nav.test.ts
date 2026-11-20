@@ -254,7 +254,7 @@ describe('parsePlatformSettingsRoute', () => {
   });
 
   it('ignores workspace and organization settings', () => {
-    expect(parsePlatformSettingsRoute('/workspace/ws-1/settings/members').isPlatformSettingsRoute).toBe(false);
+    expect(parsePlatformSettingsRoute('/workspace/ws-1/settings/users').isPlatformSettingsRoute).toBe(false);
     expect(parsePlatformSettingsRoute('/organizations/org-1/settings/users').isPlatformSettingsRoute).toBe(false);
     expect(parsePlatformSettingsRoute(null).isPlatformSettingsRoute).toBe(false);
   });

@@ -79,7 +79,7 @@ export function candidateLabel(candidate: Pick<MemberCandidate, 'name' | 'email'
  */
 export function createUserHref(workspaceId: string, typed: string): string {
   const text = typed.trim();
-  const base = `/workspace/${encodeURIComponent(workspaceId)}/settings/members/new`;
+  const base = `/workspace/${encodeURIComponent(workspaceId)}/settings/users/new`;
   if (!text) return base;
   const query = new URLSearchParams(looksLikeEmail(text) ? { email: text } : { name: text });
   return `${base}?${query}`;

@@ -104,7 +104,7 @@ describe('old System links', () => {
       '/organizations/org-1/settings/groups'
     );
     expect(platformSettingsRedirect('/workspace/ws-1/settings/permissions', '?section=people')).toBe(
-      '/workspace/ws-1/settings/members'
+      '/workspace/ws-1/settings/users'
     );
   });
 

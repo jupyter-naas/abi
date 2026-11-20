@@ -108,7 +108,7 @@ describe('middleware auth redirects', () => {
       'https://nexus.example.com/workspace/ws-1/settings/policies/pol_1',
     );
     expect(at('/org/acme/workspace/ws-1/settings/permissions?section=people')).toBe(
-      'https://nexus.example.com/org/acme/workspace/ws-1/settings/members',
+      'https://nexus.example.com/org/acme/workspace/ws-1/settings/users',
     );
   });
 
@@ -136,7 +136,19 @@ describe('middleware auth redirects', () => {
     const response = middleware(
       requestFor('/settings/members', { 'nexus-auth-flag': 'true' }),
     );
-    expect(response.headers.get('location')).toMatch(/\/workspace\/.+\/settings\/members$/);
+    expect(response.headers.get('location')).toMatch(/\/workspace\/.+\/settings\/users$/);
+  });
+
+  it("sends a workspace's old Members address to Users, a person's page and the query kept", () => {
+    process.env.NODE_ENV = 'production';
+    const cookies = { 'nexus-auth-flag': 'true' };
+
+    const list = middleware(requestFor('/workspace/ws-1/settings/members?added=1', cookies));
+    expect(list.headers.get('location')).toBe('https://nexus.example.com/workspace/ws-1/settings/users?added=1');
+    const person = middleware(requestFor('/workspace/ws-1/settings/members/usr_1', cookies));
+    expect(person.headers.get('location')).toBe('https://nexus.example.com/workspace/ws-1/settings/users/usr_1');
+    const org = middleware(requestFor('/org/acme/workspace/ws-1/settings/members/new', cookies));
+    expect(org.headers.get('location')).toBe('https://nexus.example.com/org/acme/workspace/ws-1/settings/users/new');
   });
 
   it('redirects every legacy workspace settings link, even where a table shares the name', () => {
@@ -147,8 +159,9 @@ describe('middleware auth redirects', () => {
       const response = middleware(
         requestFor(`/settings/${slug}`, { 'nexus-auth-flag': 'true' }),
       );
+      // Members became Users.
       expect(response.headers.get('location')).toMatch(
-        new RegExp(`/workspace/.+/settings/${slug}$`),
+        new RegExp(`/workspace/.+/settings/${slug === 'members' ? 'users' : slug}$`),
       );
     }
   });

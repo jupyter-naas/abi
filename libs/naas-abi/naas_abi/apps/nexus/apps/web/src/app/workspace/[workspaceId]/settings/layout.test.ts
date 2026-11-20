@@ -102,7 +102,7 @@ describe('workspace settings by URL (UJ-W1)', () => {
     const text = await render();
     expect(text).not.toContain('GENERAL PAGE');
     expect(state.replaced).toEqual(['/workspace/ws-1/settings/policies']);
-    for (const path of ['/workspace/ws-1/settings/policies', '/workspace/ws-1/settings/policies/pol_1', '/workspace/ws-1/settings/members/usr_bob']) {
+    for (const path of ['/workspace/ws-1/settings/policies', '/workspace/ws-1/settings/policies/pol_1', '/workspace/ws-1/settings/users/usr_bob']) {
       state.path = path;
       await mounted?.unmount();
       mounted = null;

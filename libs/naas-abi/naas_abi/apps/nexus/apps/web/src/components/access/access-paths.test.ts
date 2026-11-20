@@ -19,7 +19,7 @@ describe('the Access pages of each level', () => {
     expect(organizationAccessPath('org-1', 'groups', 'grp_1')).toBe('/organizations/org-1/settings/groups/grp_1');
     expect(workspaceAccessPath('ws-1', 'policies')).toBe('/workspace/ws-1/settings/policies');
     expect(platformPersonPath('usr_1')).toBe('/settings/users/usr_1');
-    expect(workspacePersonPath('ws-1', 'usr_1')).toBe('/workspace/ws-1/settings/members/usr_1');
+    expect(workspacePersonPath('ws-1', 'usr_1')).toBe('/workspace/ws-1/settings/users/usr_1');
   });
 
   it('reads what an address has open, decoded, and nothing on the page itself', () => {
@@ -78,7 +78,7 @@ describe('old Roles & permissions addresses', () => {
     expect(oldAccessRedirect(permissions)).toBe('/workspace/ws-1/settings/policies');
     expect(oldAccessRedirect(permissions, '?section=policies&policy=pol_1')).toBe('/workspace/ws-1/settings/policies/pol_1');
     expect(oldAccessRedirect(permissions, '?section=groups')).toBe('/workspace/ws-1/settings/groups');
-    expect(oldAccessRedirect(permissions, '?section=people&person=usr_1')).toBe('/workspace/ws-1/settings/members/usr_1');
+    expect(oldAccessRedirect(permissions, '?section=people&person=usr_1')).toBe('/workspace/ws-1/settings/users/usr_1');
     expect(oldAccessRedirect('/org/acme/workspace/ws-1/settings/permissions', '?section=groups&group=g')).toBe(
       '/org/acme/workspace/ws-1/settings/groups/g'
     );
@@ -90,7 +90,7 @@ describe('old Roles & permissions addresses', () => {
       '/settings/users/usr_1',
       '/organizations/org-1/settings/policies',
       '/workspace/ws-1/settings/policies',
-      '/workspace/ws-1/settings/members',
+      '/workspace/ws-1/settings/users',
       '/settings/rolesx',
     ]) {
       expect(oldAccessRedirect(path, '?section=people')).toBeNull();

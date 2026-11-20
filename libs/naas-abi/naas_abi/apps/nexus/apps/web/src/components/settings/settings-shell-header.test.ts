@@ -86,7 +86,7 @@ describe('SettingsShellHeader', () => {
   const TABS: SettingsTab[] = [
     { id: 'platform', label: 'Platform', href: '/settings/general', active: false },
     { id: 'organization', label: 'Organization · Acme', href: '/organizations/acme/settings/general', active: false },
-    { id: 'workspace', label: 'Workspace', href: '/workspace/ws-1/settings/members', active: true },
+    { id: 'workspace', label: 'Workspace', href: '/workspace/ws-1/settings/users', active: true },
     { id: 'account', label: 'Account', href: '/account/profile', active: false },
   ];
 

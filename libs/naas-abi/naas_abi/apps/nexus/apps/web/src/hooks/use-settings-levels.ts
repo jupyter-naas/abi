@@ -19,6 +19,7 @@ import {
   visibleSettingsGroups,
   workspaceOrganization,
 } from '@/components/shell/settings-nav';
+import { useReadsAnalytics } from '@/hooks/use-analytics-access';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
@@ -46,6 +47,8 @@ export function useSettingsLevels({ organization }: { organization?: PageOrganiz
     undefined,
     { skip: !workspace }
   );
+  // Analytics is listed to whoever may read the level's analytics, as each layout's own nav.
+  const workspaceAnalytics = useReadsAnalytics(workspace ? { kind: 'workspace', workspaceId: workspace.id } : null);
 
   const { orgs } = useOpenableOrganizations();
   const workspaceOrgId = workspace?.organizationId;
@@ -59,23 +62,29 @@ export function useSettingsLevels({ organization }: { organization?: PageOrganiz
     undefined,
     { skip: !activeId || !!organization }
   );
+  const orgAnalytics = useReadsAnalytics(activeId && !organization ? { kind: 'organization', orgId: activeId } : null);
 
   const { status: platformStatus, actions } = usePlatformSettingsAccess();
 
   return useMemo(() => {
     let workspaceGroups = null;
     if (workspace && workspaceAccess === 'all') {
-      workspaceGroups = visibleSettingsGroups(resources, flags, SETTINGS_GROUPS, { access: workspaceIam });
+      workspaceGroups = visibleSettingsGroups(resources, flags, SETTINGS_GROUPS, {
+        access: workspaceIam,
+        readsAnalytics: workspaceAnalytics,
+      });
     } else if (workspace && workspaceAccess === 'iam') {
       const held = accessSettingsItems(workspaceIam);
       workspaceGroups = SETTINGS_GROUPS.map((group) => ({
         ...group,
-        items: group.items.filter((item) => held.includes(item)),
+        items: group.items.filter(
+          (item) => held.includes(item) || (item.needs === 'analytics' && workspaceAnalytics)
+        ),
       }));
     }
     const organizationItems =
       organization?.items ??
-      (listed ? orgSettingsNavForRole(listed.role, { access: orgIam }) : []);
+      (listed ? orgSettingsNavForRole(listed.role, { access: orgIam, readsAnalytics: orgAnalytics }) : []);
     return settingsLevels({
       account: accountSettingsNavVisible,
       workspace: workspace && workspaceGroups ? { id: workspace.id, groups: workspaceGroups } : null,
@@ -91,9 +100,11 @@ export function useSettingsLevels({ organization }: { organization?: PageOrganiz
     resources,
     flags,
     workspaceIam,
+    workspaceAnalytics,
     organization,
     listed,
     orgIam,
+    orgAnalytics,
     activeId,
     workspaceOrgId,
     orgs,

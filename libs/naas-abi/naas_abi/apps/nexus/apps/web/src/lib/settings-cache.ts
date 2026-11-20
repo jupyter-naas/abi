@@ -16,7 +16,7 @@ export function isSettingsRoute(pathname: string): boolean {
 // The "Components" group of the workspace settings nav (components/shell/settings-nav.tsx),
 // plus Members.
 const CACHED_SETTINGS_ROUTE =
-  /^\/workspace\/[^/]+\/settings\/(?:agents|ontologies|graphs|search|skills|apps|models|members)(?:\/|$)/;
+  /^\/workspace\/[^/]+\/settings\/(?:agents|ontologies|graphs|search|skills|apps|models|users)(?:\/|$)/;
 
 /** Settings pages (and their detail pages) that are cached and have a Reload button. */
 export function isCachedSettingsRoute(pathname: string): boolean {

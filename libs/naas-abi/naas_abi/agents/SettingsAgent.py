@@ -18,7 +18,7 @@ _WS = f"{_WEB}/app/workspace/[workspaceId]"
 
 SETTINGS_CODE_MAP = f"""Web (workspace settings):
 - {_WS}/settings/layout.tsx and settings/page.tsx: settings shell and general page.
-- {_WS}/settings/members/page.tsx, theme/page.tsx, secrets/page.tsx, drives/page.tsx, models/page.tsx, servers/page.tsx, services/page.tsx, apps/page.tsx, export/page.tsx.
+- {_WS}/settings/users/page.tsx, theme/page.tsx, secrets/page.tsx, drives/page.tsx, models/page.tsx, servers/page.tsx, services/page.tsx, apps/page.tsx, export/page.tsx.
 - {_WEB}/components/settings/secrets-panel.tsx, models-panel.tsx, servers-panel.tsx, integrations-panel.tsx, provider-form.tsx.
 Web (organization):
 - {_WS}/organization/page.tsx, users/page.tsx, admins/page.tsx, workspaces/page.tsx, branding/page.tsx, domains/page.tsx, billing/page.tsx.

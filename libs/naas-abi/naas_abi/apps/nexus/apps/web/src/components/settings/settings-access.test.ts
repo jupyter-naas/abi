@@ -16,6 +16,8 @@ type Person = {
   workspaceRole: 'owner' | 'admin' | 'member' | 'viewer';
   organizations: { id: string; name: string; role: 'owner' | 'admin' | 'member' }[];
   grants: Partial<Record<Scope, string[]>>;
+  /** The levels whose analytics they may read (`GET …/analytics/access`). */
+  readsAnalytics?: Scope[];
 };
 
 const world = vi.hoisted(() => ({ person: null as Person | null, path: '' }));
@@ -42,6 +44,11 @@ vi.mock('@/stores/auth', async (importOriginal) => {
       if (!person) return new Response(null, { status: 401 });
       if (url.pathname === '/api/organizations') {
         return json(person.organizations.map((o) => ({ id: o.id, name: o.name, current_user_role: o.role })));
+      }
+      const analytics = /^\/api\/(workspaces|organizations)\/([^/]+)\/analytics\/access$/.exec(url.pathname);
+      if (analytics) {
+        const level: Scope = analytics[1] === 'workspaces' ? 'workspace' : `organization:${analytics[2]}`;
+        return json({ can_read: (person.readsAnalytics ?? []).includes(level), timezone: 'UTC' });
       }
       if (url.pathname === '/api/iam/admin/access') {
         const scope = scopeOf(url.searchParams.get('scope'));
@@ -145,7 +152,7 @@ describe('who sees what in Settings', () => {
     expect(seen.settings).toBe('/workspace/ws-1/settings/general');
     expect(seen.level).toBe('Workspace');
     expect(Object.keys(seen.column)).toEqual(['Workspace', 'Access', 'Features']);
-    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Members']));
+    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users']));
     expect(seen.column.Access).toEqual(['Policies', 'Groups']);
 
     const platform = await seenBy(root, seen.opens.Platform);
@@ -162,9 +169,28 @@ describe('who sees what in Settings', () => {
 
     const organization = await seenBy(root, seen.opens.Organization);
     expect(organization.column).toEqual({
-      Organization: ['General', 'Branding', 'Workspaces', 'Members'],
+      Organization: ['General', 'Branding', 'Workspaces', 'Users'],
       Access: ['Policies', 'Groups'],
     });
+  });
+
+  it('whoever may read analytics: Analytics in the workspace and organization columns', async () => {
+    const ana: Person = {
+      id: 'ana',
+      workspaceRole: 'admin',
+      organizations: [{ ...ACME, role: 'admin' }],
+      grants: {},
+      readsAnalytics: ['workspace', 'organization:acme'],
+    };
+    const seen = await seenBy(ana);
+    expect(seen.level).toBe('Workspace');
+    expect(seen.column.Workspace).toContain('Analytics');
+    const organization = await seenBy(ana, seen.opens.Organization);
+    expect(Object.values(organization.column).flat()).toContain('Analytics');
+
+    const ned: Person = { ...ana, id: 'ned', readsAnalytics: [] };
+    const without = await seenBy(ned);
+    expect(without.column.Workspace).not.toContain('Analytics');
   });
 
   it('an organization admin: their organization and workspace, no Platform tab', async () => {
@@ -180,7 +206,7 @@ describe('who sees what in Settings', () => {
     const organization = await seenBy(olivia, seen.opens.Organization);
     expect(organization.level).toBe('Organization');
     expect(organization.column).toEqual({
-      Organization: ['General', 'Branding', 'Workspaces', 'Members'],
+      Organization: ['General', 'Branding', 'Workspaces', 'Users'],
       Access: ['Policies'],
     });
   });
@@ -194,7 +220,7 @@ describe('who sees what in Settings', () => {
     });
     expect(seen.tabs).toEqual(['Workspace', 'Account']);
     expect(seen.settings).toBe('/workspace/ws-1/settings/general');
-    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Members']));
+    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users']));
     expect(seen.column.Access).toEqual(['Policies']);
   });
 
@@ -206,7 +232,7 @@ describe('who sees what in Settings', () => {
       grants: {},
     });
     expect(seen.level).toBe('Workspace');
-    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Members']));
+    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users']));
     expect(Object.keys(seen.column)).not.toContain('Access');
     expect(Object.values(seen.column).flat()).not.toContain('Policies');
   });
@@ -295,7 +321,7 @@ describe('who sees what in Settings', () => {
     expect(seen.tabs).toEqual(['Organization · Beta', 'Account']);
     const organization = await seenBy(nina, seen.opens['Organization · Beta']);
     expect(organization.level).toBe('Organization · Beta');
-    expect(organization.column['Organization · Beta']).toContain('Members');
+    expect(organization.column['Organization · Beta']).toContain('Users');
     expect(Object.values(organization.column).flat()).not.toContain('Policies');
   });
 

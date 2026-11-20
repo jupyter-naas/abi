@@ -143,7 +143,7 @@ describe('the banner', () => {
     await mounted.click(mounted.host.querySelector('.view-banner-stop'));
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await settle();
-    expect(go).toHaveBeenCalledWith('/workspace/ws-alpha/settings/members/iam_dave');
+    expect(go).toHaveBeenCalledWith('/workspace/ws-alpha/settings/users/iam_dave');
   });
 
   it('stays in the view and says why when Stop fails', async () => {
