@@ -389,7 +389,12 @@ interface WorkspaceState {
   getWorkspaceConversations: () => Conversation[];
   setCurrentWorkspace: (id: string) => void;
   syncWorkspaceConversations: (workspaceId?: string) => Promise<void>;
-  loadConversationMessages: (conversationId: string) => Promise<void>;
+  // ``replaceLocal``: the server's thread replaces the local one, optimistic
+  // messages included (a turn the server finished after its page went away).
+  loadConversationMessages: (
+    conversationId: string,
+    options?: { replaceLocal?: boolean },
+  ) => Promise<void>;
 
   // Projects
   projects: Project[];
@@ -1217,7 +1222,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }
   },
 
-  loadConversationMessages: async (conversationId) => {
+  loadConversationMessages: async (conversationId, options) => {
     if (!conversationId) return;
     try {
       const { authFetch } = await import('./auth');
@@ -1235,9 +1240,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         // Preserve optimistic local messages (e.g. user just sent) that the API
         // snapshot does not include yet. Blind replace made send look like a no-op.
         const apiIds = new Set(mapped.messages.map((m) => m.id));
-        const localOnly = existing
-          ? existing.messages.filter((m) => !apiIds.has(m.id))
-          : [];
+        const localOnly =
+          existing && !options?.replaceLocal
+            ? existing.messages.filter((m) => !apiIds.has(m.id))
+            : [];
         const merged: Conversation = {
           ...mapped,
           messages:

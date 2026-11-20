@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
 
@@ -230,6 +232,50 @@ async def turn_container(workspace_id: str) -> str | None:
         return await AUTHZ.container_of(workspace_id)
     except IAMUnavailableError:
         return None
+
+
+_END_OF_TURN = object()
+# Strong references: the event loop keeps only weak ones to its tasks.
+_TURNS_IN_FLIGHT: set[asyncio.Task[None]] = set()
+
+
+def _turn_finished(task: asyncio.Task[None]) -> None:
+    _TURNS_IN_FLIGHT.discard(task)
+    if not task.cancelled() and task.exception() is not None:
+        logger.error("Chat turn failed", exc_info=task.exception())
+
+
+def _outlives_client(frames: AsyncIterator[str]) -> AsyncIterator[str]:
+    """Relay ``frames`` to the client while a task of their own runs them to
+    their end, so the turn persists its answer even when the client leaves.
+
+    A reload, a navigation or Stop cancels the response. Iterated by the
+    response, the turn died with it before persisting, while the agent thread
+    went on answering: the assistant row pre-created at the start kept its
+    empty content, an empty bubble for good. A delegated turn sends no text
+    until the sub-agent's whole answer, so any reload during it did that.
+
+    The task starts at the response's first read, in its context: the turn's
+    ContextVars (usable agents, identity) are the ones it always ran with.
+    """
+
+    async def relay() -> AsyncIterator[str]:
+        queue: asyncio.Queue[object] = asyncio.Queue()
+
+        async def run_turn() -> None:
+            try:
+                async for frame in frames:
+                    queue.put_nowait(frame)
+            finally:
+                queue.put_nowait(_END_OF_TURN)
+
+        task = asyncio.create_task(run_turn())
+        _TURNS_IN_FLIGHT.add(task)
+        task.add_done_callback(_turn_finished)
+        while (frame := await queue.get()) is not _END_OF_TURN:
+            yield str(frame)
+
+    return relay()
 
 
 async def stream_chat_response(
@@ -936,4 +982,4 @@ async def stream_chat_response(
             yield f'data: {{"error": "{escaped_error}"}}\n\n'
             yield "data: [DONE]\n\n"
 
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    return StreamingResponse(_outlives_client(generate()), media_type="text/event-stream")

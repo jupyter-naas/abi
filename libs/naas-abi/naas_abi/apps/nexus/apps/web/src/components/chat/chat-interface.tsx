@@ -69,6 +69,11 @@ import { PdfViewer } from '@/components/files/pdf-viewer';
 
 import { chatFailureText, chatResponseError, humanizeChatProviderError } from '@/lib/chat-provider-error';
 import {
+  endsOnUnfinishedTurn,
+  UNFINISHED_TURN_POLL_MS,
+  UNFINISHED_TURN_POLLS,
+} from '@/lib/unfinished-turn';
+import {
   buildContextUsage,
   parseStreamTokenUsage,
   reservedOutputTokensForModel,
@@ -1085,6 +1090,31 @@ export function ChatInterface({
       void loadConversationMessages(activeConversationId);
     }
   }, [activeConversationId, loadConversationMessages]);
+
+  // A thread this surface is not streaming that ends on an unfinished reply
+  // (its page went away mid-turn) shows the server's copy, asked for until
+  // the turn the server kept running has written it.
+  const activeTurnUnfinished = useWorkspaceStore((s) => {
+    const conv = s.conversations.find((c) => c.id === activeConversationId);
+    return Boolean(conv && !conv.isDraft && endsOnUnfinishedTurn(conv.messages));
+  });
+  useEffect(() => {
+    if (!activeConversationId?.startsWith('conv-')) return;
+    if (!activeTurnUnfinished || isStreaming || isSubmittingRef.current) return;
+    const conversationId = activeConversationId;
+    let polls = 0;
+    const poll = () => {
+      if (isSubmittingRef.current) return;
+      polls += 1;
+      void loadConversationMessages(conversationId, { replaceLocal: true });
+    };
+    poll();
+    const timer = setInterval(() => {
+      if (polls >= UNFINISHED_TURN_POLLS) clearInterval(timer);
+      else poll();
+    }, UNFINISHED_TURN_POLL_MS);
+    return () => clearInterval(timer);
+  }, [activeConversationId, activeTurnUnfinished, isStreaming, loadConversationMessages]);
 
   // Handle typing indicators
   const handleInputChange = (value: string) => {
