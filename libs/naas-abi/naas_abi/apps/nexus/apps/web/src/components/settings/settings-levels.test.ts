@@ -28,7 +28,7 @@ describe('the levels of Settings', () => {
     const all: SettingsLevelsInput = {
       ...member,
       workspace: { id: 'ws-1', groups: SETTINGS_GROUPS },
-      organization: { id: 'acme', name: 'Acme', items: orgSettingsNavForRole('admin', { holdsIam: true }) },
+      organization: { id: 'acme', name: 'Acme', items: orgSettingsNavForRole('admin', { holdsIam: true }), current: true },
       platform: visibleAdministrationItems({ 'nexus:ReadSystem': true, 'nexus:ListUsers': true }),
     };
     expect(titles(all)).toEqual(['Account', 'Workspace', 'Organization', 'Platform']);
@@ -46,7 +46,7 @@ describe('the levels of Settings', () => {
     const input: SettingsLevelsInput = {
       ...member,
       workspace: { id: 'ws-1', groups: [{ label: 'General', items: [] }] },
-      organization: { id: 'acme', name: 'Acme', items: [] },
+      organization: { id: 'acme', name: 'Acme', items: [], current: true },
     };
     expect(titles(input)).toEqual(['Account']);
   });
@@ -54,7 +54,7 @@ describe('the levels of Settings', () => {
   it('names the organization when the caller opens several, and links the others', () => {
     const input: SettingsLevelsInput = {
       ...member,
-      organization: { id: 'acme', name: 'Acme', items: orgSettingsNavForRole('admin', { holdsIam: false }) },
+      organization: { id: 'acme', name: 'Acme', items: orgSettingsNavForRole('admin', { holdsIam: false }), current: true },
       otherOrganizations: [{ id: 'beta', name: 'Beta' }],
     };
     const organization = settingsLevels(input).find((level) => level.id === 'organization');
@@ -63,6 +63,14 @@ describe('the levels of Settings', () => {
       label: 'Other organizations',
       links: [{ label: 'Beta', href: '/organizations/beta/settings' }],
     });
+  });
+
+  it('names the organization when it is not the current workspace\'s', () => {
+    const items = orgSettingsNavForRole('admin', { holdsIam: false });
+    const elsewhere = { ...member, organization: { id: 'acme', name: 'Acme', items, current: false } };
+    const here = { ...member, organization: { id: 'acme', name: 'Acme', items, current: true } };
+    expect(titles(elsewhere)).toEqual(['Account', 'Organization · Acme']);
+    expect(titles(here)).toEqual(['Account', 'Organization']);
   });
 
   it('lists the organizations when none is the page\'s or the workspace\'s', () => {

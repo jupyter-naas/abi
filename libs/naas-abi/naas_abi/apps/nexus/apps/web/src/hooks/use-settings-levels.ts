@@ -66,7 +66,9 @@ export function useSettingsLevels({
     return settingsLevels({
       account: accountSettingsNavVisible,
       workspace: workspace && workspaceGroups ? { id: workspace.id, groups: workspaceGroups } : null,
-      organization: activeId ? { id: activeId, name: listed?.name ?? activeId, items: organizationItems } : null,
+      organization: activeId
+        ? { id: activeId, name: listed?.name ?? activeId, items: organizationItems, current: activeId === workspaceOrgId }
+        : null,
       otherOrganizations: orgs.filter((o) => o.id !== activeId).map((o) => ({ id: o.id, name: o.name })),
       platform: platformStatus === 'ready' ? visibleAdministrationItems(actions) : [],
     });
@@ -80,6 +82,7 @@ export function useSettingsLevels({
     listed,
     orgIam,
     activeId,
+    workspaceOrgId,
     orgs,
     platformStatus,
     actions,
