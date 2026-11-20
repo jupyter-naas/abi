@@ -228,8 +228,8 @@ export const DIAGRAMS_ITEM: PlatformSettingsNavItem = {
 
 // Discovery sits by Modules, Bus by NATS and the Event store by Events: each shows the
 // same things as its neighbour, until the two pages are one.
-/** Pages that keep the shell's padding (Administration: General, Organizations, Users,
- * Drives; and Access). The other pages (System, Activity, Resources, Data)
+/** Pages that keep the shell's padding (Administration: General, Organizations, Users;
+ * Resources › Drives; and Access). The other pages (System, Activity, Resources, Data)
  * lay out their own panes with their own padding; Nexus tables have their own layout.
  * No page is width-capped anymore: the centered column is retired everywhere. */
 const PADDED_ITEM_IDS: ReadonlySet<string> = new Set([
@@ -248,7 +248,7 @@ export function laysOutOwnPanes(item: Pick<PlatformSettingsNavItem, 'id'>): bool
 export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
   {
     label: 'Administration',
-    items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM, DRIVES_ITEM],
+    items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM],
   },
   { label: 'Access', items: ACCESS_ITEMS },
   {
@@ -276,7 +276,10 @@ export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
       serviceItem('activity_log'),
     ],
   },
-  { label: 'Resources', items: servicePagesIn('resources').map((page) => serviceItem(page.service)) },
+  {
+    label: 'Resources',
+    items: [DRIVES_ITEM, ...servicePagesIn('resources').map((page) => serviceItem(page.service))],
+  },
   {
     label: 'Data',
     items: [NEXUS_TABLES_ITEM, ...servicePagesIn('data').map((page) => serviceItem(page.service))],

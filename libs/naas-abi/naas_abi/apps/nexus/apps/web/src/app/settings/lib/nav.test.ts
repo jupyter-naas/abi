@@ -58,7 +58,6 @@ describe('platformSettingsGroups', () => {
       ['General', '/settings/general'],
       ['Organizations', '/settings/organizations'],
       ['Users', '/settings/users'],
-      ['Drives', '/settings/drives'],
     ]);
     expect(items('Access')).toEqual([
       ['Policies', '/settings/access/policies'],
@@ -88,6 +87,7 @@ describe('platformSettingsGroups', () => {
       ['Activity log', '/settings/activity/log'],
     ]);
     expect(items('Resources')).toEqual([
+      ['Drives', '/settings/drives'],
       ['Models', '/settings/resources/models'],
       ['Secrets', '/settings/resources/secrets'],
       ['Email', '/settings/resources/email'],
@@ -186,9 +186,7 @@ describe('what the caller sees', () => {
 
   it('shows Drives to whoever IAM lets list the drives, and nothing else to them', () => {
     expect(ids(driveLister)).toEqual(['drives']);
-    expect(visiblePlatformSettingsGroups(driveLister).map((group) => group.label)).toEqual([
-      'Administration',
-    ]);
+    expect(visiblePlatformSettingsGroups(driveLister).map((group) => group.label)).toEqual(['Resources']);
     expect(firstPlatformSettingsPath(driveLister)).toBe('/settings/drives');
   });
 
