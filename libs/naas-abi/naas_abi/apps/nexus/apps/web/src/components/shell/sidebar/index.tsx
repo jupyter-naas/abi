@@ -27,7 +27,7 @@ import { isSlidesNestedPath } from './slides-tree';
 import { getWorkspacePath } from './utils';
 import { panelFromPathChange } from '../home-route';
 import { clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
-import { dockShowsLabels } from '@/lib/shell-columns';
+import { dockShowsLabels, toggleDockWidth } from '@/lib/shell-columns';
 import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
 import { DockProfile } from './dock-profile';
 import { prefetchSectionPanel } from './section-panel';
@@ -111,6 +111,7 @@ export function Sidebar() {
     lastY: number;
   } | null>(null);
   const didDragRef = useRef(false);
+  const lastSectionClickRef = useRef<{ id: SidebarSection; at: number } | null>(null);
   const panelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -528,6 +529,14 @@ export function Sidebar() {
       if (drag && insertIndex != null) commitItemDrag(drag.id, insertIndex);
       return;
     }
+    // The second press of a double-click must not navigate again. Pointer
+    // detail is not a reliable click count, so the same logo inside the
+    // double-click window is ignored after the first press.
+    if (e.detail > 1) return;
+    const now = performance.now();
+    const prev = lastSectionClickRef.current;
+    if (prev && prev.id === section.id && now - prev.at < 500) return;
+    lastSectionClickRef.current = { id: section.id, at: now };
     handleSectionClick(section);
   };
 
@@ -635,6 +644,11 @@ export function Sidebar() {
         )}
         style={{ width: dockWidth }}
         aria-label="Dock"
+        onDoubleClick={(event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest('button, a')) return;
+          setDockWidth(toggleDockWidth(dockWidth));
+        }}
       >
       <WorkspaceSwitcher />
 
@@ -687,7 +701,16 @@ export function Sidebar() {
                   e.preventDefault();
                   e.stopPropagation();
                   didDragRef.current = false;
+                  return;
                 }
+                if (e.detail > 1) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+              }}
+              onDoubleClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
               }}
               aria-label={section.label}
               className={cn(
@@ -724,7 +747,8 @@ export function Sidebar() {
             aria-label="More"
             aria-haspopup="menu"
             aria-expanded={moreOpen}
-            onClick={() => {
+            onClick={(e) => {
+              if (e.detail > 1) return;
               setHoverTip(null);
               if (moreOpen) {
                 setMoreOpen(false);
@@ -732,6 +756,10 @@ export function Sidebar() {
               }
               placeMoreMenu();
               setMoreOpen(true);
+            }}
+            onDoubleClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
             }}
             onPointerEnter={(e) => showHoverTip(
               { id: 'dock-more', label: 'More', description: 'Sections that do not fit on the dock' },
@@ -768,7 +796,14 @@ export function Sidebar() {
           return (
             <button
               key={section.id}
-              onClick={() => handleSectionClick(section)}
+              onClick={(e) => {
+                if (e.detail > 1) return;
+                handleSectionClick(section);
+              }}
+              onDoubleClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
               onPointerEnter={(e) => {
                 prefetchSectionPanel(section.id);
                 const path = getDefaultPath(section.id);

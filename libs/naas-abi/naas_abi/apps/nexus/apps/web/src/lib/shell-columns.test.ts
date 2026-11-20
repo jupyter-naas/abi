@@ -5,8 +5,11 @@ import {
   clampFeatureColumnWidth,
   DOCK_WIDTH_DEFAULT,
   DOCK_WIDTH_MAX,
+  DOCK_LABELS_MIN_WIDTH,
   DOCK_WIDTH_MIN,
+  FEATURE_COLUMN_WIDTH_DEFAULT,
   dockShowsLabels,
+  toggleDockWidth,
 } from './shell-columns';
 
 describe('clampDockWidth', () => {
@@ -28,6 +31,23 @@ describe('dockShowsLabels', () => {
 
   it('hides labels at the default (collapsed) width', () => {
     expect(dockShowsLabels(DOCK_WIDTH_DEFAULT)).toBe(false);
+  });
+});
+
+describe('toggleDockWidth', () => {
+  it('snaps a collapsed dock to the feature column width', () => {
+    expect(toggleDockWidth(DOCK_WIDTH_MIN)).toBe(FEATURE_COLUMN_WIDTH_DEFAULT);
+    expect(dockShowsLabels(toggleDockWidth(DOCK_WIDTH_MIN))).toBe(true);
+  });
+
+  it('snaps a labeled dock back to logos only', () => {
+    expect(toggleDockWidth(DOCK_LABELS_MIN_WIDTH)).toBe(DOCK_WIDTH_MIN);
+    expect(dockShowsLabels(toggleDockWidth(DOCK_LABELS_MIN_WIDTH))).toBe(false);
+  });
+
+  it('collapses a wider dock to logos, then returns to the feature column width', () => {
+    expect(toggleDockWidth(DOCK_WIDTH_MAX)).toBe(DOCK_WIDTH_MIN);
+    expect(toggleDockWidth(toggleDockWidth(DOCK_WIDTH_MAX))).toBe(FEATURE_COLUMN_WIDTH_DEFAULT);
   });
 });
 

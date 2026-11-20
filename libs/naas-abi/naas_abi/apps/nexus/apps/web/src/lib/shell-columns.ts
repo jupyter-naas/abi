@@ -27,3 +27,12 @@ export function clampDockWidth(width: number): number {
 export function dockShowsLabels(width: number): boolean {
   return width >= DOCK_LABELS_MIN_WIDTH;
 }
+
+/**
+ * Double-click on the dock chrome snaps between icon-only and the feature
+ * column's width (the chat list beside the dock). A dock dragged wider than
+ * that snaps back to the feature column, not to the width it had before.
+ */
+export function toggleDockWidth(width: number): number {
+  return dockShowsLabels(width) ? DOCK_WIDTH_MIN : FEATURE_COLUMN_WIDTH_DEFAULT;
+}
