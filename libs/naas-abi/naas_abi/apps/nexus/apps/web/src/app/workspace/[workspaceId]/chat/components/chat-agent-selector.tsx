@@ -2,12 +2,16 @@
 
 import { Check, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useAgentList } from '@/components/ui/dialogs';
+import { pickPaneAgentForSurface } from '@/lib/feature-agent-pane';
+import { appAgentRefForPane, getPaneSurfaceForPath } from '@/lib/feature-office-agents';
 import { useWorkspaceStore } from '@/stores/workspace';
-import type { Agent } from '@/stores/agents';
+import { useFeaturePaneStore } from '@/stores/feature-pane';
+import { useAgentsStore, type Agent } from '@/stores/agents';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import './chat-agent-selector.css';
 
@@ -77,7 +81,21 @@ export function ChatAgentSelector({
   const setSelectedChatModel = useWorkspaceStore((s) => s.setSelectedChatModel);
   const catalogModels = useModelsStore((s) => s.models);
   const fetchModels = useModelsStore((s) => s.fetchModels);
-  const { defaultAgents, customAgents, filteredAgents } = useAgentList(searchQuery);
+  const pathname = usePathname();
+  const featureResource = useFeaturePaneStore((s) => s.resource);
+  const allAgents = useAgentsStore((s) => s.agents);
+  // A pane still offers the agent it runs and its section's, even one the
+  // workspace default fronts in chat.
+  const keptAgentIds = useMemo(() => {
+    if (!isPane) return [];
+    const section = pickPaneAgentForSurface(
+      allAgents,
+      getPaneSurfaceForPath(pathname),
+      appAgentRefForPane(pathname, featureResource),
+    );
+    return [selectedAgent, section?.id];
+  }, [isPane, allAgents, pathname, featureResource, selectedAgent]);
+  const { defaultAgents, customAgents, filteredAgents } = useAgentList(searchQuery, keptAgentIds);
 
   const usableAgents = useMemo(
     () => [...defaultAgents, ...customAgents],

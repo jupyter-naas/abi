@@ -1523,9 +1523,9 @@ def _prune_inprocess_subagents_for_roster(agent: Any, allowed: frozenset[str]) -
 
     agent._agents = pruned
 
-    if type(agent).__name__ == "AbiAgent":
-        from naas_abi.agents.AbiAgent import AbiAgent
+    from naas_abi.agents.AbiAgent import AbiAgent
 
+    if isinstance(agent, AbiAgent):
         agent._intents = AbiAgent.get_intents(agents=pruned)
         # The copy's own configuration: the template's is shared by every turn.
         agent._configuration = AbiAgent.with_agents_section(agent._configuration, pruned)

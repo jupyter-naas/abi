@@ -28,6 +28,10 @@ class AgentRecord:
     resolved_model_id: str | None = None
     # Chat models the agent class can load. Empty/None means a single resolved id.
     model_ids: list[str] | None = None
+    # Not persisted. False for an agent the workspace default fronts
+    # (``AbiAgent.fronts``): the chat pickers leave it out, chat reaches it
+    # through the default, and its section's pane still runs it.
+    in_chat_picker: bool = True
 
 
 @dataclass

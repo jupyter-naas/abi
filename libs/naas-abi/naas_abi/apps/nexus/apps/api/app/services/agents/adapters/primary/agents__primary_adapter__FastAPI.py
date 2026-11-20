@@ -994,9 +994,39 @@ async def _enriched_workspace_agents(
 
     visible = await _visible_to_caller(await served_agents(agent_list), current_user, workspace_id)
     remote_by_class_name = await _remote_agents_by_key(visible)
-    return [
-        _enrich_agent(agent, class_name_to_agent_class, remote_by_class_name) for agent in visible
-    ]
+    return mark_fronted_agents(
+        [
+            _enrich_agent(agent, class_name_to_agent_class, remote_by_class_name)
+            for agent in visible
+        ],
+        class_name_to_agent_class,
+    )
+
+
+def mark_fronted_agents(
+    agents: list[AgentRecord], class_name_to_agent_class: Mapping[str, type]
+) -> list[AgentRecord]:
+    """``agents`` with ``in_chat_picker`` False on those the workspace default
+    fronts: an Abi specialization declaring ``fronts_its_agents`` stands in for
+    Abi and for every agent it hands work to (``AbiAgent.fronts``).
+
+    The rows stay listed, for the section panes that bind them. A remote agent
+    and one the workspace built have no class the default could hand work to,
+    so they stay in the pickers."""
+    from naas_abi.agents.AbiAgent import AbiAgent
+
+    default = next((agent for agent in agents if agent.is_default), None)
+    default_cls = class_name_to_agent_class.get(default.class_name or "") if default else None
+    if not (isinstance(default_cls, type) and issubclass(default_cls, AbiAgent)):
+        return agents
+
+    def fronted(agent: AgentRecord) -> bool:
+        if agent.provider == REMOTE_PROVIDER or not agent.class_name:
+            return False
+        agent_cls = class_name_to_agent_class.get(agent.class_name)
+        return isinstance(agent_cls, type) and default_cls.fronts(agent_cls)
+
+    return [replace(agent, in_chat_picker=False) if fronted(agent) else agent for agent in agents]
 
 
 async def seed_workspace_agents(

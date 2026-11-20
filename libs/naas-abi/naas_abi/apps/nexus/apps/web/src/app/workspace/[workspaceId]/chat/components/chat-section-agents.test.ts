@@ -152,4 +152,19 @@ describe('chatRosterSections', () => {
     expect(visible.map((a) => a.id)).toEqual(['axi', 'osint']);
     expect(hiddenCount).toBe(0);
   });
+
+  it('leaves out the agents the default fronts, collapsed or expanded', () => {
+    const joe = { id: 'joe', isDefault: true, class_name: 'joe.agents.JoeAgent/JoeAgent' };
+    const fronted = [
+      { ...abi, inChatPicker: false },
+      { ...apps, inChatPicker: false },
+    ];
+    const roster = [joe, ...fronted, osint];
+
+    for (const expanded of [false, true]) {
+      const { visible, hiddenCount } = chatRosterSections(roster, expanded);
+      expect(visible.map((a) => a.id)).toEqual(['joe', 'osint']);
+      expect(hiddenCount).toBe(0);
+    }
+  });
 });

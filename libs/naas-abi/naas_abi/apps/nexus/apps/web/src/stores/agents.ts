@@ -71,6 +71,7 @@ export interface Agent {
   capabilities: AgentCapabilities; // Agent capabilities (memory, reasoning, vision)
   intentMappings: IntentMapping[]; // Intent to action mappings
   isDefault: boolean; // Workspace's default agent for new chats — at most one per workspace
+  inChatPicker?: boolean; // False when the workspace default fronts it: only its section's pane offers it
   createdAt: Date;
   updatedAt: Date;
 }
@@ -267,6 +268,7 @@ export const useAgentsStore = create<AgentsState>()(
                     }))
                 : [],
               isDefault: a.is_default === true || a.is_default === 1,
+              inChatPicker: a.in_chat_picker !== false,
               createdAt: new Date(a.created_at),
               updatedAt: new Date(a.updated_at),
             }));
@@ -291,8 +293,13 @@ export const useAgentsStore = create<AgentsState>()(
             if (!preferred) return;
             const inRoster = (id: string) =>
               Boolean(id && formattedAgents.some((a) => a.id === id));
+            // A pick the chat picker no longer offers (an agent the default
+            // now fronts) would keep running behind the default's name.
+            const { chatPickerAgents } = await import('@/lib/chat-picker-agents');
+            const offeredInChat = chatPickerAgents(formattedAgents);
+            const inChat = (id: string) => Boolean(id && offeredInChat.some((a) => a.id === id));
 
-            if (!ws.agentExplicitlySelected || !inRoster(currentSelected)) {
+            if (!ws.agentExplicitlySelected || !inChat(currentSelected)) {
               ws.setSelectedAgent(preferred.id);
             }
 

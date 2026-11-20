@@ -37,6 +37,11 @@ class AbiAgent(IntentAgent):
     )
     # A handoff to a feature agent that reads the code shares this budget.
     recursion_limit: int = FEATURE_RECURSION_LIMIT
+    # A specialization that sets it is the chat's one door to what it inherits:
+    # where it is a workspace's default, Nexus leaves Abi and every agent it
+    # hands work to out of the chat pickers (``fronts``). Their section panes
+    # still run them.
+    fronts_its_agents: bool = False
     system_prompt: str = """<role>You are Abi, the orchestrator Agent developed by NaasAI.
 </role>
 
@@ -184,6 +189,27 @@ Respond only based on what your available agents and tools can actually deliver.
         return tools
 
     @classmethod
+    def hands_off_to(cls, agent_cls: type) -> bool:
+        """True for a loaded agent class this orchestrator takes as a sub-agent.
+
+        Every one but Abi and its specializations, and a supervisor that has
+        Abi as a sub-agent (``delegates_to_abi``): each would build the other
+        forever.
+        """
+        return not (issubclass(agent_cls, AbiAgent) or delegates_to_abi(agent_cls))
+
+    @classmethod
+    def fronts(cls, agent_cls: type) -> bool:
+        """True for an agent the chat pickers leave out where this orchestrator
+        is the workspace default: the Abi it specializes and every agent it
+        hands work to. Always False without ``fronts_its_agents``."""
+        if not cls.fronts_its_agents or agent_cls is cls:
+            return False
+        if issubclass(agent_cls, AbiAgent):
+            return issubclass(cls, agent_cls)
+        return cls.hands_off_to(agent_cls)
+
+    @classmethod
     def get_agents(cls) -> tuple[list, AgentSharedState]:
         from queue import Queue
 
@@ -196,7 +222,7 @@ Respond only based on what your available agents and tools can actually deliver.
         seen_candidate_class_names: set[str] = set()
 
         def _register_candidate(agent_cls: type[Agent]) -> None:
-            if agent_cls is cls or delegates_to_abi(agent_cls):
+            if not cls.hands_off_to(agent_cls):
                 return
             candidate_name = f"{agent_cls.__module__}.{agent_cls.__name__}"
             if candidate_name in seen_candidate_class_names:
@@ -336,6 +362,12 @@ Respond only based on what your available agents and tools can actually deliver.
         return str(ABIModule.get_instance().configuration.abi_agent_model)
 
     @classmethod
+    def get_chat_model_provider(cls) -> str | None:
+        from naas_abi import ABIModule
+
+        return ABIModule.get_instance().configuration.abi_agent_provider
+
+    @classmethod
     def New(
         cls,
         agent_shared_state: AgentSharedState | None = None,
@@ -345,10 +377,9 @@ Respond only based on what your available agents and tools can actually deliver.
         from naas_abi import ABIModule
 
         abi_module = ABIModule.get_instance()
-        resolved_model = model_id or abi_module.configuration.abi_agent_model
         chat_model = abi_module.engine.services.model_registry.get_chat_model(
-            resolved_model,
-            provider=abi_module.configuration.abi_agent_provider,
+            model_id or cls.get_chat_model_id(),
+            provider=cls.get_chat_model_provider(),
         )
 
         tools = cls.get_tools()

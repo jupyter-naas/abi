@@ -1,6 +1,7 @@
+import { chatPickerAgents, type ChatPickerAgent } from '@/lib/chat-picker-agents';
 import { isNaasAbiAgent } from '@/lib/feature-office-agents';
 
-export type ChatRosterAgent = {
+export type ChatRosterAgent = ChatPickerAgent & {
   isDefault?: boolean;
   class_name?: string | null;
 };
@@ -39,16 +40,18 @@ export function partitionChatRosterAgents<T extends ChatRosterAgent>(
  * Expanding appends the packed half after the preview half, so "Show less"
  * never reorders the list. A roster that is mostly naas_abi agents therefore
  * shows fewer than `previewCount` rows while collapsed — that is the point.
+ * The agents the workspace default fronts are not on it at all.
  */
 export function chatRosterSections<T extends ChatRosterAgent>(
   agents: T[],
   expanded: boolean,
   previewCount: number = AGENTS_PREVIEW_COUNT,
 ): { visible: T[]; hiddenCount: number } {
-  const { preview, packed } = partitionChatRosterAgents(agents);
+  const offered = chatPickerAgents(agents);
+  const { preview, packed } = partitionChatRosterAgents(offered);
   const collapsed = preview.slice(0, previewCount);
   return {
     visible: expanded ? [...preview, ...packed] : collapsed,
-    hiddenCount: agents.length - collapsed.length,
+    hiddenCount: offered.length - collapsed.length,
   };
 }

@@ -6,6 +6,9 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAgentsStore, type Agent } from '@/stores/agents';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { chatPickerAgents } from '@/lib/chat-picker-agents';
+
+const NO_KEPT_AGENTS: ReadonlyArray<string> = [];
 
 // ============================================================
 // Generic Modal Backdrop
@@ -55,12 +58,16 @@ export function ModalBackdrop({
 // Use this in any dialog that needs to show or select agents.
 // ============================================================
 
-export function useAgentList(searchQuery = '') {
+export function useAgentList(
+  searchQuery = '',
+  keepIds: ReadonlyArray<string | null | undefined> = NO_KEPT_AGENTS,
+) {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const { agents, fetchAgents, getAgent } = useAgentsStore();
 
-  // The API lists exactly the agents the caller may use in the workspace.
-  const usableAgents = agents;
+  // The API lists exactly the agents the caller may use in the workspace;
+  // the picker offers those it does not mark as fronted by the default.
+  const usableAgents = useMemo(() => chatPickerAgents(agents, keepIds), [agents, keepIds]);
 
   const filteredAgents = useMemo(
     () =>
