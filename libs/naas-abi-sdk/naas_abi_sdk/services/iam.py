@@ -247,6 +247,10 @@ class IAMService(ServiceProxy):
     ) -> dict[str, Any]:
         return await self._request("list_groups", limit=limit, after=after, scope=scope)
 
+    async def update_group(self, group_id: str, *, name: str) -> dict[str, Any]:
+        """Rename a group (``iam:UpdateGroup``)."""
+        return await self._request("update_group", group_id=group_id, name=name)
+
     async def delete_group(self, group_id: str) -> dict[str, Any]:
         return await self._request("delete_group", group_id=group_id)
 

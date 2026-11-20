@@ -69,7 +69,7 @@ Nexus adds no role check of its own.
   `GET /principals/{id}/groups` (IAM's `list_principal_groups`: the groups of the principal the caller may
   `iam:GetGroup`, at every level; empty, not a 403, for a principal they see nothing of),
   `POST /principals/{id}/suspend|resume`
-- `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, which names that organization's container, is the owner), `GET|DELETE /groups/{id}`, `PUT|DELETE /groups/{id}/members/{member}`,
+- `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, which names that organization's container, is the owner), `GET|DELETE /groups/{id}`, `PATCH /groups/{id}` (`{name}`: a rename, IAM's `update_group`, `iam:UpdateGroup`), `PUT|DELETE /groups/{id}/members/{member}`,
   `PUT|DELETE /groups/{id}/idp-mappings`
 - `GET|POST /service-accounts`, `DELETE /service-accounts/{id}`, `GET|POST /service-accounts/{id}/keys`,
   `DELETE …/keys/{key}`, `POST …/keys/{key}/rotate`
@@ -137,17 +137,17 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   anyone but the platform admin, as IAM refuses it; a right to attach without one to list still offers the
   level's own), and `GET /access?scope=`, `/catalogs?scope=`,
   `/grantable?scope=` and `/policies/validate?scope=` answer for that level (a scope below a container, in these
-  and in the lists, answers for that container). One web module serves every level (Nexus `AGENTS.md`, "Roles & permissions
-  UI module"): Platform settings, Organization settings and Workspace settings › Roles & permissions mount it
-  with their scope, and `GET /access?scope=` alone decides its sections and buttons. Consequences: an org or
+  and in the lists, answers for that container). One web module serves every level (Nexus `AGENTS.md`, "Access
+  UI module"): the pages of Platform settings, Organization settings and Workspace settings › Access mount it
+  with their scope, and `GET /access?scope=` alone decides its pages and buttons. Consequences: an org or
   workspace admin holds, at their scope, the attachment actions and that level's policies and groups, and
   nothing else of IAM; members and viewers hold none of it. Service accounts and keys, module approvals, the
   simulator, IdP mappings and the audit are the platform's: `access` answers their actions (`_PLATFORM_ONLY`,
   `nexus:ReadSystem`) false at any scope, the platform admin's included, so only the platform's page shows them.
-  The Platform Settings sidebar shows Roles & permissions for any
-  platform-level `iam:` action `GET /access` grants, and the tables and System only with `nexus:ReadSystem`:
-  a delegated IAM admin without it sees Roles & permissions alone, a stranger a 403; Organization and Workspace
-  settings show it for any `iam:` action at their scope.
+  The Platform Settings sidebar shows each page of Access for an action of it `GET /access` grants (Policies:
+  `iam:ListPolicies`, `iam:CreatePolicy` or `iam:ListAttachments`; Groups: `iam:ListGroups`; and so on), and the
+  tables and System only with `nexus:ReadSystem`: a delegated IAM admin without it sees those pages alone, a
+  stranger a 403; Organization and Workspace settings show their Policies and Groups on the same rule at their scope.
 - **Every change is audited, fail-closed.** The System app's `run_audited` and `audit_logs` table are reused: a
   `requested` record is written first and nothing changes if it cannot be (503); `succeeded` or `failed` (the
   exception type only) follows. IAM's records are the rows `iam.<operation>` (`SqlAdminAuditLog` takes the action
@@ -200,7 +200,7 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   on save (it leaves `parent` out of the `PUT`); choosing a parent and the tree of policies are the builder's
   (a later change).
 - **A workspace's admins edit its access policy at the workspace.** *Decision:* "<W> access" is owned by the workspace
-  (`../iam/AGENTS.md`, "Access policies and default groups"), so Workspace settings › Roles & permissions › Policies
+  (`../iam/AGENTS.md`, "Access policies and default groups"), so Workspace settings › Access › Policies
   lists it as the workspace's own, with its sub-policies below it, and opens it in the editor with the builder within
   "<O> access": `/publishers?scope=<W>&parent=<O access>` answers its editors (core's `grantable` for whoever may update
   a sub-policy of the parent at the scope), though they may neither read "<O> access" nor derive from it.
@@ -209,7 +209,7 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   words ("… which pol_… (Acme access), above it, does not allow …: it would grant nothing"), never a policy that grants
   less than it says; a widening beyond what the editor holds is a 403 (`GRANT_NOT_HELD`).
 - **A principal's and a policy's access at every level are IAM's lists.** *Decision:* the person's page, the group's page
-  and a policy's attachments (Nexus `AGENTS.md`, "Roles & permissions UI module") read `/attachments?principal_id=` and
+  and a policy's attachments (Nexus `AGENTS.md`, "Access UI module") read `/attachments?principal_id=` and
   `?policy_id=` without a scope, `/principals/{id}/groups` and, at the platform, `/principals?q=`; the filtering is
   IAM's (`list_attachments`, `list_principal_groups`, `list_principals(text=)`, in process, over NATS and in the
   SDK), Nexus adds none. *Consequences:* the platform admin sees everything a person holds, an organization's admin

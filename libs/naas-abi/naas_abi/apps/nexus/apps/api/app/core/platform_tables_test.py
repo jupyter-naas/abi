@@ -88,6 +88,7 @@ def test_registry_lists_every_nexus_table_by_section() -> None:
         ("Sign-in & security", "audit_logs"),
         ("Sign-in & security", "iam_migrations"),
         ("Sign-in & security", "container_defaults"),
+        ("Sign-in & security", "workspace_feature_policies"),
         ("Sign-in & security", "provisioned_identities"),
         ("Sign-in & security", "view_as_views"),
         ("Chat, agents & models", "conversations"),

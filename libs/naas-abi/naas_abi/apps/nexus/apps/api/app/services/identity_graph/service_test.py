@@ -444,6 +444,21 @@ def test_account_carries_the_hash_terminal_events_use() -> None:
     assert (user_account_iri("usr-1"), NEXUS.user_email_sha256, Literal(digest)) in graph
 
 
+def test_a_workspace_only_link_makes_a_user_of_the_organization_with_no_role() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.identity_graph.port import (
+        IdentityOrganizationMembership,
+    )
+
+    linked = IdentityOrganizationMembership(
+        id="member-org-1-usr-3", organization_id="org-1", user_id="usr-3", role=None, created_at=T0
+    )
+    graph = build_identity_graph(_snapshot(organization_memberships=[BOB_IN_ORG, linked]))
+
+    assert (organization_iri("org-1"), NEXUS.hasUser, person_iri("usr-3")) in graph
+    assert not list(graph.triples((organization_membership_iri("org-1", "usr-3"), None, None)))
+    assert not list(graph.triples((organization_role_iri("org-1", "usr-3"), None, None)))
+
+
 def test_the_workspace_settings_mirrored_carry_no_drive_flag() -> None:
     """Platform Files and System Files are IAM's: no workspace flag is mirrored."""
     from naas_abi.apps.nexus.apps.api.app.services.identity_graph.adapters.secondary.identity_graph__secondary_adapter__postgres import (  # noqa: E501

@@ -12,7 +12,9 @@ describe('old table pages', () => {
       '/settings/tables/workspace_members'
     );
     expect(platformSettingsRedirect('/settings/users/user-1')).toBe('/settings/tables/users/user-1');
-    expect(platformSettingsRedirect('/settings/users/usr_1', '?x=1')).toBe('/settings/tables/users/usr_1?x=1');
+    expect(platformSettingsRedirect('/settings/users/user-1', '?x=1')).toBe('/settings/tables/users/user-1?x=1');
+    // An IAM id is a person's page under Users, not a row.
+    expect(platformSettingsRedirect('/settings/users/usr_1')).toBeNull();
     expect(platformSettingsRedirect('/settings/workspace_resource_policies/ws-1~maps')).toBe(
       '/settings/tables/workspace_resource_policies/ws-1~maps'
     );
@@ -36,7 +38,10 @@ describe('old table pages', () => {
       '/settings/activity/traces',
       '/settings/resources/models',
       '/settings/data/documents',
-      '/settings/roles',
+      '/settings/access',
+      '/settings/access/policies',
+      '/settings/access/policies/builtin.owner',
+      '/settings/users/usr_1',
     ]) {
       expect(platformSettingsRedirect(path)).toBeNull();
     }
@@ -74,16 +79,39 @@ describe('old System links', () => {
     expect(platformSettingsRedirect('/settings/system/nats')).toBeNull();
   });
 
-  it('send Access to Roles & permissions', () => {
+  it('send Access to Platform › Access', () => {
     expect(platformSettingsRedirect('/workspace/ws-1/admin/system', '?tab=access')).toBe(
-      '/settings/roles'
+      '/settings/access'
     );
-    expect(platformSettingsRedirect('/settings/system/access')).toBe('/settings/roles');
+    expect(platformSettingsRedirect('/settings/system/access')).toBe('/settings/access');
   });
 
-  it('send Modules & features, removed with the sets, to Roles & permissions', () => {
-    expect(platformSettingsRedirect('/settings/modules')).toBe('/settings/roles');
-    expect(platformSettingsRedirect('/settings/modules', '?org=acme')).toBe('/settings/roles?org=acme');
+  it('send Modules & features, removed with the sets, to Platform › Access', () => {
+    expect(platformSettingsRedirect('/settings/modules')).toBe('/settings/access');
+    expect(platformSettingsRedirect('/settings/modules', '?org=acme')).toBe('/settings/access?org=acme');
+  });
+
+  it('send Roles & permissions to the page of Access it opened, People & roles to Users', () => {
+    expect(platformSettingsRedirect('/settings/roles')).toBe('/settings/access');
+    expect(platformSettingsRedirect('/settings/roles', '?section=policies')).toBe('/settings/access/policies');
+    expect(platformSettingsRedirect('/settings/roles', '?section=policies&policy=builtin.owner')).toBe(
+      '/settings/access/policies/builtin.owner'
+    );
+    expect(platformSettingsRedirect('/settings/roles', '?section=people')).toBe('/settings/users');
+    expect(platformSettingsRedirect('/settings/roles', '?section=people&person=usr_1')).toBe('/settings/users/usr_1');
+    expect(platformSettingsRedirect('/settings/roles', '?section=audit')).toBe('/settings/access/audit');
+    expect(platformSettingsRedirect('/organizations/org-1/settings/roles', '?section=groups')).toBe(
+      '/organizations/org-1/settings/groups'
+    );
+    expect(platformSettingsRedirect('/workspace/ws-1/settings/permissions', '?section=people')).toBe(
+      '/workspace/ws-1/settings/users'
+    );
+  });
+
+  it('send the Console, removed, to Settings', () => {
+    expect(platformSettingsRedirect('/settings/console')).toBe('/settings');
+    expect(platformSettingsRedirect('/settings/console/')).toBe('/settings');
+    expect(isPlatformSettingsPath('/settings/console')).toBe(false);
   });
 
   it('send Events to Activity › Events', () => {
@@ -110,15 +138,17 @@ describe('PLATFORM_SETTINGS_SECTIONS', () => {
       'data',
       'organizations',
       'users',
-      'roles',
+      'access',
       'drives',
     ]);
   });
 
-  it('serves Create user at /settings/users/new, never redirected to a users row', () => {
+  it('serves Create user at /settings/users/new and a person at /settings/users/<IAM id>, never redirected to a users row', () => {
     expect(platformSettingsRedirect('/settings/users/new')).toBeNull();
     expect(isPlatformSettingsPath('/settings/users/new')).toBe(true);
-    expect(platformSettingsRedirect('/settings/users/usr_a')).toBe('/settings/tables/users/usr_a');
+    expect(platformSettingsRedirect('/settings/users/usr_a')).toBeNull();
+    expect(isPlatformSettingsPath('/settings/users/usr_a')).toBe(true);
+    expect(platformSettingsRedirect('/settings/users/user-48f0f9a98e27')).toBe('/settings/tables/users/user-48f0f9a98e27');
   });
 
   it('serves Users, never redirected to the users table (its rows still are)', () => {
@@ -148,7 +178,8 @@ describe('isPlatformSettingsPath', () => {
     expect(isPlatformSettingsPath('/settings/activity/events')).toBe(true);
     expect(isPlatformSettingsPath('/settings/resources/models')).toBe(true);
     expect(isPlatformSettingsPath('/settings/data')).toBe(true);
-    expect(isPlatformSettingsPath('/settings/roles')).toBe(true);
+    expect(isPlatformSettingsPath('/settings/access/groups')).toBe(true);
+    expect(isPlatformSettingsPath('/settings/roles')).toBe(false);
     expect(isPlatformSettingsPath('/settings/organizations')).toBe(true);
     expect(isPlatformSettingsPath('/settings/modules')).toBe(false);
     expect(isPlatformSettingsPath('/settings/members')).toBe(false);

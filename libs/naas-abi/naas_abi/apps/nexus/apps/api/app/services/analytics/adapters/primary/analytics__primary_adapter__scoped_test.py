@@ -249,6 +249,46 @@ def test_the_organization_counts_its_members_in_its_workspaces_only(world, nexus
     assert {e["user_email"] for e in events} == {"member@example.com", "viewer@example.com"}
 
 
+@pytest.mark.asyncio
+async def test_someone_with_a_workspace_role_only_counts_in_the_organization(
+    team, world, nexus_db
+) -> None:
+    """Added to a workspace, a person gets no organization role (epic #1566), and is
+    still one of the organization's people: its directory, and so its analytics."""
+    team.grant("guest", "member", team.workspace("org-1", "ws-2"))
+    async with nexus_db() as db:
+        db.add(UserModel(id="guest", email="guest@example.com", name="guest"))
+        await db.flush()
+        await AnalyticsSecondaryAdapterPostgresEvents(db).apply_events(
+            [
+                RecordedEvent(
+                    event_id="e-guest",
+                    timestamp=T0,
+                    session_id="s-g",
+                    event_name="page_viewed",
+                    user_id="guest",
+                    workspace_id="ws-2",
+                    page_path="/workspace/ws-2/home",
+                    page_title="Home",
+                    payload={"event_id": "e-guest", "user_id": "guest", "workspace_id": "ws-2"},
+                )
+            ],
+            not_before=datetime(2026, 1, 1),
+        )
+        await db.commit()
+
+    client = _client(nexus_db, "admin")
+    users = client.get(f"{ORG}/users").json()
+    assert {u["user_id"] for u in users["users"]} == {"member", "viewer", "guest"}
+    directory = {d["user_id"]: d for d in users["directory"]}
+    assert directory["guest"]["workspace_ids"] == ["ws-2"]
+    overview = client.get(f"{ORG}/overview", params={"period": "today"}).json()
+    assert overview["kpi"]["active_users"] == 3
+    # Their figures are read in the workspace they hold a role in, and nowhere else.
+    assert client.get(f"{ORG}/users/guest").status_code == 200
+    assert client.get(f"{WS}/users/guest").status_code == 404
+
+
 def test_the_workspace_counts_that_workspace_only(world, nexus_db) -> None:
     client = _client(nexus_db, "admin")
     overview = client.get(f"{WS}/overview").json()

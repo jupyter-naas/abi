@@ -2,45 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { User } from 'lucide-react';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { useAuthStore } from '@/stores/auth';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { useMounted } from '@/hooks/use-mounted';
-import { useRememberSettingsScope } from '@/hooks/use-remember-settings-scope';
+import { useRememberSettingsPath } from '@/hooks/use-remember-settings-scope';
+import { useSettingsTabs } from '@/hooks/use-settings-levels';
 import { loadOrgBranding, resolveWorkspaceOrgId } from '@/lib/org-branding';
-import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
-import {
-  SettingsLayoutRoot,
-  SettingsNavItem,
-  useWorkspaceReturnPath,
-} from '@/components/settings/settings-shell';
+import { SettingsLevelsNav } from '@/components/settings/settings-levels-nav';
+import { SettingsLayoutRoot, useWorkspaceReturnPath } from '@/components/settings/settings-shell';
 import { SettingsShellHeader } from '@/components/settings/settings-shell-header';
-import { accountSettingsNavVisible, type AccountSettingsNavItem } from './lib/nav';
 import { parseAccountRoute } from './lib/account-route';
 import '@/app/organizations/[orgId]/settings/org-settings-layout.css';
-
-function NavItem({
-  item,
-  pathname,
-  mobileList = false,
-}: {
-  item: AccountSettingsNavItem;
-  pathname: string;
-  mobileList?: boolean;
-}) {
-  const isActive = pathname === item.href;
-  const Icon = item.icon;
-  return (
-    <SettingsNavItem
-      href={item.href}
-      label={item.label}
-      icon={Icon}
-      active={isActive}
-      chevron={mobileList}
-    />
-  );
-}
 
 export default function AccountLayout({
   children,
@@ -57,11 +28,11 @@ export default function AccountLayout({
   const workspaceOrgId = useWorkspaceStore(
     (state) => state.workspaces.find((w) => w.id === state.currentWorkspaceId)?.organizationId,
   );
-  const user = useAuthStore((state) => state.user);
-  const mounted = useMounted();
   const [borderRadius, setBorderRadius] = useState('0');
+  const { tabs, level } = useSettingsTabs({ mobile: isMobile });
 
-  useRememberSettingsScope(pathname);
+  // Every account page opens; the index is the phone's list, never reopened.
+  useRememberSettingsPath(sectionLabel ? pathname : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,8 +72,6 @@ export default function AccountLayout({
     router.push(workspaceHref);
   };
 
-  const scopeTitle = (mounted && user?.name) || 'Account';
-
   const showNav = !showMobileDetail;
   const showMain = !showMobileList;
 
@@ -110,12 +79,10 @@ export default function AccountLayout({
     <SettingsLayoutRoot borderRadius={borderRadius}>
       <div className="org-settings-layout-left">
         <SettingsShellHeader
-          scopeTitle={scopeTitle}
-          detailTitle={sectionLabel}
-          showScopeSwitcher={!showMobileDetail}
-          icon={User}
+          detailTitle={showMobileDetail ? sectionLabel : null}
+          tabs={showMobileDetail ? undefined : tabs}
           onBack={handleBack}
-          backAriaLabel={showMobileDetail ? 'Back to account settings' : 'Back to workspace'}
+          backAriaLabel={showMobileDetail ? 'Back to settings' : 'Back to workspace'}
         />
 
         <div
@@ -128,20 +95,7 @@ export default function AccountLayout({
                 : 'org-settings-layout-body'
           }
         >
-          {showNav && (
-            <SettingsLayoutNav title="Account Settings" resizable={!showMobileList}>
-              <ul className="settings-layout-nav-list">
-                {accountSettingsNavVisible.map((item) => (
-                  <NavItem
-                    key={item.href}
-                    item={item}
-                    pathname={pathname ?? ''}
-                    mobileList={showMobileList}
-                  />
-                ))}
-              </ul>
-            </SettingsLayoutNav>
-          )}
+          {showNav && <SettingsLevelsNav level={level} mobileList={showMobileList} />}
 
           {showMain && (
             <div className="org-settings-layout-main">

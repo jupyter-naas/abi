@@ -98,12 +98,24 @@ def _invalidate_settings_cache() -> None:
     invalidate_on_startup()
 
 
+_identity_graph_sync_lock: asyncio.Lock | None = None
+
+
 async def _sync_identity_graph() -> None:
     """Rebuild graph/nexus-identity from Postgres and the running configuration:
     users and persons, organizations, workspaces, memberships and access roles,
     features and policies, and their setup processes. Event payloads only hold
-    ids; this graph resolves them to people.
+    ids; this graph resolves them to people. One at a time: the boot's and one an
+    identity event scheduled would each read everything and rewrite the same graph.
     """
+    global _identity_graph_sync_lock
+    if _identity_graph_sync_lock is None:
+        _identity_graph_sync_lock = asyncio.Lock()
+    async with _identity_graph_sync_lock:
+        await _sync_identity_graph_now()
+
+
+async def _sync_identity_graph_now() -> None:
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
@@ -536,6 +548,23 @@ async def _hint_unlinked_users() -> None:
         )
 
 
+async def _migrate_pending_invitations() -> None:
+    """Pending invitations become invited people, once (``services/invites/migration.py``),
+    in the background: the identity provider they name may answer after the API
+    starts. Not while IAM's names wait to become container paths (the grants are
+    named in them): the next start does it."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, async_engine
+    from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+    from naas_abi.apps.nexus.apps.api.app.services.invites.runtime import migrate_when_ready
+
+    if authz.upgrading():
+        logging.getLogger(__name__).info(
+            "Pending invitations are moved to the people directory once IAM's moves are recorded"
+        )
+        return
+    await migrate_when_ready(AsyncSessionLocal, async_engine)
+
+
 async def _place_workspace_resources() -> None:
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
     from naas_abi.apps.nexus.apps.api.app.services.iam import placements
@@ -636,6 +665,8 @@ async def _startup(app: FastAPI) -> None:
         asyncio.create_task(_sync_identity_graph())
         # After seeds too: users and workspaces created before the drive writers get theirs.
         asyncio.create_task(_backfill_drives())
+        # After seeds and the moves: pending invitations become invited people.
+        asyncio.create_task(_migrate_pending_invitations())
 
     try:
         start_chat_ingestion_consumer(app)

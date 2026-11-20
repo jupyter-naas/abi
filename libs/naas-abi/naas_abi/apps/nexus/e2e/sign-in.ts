@@ -120,9 +120,11 @@ export async function signIn(page: Page, { email = ADMIN_EMAIL }: { email?: stri
   await page.waitForURL(leftTheLogin, { timeout: 60_000 });
 }
 
-/** Log out through the account menu: the web app ends the session (POST /api/auth/oidc/logout). */
+/** Open Account from the identity menu, then log out from the Settings header (POST /api/auth/oidc/logout). */
 export async function signOut(page: Page): Promise<void> {
   await page.getByRole('button', { name: /account menu/i }).first().click();
-  await page.getByRole('menuitem', { name: /log out/i }).click();
+  await page.getByRole('menuitem', { name: /^Account$/ }).click();
+  await expect(page).toHaveURL(/\/account\/profile/);
+  await page.getByRole('button', { name: /log out/i }).click();
   await expect(page).toHaveURL(/\/auth\/login/);
 }

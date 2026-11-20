@@ -43,6 +43,11 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.views import (
     PROVIDER_FAILURES,
     provider_failure,
 )
+from naas_abi.apps.nexus.apps.api.app.services.people.port import (
+    EmailTakenError,
+    ProvisioningFailedError,
+    RetiredIdentityError,
+)
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
 from pydantic import BaseModel, Field
 
@@ -54,7 +59,8 @@ LIST = "-"
 class AdminUserOrganization(BaseModel):
     id: str
     name: str
-    role: str
+    # Null: linked through one of the organization's workspaces only.
+    role: str | None = None
 
 
 class AdminUser(BaseModel):
@@ -198,7 +204,7 @@ async def _answer(call: Any) -> Any:
         raise HTTPException(status_code=404, detail="User not found") from exc
     except (DeletionBlocked, IdentityRetired) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except AccountExistsError as exc:
+    except (AccountExistsError, EmailTakenError, RetiredIdentityError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (AccountChangeRefused, NoProviderError, InvalidPolicyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -209,6 +215,10 @@ async def _answer(call: Any) -> Any:
     except ProviderUnreachable as exc:
         raise HTTPException(
             status_code=502, detail=f"The identity provider could not do it: {exc}"
+        ) from exc
+    except ProvisioningFailedError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"The identity provider could not create the user: {exc}"
         ) from exc
     except AuditUnavailable as exc:
         raise HTTPException(
@@ -239,8 +249,9 @@ async def invite_user(
     current_user: User = Depends(get_current_user_required),
     service: AccountService = Depends(get_account_service),
 ) -> AdminUserInvited:
-    """Invite someone to the platform, through Nexus's invitations: their provider
-    makes the account, and they get no role (attach their access once they have one)."""
+    """Invite someone to the platform: their account exists from now on, ``invited``
+    until they sign in (``services/people``); their provider makes theirs, and they get
+    no role (attach their access in Roles & permissions)."""
     email = body.email.strip().lower()
     if "@" not in email or email.startswith("@") or email.endswith("@"):
         raise HTTPException(status_code=400, detail="Enter a valid email address")

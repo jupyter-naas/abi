@@ -27,7 +27,7 @@ describe('FilesViewPicker', () => {
   it('renders the Drive then the View picker as ontology pickers', () => {
     const html = render();
     expect(html).not.toContain('<select');
-    expect(html.match(/class="ontology-picker-trigger/g)).toHaveLength(2);
+    expect(html.match(/class="search-picker-trigger/g)).toHaveLength(2);
     const drive = html.indexOf('aria-label="Choose drive: All Drives"');
     const view = html.indexOf('aria-label="Choose view: All Views"');
     expect(drive).toBeGreaterThan(-1);
@@ -35,7 +35,7 @@ describe('FilesViewPicker', () => {
   });
 
   it('stacks the two pickers, Drive above View, like the ontology filters', () => {
-    expect(render()).toContain('class="ontology-sidebar-filters');
+    expect(render()).toContain('class="search-picker-stack');
   });
 
   it('labels each trigger with its choice', () => {

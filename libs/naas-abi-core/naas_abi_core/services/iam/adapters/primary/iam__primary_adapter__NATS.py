@@ -285,6 +285,10 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             next_after=page.next_after,
         )
 
+    def _call_update_group(self, req: pb.UpdateGroupRequest) -> pb.UpdateGroupResponse:
+        record = self._iam.update_group(req.group_id, name=req.name)
+        return pb.UpdateGroupResponse(group=codec.principal_to_pb(record))
+
     def _call_delete_group(self, req: pb.DeleteGroupRequest) -> pb.DeleteGroupResponse:
         return pb.DeleteGroupResponse(
             group=codec.principal_to_pb(self._iam.delete_group(req.group_id))

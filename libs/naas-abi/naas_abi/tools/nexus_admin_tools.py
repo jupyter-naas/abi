@@ -193,6 +193,106 @@ def _auth_service(db: Any) -> Any:
     return AuthService(adapter=AuthSecondaryAdapterPostgres(db=db))
 
 
+def _people_service(db: Any) -> Any:
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+        build_people_service,
+    )
+
+    return build_people_service(db)
+
+
+async def _caller(db: Any, user_id: str) -> Any:
+    """The asking user, as the people service names who invites (``by``)."""
+    from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User
+
+    record = await _auth_service(db).get_user(user_id)
+    return User.model_construct(
+        id=user_id,
+        email=getattr(record, "email", None),
+        name=getattr(record, "name", None),
+    )
+
+
+async def _invite_limits(
+    user_id: str,
+    email: str,
+    *,
+    endpoint: str,
+    organization_id: str | None,
+    workspace_id: str | None,
+) -> dict[str, Any] | None:
+    """The invite routes' limits, for the agent's invitations too: the asking
+    user's and the address's, and the organization's day of invitation mail. An
+    error to report when one is reached, else None."""
+    from fastapi import HTTPException
+
+    from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+        check_invitation_mail_quota,
+        check_rate_limit,
+    )
+
+    try:
+        await check_rate_limit(f"user:{user_id}", endpoint)
+        await check_rate_limit(f"email:{email}", endpoint)
+        await check_invitation_mail_quota(organization_id, workspace_id)
+    except HTTPException as exc:
+        return {"error": str(exc.detail), "email": email}
+    return None
+
+
+async def _create_or_link(
+    db: Any,
+    user_id: str,
+    *,
+    limits_endpoint: str,
+    workspace_id: str | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """``PeopleService.create_or_link`` for the asking user: the person's account
+    made or linked, given ``grants`` on the asker's behalf (IAM decides), and
+    mailed. The answer never tells whether the account was made or linked. The
+    invite routes' limits apply (``limits_endpoint``: whose counters)."""
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+        people_http_error,
+        people_status,
+        provider_view,
+    )
+
+    limited = await _invite_limits(
+        user_id,
+        kwargs["email"],
+        endpoint=limits_endpoint,
+        organization_id=kwargs.get("organization_id"),
+        workspace_id=workspace_id,
+    )
+    if limited is not None:
+        return limited
+    try:
+        result = await _people_service(db).create_or_link(
+            by=await _caller(db, user_id), **kwargs
+        )
+    except MembershipDenied:
+        raise
+    except Exception as exc:
+        answer = people_http_error(exc)
+        if answer is None:
+            raise
+        return {"error": str(answer.detail), "email": kwargs.get("email")}
+    user = result.user
+    return {
+        "status": "added",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "status": people_status(user.status),
+        },
+        "provider": provider_view(result.provider),
+        "sign_in_email_sent": result.sign_in_email_sent,
+        "warning": result.warning,
+    }
+
+
 def _record_to_dict(record: Any) -> dict[str, Any]:
     if record is None:
         return {}
@@ -360,10 +460,12 @@ def nexus_admin_tools() -> list[BaseTool]:
         role: str = "member",
         name: str = "",
     ) -> Any:
-        """Invite a user by email into a workspace (creates the account if missing).
+        """Add a person by email to a workspace: their platform account is made,
+        or the one their email already has is linked.
 
-        Requires workspace owner/admin. role: admin, member, or viewer.
-        Sends OTP / magic-link sign-in email when email delivery is configured.
+        Requires workspace owner/admin. role: admin, member, or viewer. Grants the
+        workspace role only (no organization role). The person is mailed: a
+        sign-in link when new, a notice when they already had an account.
         Defaults to the current chat workspace when workspace_id is omitted.
         """
         user_id = _require_user_id()
@@ -379,16 +481,11 @@ def nexus_admin_tools() -> list[BaseTool]:
             return {"error": f"role must be one of {sorted(_WS_ROLES)}", "role": role}
 
         async def _run(db: Any) -> Any:
-            from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
-                issue_and_send_invite_sign_in,
-                resolve_email_service,
-            )
-            from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
-                WorkspaceMemberAlreadyExistsError,
+            from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+                Grant,
             )
 
             ws = _workspace_service(db)
-            auth = _auth_service(db)
             caller_role = await ws.get_workspace_role(user_id=user_id, workspace_id=workspace_id)
             if caller_role not in ("owner", "admin"):
                 return {
@@ -396,29 +493,22 @@ def nexus_admin_tools() -> list[BaseTool]:
                     "workspace_id": workspace_id,
                     "role": caller_role,
                 }
-            _user, user_created = await auth.ensure_user_for_invite(
-                email, name=display_name
+            workspace = await ws.get_workspace(workspace_id)
+            if workspace is None:
+                return {"error": "Workspace not found", "workspace_id": workspace_id}
+            # The workspace role only: a workspace admin never grants an org role.
+            return await _create_or_link(
+                db,
+                user_id,
+                limits_endpoint="/api/workspaces/members/invite",
+                workspace_id=workspace_id,
+                email=email,
+                name=display_name,
+                provider=None,
+                grants=[Grant("workspace", workspace_id, role)],  # type: ignore[arg-type]
+                may_grant_owner=False,
+                organization_id=workspace.organization_id,
             )
-            try:
-                member = await ws.invite_workspace_member(
-                    workspace_id=workspace_id,
-                    email=email,
-                    role=role,
-                    by=user_id,
-                )
-            except WorkspaceMemberAlreadyExistsError:
-                return {"error": "User is already a member", "email": email}
-            if member is None:
-                return {"error": "Failed to create or find user for invite", "email": email}
-            sign_in_email_sent = await issue_and_send_invite_sign_in(
-                auth, email, email_service=resolve_email_service()
-            )
-            return {
-                "status": "invited",
-                "member": _record_to_dict(member),
-                "user_created": user_created,
-                "sign_in_email_sent": sign_in_email_sent,
-            }
 
         try:
             return _run_async(_with_db(_run))
@@ -556,11 +646,12 @@ def nexus_admin_tools() -> list[BaseTool]:
         workspace_id: str = "",
         workspace_role: str = "member",
     ) -> Any:
-        """Invite a user by email into an organization (creates the account if missing).
+        """Add a person by email to an organization: their platform account is
+        made, or the one their email already has is linked.
 
-        Requires org owner/admin. role: owner, admin, or member.
-        Optionally also add them to a workspace via workspace_id.
-        Sends OTP / magic-link sign-in email when email delivery is configured.
+        Requires org owner/admin. role: owner (owners only), admin, or member.
+        Optionally also give them a role in one of its workspaces (workspace_id).
+        The person is mailed: a sign-in link when new, a notice otherwise.
         """
         user_id = _require_user_id()
         if isinstance(user_id, dict):
@@ -582,20 +673,11 @@ def nexus_admin_tools() -> list[BaseTool]:
             }
 
         async def _run(db: Any) -> Any:
-            from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-            from naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email import (
-                issue_and_send_invite_sign_in,
-                resolve_email_service,
-            )
-            from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
-                OrganizationMemberAlreadyExistsError,
-            )
-            from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
-                WorkspaceMemberAlreadyExistsError,
+            from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+                Grant,
             )
 
             org = _organization_service(db)
-            auth = _auth_service(db)
             caller_role = await org.get_organization_role(
                 user_id=user_id, org_id=organization_id
             )
@@ -605,6 +687,7 @@ def nexus_admin_tools() -> list[BaseTool]:
                     "organization_id": organization_id,
                     "role": caller_role,
                 }
+            grants = [Grant("organization", organization_id, role)]  # type: ignore[arg-type]
             if workspace_id:
                 org_workspaces = await org.list_all_workspaces(org_id=organization_id)
                 if workspace_id not in {ws.id for ws in org_workspaces}:
@@ -613,47 +696,25 @@ def nexus_admin_tools() -> list[BaseTool]:
                         "organization_id": organization_id,
                         "workspace_id": workspace_id,
                     }
-            _user, user_created = await auth.ensure_user_for_invite(
-                email, name=display_name
+                grants.append(Grant("workspace", workspace_id, workspace_role))  # type: ignore[arg-type]
+            out = await _create_or_link(
+                db,
+                user_id,
+                limits_endpoint="/api/organizations/members/invite",
+                workspace_id=workspace_id or None,
+                email=email,
+                name=display_name,
+                provider=None,
+                grants=grants,
+                may_grant_owner=caller_role == "owner",
+                organization_id=organization_id,
             )
-            try:
-                member = await org.invite_member(
-                    org_id=organization_id,
-                    email=email,
-                    role=role,
-                    now=datetime.now(UTC).replace(tzinfo=None),
-                    by=user_id,
+            if "error" not in out:
+                member = await org.get_organization_member(
+                    org_id=organization_id, user_id=out["user"]["id"]
                 )
-            except OrganizationMemberAlreadyExistsError:
-                return {"error": "User is already a member", "email": email}
-            if member is None:
-                return {"error": "Failed to create or find user for invite", "email": email}
-
-            workspace_member = None
-            if workspace_id:
-                ws = _workspace_service(db)
-                try:
-                    workspace_member = await ws.invite_workspace_member(
-                        workspace_id=workspace_id,
-                        email=email,
-                        role=workspace_role,
-                        by=user_id,
-                    )
-                except WorkspaceMemberAlreadyExistsError:
-                    workspace_member = None
-
-            sign_in_email_sent = await issue_and_send_invite_sign_in(
-                auth, email, email_service=resolve_email_service()
-            )
-            return {
-                "status": "invited",
-                "member": _record_to_dict(member),
-                "user_created": user_created,
-                "sign_in_email_sent": sign_in_email_sent,
-                "workspace_member": _record_to_dict(workspace_member)
-                if workspace_member
-                else None,
-            }
+                out["member"] = _record_to_dict(member) if member else None
+            return out
 
         try:
             return _run_async(_with_db(_run))
@@ -791,7 +852,6 @@ def nexus_admin_tools() -> list[BaseTool]:
                 user = await _auth_service(db).update_profile(
                     user_id=user_id,
                     name=payload["name"],
-                    email=None,
                     organization=payload["organization"],
                     job_title=payload["job_title"],
                     bio=payload["bio"],

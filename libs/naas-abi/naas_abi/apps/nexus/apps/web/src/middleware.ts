@@ -10,10 +10,12 @@ import { WEB_PASS_COOKIE } from './lib/web-pass';
  *
  * Routing hierarchy:
  *   /account/*                        -> authed
- *   /settings, /settings/{general,organizations,users,roles,drives,system,activity,resources,data,tables}/... -> authed, Platform Settings
- *   /settings/<table>, /settings/modules, /settings/system/{data,traffic,traces,events},
+ *   /settings, /settings/{general,organizations,users,access,drives,system,activity,resources,data,tables}/... -> authed, Platform Settings
+ *   /settings/<table>, /settings/modules, /settings/console, /settings/system/{data,traffic,traces,events},
  *   /workspace/[id]/admin/{system,events} -> redirected there (old links)
- *   /organizations/[orgId]/settings   -> authed (/settings/{access,modules} -> /settings/roles)
+ *   /settings/roles, /organizations/[orgId]/settings/roles, /workspace/[id]/settings/permissions
+ *                                     -> the Access page (or the person's page) they opened
+ *   /organizations/[orgId]/settings   -> authed (/settings/{access,modules} -> /settings/policies)
  *   /org/[orgSlug]/login              -> public, org-branded login
  *   /org/[orgSlug]/workspace/[id]/... -> authed, rewritten to /workspace/[id]/...
  *   /auth/login                       -> public
@@ -55,6 +57,14 @@ const legacyRoutes = ['/home', '/maps', '/chat', '/search', '/lab', '/ontology',
 // into them, and the legacy workspace settings links (/settings/members, ...) keep
 // redirecting to the workspace.
 
+/** A workspace's Members page became Users: `<workspace>/settings/members[/...]` → `.../users[/...]`. */
+const WORKSPACE_MEMBERS = /^((?:\/org\/[^/]+)?\/workspace\/[^/]+\/settings\/)members(\/.*)?$/;
+
+export function workspaceUsersRedirect(pathname: string): string | null {
+  const match = WORKSPACE_MEMBERS.exec(pathname);
+  return match ? `${match[1]}users${match[2] ?? ''}` : null;
+}
+
 const authRoutes = ['/auth/login', '/login'];
 
 const orgWorkspaceRegex = /^\/org\/([^/]+)\/workspace\/([^/]+)(\/.*)?$/;
@@ -77,7 +87,13 @@ export function middleware(request: NextRequest) {
     platformSettingsRedirect(pathname, request.nextUrl.search) ??
     orgSettingsRedirect(pathname, request.nextUrl.search);
   if (moved) {
-    return NextResponse.redirect(new URL(moved, request.url));
+    return NextResponse.redirect(new URL(workspaceUsersRedirect(moved) ?? moved, request.url));
+  }
+  const users = workspaceUsersRedirect(pathname);
+  if (users) {
+    const url = new URL(users, request.url);
+    url.search = request.nextUrl.search;
+    return NextResponse.redirect(url);
   }
 
   if (pathname.match(orgAuthRegex)) {
@@ -113,7 +129,8 @@ export function middleware(request: NextRequest) {
     !isPlatformSettingsPath(pathname) &&
     legacyRoutes.some(r => pathname === r || pathname.startsWith(`${r}/`));
   if (isLegacyRoute) {
-    const newUrl = new URL(`/workspace/${resolveDefaultWorkspace(request)}${pathname}`, request.url);
+    const target = `/workspace/${resolveDefaultWorkspace(request)}${pathname}`;
+    const newUrl = new URL(workspaceUsersRedirect(target) ?? target, request.url);
     newUrl.search = request.nextUrl.search;
     return NextResponse.redirect(newUrl);
   }

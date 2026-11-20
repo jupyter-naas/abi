@@ -24,7 +24,7 @@ describe('HoldingsTable', () => {
     const actionsAt = () => ({ 'iam:ListPolicies': true });
     mounted = await mount(HoldingsTable, { rows, names: {}, actionsAt, here: 'abi:', onDetach: vi.fn(), empty: '' });
     const link = (policy: string) => document.querySelector(`[data-holding="${policy}"] a`);
-    expect(link('pol_known')?.getAttribute('href')).toBe('/workspace/ws-1/settings/permissions?section=policies&policy=pol_known');
+    expect(link('pol_known')?.getAttribute('href')).toBe('/workspace/ws-1/settings/policies/pol_known');
     expect(link('pol_unread')).toBeNull();
     expect(document.querySelector('[data-holding="pol_unread"]')?.textContent).toContain('Unread');
   });

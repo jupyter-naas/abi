@@ -25,6 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
     register_service_exception_handlers,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
 from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.primary.invites__primary_adapter__FastAPI import (  # noqa: E501
@@ -41,11 +42,21 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.service_test import (
     Mailer,
     Store,
 )
+from naas_abi.apps.nexus.apps.api.app.services.people.adapters.secondary.engine import (
+    EngineAccessGateway,
+)
+from naas_abi.apps.nexus.apps.api.app.services.people.adapters.secondary.engine_test import (
+    Idp,
+)
+from naas_abi.apps.nexus.apps.api.app.services.people.runtime import PeopleRuntime
+from naas_abi.apps.nexus.apps.api.app.services.people.service_test import Mailer as PeopleMailer
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary import (
     workspaces__primary_adapter__FastAPI as workspaces_module,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_testing import installed
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
+from sqlalchemy import select
 
 WS1 = workspace_container("org-1", "ws-1")
 REFUSAL = "You cannot grant what you do not hold"
@@ -138,7 +149,6 @@ async def api(team, nexus_db, monkeypatch):
 
     app.dependency_overrides[get_db] = session
     app.dependency_overrides[invites_runtime.get_invitation_service] = lambda: invites
-    app.dependency_overrides[workspaces_module._get_email_service] = lambda: None
     app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(
         id=current["id"], email=f"{current['id']}@example.com", name=current["id"].title()
     )
@@ -147,7 +157,14 @@ async def api(team, nexus_db, monkeypatch):
         current["id"] = user
         return AsyncClient(transport=ASGITransport(app=app), base_url="http://t")
 
-    return SimpleNamespace(as_=as_, invites=invites)
+    # The member invites create or link through the real people service, on the
+    # same IAM; only the provider and the mail are in memory.
+    idp = Idp()
+    people = PeopleRuntime(
+        identity_gateway=idp, access=EngineAccessGateway(lambda: team.iam), mailer=PeopleMailer()
+    )
+    with installed(people):
+        yield SimpleNamespace(as_=as_, invites=invites, idp=idp, sessions=nexus_db)
 
 
 def _pending(team) -> list[tuple[str, str | None]]:
@@ -167,6 +184,13 @@ def _refused(response, policy_id: str) -> None:
     assert detail.endswith("you do not hold it there"), detail
 
 
+async def _row(api, email: str) -> UserModel | None:
+    async with api.sessions() as db:
+        return (
+            await db.execute(select(UserModel).where(UserModel.email == email))
+        ).scalar_one_or_none()
+
+
 @pytest.mark.asyncio
 async def test_an_invitation_to_a_role_the_inviter_lacks_is_a_403_naming_it(api, team):
     async with api.as_("inviter") as client:
@@ -175,15 +199,25 @@ async def test_an_invitation_to_a_role_the_inviter_lacks_is_a_403_naming_it(api,
             json={"email": "eve@example.com", "role": "member"},
         )
         _refused(response, "builtin.member")
+        # Refused before anything was made: no warrant left, no account at the
+        # provider, no row, no invitation.
         assert _pending(team) == []
+        assert api.idp.asked == []
+        assert await _row(api, "eve@example.com") is None
         assert api.invites.persistence.rows == {}
-        # A role it holds, it gives.
+        # A role it holds, it gives: Eve is a user now, invited, holding it.
         response = await client.post(
             "/api/workspaces/ws-1/members/invite",
             json={"email": "eve@example.com", "role": "viewer"},
         )
         assert response.status_code == 200, response.text
-    assert _pending(team) == [("builtin.viewer", WS1)]
+    answer = response.json()
+    assert answer["status"] == "added" and answer["user"]["status"] == "invited"
+    eve = await _row(api, "eve@example.com")
+    assert eve is not None and eve.status == "invited" and eve.id == answer["user"]["id"]
+    assert await MEMBERSHIPS.roles_of(eve.id) == {WS1: "viewer"}
+    # The role is attached directly: nothing waits as a pending grant.
+    assert _pending(team) == []
     async with api.as_("admin") as client:
         response = await client.post(
             "/api/workspaces/ws-1/members/invite",
@@ -212,15 +246,11 @@ def _held(team, user: str) -> set[tuple[str, str | None]]:
 
 
 @pytest.mark.asyncio
-async def test_adding_an_account_checks_its_policies_before_the_membership(api, team, monkeypatch):
-    """Someone who has an account is added directly: the policies the invite
-    carries are checked first, so a refused one leaves no membership behind."""
+async def test_adding_an_account_checks_its_policies_before_the_membership(api, team):
+    """Someone who has an account is linked: the policies the invite carries are
+    checked first, so a refused one leaves no membership behind."""
     from naas_abi.apps.nexus.apps.api.app.services.iam import role_features
 
-    async def known(email: str) -> str | None:
-        return "carl" if email == "carl@example.com" else None
-
-    monkeypatch.setattr(api.invites.persistence, "user_id_by_email", known)
     with as_service_account("engine"):
         features = team.iam.create_policy(
             "Features of member", role_features.policy_document(["chat"]), scope=WS1
@@ -228,7 +258,7 @@ async def test_adding_an_account_checks_its_policies_before_the_membership(api, 
     body = {"email": "carl@example.com", "role": "viewer", "policy_ids": [features.id]}
     async with api.as_("inviter") as client:
         refused = await client.post("/api/workspaces/ws-1/members/invite", json=body)
-    assert refused.status_code in (403, 404), refused.text
+    assert refused.status_code == 403, refused.text
     assert _held(team, "carl") == set()
     async with api.as_("admin") as client:
         wrong = await client.post(
@@ -239,4 +269,12 @@ async def test_adding_an_account_checks_its_policies_before_the_membership(api, 
         assert _held(team, "carl") == set()
         added = await client.post("/api/workspaces/ws-1/members/invite", json=body)
     assert added.status_code == 200, added.text
+    # Linked, never made: the provider was not asked, and Carl is who he was.
+    assert added.json()["user"] == {
+        "id": "carl",
+        "email": "carl@example.com",
+        "name": "Carl",
+        "status": "active",
+    }
+    assert api.idp.asked == []
     assert {("builtin.viewer", WS1), (features.id, WS1)} <= _held(team, "carl")

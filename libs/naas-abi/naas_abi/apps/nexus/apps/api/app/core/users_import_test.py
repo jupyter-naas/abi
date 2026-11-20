@@ -165,6 +165,37 @@ async def test_a_new_superadmin_is_a_platform_administrator_in_iam(db) -> None:
     assert await authz.allowed("ManageSystem", user=root.id)
 
 
+@pytest.mark.asyncio
+async def test_new_people_are_invited_and_name_their_provider(db) -> None:
+    """As the configuration's (core/org_seed.py): their verified sign-in at that
+    provider opens the row; an existing row no provider signs in yet is only given
+    its provider."""
+    providers = ({"builtin": "builtin", "corp": "zitadel"}, "corp")
+
+    report = await import_users(
+        db,
+        [
+            {"email": "new@example.com", "name": "New"},
+            {"email": "kc@example.com", "name": "Kc", "provider": "builtin"},
+            {"email": "existing@example.com", "name": "Snapshot"},
+        ],
+        providers=providers,
+    )
+    await db.commit()
+
+    rows = {u.email: u for u in (await db.execute(select(UserModel))).scalars()}
+    assert (rows["new@example.com"].status, rows["new@example.com"].idp_provider) == (
+        "invited",
+        "corp",
+    )
+    assert rows["kc@example.com"].idp_provider == "builtin"
+    assert (rows["existing@example.com"].status, rows["existing@example.com"].idp_provider) == (
+        "active",
+        "corp",
+    )
+    assert report.created_emails == ["new@example.com", "kc@example.com"]
+
+
 def test_load_entries_reads_the_snapshot_format(tmp_path) -> None:
     path = tmp_path / "config.users.yaml"
     path.write_text("# header\nusers:\n  - email: a@example.com\n    name: A\n")

@@ -23,13 +23,28 @@ vi.mock('next/link', async () => {
 });
 vi.mock('@/hooks/use-is-mobile', () => ({ useIsMobile: () => false }));
 vi.mock('@/hooks/use-dev-route-warmup', () => ({ useDevRouteWarmup: () => undefined }));
-vi.mock('@/hooks/use-remember-settings-scope', () => ({ useRememberSettingsScope: () => undefined }));
 vi.mock('@/hooks/use-platform-settings-access', () => ({
   usePlatformSettingsAccess: () => ({ status: 'ready', actions: {}, retry: () => undefined }),
 }));
-vi.mock('@/components/settings/settings-scope-switcher', () => ({
-  SettingsScopeSwitcher: ({ title }: { title: string }) => title,
-}));
+// The column: this organization's level, as the layout has read it (role, IAM access).
+vi.mock('@/hooks/use-settings-levels', async () => {
+  const { currentSettingsLevel, settingsLevels } = await import('@/components/settings/settings-levels');
+  return {
+    useSettingsTabs: ({ organization }: { organization?: { id: string; items: never[] } }) => ({
+      tabs: [],
+      level: currentSettingsLevel(
+        settingsLevels({
+          account: [],
+          workspace: null,
+          organization: organization ? { ...organization, name: 'Acme', current: true } : null,
+          otherOrganizations: [],
+          platform: [],
+        }),
+        '/organizations/acme/settings/general'
+      ),
+    }),
+  };
+});
 vi.mock('@/lib/iam-admin/use-access', () => ({
   useIamAccess: () => ({ access: state.access, loading: false, error: null, can: () => false }),
 }));
@@ -41,6 +56,7 @@ vi.mock('@/stores/workspace', () => {
   return { useWorkspaceStore: (select: (s: typeof store) => unknown) => select(store) };
 });
 vi.mock('@/stores/auth', () => ({
+  useAuthStore: (select: (s: unknown) => unknown) => select({ logout: () => undefined }),
   authFetch: async (url: string) =>
     url === '/api/organizations/acme'
       ? new Response(JSON.stringify({ name: 'Acme', current_user_role: state.role }), { status: 200 })
@@ -48,6 +64,7 @@ vi.mock('@/stores/auth', () => ({
 }));
 
 import { createElement } from 'react';
+import { settingsLevelReturnPath, settingsReturnPath } from '@/lib/settings-scope-path';
 import OrganizationSettingsLayout from './layout';
 
 let mounted: Mounted | null = null;
@@ -56,6 +73,7 @@ afterEach(async () => {
   mounted = null;
   state.replaced = [];
   state.readsAnalytics = false;
+  window.sessionStorage.clear();
 });
 
 async function render(): Promise<string> {
@@ -71,6 +89,10 @@ describe('organization settings by URL (UJ-O1)', () => {
     const text = await render();
     expect(text).toContain('GENERAL PAGE');
     expect(text).toContain('Users');
+    expect(text).toContain('Policies');
+    expect(text).not.toContain('Roles & permissions');
+    expect(mounted?.host.querySelector('header [aria-label="Help"]')).not.toBeNull();
+    expect(mounted?.host.querySelector('header [aria-label="Log out"]')).not.toBeNull();
   });
 
   it('refuse an organization member with no iam: right there (Eve, Bob)', async () => {
@@ -82,11 +104,11 @@ describe('organization settings by URL (UJ-O1)', () => {
     expect(text).toContain('You have no access to these settings');
   });
 
-  it('send a member holding iam: rights there to Roles & permissions', async () => {
+  it('send a member holding iam: rights there to the first Access page they hold', async () => {
     state.role = 'member';
     state.access = { actions: { 'iam:ListPolicies': true } };
     await render();
-    expect(state.replaced).toEqual(['/organizations/acme/settings/roles']);
+    expect(state.replaced).toEqual(['/organizations/acme/settings/policies']);
   });
 
   it('show Analytics to an organization admin the analytics API lets read', async () => {
@@ -96,5 +118,24 @@ describe('organization settings by URL (UJ-O1)', () => {
     await mounted?.unmount();
     state.readsAnalytics = true;
     expect(await render()).toContain('Analytics');
+  });
+
+  it('remember a section once it opens, never a refused one or one that sends the caller elsewhere', async () => {
+    state.role = 'member';
+    state.access = { actions: { 'iam:ListPolicies': false } };
+    expect(await render()).toContain('You have no access to these settings');
+    expect(settingsReturnPath('nothing')).toBe('nothing');
+
+    await mounted?.unmount();
+    state.access = { actions: { 'iam:ListPolicies': true } };
+    await render();
+    expect(state.replaced).toEqual(['/organizations/acme/settings/policies']);
+    expect(settingsReturnPath('nothing')).toBe('nothing');
+
+    await mounted?.unmount();
+    state.role = 'admin';
+    expect(await render()).toContain('GENERAL PAGE');
+    expect(settingsReturnPath('nothing')).toBe('/organizations/acme/settings/general');
+    expect(settingsLevelReturnPath('organization')).toBe('/organizations/acme/settings/general');
   });
 });

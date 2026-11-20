@@ -177,6 +177,36 @@ def test_the_allowlists_have_no_stale_entries(table) -> None:
     assert sorted(set(ACCOUNT_ROUTES) & set(PUBLIC_ROUTES)) == []
 
 
+# Workspace settings > General › Features: read as the workspace's configuration, saved
+# as the IAM writes the caller makes (``services/feature_access``).
+FEATURE_ACCESS_ROUTES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("GET", "/api/workspaces/{workspace_id}/feature-access"): ("GetWorkspaceConfiguration",),
+    ("PUT", "/api/workspaces/{workspace_id}/feature-access"): (
+        "iam:CreatePolicy",
+        "iam:AttachPolicy",
+        "iam:DetachPolicy",
+    ),
+}
+
+
+def test_the_feature_access_routes_declare_what_they_authorize(table) -> None:
+    found = {key: tuple(d.action for d in _declared(table[key])) for key in FEATURE_ACCESS_ROUTES}
+    assert found == FEATURE_ACCESS_ROUTES
+
+
+# Access › Groups: IAM decides each change on the group, at the scope that owns it.
+GROUP_ROUTES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("POST", "/api/iam/admin/groups"): ("iam:CreateGroup",),
+    ("PATCH", "/api/iam/admin/groups/{group_id}"): ("iam:UpdateGroup",),
+    ("DELETE", "/api/iam/admin/groups/{group_id}"): ("iam:DeleteGroup",),
+}
+
+
+def test_the_group_routes_declare_what_they_authorize(table) -> None:
+    found = {key: tuple(d.action for d in _declared(table[key])) for key in GROUP_ROUTES}
+    assert found == GROUP_ROUTES
+
+
 def test_a_write_method_never_authorizes_only_a_read(table) -> None:
     offenders = []
     for key, calls in table.items():

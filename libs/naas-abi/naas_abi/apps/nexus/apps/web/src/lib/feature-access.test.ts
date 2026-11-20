@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  FEATURE_KEYS,
   getFeatureForWorkspacePath,
   getGatingFeatureForWorkspacePath,
   getFirstAllowedWorkspacePath,
@@ -62,7 +63,6 @@ describe('getFeatureForWorkspacePath', () => {
     );
     expect(getFeatureForWorkspacePath('/workspace/ws1/settings/agents')).toBe('agents');
     expect(getFeatureForWorkspacePath('/workspace/ws1/settings/general')).toBe('settings.workspace');
-    expect(getFeatureForWorkspacePath('/workspace/ws1/settings/infrastructure')).toBe('settings.workspace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization')).toBe('settings.organization');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization/billing')).toBe('settings.organization');
     expect(getFeatureForWorkspacePath('/workspace/ws1/apps')).toBe('apps');
@@ -77,6 +77,24 @@ describe('getFeatureForWorkspacePath', () => {
     expect(getGatingFeatureForWorkspacePath('/workspace/ws1/settings/general')).toBe(null);
     expect(getFeatureForWorkspacePath('/workspace/ws1/marketplace')).toBe('marketplace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/help')).toBe('settings');
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/help')).toBe(null);
+  });
+
+  it('opens Help to a member holding only chat and files', () => {
+    const onlyChatAndFiles = Object.fromEntries(
+      FEATURE_KEYS.map((feature) => [feature, feature === 'chat' || feature === 'files']),
+    );
+    const member = { role: 'member', workspaceFlags: onlyChatAndFiles };
+    expect(isWorkspacePathAllowed({ pathname: '/workspace/ws1/help', ...member })).toBe(true);
+    expect(isWorkspacePathAllowed({ pathname: '/org/acme/workspace/ws1/help', ...member })).toBe(true);
+    expect(isWorkspacePathAllowed({ pathname: '/workspace/ws1/settings', ...member })).toBe(true);
+    expect(isWorkspacePathAllowed({ pathname: '/workspace/ws1/organization', ...member })).toBe(false);
+    // The Apps page lists the module apps the caller may open; app projects need "apps".
+    expect(isWorkspacePathAllowed({ pathname: '/workspace/ws1/apps', ...member })).toBe(true);
+    expect(isWorkspacePathAllowed({ pathname: '/workspace/ws1/apps/p/my-app', ...member })).toBe(false);
+    expect(
+      getWorkspaceSwitchPath({ pathname: '/workspace/ws1/help', targetWorkspaceId: 'ws2', ...member }),
+    ).toBe('/workspace/ws2/help');
   });
 
   it('supports org-scoped rewritten routes', () => {

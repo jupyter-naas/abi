@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useIsMobile } from '@/hooks/use-is-mobile';
+import { isMobileViewport, useIsMobile } from '@/hooks/use-is-mobile';
 
 export default function AccountPage() {
   const isMobile = useIsMobile();
@@ -11,7 +11,7 @@ export default function AccountPage() {
   // Desktop keeps the old default: land on Profile. Mobile stays on /account
   // so the layout can show the settings list first (chat-style list-then-detail).
   useEffect(() => {
-    if (!isMobile) {
+    if (!isMobile && !isMobileViewport()) {
       router.replace('/account/profile');
     }
   }, [isMobile, router]);

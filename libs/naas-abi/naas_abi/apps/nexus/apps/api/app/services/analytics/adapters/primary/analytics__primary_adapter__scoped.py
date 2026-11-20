@@ -8,8 +8,9 @@ the contract shared with the web app (``docs/adr/20261119_analytics_scoped_rollu
 
 The scope is resolved here, on the server, before the domain service runs:
 
-* organization: its workspaces (``workspaces.organization_id``) and its members
-  (who holds a role at the organization's container, from IAM);
+* organization: its workspaces (``workspaces.organization_id``) and its people, as
+  its directory lists them (who holds a role at the organization's container, below
+  it, or in one of its workspaces, from IAM);
 * workspace: that workspace, and who holds a role there or reaches it through an
   org-wide role (as the workspace's member list shows them).
 
@@ -177,12 +178,15 @@ async def organization_scope(
     workspace_ids = await queries.organization_workspaces(org_id)
     containers = {ws: workspace_container(org_id, ws) for ws in workspace_ids}
     found = await _members_of([org_container(org_id), org_below(org_id), *containers.values()])
-    members = sorted(found[org_container(org_id)])
     org_wide = found[org_below(org_id)]
     held: dict[str, list[str]] = {}
     for ws, container in containers.items():
         for uid in found[container]:
             held.setdefault(uid, []).append(ws)
+    # The organization's directory (``MEMBERSHIPS.org_directory``, epic #1566): who holds
+    # a role at the organization, below it, or only in one of its workspaces. Someone
+    # added to a workspace gets no organization role, and still counts here.
+    members = sorted(found[org_container(org_id)] | org_wide | held.keys())
     return AnalyticsScope(
         kind="organization",
         organization_id=org_id,

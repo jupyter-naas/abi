@@ -12,6 +12,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { discardDeferredStorage } from '@/lib/deferred-storage';
 import { clearAuthFlagCookie, mergeAuthPersistedState, setAuthFlagCookie } from '@/lib/auth-session';
 import { getSafeStorage } from '@/lib/safe-storage';
+import { forgetSettingsPaths } from '@/lib/settings-scope-path';
 import { dropWebPass, keepWebPass } from '@/lib/web-pass';
 import { clearViewFlag, setViewFlag, viewFlagActive, readViewFlag } from '@/lib/view-flag';
 import {
@@ -94,6 +95,7 @@ export const useAuthStore = create<AuthState>()(
         dropWebPass();
         // The sign-out ends the view on the server; the browser forgets it too.
         clearViewFlag();
+        forgetSettingsPaths();
         const { csrfToken } = get();
         // The API ends the session; the provider may end its own too.
         void fetch(`${getApiUrl()}/api/auth/oidc/logout`, {

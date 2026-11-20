@@ -16,7 +16,7 @@ export interface AdminUserOrganization {
 }
 
 export interface AdminUser {
-  /** The Nexus user id; someone invited who has no account yet: `invited:<email>`. */
+  /** The Nexus user id; an invitation from before people were created at once: `invited:<email>`. */
   id: string;
   kind: 'account' | 'invitation';
   email: string;
@@ -24,8 +24,8 @@ export interface AdminUser {
   avatar: string | null;
   /** Their IAM id, which the person's page opens on (null: IAM has none yet). */
   principal_id: string | null;
-  /** Signed in at least once, or invited and not yet. */
-  status: 'signed_in' | 'invited';
+  /** Invited: created, has not signed in yet. Active (older API: `signed_in`): signed in once. */
+  status: 'active' | 'signed_in' | 'invited';
   deactivated: boolean;
   is_superadmin: boolean;
   /** Null for an invitation the API knows no date of. */
@@ -91,7 +91,7 @@ export type ColumnId = 'user' | 'iam' | 'status' | 'superadmin' | 'organizations
 
 export const COLUMNS: { id: ColumnId; label: string }[] = [
   { id: 'user', label: 'User' },
-  { id: 'iam', label: 'IAM ID' },
+  // The IAM id is not a column: it stays in the search, the export and the person's page.
   { id: 'status', label: 'Status' },
   { id: 'superadmin', label: 'Superadmin' },
   { id: 'organizations', label: 'Organizations' },
@@ -109,8 +109,9 @@ export const NO_ORGANIZATION = 'No organization';
 export const NO_DATE = 'No date';
 export const NO_IAM_ID = 'None yet';
 
+/** Anything but invited has signed in: `active`, or the older `signed_in`. */
 export function statusLabel(user: AdminUser): string {
-  return user.status === 'signed_in' ? SIGNED_IN : INVITED;
+  return user.status === 'invited' ? INVITED : SIGNED_IN;
 }
 
 /** `YYYY-MM-DD`, or the text as it came when it is not a date. */
@@ -199,10 +200,11 @@ export function exportRow(user: AdminUser): string[] {
   ];
 }
 
-/** The person's page in Roles & permissions, where their access is seen and changed. */
+/** The person's page under Users (`/settings/users/<IAM id>`), where their access is seen and
+ *  changed. */
 export function personHref(user: AdminUser): string | null {
   if (!user.principal_id) return null;
-  return `/settings/roles?section=people&person=${encodeURIComponent(user.principal_id)}`;
+  return `${PLATFORM_USERS_PATH}/${encodeURIComponent(user.principal_id)}`;
 }
 
 export function isSelf(user: AdminUser, selfId: string | null | undefined): boolean {

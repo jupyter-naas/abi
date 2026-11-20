@@ -24,7 +24,9 @@ type Props = AccessViewProps & {
   personId: string;
   /** Their name as the page that opened this one shows it, until IAM's is read. */
   label?: string | null;
-  onClose: () => void;
+  /** Back to where the page was opened from (Users, Members); without it, no back link. */
+  onClose?: () => void;
+  backLabel?: string;
   /** Changes a role (tests pass a fake); the membership routes by default. */
   changeRole?: (target: RoleTarget, userId: string, role: BuiltInRole) => Promise<void>;
   /** The workspaces to view them in (tests pass a fake); IAM's answer by default. */
@@ -42,7 +44,7 @@ const targetKey = (target: RoleTarget) =>
   target.level === 'workspace' ? `workspace/${target.workspaceId}` : `organization/${target.organizationId}`;
 
 /**
- * The person as the members of ``target`` name them, as People & roles joins them
+ * The person as the members of ``target`` name them, as the people of a scope are joined
  * (`people-model.peopleAt`): their IAM id, else, for an account linked from the old login, the
  * member with their email. Null when they are not found there, or their role there is the
  * organization's (read-only), or the members cannot be read: the role is then not changed here.
@@ -91,6 +93,7 @@ export function PersonView({
   personId,
   label,
   onClose,
+  backLabel = 'Users',
   changeRole = changeMemberRole,
   viewable,
 }: Props) {
@@ -206,9 +209,11 @@ export function PersonView({
 
   return (
     <div className="access-person" data-person-page={personId}>
-      <button type="button" className="access-person-back" onClick={onClose}>
-        <ArrowLeft size={14} /> People &amp; roles
-      </button>
+      {onClose && (
+        <button type="button" className="access-person-back" onClick={onClose}>
+          <ArrowLeft size={14} /> {backLabel}
+        </button>
+      )}
       <header className="access-person-header">
         <h3 className="access-person-name">{name}</h3>
         {shownEmail && <span className="access-people-sub">{shownEmail}</span>}
@@ -271,7 +276,7 @@ export function PersonView({
               <AttachForm
                 key={attachAt}
                 api={api}
-                // The platform's level is an attachment everywhere (no scope), as on People & roles.
+                // The platform's level is an attachment everywhere (no scope).
                 scope={attachAt === PLATFORM ? null : attachAt}
                 principals={[]}
                 principalId={personId}

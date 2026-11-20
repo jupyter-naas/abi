@@ -13,6 +13,12 @@ from collections.abc import Callable, Sequence
 from typing import Any, TypeVar
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+from naas_abi.apps.nexus.apps.api.app.services.invites.migration import (
+    ROLE_POLICIES,
+    MigrationGateway,
+    MigrationProvider,
+    ProviderUnavailable,
+)
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     Directory,
     DirectoryGateway,
@@ -213,3 +219,85 @@ class EngineGrantsGateway(GrantsGateway):
             for b in found
             if b.scope in wanted and b.policy_id.startswith(BUILTIN_PREFIX)
         ]
+
+
+class EngineMigrationGateway(MigrationGateway):
+    """What the move of pending invitations into people asks of the engine, as
+    Nexus itself (``api`` for nobody): the grants it attaches were authorized when
+    the invitations were made."""
+
+    def __init__(self, identity: Callable[[], Any | None], iam: Callable[[], Any | None]) -> None:
+        self._identity = identity
+        self._iam = iam
+
+    def _service(self, get: Callable[[], Any | None], what: str) -> Any:
+        service = get()
+        if service is None:
+            # Not up yet (or not opened by the CLI): the invitations wait, retried.
+            raise ProviderUnavailable(f"The engine's {what} service is not loaded")
+        return service
+
+    async def providers(self) -> dict[str, MigrationProvider]:
+        identity = self._service(self._identity, "identity")
+        try:
+            found = await _as_api(lambda: identity.list_providers())
+        except ProviderUnavailableError as exc:
+            raise ProviderUnavailable(str(exc)) from exc
+        return {
+            p.name: MigrationProvider(p.name, str(p.issuer), str(p.provisioning)) for p in found
+        }
+
+    async def find(self, provider: MigrationProvider, email: str) -> str | None:
+        if provider.provisioning == "none":
+            return None
+        identity = self._service(self._identity, "identity")
+        try:
+            user = await _as_api(lambda: identity.find_provisioned_user(provider.name, email))
+        except NotImplementedError:
+            return None
+        except ProviderUnavailableError as exc:
+            raise ProviderUnavailable(str(exc)) from exc
+        subject = getattr(user, "subject", None) if user is not None else None
+        return str(subject) if subject else None
+
+    async def ensure_principal(
+        self, provider: MigrationProvider, subject: str, *, email: str
+    ) -> str | None:
+        iam = self._service(self._iam, "IAM")
+        record = await _as_api(
+            lambda: iam.ensure_user(provider.issuer, subject, provider=provider.name, email=email)
+        )
+        return str(record.id) if str(record.status) == "active" else None
+
+    async def pending(self, grant_ids: Sequence[str]) -> dict[str, tuple[str, str | None]]:
+        wanted = set(grant_ids)
+        if not wanted:
+            return {}
+        iam = self._service(self._iam, "IAM")
+        found = await _as_api(lambda: iam.list_pending_grants())
+        return {str(g.id): (str(g.policy_id), g.scope) for g in found if str(g.id) in wanted}
+
+    async def give(self, user_id: str, policy_id: str, scope: str | None) -> None:
+        from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+        role = policy_id.removeprefix(BUILTIN_PREFIX) if policy_id in ROLE_POLICIES else None
+        if role is not None and scope is not None:
+            held = await MEMBERSHIPS.role_at(user_id, scope)
+            if held is None or _RANKS.index(held) > _RANKS.index(role):
+                # As the system: the invitation was authorized when it was made.
+                await MEMBERSHIPS.grant(user_id, role, scope)
+            return
+        iam = self._service(self._iam, "IAM")
+        principal_id = await MEMBERSHIPS.principal_id(user_id)
+        await _as_api(lambda: iam.attach_policy(policy_id, principal_id, scope))
+
+    async def withdraw(self, grant_ids: Sequence[str]) -> None:
+        if not grant_ids:
+            return
+        iam = self._service(self._iam, "IAM")
+        for grant_id in grant_ids:
+            await _as_api(lambda g=grant_id: iam.revoke_pending_grant(g))  # type: ignore[misc]
+
+
+# Highest first.
+_RANKS = ("owner", "admin", "member", "viewer")

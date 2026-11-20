@@ -4,16 +4,12 @@ import { useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { RefreshCw, ShieldCheck } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
-import { useRememberSettingsScope } from '@/hooks/use-remember-settings-scope';
+import { useRememberSettingsPath } from '@/hooks/use-remember-settings-scope';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
+import { useSettingsTabs } from '@/hooks/use-settings-levels';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
-import {
-  SettingsLayoutRoot,
-  SettingsNavItem,
-  useWorkspaceReturnPath,
-} from '@/components/settings/settings-shell';
+import { SettingsLevelsNav } from '@/components/settings/settings-levels-nav';
+import { SettingsLayoutRoot, useWorkspaceReturnPath } from '@/components/settings/settings-shell';
 import { SettingsShellHeader } from '@/components/settings/settings-shell-header';
 import { SettingsLoading } from '@/components/settings/settings-ui';
 import {
@@ -23,41 +19,17 @@ import {
   PLATFORM_SETTINGS_INDEX,
   READ_SYSTEM,
   visiblePlatformSettingsGroups,
-  type PlatformSettingsNavItem,
 } from './lib/nav';
 import { PLATFORM_TABLES_PATH, platformTablePath } from './lib/tables';
 import { useTablesView } from './lib/tables-view';
 import { JobFailuresContext, useJobFailures } from './system/jobs/failures';
 import { createJobsApi } from './system/jobs/jobs-api';
+import { systemViewPath } from './system/system-tabs';
 // Same shell as Organization Settings, so both settings areas look alike.
 import '@/app/organizations/[orgId]/settings/org-settings-layout.css';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 import '@/app/organizations/[orgId]/settings/users/users.css';
 import './platform-settings.css';
-
-function NavItem({
-  item,
-  active,
-  badge,
-  mobileList,
-}: {
-  item: PlatformSettingsNavItem;
-  active: boolean;
-  badge?: string | null;
-  mobileList: boolean;
-}) {
-  return (
-    <SettingsNavItem
-      href={item.href}
-      label={item.label}
-      icon={item.icon}
-      active={active}
-      chevron={mobileList}
-      badge={badge}
-      badgeTitle={badge ? `${badge} failed runs since you last looked` : undefined}
-    />
-  );
-}
 
 /** No item for this caller, or not this one: the 403 of Platform Settings. */
 function PlatformSettingsForbidden({ onRetry }: { onRetry?: () => void }) {
@@ -73,7 +45,7 @@ function PlatformSettingsForbidden({ onRetry }: { onRetry?: () => void }) {
       <p className="org-settings-empty-body">
         {error
           ? 'The permission service did not answer. Try again in a moment.'
-          : 'Platform Settings shows what your permissions let you open. Ask a platform administrator for access.'}
+          : 'The platform shows what your permissions let you open. Ask a platform administrator for access.'}
       </p>
       {error && (
         <button
@@ -92,16 +64,11 @@ function PlatformSettingsForbidden({ onRetry }: { onRetry?: () => void }) {
 export default function PlatformSettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? PLATFORM_SETTINGS_INDEX;
   const router = useRouter();
-  useRememberSettingsScope(pathname);
   const { status, actions, retry } = usePlatformSettingsAccess({ fresh: true });
   const isMobile = useIsMobile();
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const groups = useMemo(() => visiblePlatformSettingsGroups(actions), [actions]);
-  const sectionHrefs = useMemo(
-    () => groups.flatMap((group) => group.items.map((item) => item.href)),
-    [groups]
-  );
-  useDevRouteWarmup(sectionHrefs);
+  const { tabs, level } = useSettingsTabs({ mobile: isMobile });
 
   // Runs that failed since the admin last looked: the Jobs item's badge, and the Jobs page.
   const jobsApi = useMemo(() => createJobsApi(), []);
@@ -109,6 +76,13 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
   const failures = jobFailures.failures;
   const jobsBadge =
     failures && failures.count > 0 ? (failures.more ? `${failures.count}+` : String(failures.count)) : null;
+  const badges = useMemo(
+    () =>
+      jobsBadge
+        ? { [systemViewPath('jobs')]: { text: jobsBadge, title: `${jobsBadge} failed runs since you last looked` } }
+        : undefined,
+    [jobsBadge]
+  );
 
   const { isDetail, item, table, rowId } = parsePlatformSettingsRoute(pathname);
   const isTables = item?.id === 'tables';
@@ -127,7 +101,7 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
 
   const handleBack = () => {
     if (showMobileDetail) {
-      // A row goes back to its table, a table to Nexus tables, a page to the list.
+      // A row goes back to its table, a table to Nexus tables, a setting to the list.
       if (rowId && table) router.push(platformTablePath(table));
       else if (table) router.push(PLATFORM_TABLES_PATH);
       else router.push(PLATFORM_SETTINGS_INDEX);
@@ -141,6 +115,8 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
 
   const ready = status === 'ready';
   const allowed = ready && (item ? holds(item.needs, actions) : groups.length > 0);
+  // Reopened only once the page opens: not while the access is read, refused, or the index.
+  useRememberSettingsPath(item && allowed ? pathname : null);
 
   let content: React.ReactNode;
   if (status === 'checking') content = <SettingsLoading />;
@@ -148,37 +124,13 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
   else if (!allowed) content = <PlatformSettingsForbidden />;
   else content = children;
 
-  const nav = (
-    <SettingsLayoutNav title="Platform Settings" resizable={!showMobileList}>
-      {ready &&
-        groups.map((group) => (
-          <div key={group.label} className="platform-settings-nav-group">
-            <h3 className="platform-settings-nav-group-title">{group.label}</h3>
-            <ul className="settings-layout-nav-list">
-              {group.items.map((navItem) => (
-                <NavItem
-                  key={navItem.id}
-                  item={navItem}
-                  active={navItem.id === item?.id}
-                  badge={navItem.id === 'system-jobs' ? jobsBadge : null}
-                  mobileList={showMobileList}
-                />
-              ))}
-            </ul>
-          </div>
-        ))}
-    </SettingsLayoutNav>
-  );
-
   return (
     <JobFailuresContext.Provider value={jobFailures}>
       <SettingsLayoutRoot className="platform-settings-root">
         <div className="org-settings-layout-left">
           <SettingsShellHeader
-            scopeTitle="Platform"
-            detailTitle={detailTitle}
-            showScopeSwitcher={!showMobileDetail}
-            icon={ShieldCheck}
+            detailTitle={showMobileDetail ? detailTitle : null}
+            tabs={showMobileDetail ? undefined : tabs}
             onBack={handleBack}
             backAriaLabel={showMobileDetail ? 'Back' : 'Back to workspace'}
           />
@@ -194,7 +146,7 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
             }
           >
             {/* A phone lists the items on /settings, then opens one at a time. */}
-            {!showMobileDetail && nav}
+            {!showMobileDetail && <SettingsLevelsNav level={level} mobileList={showMobileList} badges={badges} />}
 
             {!(showMobileList && ready && allowed) && (
               <div

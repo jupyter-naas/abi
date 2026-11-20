@@ -28,6 +28,7 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `policy_tree.py` | Startup, once: the sets and the workspace toggles become access policies and their sub-policies (`migrate_sets`, `iam_migrations` `policy_tree_v1`); `pending()` until it is recorded |
 | `container_names.py` | Startup, once, after `policy_tree_v1`: organizations and workspaces registered as IAM containers, and every name IAM stored in the old grammar rewritten to container paths (`LegacyNames`, `migrate_names`, `iam_migrations` `container_names_v1`); `pending()` until it is recorded |
 | `container_defaults.py` | Each organization's and workspace's access policy and its members and admins groups ("Access policies and default groups"): made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), kept in step with the roles (`sync_scope`, from `MEMBERSHIPS`), forgotten with it (`dropped`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
+| `../invites/migration.py` | Startup, once (background, after the moves): each pending Nexus invitation becomes an invited `users` row holding what its pending grants held, attached as `api` for no user (they were authorized at invitation), the grants withdrawn (`iam_migrations` `invitations_to_people_v1`, `abi user migrate-invitations`; `services/invites/AGENTS.md`) |
 | `module_moves.py` | Startup, once, after `container_names_v1`: a module scope a remote module serves now (`MOVES`: the X app, `app/naas_abi_marketplace.applications.x/x_proxy` to `app/applications.x/x_proxy`) renamed in policy documents and keys' narrowing (`iam.rewrite_names(MovedScopes)`, `iam_migrations` `module_moves_v1`): a pattern naming the old item names the new one, a wildcard over the old module gets the new item beside it, one already reaching it is left. Nexus's rows of the app id: migration `0072_remote_x_app.sql` |
 | `runtime.py` | Where Nexus gets IAM (the engine's); tests install their own with `configure` |
 | `testing.py`, `../../conftest.py` | `NexusIam` (a real IAM on the memory store) and the `nexus_iam` / `team` / `nexus_db` fixtures |
@@ -254,6 +255,11 @@ policy tree of issue #1413's journeys:
   decision. Its admins edit it with the builder within "<O> access" (core's `grantable` answers the editor of a
   sub-policy), and every change is checked as any: they give only what they hold. A workspace in no organization has
   no organization's to be within: its access has no parent and allows nothing until the platform admin widens it.
+- **The names follow the container's.** Renaming an organization or a workspace renames its access policy (name and
+  description) and its two groups (`ContainerDefaults.renamed`, `align_names`, IAM's `update_group`), and every start
+  repairs what an older rename left (`align_all`, in `migrate`). Only what the system made is renamed: a name equal to
+  the one made from the previous name, or from a label the access policy's description, as made, still carries (each
+  `{label}` of its template is read back); a name a person chose, or a description they rewrote, stays.
 - **Who sees a hidden item.** Each person uses what their own policies give them, whatever their role. Hiding an item
   in "<W> access" takes it from whoever holds it through "<W> access" or below it ("<W> admins", member policies).
   Whoever holds it from above keeps it: the org's admins and owners (through "<O> access" below the organization), a

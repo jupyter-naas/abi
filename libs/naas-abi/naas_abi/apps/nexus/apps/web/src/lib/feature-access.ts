@@ -204,11 +204,15 @@ export function pathNeedsGraphExport(pathname: string | null | undefined): boole
  * to open (`useWorkspaceSettingsAccess`: the role there, else a Roles & permissions section
  * IAM shows), so a member an admin gave an `iam:` right opens Roles & permissions without the
  * settings feature, and a member with neither is told so on every settings page.
+ * Help is every member's, whatever features they hold.
  */
 export function getGatingFeatureForWorkspacePath(pathname: string): FeatureKey | null {
   const feature = getFeatureForWorkspacePath(pathname);
   const parts = pathWithoutQuery(pathname).split('/').filter(Boolean);
   const workspaceIndex = parts.indexOf('workspace');
+  if (parts[workspaceIndex + 2] === 'help') {
+    return null;
+  }
   if (feature === 'settings.workspace') {
     // The settings layout decides, with the role and IAM (`useWorkspaceSettingsAccess`).
     return null;

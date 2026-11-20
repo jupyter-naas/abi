@@ -33,6 +33,8 @@ const user = (over: Partial<AdminUser> = {}): AdminUser => ({
 describe('cells', () => {
   it('say the status, deactivated or not, as the filter sees it', () => {
     expect(cellValues(user(), 'status')).toEqual(['Signed in', 'Active']);
+    // The API's status since people are created at once: active, or invited.
+    expect(cellValues(user({ status: 'active' }), 'status')).toEqual(['Signed in', 'Active']);
     expect(cellValues(user({ status: 'invited', deactivated: true }), 'status')).toEqual([
       'Invited, not yet',
       'Deactivated',
@@ -103,7 +105,7 @@ describe('export', () => {
 
 describe('the person, oneself and the delete confirmation', () => {
   it('opens the person page on the IAM id, nothing without one', () => {
-    expect(personHref(user({ principal_id: 'usr_x/y' }))).toBe('/settings/roles?section=people&person=usr_x%2Fy');
+    expect(personHref(user({ principal_id: 'usr_x/y' }))).toBe('/settings/users/usr_x%2Fy');
     expect(personHref(user({ principal_id: null }))).toBeNull();
   });
 

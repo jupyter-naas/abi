@@ -13,7 +13,7 @@ import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Plus, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { OTHERS_GROUP } from '@/lib/workspace-picker';
-import '@/components/shell/sidebar/ontology-picker.css';
+import '@/components/shell/sidebar/search-picker.css';
 
 const NO_GROUP_LABEL = `${OTHERS_GROUP} (no group)`;
 
@@ -175,7 +175,7 @@ export function WorkspaceGroupSelect({
   }
 
   return (
-    <div ref={wrapRef} className="ontology-picker">
+    <div ref={wrapRef} className="search-picker">
       <button
         ref={triggerRef}
         id={id}
@@ -191,7 +191,7 @@ export function WorkspaceGroupSelect({
           }
         }}
         className={cn(
-          'ontology-picker-trigger account-profile-field-input min-h-9 justify-between text-sm text-foreground',
+          'search-picker-trigger account-profile-field-input min-h-9 justify-between text-sm text-foreground',
           trimmedValue && 'is-filtered'
         )}
         aria-label={`Workspace group: ${triggerLabel}`}
@@ -200,7 +200,7 @@ export function WorkspaceGroupSelect({
         aria-controls={open ? listId : undefined}
         title={triggerLabel}
       >
-        <span className="ontology-picker-label">{triggerLabel}</span>
+        <span className="search-picker-label">{triggerLabel}</span>
         <ChevronDown size={14} className="shrink-0 opacity-70" />
       </button>
       {open &&

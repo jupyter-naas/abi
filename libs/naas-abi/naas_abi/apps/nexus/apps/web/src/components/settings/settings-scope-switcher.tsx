@@ -1,121 +1,123 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronDown, Loader2, type LucideIcon } from 'lucide-react';
-import { usePathname } from 'next/navigation';
-import { visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
-import { useAuthStore } from '@/stores/auth';
+import { useMemo } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { SearchPicker } from '@/components/shell/sidebar/search-picker';
 import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
-import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
-import { settingsScopeFromPathname } from '@/lib/settings-scope-path';
-import { buildSettingsScopeMenuEntries, opensAnotherPage } from './settings-scope-list';
-import './settings-scope-switcher.css';
+import { useWorkspaceStore, type Workspace } from '@/stores/workspace';
+import {
+  organizationSettingsSwitchPath,
+  organizationsOfWorkspaces,
+  settingsOrganizationId,
+  settingsWorkspaceId,
+  workspaceSettingsSwitchPath,
+} from './settings-scope-switch';
 
-export function SettingsScopeSwitcher({
-  title,
-  icon: Icon,
+type Option = { id: string; label: string };
+
+const NONE: Workspace[] = [];
+
+/** A level picked as Files picks a drive (its single-choice picker, with a search box), under
+ *  its kind. */
+function ScopeDropdown({
+  kind,
+  value,
+  options,
+  onPick,
 }: {
-  title: string;
-  icon?: LucideIcon;
+  kind: 'Organization' | 'Workspace';
+  value: string;
+  options: Option[];
+  onPick: (id: string) => void;
 }) {
-  const pathname = usePathname();
-  const currentScope = useMemo(() => settingsScopeFromPathname(pathname), [pathname]);
-  const accountName = useAuthStore((s) => s.user?.name);
-  const platformSettings = usePlatformSettingsAccess();
-  const showPlatform =
-    platformSettings.status === 'ready' &&
-    visiblePlatformSettingsGroups(platformSettings.actions).length > 0;
+  const noun = kind.toLowerCase();
+  const current = options.find((o) => o.id === value)?.label ?? value;
+  return (
+    <div className="settings-scope-switcher" data-scope-switcher={noun}>
+      <span className="settings-scope-kind" aria-hidden="true">
+        {kind}
+      </span>
+      <SearchPicker
+        single
+        ariaLabel={`Switch ${noun}`}
+        items={options.map((o) => ({ value: o.id, label: o.label }))}
+        value={[value]}
+        onToggle={(id) => {
+          if (id !== value) onPick(id);
+        }}
+        onClear={() => undefined}
+        loading={false}
+        error={null}
+        label={current}
+        noun={`${noun}s`}
+      />
+    </div>
+  );
+}
 
-  // Shared with the avatar menu: one read per user, kept across scope switches.
-  const { orgs: organizations } = useOpenableOrganizations();
+/**
+ * Atop the Settings column of an organization or a workspace: the organization, and in a
+ * workspace's Settings its workspace, each switched from a list with a search box. Picking
+ * one keeps the section open (Users stays Users). In a workspace's Settings the organization
+ * lists those of the caller's workspaces, and picking one opens its first workspace.
+ */
+export function SettingsScopeSwitcher() {
+  const pathname = usePathname() ?? '';
+  const router = useRouter();
+  const workspaces = useWorkspaceStore((s) => s.workspaces) ?? NONE;
+  const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace);
+  const { orgs: openable } = useOpenableOrganizations();
+  const workspaceId = settingsWorkspaceId(pathname);
+  const orgId = settingsOrganizationId(pathname);
+  const byWorkspace = useMemo(() => organizationsOfWorkspaces(workspaces), [workspaces]);
 
-  // The entry followed, until its page replaces this one: a scope's first open can
-  // take seconds (``next dev`` compiles it), and a click must not look like a no-op.
-  const [followed, setFollowed] = useState<{ href: string; from: string } | null>(null);
-  const pendingHref = followed && followed.from === pathname ? followed.href : null;
-
-  if (!currentScope || currentScope.kind === 'workspace') return null;
-
-  const entries = buildSettingsScopeMenuEntries({
-    currentScope,
-    showPlatform,
-    platformActions: platformSettings.actions,
-    organizations: organizations.map((o) => ({ id: o.id, name: o.name })),
-    accountName,
-  });
-
-  if (entries.length <= 1) {
+  if (workspaceId) {
+    const workspace = workspaces.find((w) => w.id === workspaceId);
+    if (!workspace) return null;
+    const org = byWorkspace.find((o) => o.id === workspace.organizationId);
+    const siblings = org?.workspaces ?? [workspace];
+    const open = (id: string) => {
+      setCurrentWorkspace(id);
+      router.push(workspaceSettingsSwitchPath(pathname, id));
+    };
     return (
-      <div className="org-settings-layout-header-meta">
-        {Icon && <Icon size={16} className="org-settings-layout-header-icon" />}
-        <h1 className="org-settings-layout-header-title">{title}</h1>
+      <div className="settings-scope search-picker-stack">
+        {org && (
+          <ScopeDropdown
+            kind="Organization"
+            value={org.id}
+            options={byWorkspace.map((o) => ({ id: o.id, label: o.name }))}
+            onPick={(id) => {
+              const first = byWorkspace.find((o) => o.id === id)?.workspaces[0];
+              if (first) open(first.id);
+            }}
+          />
+        )}
+        <ScopeDropdown
+          kind="Workspace"
+          value={workspace.id}
+          options={siblings.map((w) => ({ id: w.id, label: w.name }))}
+          onPick={open}
+        />
       </div>
     );
   }
 
-  return (
-    <div className="org-settings-layout-header-meta min-w-0">
-      {Icon && <Icon size={16} className="org-settings-layout-header-icon shrink-0" />}
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger
-          className="settings-scope-switcher-trigger"
-          aria-label="Switch settings scope"
-          aria-busy={pendingHref ? true : undefined}
-        >
-          <span className="settings-scope-switcher-title">{title}</span>
-          {pendingHref ? (
-            <Loader2 size={16} className="settings-scope-switcher-chevron animate-spin" aria-hidden />
-          ) : (
-            <ChevronDown size={16} className="settings-scope-switcher-chevron" aria-hidden />
-          )}
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content
-            className="settings-scope-switcher-content"
-            align="start"
-            sideOffset={4}
-            collisionPadding={8}
-          >
-            <nav aria-label="Settings scopes">
-              {entries.map((entry) => {
-                if (entry.type === 'separator') {
-                  return <div key={entry.id} className="settings-scope-switcher-separator" role="presentation" />;
-                }
-                return (
-                  <DropdownMenu.Item key={entry.id} asChild onSelect={(e) => e.preventDefault()}>
-                    <Link
-                      href={entry.href}
-                      className="settings-scope-switcher-link"
-                      aria-current={entry.current ? 'page' : undefined}
-                      aria-busy={pendingHref === entry.href ? true : undefined}
-                      onClick={(event) => {
-                        // A new tab or window leaves this page where it is.
-                        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-                          return;
-                        }
-                        if (pathname && opensAnotherPage(entry.href, pathname)) {
-                          setFollowed({ href: entry.href, from: pathname });
-                        }
-                      }}
-                    >
-                      <span className="settings-scope-switcher-check" aria-hidden>
-                        {pendingHref === entry.href ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : entry.current ? (
-                          <Check size={16} />
-                        ) : null}
-                      </span>
-                      <span className="min-w-0 truncate">{entry.label}</span>
-                    </Link>
-                  </DropdownMenu.Item>
-                );
-              })}
-            </nav>
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
-    </div>
-  );
+  if (orgId) {
+    const options = [...openable]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((o) => ({ id: o.id, label: o.name }));
+    if (!options.some((o) => o.id === orgId)) return null;
+    return (
+      <div className="settings-scope search-picker-stack">
+        <ScopeDropdown
+          kind="Organization"
+          value={orgId}
+          options={options}
+          onPick={(id) => router.push(organizationSettingsSwitchPath(pathname, id))}
+        />
+      </div>
+    );
+  }
+  return null;
 }

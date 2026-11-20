@@ -46,7 +46,7 @@ const platform = { scope: PLATFORM_ACCESS_SCOPE, directory: EMPTY_DIRECTORY };
 async function open(api: ReturnType<typeof setup>, can: (a: string) => boolean = allowAll) {
   mounted = await mount(GroupsView, { api, can, ...platform, loadProviders: () => Promise.resolve(providers) });
   await mounted.flush();
-  await mounted.click(document.querySelector('[data-group] button.access-row-toggle'));
+  await mounted.click(document.querySelector('[data-group] button[data-action="open"]'));
   await mounted.flush();
 }
 
@@ -57,7 +57,7 @@ describe('GroupsView', () => {
     const row = document.querySelector('[data-group="grp_1"]');
     expect(row?.textContent).toContain('Analysts');
     expect(row?.textContent).toContain('Platform');
-    expect(row?.querySelector('.access-num')?.textContent).toBe('1');
+    expect(row?.querySelector('[data-field="members"]')?.textContent).toBe('1');
   });
 
   it('adds a member by id', async () => {
@@ -116,7 +116,7 @@ describe('GroupsView at a workspace', () => {
   async function show(api: ReturnType<typeof workspaceApi>, groupId: string) {
     mounted = await mount(GroupsView, { api, can: admin, scope: wsScope, directory: fakeDirectory([member()]) });
     await mounted.flush();
-    await mounted.click(document.querySelector(`[data-group="${groupId}"] button.access-row-toggle`));
+    await mounted.click(document.querySelector(`[data-group="${groupId}"] button[data-action="open"]`));
     await mounted.flush();
   }
 
@@ -125,8 +125,9 @@ describe('GroupsView at a workspace', () => {
     mounted = await mount(GroupsView, { api, can: admin, scope: wsScope, directory: EMPTY_DIRECTORY });
     await mounted.flush();
     expect(api.listGroups).toHaveBeenCalledWith('abi:nexus:organization/acme/nexus:workspace/ws-1');
+    await mounted.click(document.querySelector('[data-action="create-group"]'));
     await mounted.type(document.querySelector('[aria-label="Group name"]'), 'Recruiters');
-    await mounted.click(buttonNamed('Create group'));
+    await mounted.click(document.querySelector('form.access-group-create button[type="submit"]'));
     expect(api.createGroup).toHaveBeenCalledWith({ name: 'Recruiters', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
   });
 
@@ -150,8 +151,47 @@ describe('GroupsView at a workspace', () => {
   it('changes neither the members nor the existence of a group owned above', async () => {
     await show(workspaceApi(), fromOrg.id);
     expect(buttonNamed('Delete Org analysts')).toBeNull();
+    expect(buttonNamed('Rename Org analysts')).toBeNull();
     expect(buttonNamed('Add member')).toBeNull();
     expect(buttonNamed('Attach policy')).not.toBeNull();
+  });
+
+  it('renames a group it owns, and shows the new name', async () => {
+    const renamed = { ...owned, name: 'Talent' };
+    const api = workspaceApi({ renameGroup: vi.fn(() => Promise.resolve(renamed)) });
+    await show(api, owned.id);
+    await mounted!.click(buttonNamed('Rename Recruiters'));
+    const input = document.querySelector('[aria-label="New group name"]') as HTMLInputElement;
+    expect(input.value).toBe('Recruiters');
+    await mounted!.type(input, '  Talent ');
+    await mounted!.click(buttonNamed('Save name'));
+    expect(api.renameGroup).toHaveBeenCalledWith('grp_ws', 'Talent');
+    expect(document.querySelector('.access-person-name')?.textContent).toBe('Talent');
+    expect(document.querySelector('[aria-label="New group name"]')).toBeNull();
+  });
+
+  it('offers no rename without iam:UpdateGroup, and keeps the form open when it fails', async () => {
+    await show(workspaceApi(), owned.id);
+    expect(buttonNamed('Rename Recruiters')).not.toBeNull();
+    await mounted!.unmount();
+    mounted = null;
+
+    const refused = (action: string) => action !== 'iam:UpdateGroup' && admin(action);
+    mounted = await mount(GroupsView, { api: workspaceApi(), can: refused, scope: wsScope, directory: fakeDirectory([member()]) });
+    await mounted.flush();
+    await mounted.click(document.querySelector(`[data-group="${owned.id}"] button[data-action="open"]`));
+    await mounted.flush();
+    expect(buttonNamed('Rename Recruiters')).toBeNull();
+    await mounted.unmount();
+    mounted = null;
+
+    const failing = workspaceApi({ renameGroup: vi.fn(() => Promise.reject(new IamAdminError('Not allowed to rename it', 403))) });
+    await show(failing, owned.id);
+    await mounted!.click(buttonNamed('Rename Recruiters'));
+    await mounted!.type(document.querySelector('[aria-label="New group name"]'), 'Talent');
+    await mounted!.click(buttonNamed('Save name'));
+    expect(mounted!.host.querySelector('[role="alert"]')?.textContent).toContain('Not allowed to rename it');
+    expect(document.querySelector('[aria-label="New group name"]')).not.toBeNull();
   });
 });
 
@@ -205,7 +245,7 @@ describe('A group’s page', () => {
     const onFocus = vi.fn();
     mounted = await mount(GroupsView, { api, can: allowAll, scope: PLATFORM_ACCESS_SCOPE, directory: EMPTY_DIRECTORY, onFocus, loadProviders: () => Promise.resolve(providers) });
     await mounted.flush();
-    await mounted.click(document.querySelector('[data-group="grp_g"] button.access-row-toggle'));
+    await mounted.click(document.querySelector('[data-group="grp_g"] button[data-action="open"]'));
     expect(onFocus).toHaveBeenCalledWith('grp_g');
     expect(document.querySelector('[data-group-detail="grp_g"]')).not.toBeNull();
   });

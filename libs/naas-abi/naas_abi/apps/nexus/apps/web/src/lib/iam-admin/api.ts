@@ -102,7 +102,7 @@ async function read<T>(fetcher: Fetcher, url: string, fallback: string): Promise
 async function send<T>(
   fetcher: Fetcher,
   url: string,
-  method: 'POST' | 'PUT' | 'DELETE',
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   body: unknown,
   fallback: string,
 ): Promise<T> {
@@ -225,6 +225,9 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
     /** `scope`: the owner (an organization's or a workspace's container); none: the platform. */
     createGroup: (input: { name: string; org?: string | null; scope?: string | null }) =>
       send<PrincipalView>(fetcher, path('groups'), 'POST', input, 'Could not create the group.'),
+    /** `iam:UpdateGroup`: its id, owner, members and policies stay. */
+    renameGroup: (id: string, name: string) =>
+      send<GroupView>(fetcher, path('groups', id), 'PATCH', { name }, 'Could not rename the group.'),
     deleteGroup: (id: string) =>
       send<void>(fetcher, path('groups', id), 'DELETE', undefined, 'Could not delete the group.'),
     addMember: (groupId: string, memberId: string) =>

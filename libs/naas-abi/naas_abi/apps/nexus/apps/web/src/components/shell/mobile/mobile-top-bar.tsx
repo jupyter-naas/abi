@@ -1,14 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowLeft, X,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores/auth';
-import { useWarmAvatarSettingsLinks } from '@/hooks/use-avatar-settings-links';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { isMobileChatThreadOpen, parseChatRoute } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { getWorkspacePath } from '../sidebar/utils';
@@ -16,7 +14,8 @@ import { WorkspaceMark, WorkspaceMarkFrame } from '../workspace-mark';
 import { WorkspacesSection } from '../sidebar/workspaces-section';
 import { useShellTitle } from '../shell-title';
 import { resolveMobileTopBarTitle } from './mobile-top-bar-title';
-import { AccountMenuPanel, UserAvatar } from '../account-menu';
+import { AccountMenu } from '../account-menu';
+import { toggleWorkspacesPanel } from '../toggle-workspaces-panel';
 
 type MobileTopBarProps = {
   /** Top-level tab chrome, or an immersive detail view (chat thread, file browser). */
@@ -40,34 +39,29 @@ export function MobileTopBar({
   const router = useRouter();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
-  const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [profilePos, setProfilePos] = useState({ top: 0, right: 0 });
-  const profileBtnRef = useRef<HTMLButtonElement>(null);
 
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const workspacesOpen = useWorkspaceStore((s) => s.activePanelSection === 'workspaces');
+  const closeWorkspacesPanel = useWorkspaceStore((s) => s.closeWorkspacesPanel);
   const activeConversationId = useWorkspaceStore((s) => s.activeConversationId);
   const mobilePendingChatSlug = useWorkspaceStore((s) => s.mobilePendingChatSlug);
   const conversations = useWorkspaceStore((s) => s.conversations);
   const setActiveConversation = useWorkspaceStore((s) => s.setActiveConversation);
   const setMobilePendingChatSlug = useWorkspaceStore((s) => s.setMobilePendingChatSlug);
 
-  const user = useAuthStore((s) => s.user);
-  // The menu's Organization and Platform entries are read now, not when it opens.
-  useWarmAvatarSettingsLinks();
   const { title: pageTitle } = useShellTitle();
 
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    if (!workspaceOpen) return;
+    if (!workspacesOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setWorkspaceOpen(false);
+      if (e.key === 'Escape') closeWorkspacesPanel();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [workspaceOpen]);
+  }, [workspacesOpen, closeWorkspacesPanel]);
 
   const currentWorkspace = mounted
     ? workspaces.find((w) => w.id === currentWorkspaceId) || null
@@ -96,19 +90,6 @@ export function MobileTopBar({
     router.replace(getWorkspacePath(currentWorkspaceId, '/chat'));
   });
 
-  const openWorkspaceSheet = () => {
-    setProfileOpen(false);
-    setWorkspaceOpen(true);
-  };
-
-  const openProfileMenu = () => {
-    if (!profileBtnRef.current) return;
-    const rect = profileBtnRef.current.getBoundingClientRect();
-    setProfilePos({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) });
-    setWorkspaceOpen(false);
-    setProfileOpen(true);
-  };
-
   return (
     <>
       {/* min-h, not h: the safe-area inset is padding inside the box, so a fixed
@@ -129,11 +110,11 @@ export function MobileTopBar({
         ) : (
           <button
             type="button"
-            onClick={openWorkspaceSheet}
+            onClick={toggleWorkspacesPanel}
             className="flex h-9 w-9 flex-shrink-0 items-center justify-center"
             title={currentWorkspace?.name || 'Workspace'}
             aria-label="Workspaces"
-            aria-expanded={workspaceOpen}
+            aria-expanded={workspacesOpen}
           >
             <WorkspaceMarkFrame
               backgroundColor={
@@ -160,22 +141,10 @@ export function MobileTopBar({
         {actions}
 
         {/* Profile only on list / top-level tabs. Detail views stay immersive. */}
-        {variant === 'top' && (
-          <button
-            ref={profileBtnRef}
-            type="button"
-            onClick={openProfileMenu}
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full"
-            aria-label="Account menu"
-            aria-haspopup="menu"
-            aria-expanded={profileOpen}
-          >
-            <UserAvatar user={user} className="h-8 w-8" alt="" />
-          </button>
-        )}
+        {variant === 'top' && <AccountMenu placement="phone" />}
       </header>
 
-      {workspaceOpen && mounted && createPortal(
+      {workspacesOpen && mounted && createPortal(
         <div
           className="fixed inset-0 z-[300]"
           role="dialog"
@@ -187,7 +156,7 @@ export function MobileTopBar({
             type="button"
             className="absolute inset-0 bg-black/40"
             aria-label="Close"
-            onClick={() => setWorkspaceOpen(false)}
+            onClick={() => closeWorkspacesPanel()}
           />
           <div
             className={cn(
@@ -200,7 +169,7 @@ export function MobileTopBar({
               <span className="text-sm font-semibold">Workspaces</span>
               <button
                 type="button"
-                onClick={() => setWorkspaceOpen(false)}
+                onClick={() => closeWorkspacesPanel()}
                 className="p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                 aria-label="Close workspaces"
               >
@@ -208,22 +177,9 @@ export function MobileTopBar({
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden p-2">
-              <WorkspacesSection onPicked={() => setWorkspaceOpen(false)} />
+              <WorkspacesSection onPicked={() => closeWorkspacesPanel()} />
             </div>
           </div>
-        </div>,
-        document.body
-      )}
-
-      {profileOpen && mounted && createPortal(
-        <div>
-          <div className="fixed inset-0 z-[299]" onClick={() => setProfileOpen(false)} />
-          <AccountMenuPanel
-            user={user}
-            onClose={() => setProfileOpen(false)}
-            className="fixed"
-            style={{ top: profilePos.top, right: profilePos.right }}
-          />
         </div>,
         document.body
       )}

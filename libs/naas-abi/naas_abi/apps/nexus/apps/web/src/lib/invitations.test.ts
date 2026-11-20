@@ -8,7 +8,6 @@ import {
   policyIdsToSend,
   providerHint,
   providerToSend,
-  workspaceInviteBody,
   type Invitation,
   type InviteProvider,
   type InviteProviders,
@@ -146,19 +145,5 @@ describe('the policies an invitation carries', () => {
     expect(policyIdsToSend([])).toEqual({});
     expect(policyIdsToSend(undefined)).toEqual({});
     expect(policyIdsToSend(['pol_1', 'pol_2'])).toEqual({ policy_ids: ['pol_1', 'pol_2'] });
-  });
-
-  it('sends the picked policies with a workspace invitation', () => {
-    expect(workspaceInviteBody({ email: 'bob@example.com', role: 'member', policyIds: ['pol_1'] })).toEqual({
-      email: 'bob@example.com',
-      role: 'member',
-      provider: undefined,
-      policy_ids: ['pol_1'],
-    });
-    expect(workspaceInviteBody({ email: 'bob@example.com', role: 'viewer', provider: 'okta' })).toEqual({
-      email: 'bob@example.com',
-      role: 'viewer',
-      provider: 'okta',
-    });
   });
 });

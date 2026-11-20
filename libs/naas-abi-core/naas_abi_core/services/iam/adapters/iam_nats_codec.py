@@ -70,6 +70,7 @@ OPERATIONS = {
     "create_group": "CreateGroup",
     "get_group": "GetGroup",
     "list_groups": "ListGroups",
+    "update_group": "UpdateGroup",
     "delete_group": "DeleteGroup",
     "add_group_member": "AddGroupMember",
     "remove_group_member": "RemoveGroupMember",

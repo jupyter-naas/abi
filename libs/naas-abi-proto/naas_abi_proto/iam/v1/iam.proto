@@ -508,6 +508,17 @@ message ListGroupsResponse {
   optional string next_after = 3;
 }
 
+// Renames a group (iam:UpdateGroup); its id, owner, members and attachments stay.
+message UpdateGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+  string name = 3;
+}
+message UpdateGroupResponse {
+  abi.common.v1.CallError error = 1;
+  Principal group = 2;
+}
+
 message DeleteGroupRequest {
   abi.common.v1.CallContext context = 1;
   string group_id = 2;

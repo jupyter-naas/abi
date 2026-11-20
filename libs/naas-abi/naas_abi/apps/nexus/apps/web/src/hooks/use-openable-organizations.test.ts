@@ -32,6 +32,23 @@ describe('the openable organizations store', () => {
     expect(store.getState()).toMatchObject({ status: 'ready', orgs: [{ id: 'acme', name: 'Acme' }] });
   });
 
+  it('keeps the caller role in each, which decides its sections', async () => {
+    const store = createOpenableOrganizationsStore(
+      api(
+        {
+          '/api/organizations': LIST,
+          'abi:nexus:organization/beta': { actions: { 'iam:ListPolicies': true } },
+        },
+        []
+      )
+    );
+    await store.getState().load('u1');
+    expect(store.getState().orgs).toEqual([
+      { id: 'acme', name: 'Acme', role: 'admin' },
+      { id: 'beta', name: 'Beta', role: 'member' },
+    ]);
+  });
+
   it('reads the access only of the organizations the role does not open', async () => {
     const calls: string[] = [];
     const store = createOpenableOrganizationsStore(

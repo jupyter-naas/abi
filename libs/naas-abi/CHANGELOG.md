@@ -1,5 +1,68 @@
 # CHANGELOG
 
+## Upgrade notes (next release): one people directory
+
+- **Pending invitations become invited users.** Nexus creates a user for every person
+  from the moment they are invited: status `invited`, and `active` after their first
+  sign-in. At the first start after the upgrade, Nexus moves each pending invitation
+  into such a user, in the background:
+  - the user has the same roles and policies the invitation held;
+  - the invitation's pending grants are withdrawn;
+  - the invitation is marked `migrated`.
+
+  The person shows as an Invited member in Org settings › Users and in Workspace ›
+  Members, where it can be resent or removed like any member. The pending-invitations
+  list empties.
+
+  If an identity provider does not answer during the start, its invitations stay
+  pending and keep working; the next start moves them. You can also move them by hand:
+  run `abi user migrate-invitations` for a dry run, then add `--apply`.
+
+  Revoked and accepted invitations are not changed. ADR:
+  `docs/adr/20261119_platform_user_directory.md`.
+- **Adding someone to a workspace no longer makes them an organization member.**
+  - Before, adding someone who had an account to a workspace also gave them the
+    organization `member` role, with the organization's drive and its "members" group.
+    Now they get only the workspace role and the policies the workspace admin picks.
+  - They are still listed in the organization's users as "Workspace access only".
+  - **People who got the organization `member` role that way keep it.** Remove it in
+    Org settings › Users if it was not meant.
+- **Workspace › Members › Add searches the organization's people** by name or email.
+  "Create user" makes a new person, or links the platform account that the email
+  already has. It never makes a duplicate. Linking someone from another organization
+  shows their name and email to your organization's admins.
+- **Configured users (`users:` in the configuration, `config.users.yaml`) are invited
+  users of their identity provider.**
+  - Each one signs in through the provider named by `provider:` (new, optional), else
+    the default provider, else the built-in one.
+  - At start, Nexus creates their account at that provider when it can (`builtin`,
+    `zitadel`, `keycloak`).
+  - Their first sign-in there, with the email verified, opens their account and keeps
+    the configured roles.
+  - This also works through Zitadel or Keycloak. Before, a configured user who signed
+    in through them was refused ("email already in use").
+- **API changes** (for scripts and integrations calling Nexus):
+  - `POST /api/workspaces/{id}/members/invite` and `POST /api/organizations/{id}/members/invite`
+    now answer the person added, the same way whether their account was created or linked:
+    `{status: "added", user: {id, email, name, status}, member, provider, sign_in_email_sent,
+    warning}`. They no longer answer an invitation. `sign_in_email_sent` is true only when a
+    mail was sent.
+  - Inviting someone who already holds a role there answers **409**. It used to resend
+    their invitation: use `POST .../members/{user_id}/resend` instead.
+  - **New routes:**
+    - `GET /api/workspaces/{id}/members/candidates?q=` (the organization's people,
+      at least 2 characters, at most 10 results);
+    - `POST /api/workspaces/{id}/members` (add someone who exists);
+    - `POST /api/workspaces/{id}/members/{user_id}/resend` and its organization
+      counterpart;
+    - `DELETE /api/organizations/{id}/members/{user_id}/access` (remove someone
+      with workspace access only, from every workspace of the organization).
+  - Linking an existing account writes their organization profile (job title, bio, ...)
+    only with an organization role granted in the same call. A workspace grant alone
+    leaves it as it is.
+  - **Organization settings › Analytics** count the organization's people as its
+    directory lists them, including people with a role in one of its workspaces only.
+
 ## Upgrade notes (next release): Nexus Analytics in settings
 
 - **The Analytics app is removed.** Analytics are read in Organization settings ›

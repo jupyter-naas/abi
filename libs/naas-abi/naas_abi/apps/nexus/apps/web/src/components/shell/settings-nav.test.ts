@@ -20,13 +20,15 @@ function resources(over: Partial<WorkspaceResources> = {}): WorkspaceResources {
   };
 }
 
+const IAM = { actions: { 'iam:ListPolicies': true, 'iam:ListGroups': true } };
+
 const labels = (groups: ReturnType<typeof visibleSettingsGroups>) =>
   groups.flatMap((group) => group.items.map((item) => item.label));
 
 describe('workspace settings nav', () => {
   it('lists every entry the caller may use', () => {
     expect(
-      labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { holdsIam: true, readsAnalytics: true }))
+      labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { access: IAM, readsAnalytics: true }))
     ).toEqual(
       SETTINGS_GROUPS.flatMap((group) => group.items.map((item) => item.label))
     );
@@ -38,16 +40,28 @@ describe('workspace settings nav', () => {
     expect(settingsItemFor('/workspace/ws-1/settings/drives')).toBeUndefined();
   });
 
-  it('shows Roles & permissions only to whoever holds an iam: action there', () => {
-    expect(labels(visibleSettingsGroups(resources()))).not.toContain('Roles & permissions');
-    expect(labels(visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { holdsIam: true }))).toContain(
-      'Roles & permissions'
-    );
+  it('shows Access › Policies and Groups only to whoever IAM lets open each there, Members to everyone', () => {
+    const shown = (actions: Record<string, boolean> | null) =>
+      labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { access: actions && { actions } }));
+    expect(shown(null)).not.toContain('Policies');
+    expect(shown(null)).not.toContain('Groups');
+    expect(shown(null)).toContain('Users');
+    expect(shown({ 'iam:ListPolicies': true })).toContain('Policies');
+    expect(shown({ 'iam:ListPolicies': true })).not.toContain('Groups');
+    expect(shown({ 'iam:ListAttachments': true })).toContain('Policies');
+    expect(shown({ 'iam:ListGroups': true })).toEqual(expect.arrayContaining(['Groups']));
+    expect(shown({ 'iam:Explain': true, 'nexus:ReadSystem': true })).not.toContain('Policies');
+    const access = visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { access: IAM }).find((g) => g.label === 'Access');
+    expect(access?.items.map((item) => [item.label, item.href])).toEqual([
+      ['Policies', '/settings/policies'],
+      ['Groups', '/settings/groups'],
+    ]);
+    expect(labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { access: IAM }))).not.toContain('Roles & permissions');
   });
 
   it('shows Analytics, in the General group, only to whoever may read the workspace analytics', () => {
     expect(labels(visibleSettingsGroups(resources()))).not.toContain('Analytics');
-    expect(labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { holdsIam: true }))).not.toContain(
+    expect(labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { access: IAM }))).not.toContain(
       'Analytics'
     );
     const groups = visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { readsAnalytics: true });
@@ -102,8 +116,12 @@ describe('workspace settings nav', () => {
   it('finds the entry of a path, nested pages included', () => {
     expect(settingsItemFor('/workspace/ws-1/settings/apps')?.label).toBe('Apps');
     expect(settingsItemFor('/workspace/ws-1/settings/agents/a-1')?.label).toBe('Agents');
-    expect(settingsItemFor('/workspace/ws-1/settings/infrastructure')).toBeUndefined();
     expect(settingsItemFor('/workspace/ws-1/chat')).toBeUndefined();
+  });
+
+  it('has no Infrastructure: the map of the code is the platform\'s, in Platform › System', () => {
+    expect(visibleSettingsGroups(null).map((group) => group.label)).toEqual(['General', 'Features']);
+    expect(settingsItemFor('/workspace/ws-1/settings/infrastructure/layers')).toBeUndefined();
   });
 
   it('describes a module by what the caller may use of it', () => {
@@ -122,12 +140,20 @@ describe('who opens a workspace\'s settings (UJ-W1)', () => {
     expect(settingsLandingPath(access)).toBe('/settings/general');
   });
 
-  it('opens Roles & permissions alone to someone IAM shows a section of it', () => {
+  it('opens the Access pages IAM opens, and a member’s page, alone to someone IAM shows one of them', () => {
     const access = workspaceSettingsAccess({ settingsByRole: false, holdsIam: true, accessSettled: true });
     expect(access).toBe('iam');
-    expect(settingsPageOpens(access, '/workspace/ws-1/settings/permissions')).toBe(true);
-    expect(settingsPageOpens(access, '/workspace/ws-1/settings/general')).toBe(false);
-    expect(settingsLandingPath(access)).toBe('/settings/permissions');
+    const policies = { actions: { 'iam:ListPolicies': true } };
+    expect(settingsPageOpens(access, '/workspace/ws-1/settings/policies', undefined, policies)).toBe(true);
+    expect(settingsPageOpens(access, '/workspace/ws-1/settings/policies/pol_1', undefined, policies)).toBe(true);
+    expect(settingsPageOpens(access, '/workspace/ws-1/settings/groups', undefined, policies)).toBe(false);
+    expect(settingsPageOpens(access, '/workspace/ws-1/settings/users/usr_bob', undefined, policies)).toBe(true);
+    expect(settingsPageOpens(access, '/workspace/ws-1/settings/users', undefined, policies)).toBe(false);
+    expect(settingsPageOpens(access, '/workspace/ws-1/settings/general', undefined, policies)).toBe(false);
+    expect(settingsLandingPath(access, policies)).toBe('/settings/policies');
+    expect(settingsLandingPath(access, { actions: { 'iam:ListGroups': true } })).toBe('/settings/groups');
+    // Policies while IAM's answer is read.
+    expect(settingsLandingPath(access)).toBe('/settings/policies');
   });
 
   it('opens nothing to a member with neither (Dave), and decides nothing before the access is read', () => {
@@ -135,7 +161,7 @@ describe('who opens a workspace\'s settings (UJ-W1)', () => {
     expect(settingsPageOpens('unknown', '/workspace/ws-1/settings/general')).toBeNull();
     const access = workspaceSettingsAccess({ settingsByRole: false, holdsIam: false, accessSettled: true });
     expect(access).toBe('none');
-    for (const page of ['general', 'members', 'permissions', 'agents']) {
+    for (const page of ['general', 'members', 'policies', 'groups', 'members/usr_bob', 'agents']) {
       expect(settingsPageOpens(access, `/workspace/ws-1/settings/${page}`)).toBe(false);
     }
   });

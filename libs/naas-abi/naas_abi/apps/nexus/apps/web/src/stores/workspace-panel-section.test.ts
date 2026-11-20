@@ -69,6 +69,18 @@ describe('dropRetiredPanelSections', () => {
     });
   });
 
+  it('forgets a stored Infrastructure column: Infrastructure opens in Settings now', () => {
+    const stored = {
+      expandedSections: ['infrastructure'],
+      activePanelSection: 'infrastructure' as SidebarSection,
+      lastActivePanelSection: 'infrastructure' as SidebarSection,
+    };
+
+    dropRetiredPanelSections(stored);
+
+    expect(stored).toEqual({ expandedSections: [], activePanelSection: null, lastActivePanelSection: null });
+  });
+
   it('keeps a column the dock has, and never restores a transient one', () => {
     const stored = {
       expandedSections: ['maps'],

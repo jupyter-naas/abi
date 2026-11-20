@@ -230,58 +230,103 @@ def test_a_linked_users_profile_is_not_written_back_by_the_seed(
     assert (record.provider, record.email, record.email_verified) == ("builtin", ADMIN, True)
 
 
-# -- the configured users at the built-in identity provider -----------------------------------
+# -- the configured users at their identity provider -----------------------------------------
 
 
-class FakeIdentity:
-    def __init__(self, *, provisioning: str = "builtin", down: int = 0) -> None:
-        self.provisioning = provisioning
+class People:
+    """The people service, as the seeds ask it (``by_email``, ``provision``)."""
+
+    def __init__(self, *, down: int = 0, managed: bool = False) -> None:
+        from naas_abi.apps.nexus.apps.api.app.services.people.port import (
+            PlatformUser,
+            UserStatus,
+        )
+
+        self.rows = {
+            ADMIN: PlatformUser("user-a", ADMIN, "Admin", UserStatus.INVITED, "corp"),
+            "bob@example.com": PlatformUser(
+                "user-b", "bob@example.com", "Bob", UserStatus.INVITED, "corp"
+            ),
+        }
         self.down = down
-        self.calls: list[tuple[str, str, str | None, str]] = []
+        self.managed = managed
+        self.provisioned: list[str] = []
 
-    def list_providers(self):
-        return [SimpleNamespace(name="builtin", provisioning=self.provisioning)]
+    async def by_email(self, email):
+        return self.rows.get(email)
 
-    def provision_user(self, provider, email, *, name=None):
-        from naas_abi_core.engine.call_context import current_call_context
+    async def provision(self, user_id):
+        from naas_abi.apps.nexus.apps.api.app.services.people.port import (
+            Provisioned,
+            ProvisioningFailedError,
+        )
         from naas_abi_core.services.identity.IdentityPorts import ProviderUnavailableError
 
         if self.down > 0:
             self.down -= 1
-            raise ProviderUnavailableError("the built-in identity provider is not reachable yet")
-        self.calls.append((provider, email, name, current_call_context().principal.id))
-        return SimpleNamespace(created=True)
+            try:
+                raise ProviderUnavailableError("the provider is not reachable yet")
+            except ProviderUnavailableError as exc:
+                raise ProvisioningFailedError(str(exc)) from exc
+        if self.managed:
+            return None
+        self.provisioned.append(user_id)
+        return Provisioned(subject=f"sub-{user_id}", created=True)
 
 
-def test_the_configured_users_are_made_at_the_built_in_provider_as_nexus() -> None:
-    identity = FakeIdentity()
+def _opened(people: People):
+    from contextlib import asynccontextmanager
 
-    done = org_seed.provision_seed_users(identity, [(ADMIN, "Admin"), ("bob@example.com", "Bob")])
+    @asynccontextmanager
+    async def opened():
+        yield people
 
-    assert done == [ADMIN, "bob@example.com"]
-    assert identity.calls == [
-        ("builtin", ADMIN, "Admin", "api"),
-        ("builtin", "bob@example.com", "Bob", "api"),
-    ]
+    return opened
 
 
-@pytest.mark.parametrize("provisioning", ["none", "zitadel", "keycloak"])
-def test_only_the_built_in_provider_is_asked_to_make_people(provisioning: str) -> None:
-    identity = FakeIdentity(provisioning=provisioning)
+def test_the_configured_users_are_made_at_their_provider_through_the_people_service() -> None:
+    people = People()
 
-    assert org_seed.provision_seed_users(identity, [(ADMIN, "Admin")]) == []
-    assert identity.calls == []
+    done = asyncio.run(
+        org_seed.provision_configured_users(people, [ADMIN, "bob@example.com", "ghost@x.io"])
+    )
+
+    assert done == [ADMIN, "bob@example.com", "ghost@x.io"]
+    assert people.provisioned == ["user-a", "user-b"]
+
+
+def test_a_provider_gone_from_the_configuration_skips_that_person_only() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.people.port import NoProviderError
+
+    class Gone(People):
+        async def provision(self, user_id):
+            if user_id == "user-a":
+                raise NoProviderError("'corp' is not an identity provider")
+            return await super().provision(user_id)
+
+    people = Gone()
+
+    done = asyncio.run(org_seed.provision_configured_users(people, [ADMIN, "bob@example.com"]))
+
+    assert done == [ADMIN, "bob@example.com"] and people.provisioned == ["user-b"]
+
+
+def test_a_provider_that_manages_its_people_is_asked_nothing() -> None:
+    people = People(managed=True)
+
+    assert asyncio.run(org_seed.provision_configured_users(people, [ADMIN])) == [ADMIN]
+    assert people.provisioned == []
 
 
 def test_the_seed_waits_for_the_provider_module_to_come_up(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(org_seed, "_PROVISION_RETRY_SECONDS", 0.0)
-    identity = FakeIdentity(down=3)
+    people = People(down=3)
 
-    asyncio.run(org_seed._provision_when_ready(identity, [(ADMIN, "Admin")]))
+    asyncio.run(org_seed._provision_when_ready(_opened(people), [ADMIN]))
 
-    assert [call[1] for call in identity.calls] == [ADMIN]
+    assert people.provisioned == ["user-a"]
 
 
 def test_a_provider_that_never_comes_up_never_stops_the_api(
@@ -289,19 +334,122 @@ def test_a_provider_that_never_comes_up_never_stops_the_api(
 ) -> None:
     monkeypatch.setattr(org_seed, "_PROVISION_RETRY_SECONDS", 0.0)
     monkeypatch.setattr(org_seed, "_PROVISION_ATTEMPTS", 3)
-    identity = FakeIdentity(down=99)
+    people = People(down=99)
 
-    asyncio.run(org_seed._provision_when_ready(identity, [(ADMIN, "Admin")]))
+    asyncio.run(org_seed._provision_when_ready(_opened(people), [ADMIN]))
 
-    assert identity.calls == []
+    assert people.provisioned == []
 
 
 def test_a_failure_of_the_provider_is_logged_not_raised() -> None:
-    class Broken(FakeIdentity):
-        def provision_user(self, provider, email, *, name=None):
+    class Broken(People):
+        async def provision(self, user_id):
             raise RuntimeError("the provider refused this address")
 
-    asyncio.run(org_seed._provision_when_ready(Broken(), [(ADMIN, "Admin")]))
+    asyncio.run(org_seed._provision_when_ready(_opened(Broken()), [ADMIN]))
+
+
+# -- the provider a configured person signs in through ---------------------------------------
+
+PROVIDERS = {"builtin": "builtin", "corp": "zitadel", "kc": "keycloak"}
+
+
+@pytest.mark.parametrize(
+    ("requested", "providers", "default", "expected"),
+    [
+        ("corp", PROVIDERS, "builtin", "corp"),
+        (None, PROVIDERS, "kc", "kc"),
+        ("gone", PROVIDERS, "kc", "kc"),
+        (None, PROVIDERS, None, "builtin"),
+        (None, {"corp": "zitadel"}, None, "corp"),
+        (None, {"corp": "zitadel", "kc": "keycloak"}, None, None),
+        (None, {}, None, None),
+    ],
+)
+def test_the_provider_is_the_named_one_else_the_default_else_the_builtin(
+    requested, providers, default, expected
+) -> None:
+    assert org_seed.seed_provider(requested, providers, default) == expected
+
+
+def test_a_new_configured_user_is_invited_and_names_their_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def nobody(_session, _email):
+        return None
+
+    monkeypatch.setattr(org_seed, "_get_user_by_email", nobody)
+    monkeypatch.setattr(org_seed, "identity_providers", lambda: (PROVIDERS, "builtin"))
+    monkeypatch.setattr(
+        org_seed.settings,
+        "users",
+        [
+            UserSeedConfig(email=ADMIN, name="Admin", provider="corp"),
+            UserSeedConfig(email="bob@example.com", name="Bob"),
+        ],
+    )
+    session = MagicMock()
+
+    asyncio.run(org_seed._upsert_users(session=session))
+
+    made = [call.args[0] for call in session.add.call_args_list]
+    assert [(u.email, u.status, u.idp_provider) for u in made] == [
+        (ADMIN, "invited", "corp"),
+        ("bob@example.com", "invited", "builtin"),
+    ]
+    assert all(u.principal_id is None and u.idp_issuer is None for u in made)
+
+
+def test_a_configured_row_no_provider_signs_in_yet_is_given_its_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unbound = SimpleNamespace(
+        is_superadmin=False,
+        idp_provider=None,
+        principal_id=None,
+        idp_issuer=None,
+        status="active",
+        updated_at=None,
+    )
+    bound = SimpleNamespace(
+        is_superadmin=False,
+        idp_provider="builtin",
+        principal_id="usr_1",
+        idp_issuer="https://idp.test",
+        updated_at=None,
+    )
+    rows = {ADMIN: unbound, "bob@example.com": bound}
+
+    async def lookup(_session, email):
+        return rows[email]
+
+    monkeypatch.setattr(org_seed, "_get_user_by_email", lookup)
+    monkeypatch.setattr(org_seed, "identity_providers", lambda: (PROVIDERS, "corp"))
+    monkeypatch.setattr(
+        org_seed.settings,
+        "users",
+        [UserSeedConfig(email=ADMIN, name="A"), UserSeedConfig(email="bob@example.com", name="B")],
+    )
+
+    asyncio.run(org_seed._upsert_users(session=MagicMock()))
+
+    # Its verified sign-in at Zitadel opens it now; its status is its own.
+    assert (unbound.idp_provider, unbound.status) == ("corp", "active")
+    assert bound.idp_provider == "builtin"
+
+
+def test_only_the_configured_people_no_provider_signs_in_yet_are_made_at_it() -> None:
+    """Someone who signed in has their account: an account their provider's admins
+    removed (offboarding at a shared realm) is never made again at each start."""
+    rows = {
+        "new@example.com": SimpleNamespace(principal_id=None, idp_issuer=None),
+        "old@example.com": SimpleNamespace(principal_id=None, idp_issuer=None),
+        "eve@corp.test": SimpleNamespace(principal_id="usr_eve", idp_issuer="https://corp.test"),
+    }
+
+    assert org_seed.not_signed_in_yet(
+        rows, ["new@example.com", "eve@corp.test", "old@example.com", "gone@example.com"]
+    ) == ["new@example.com", "old@example.com"]
 
 
 @pytest.fixture

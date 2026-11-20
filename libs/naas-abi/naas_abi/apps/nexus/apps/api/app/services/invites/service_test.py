@@ -120,6 +120,16 @@ class Store(InvitationPersistencePort):
         self.rows[invitation_id] = replace(row, status="revoked")
         return True
 
+    async def mark_migrated(self, invitation_id, *, user_id, now):
+        row = self.rows[invitation_id]
+        if row.status != "pending":
+            return False
+        self.rows[invitation_id] = replace(row, status="migrated", accepted_user_id=user_id)
+        return True
+
+    async def provisioned_by_nexus(self, provider, subject):
+        return (provider, subject) in self.provisioned
+
     async def provider_for_domain(self, domain, organization_id):
         return self.domains.get(domain)
 

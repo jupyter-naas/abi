@@ -18,7 +18,7 @@ import { OntologyTopicIcon } from '@/components/ontology/ontology-topic-icon';
 import { OntologySystemTree } from '@/components/ontology/ontology-system-tree';
 import { OntologySystemPicker } from './ontology-system-picker';
 import { OntologyFilePicker } from './ontology-file-picker';
-import { OntologyMultiPicker } from './ontology-multi-picker';
+import { SearchPicker } from './search-picker';
 import { useOntologyTreeKeyboard } from '@/hooks/use-ontology-tree-keyboard';
 
 const TYPE_OPTIONS: Array<{value: DictionaryTerm['type']; label: string}> = [
@@ -146,10 +146,10 @@ export function OntologyDictionary({files, filesLoading, filesError}: {
   }
 
   return <div className="space-y-2 px-2 pb-3">
-    <div className="ontology-sidebar-filters">
+    <div className="search-picker-stack">
       <OntologySystemPicker />
       <OntologyFilePicker key={workspaceId} files={files} value={selectedFiles} onToggle={updateFiles} onClear={() => updateFiles()} loading={filesLoading} error={filesError} />
-      <OntologyMultiPicker key={`types:${workspaceId}`} items={TYPE_OPTIONS} value={kinds}
+      <SearchPicker key={`types:${workspaceId}`} items={TYPE_OPTIONS} value={kinds}
         onToggle={type => updateTypes(type as DictionaryTerm['type'])} onClear={() => updateTypes()}
         loading={false} error={null} label={typeLabel} noun="types" allLabel="All types" />
     </div>

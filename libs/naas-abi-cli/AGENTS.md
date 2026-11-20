@@ -130,6 +130,15 @@ auth-callout seed) are generated into `.env` once and never defaulted
 (`admin_credentials.py`); `abi deploy local --regenerate` drops the keys of the old
 password login.
 
+### Pending invitations become invited users (`abi user migrate-invitations`)
+
+Nexus moves every pending invitation into an invited user once, at the start after the upgrade
+(`services/invites/migration.py` of the Nexus API, ADR `docs/adr/20261119_platform_user_directory.md`).
+`abi user migrate-invitations` lists those still pending (a dry run); `--apply` moves them, whatever the
+start recorded (a provider that did not answer then). Same `--database-url` as below; it opens the engine's
+IAM and identity like `abi user migrate`. Running it twice changes nothing; exit is an error while some
+failed or wait for their provider.
+
 ### Upgrading a project from the old login (`abi user migrate`)
 
 Nexus's old built-in login (password, magic link) is gone. An older project runs:
