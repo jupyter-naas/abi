@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v5.1.0 (2026-11-20)
+
+### Bug Fixes
+
+- **tools,cli**: Agent admin invite tools and the CLI on the people routes
+  ([`ed60399`](https://github.com/jupyter-naas/abi/commit/ed60399ef1810a5662999922243ca2ec2f460032))
+
+### Features
+
+- **nexus**: Configured users are invited people of their provider
+  ([#1570](https://github.com/jupyter-naas/abi/pull/1570),
+  [`ed6a47d`](https://github.com/jupyter-naas/abi/commit/ed6a47db2f75ae30f918a880c0e45674b2ce5afc))
+
+- **nexus**: Pending invitations become invited users
+  ([#1570](https://github.com/jupyter-naas/abi/pull/1570),
+  [`6ec2bd5`](https://github.com/jupyter-naas/abi/commit/6ec2bd50163bbb4f55784577c234072d4ba864de))
+
+
 ## v5.0.1 (2026-11-19)
 
 ### Bug Fixes
