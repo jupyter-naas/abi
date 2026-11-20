@@ -43,7 +43,7 @@ the view is on the browser's cookie session):
 
 - `GET /api/iam/view-as/workspaces?principal_id=` the workspaces the person belongs to where IAM accepts a view
   by the caller: `[{id, name, organization: {id, name} | null}]`, empty when there are none (also for a person
-  who has not signed in to Nexus). `principal_id` is the IAM id, as the person's page in Roles & permissions has it.
+  who has not signed in to Nexus). `principal_id` is the IAM id, as the person's page under Users or Members has it.
 - `POST /api/iam/view-as` (`principal_id`, `workspace_id`) starts the view. IAM decides (403 with its message),
   audited first. Answers `{person: {id, name}, workspace: {id, name}, ends_at, groups_from}`; `groups_from` is
   the time of the sign-in session the person's groups were taken from, or null (stored groups only). 404 for a
@@ -95,7 +95,7 @@ the request state. A bearer credential (an API key, a session token) never carri
   parameter **that its route declares** (a `workspace_id` in the query of a route that takes none names nothing),
   every one of them the viewed workspace; or when its route is on `ANSWERED_WITHOUT_A_WORKSPACE`, each entry with
   its reason. Anything else is 403 "Outside this view: you are viewing as <name> in <workspace>".
-- **Roles & permissions at the workspace.** The workspace's settings page reads IAM's admin routes with the
+- **Access at the workspace.** The workspace's Access pages (Policies, Groups) and a member's page read IAM's admin routes with the
   container it manages in `scope`, not a `workspace_id`: a GET under `/api/iam/admin/` that declares a `scope` query
   parameter (`access`, `grantable`, `publishers`, `resources`, `catalogs`, `policies`, `attachments`,
   `attachable-policies`, `groups`) is answered when every `scope` given is the viewed container or something below it
@@ -111,7 +111,7 @@ the request state. A bearer credential (an API key, a session token) never carri
     as the person: one with no right on the organization gets the plain refusal they would get, which is no notice.
   - `GET /api/providers/models` (the chat page's model picker): the platform's model catalog, the same for every
     workspace and part of none, answered as the person (`ListProviderModels`).
-  - `GET /api/iam/admin/policies/{policy_id}` (a policy opened on the Roles & permissions page): a policy owned by the
+  - `GET /api/iam/admin/policies/{policy_id}` (a policy's page in Access): a policy owned by the
     viewed container or below, by a container above it (its organization) or by the platform, which the page lists
     beside its own; another workspace's or organization's is "Outside this view" (`outside_this_view(owner, above=True)`).
   - `GET /api/iam/admin/principals/{principal_id}/groups` (the person's page): the groups owned by the viewed container
@@ -121,7 +121,7 @@ the request state. A bearer credential (an API key, a session token) never carri
   Settings › General show the current value: the owner is named from the workspace's own members, the group is the
   workspace's), the organizations list and each organization's access (Settings shows no Organization tab),
   a person read by id (`GET /api/iam/admin/principals/{id}`: the person's page names them by their rows) and the
-  analytics events (the viewer's page views are not the person's activity). The Roles & permissions pages ask nothing
+  analytics events (the viewer's page views are not the person's activity). The Access pages ask nothing
   above the viewed workspace: the person's page reads their (and their groups') attachments with `scope` set to the
   viewed container, asks the rights and the names of the containers below it only, and has no "View as" button (no view
   starts inside a view). They test `viewFlagActive()`, the cookie that is up before the first request is answered. The
@@ -249,7 +249,7 @@ links of `apps/links.py`). The link is the person's, within these limits:
 ## Audit
 
 Through the IAM admin's log (`SqlAdminAuditLog(prefix="iam.")`, `run_audited`), so the records show in Platform
-settings › Roles & permissions › Audit, beside IAM's:
+settings › Access › Audit, beside IAM's:
 
 - `iam.view_as_start`: the actor is the viewer, the resource the person (IAM id), the detail the workspace, the
   end time and the groups source. **Fail-closed**: a `requested` record first, no record, no view (503). A refused
@@ -266,9 +266,9 @@ settings › Roles & permissions › Audit, beside IAM's:
   that still makes a refused read shows one notice, not one per call. A refusal of what the viewer did (a save, a
   message) keeps its notice with the server's words. Consequences: opening Home, Chat, Settings › General, Roles &
   permissions, an app, Files and the account pages shows no notice; Settings has no Organization tab in a view.
-- **The workspace's Roles & permissions pages name the workspace by `scope`.** Decision: an IAM admin read is held to
+- **The workspace's Access pages name the workspace by `scope`.** Decision: an IAM admin read is held to
   the viewed workspace by its `scope` (the container or below), and a group read by id by its owner. Consequences: the
-  page opens in a view with the tabs the person sees (People & roles, Groups, Policies) and decides every button as the
+  pages open in a view as the person sees them (Policies, Groups, a member's page) and decide every button as the
   person; a read that names no container (the platform's people, the audit, service accounts) stays outside, so the page
   shows what it cannot read as "Outside this view" ("Not done" below); a policy by id and a person's groups are answered
   and held by their owner (above).
@@ -328,7 +328,7 @@ coding_environment, workflows, maps and search.
 
 ## Not done
 
-- The Roles & permissions reads that name no container are still "Outside this view": the platform's people
+- The Access reads that name no container are still "Outside this view": the platform's people
   (`GET /api/iam/admin/principals`), the audit, the service accounts and a person read by id. The pages that need them
   are the platform's, outside a view. On the person's page in a view, what they hold at the organization or the platform
   is not shown (it is outside the view), and the containers above the workspace show by id, not by name.

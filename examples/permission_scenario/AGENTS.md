@@ -158,10 +158,10 @@ lifetime, not the view's.
 
 | Step | What is checked, each with its evidence |
 |---|---|
-| `view-1` Root views as Carol | Alpha is offered for Carol, Bravo is not. The view answers as Carol: `/api/auth/me` is Carol, `/api/workspaces` lists Alpha only with her feature flags, her agents (`dev.people`'s, no Pricer) and apps (Directory, Prices), and every Alpha settings page she may open answers as it does for her (General, Members, and Roles & permissions: what she holds, policies, groups, attachments). The groups of Alpha are read by id. Bravo's pages and the platform's (workspace, agents, files, members, Acme's settings and members, policies, audit, users, system) are 403 "Outside this view: you are viewing as <name> in <workspace>". Carol holds a conversation, a secret, an API key and a My Drive file, and the view answers empty (a single item 404). Olivia, who reads a group of Bravo herself, is refused it in a view of Alpha. Stop. |
+| `view-1` Root views as Carol | Alpha is offered for Carol, Bravo is not. The view answers as Carol: `/api/auth/me` is Carol, `/api/workspaces` lists Alpha only with her feature flags, her agents (`dev.people`'s, no Pricer) and apps (Directory, Prices), and every Alpha settings page she may open answers as it does for her (General, Members, and Access › Policies and Groups: what she holds, policies, groups, attachments). The groups of Alpha are read by id. Bravo's pages and the platform's (workspace, agents, files, members, Acme's settings and members, policies, audit, users, system) are 403 "Outside this view: you are viewing as <name> in <workspace>". Carol holds a conversation, a secret, an API key and a My Drive file, and the view answers empty (a single item 404). Olivia, who reads a group of Bravo herself, is refused it in a view of Alpha. Stop. |
 | `view-2` Carol views as Dave | Dave's view is "Alpha minimal": Recruiter, Prices, chat and Home (`chat`, `search`), no BaseMap (the route is refused). A chat message and a saved setting (and the settings cache's refresh) are 403 "Read-only: you are viewing as Dave". Nothing changed: Dave's and Carol's conversations, Alpha's description, Alpha's secrets. |
 | `view-3` Refusals | Carol as Olivia: "Olivia holds Admin (builtin.admin), attached below <Acme>, which you do not hold: …". Carol as Bob: "… Owner (builtin.owner), attached at <Alpha>, which you do not hold: …". Carol and Olivia as Root: "… holds builtin.platform_admin: nobody views as the platform admin"; Root as Root: "You cannot view as yourself". None of them is offered a workspace. |
-| `view-4` Audit | Platform settings › Roles & permissions › Audit (`GET /api/iam/admin/audit`) shows, with who (the viewer's Nexus id), whom (the person's IAM id) and where (the workspace and the end time): each start and stop of Root's views, Carol's view of Dave, each refusal (`failed`, with its error), and the app opened. |
+| `view-4` Audit | Platform settings › Access › Audit (`GET /api/iam/admin/audit`) shows, with who (the viewer's Nexus id), whom (the person's IAM id) and where (the workspace and the end time): each start and stop of Root's views, Carol's view of Dave, each refusal (`failed`, with its error), and the app opened. |
 | `view-5` Ending, and apps | The end is the start plus 15 minutes. After Stop the session has no view and is Root's: his own account and his workspaces. Prices opened in a view: its link (a key marked `view-as:`) ends no later than the view, a GET through it answers, a POST through it is 403 "Read-only: you are viewing as Carol", and after Stop the link is revoked (the key's `revoked_at`) and the app no longer opens. |
 
 The 15 minutes at the clock (a view that ends by itself) is a server test (`services/view_as/view_as_http_test.py`, with a
@@ -172,11 +172,11 @@ clock), not a wait here.
 Against the same database (the Nexus web at `abi dev ports`' `nexus-web`), signed in with the code the provider mails
 (`abi dev code`):
 
-1. Platform settings › Roles & permissions › People & roles › Carol: "View as Carol" and the picker (Alpha preselected).
+1. Platform settings › Users › Carol: "View as Carol" and the picker (Alpha preselected).
 2. Start: the web loads Alpha's Home with the banner "Viewing as Carol (read-only) in Alpha · 15 min left · Stop", then a
-   workspace page, Alpha's settings (Roles & permissions, with the people, groups and policies Carol sees) and the account page.
+   workspace page, Alpha's settings (Access › Policies and Groups, with the people, groups and policies Carol sees) and the account page.
 3. Private pages: the account's API keys ("Private to Carol"), Alpha's secrets, and the chat's history.
-4. Carol, signed in as herself, views as Dave from Alpha's Roles & permissions: a save of the account page and a chat message
+4. Carol, signed in as herself, views as Dave from his page under Alpha's Members: a save of the account page and a chat message
    are refused with "Read-only: you are viewing as Dave", in the bubble and as a notice.
 5. Stop: back to the person's page, and `GET /api/auth/oidc/session` has no `view`.
 
@@ -185,7 +185,7 @@ Against the same database (the Nexus web at `abi dev ports`' `nexus-web`), signe
 On fresh storage (`storage/` emptied, `ENV=scenario abi dev up -d`): `runner.py run` 35 checks, `journeys.py` 46 checks and
 `view_as.py` 33 checks, all passing. What the run found and fixed:
 
-- Alpha's Roles & permissions page (and the settings menu that reads it) read IAM's admin routes with `scope=<the
+- Alpha's Access pages (and the settings menu that reads them) read IAM's admin routes with `scope=<the
   workspace's container>`, which a view refused: the page could not open. A GET under `/api/iam/admin/` that declares `scope` is
   answered when every scope given is the viewed container or below, and a group is read by id held to the container
   (Nexus `services/view_as/AGENTS.md`).
