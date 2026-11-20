@@ -1,11 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { AttachmentView, GroupView, PrincipalView } from '@/lib/iam-admin/types';
 import { NO_PROVIDERS, fetchInviteProviders, type InviteProviders } from '@/lib/invitations';
 import type { AccessViewProps } from '../access-props';
+import {
+  AccessHeaderAction,
+  ListHead,
+  ListSearch,
+  NameCell,
+  RowActions,
+  rowOpener,
+  useAccessBadge,
+  useListControls,
+  type ListColumn,
+} from '../access-list';
 import { PLATFORM, ownedHere, ownerOf } from '../access-scope';
 import { AttachForm } from '../attachments/attach-form';
 import { scopeLabel } from '../attachments/attachments-model';
@@ -85,13 +96,36 @@ export function GroupsView({
     }
   };
 
+  const [creating, setCreating] = useState(false);
+  const columns: ListColumn<PrincipalView>[] = [
+    { id: 'name', label: 'Group', sortBy: (g) => (g.name ?? g.id).toLowerCase(), values: (g) => [g.name ?? g.id] },
+    {
+      id: 'owner',
+      label: 'Owner',
+      sortBy: (g) => scopeLabel(g.owner_scope ?? PLATFORM),
+      values: (g) => [scopeLabel(g.owner_scope ?? PLATFORM)],
+    },
+    {
+      id: 'members',
+      label: 'Members',
+      sortBy: (g) => counts[g.id] ?? -1,
+      values: (g) => [String(counts[g.id] ?? '–')],
+    },
+  ];
+  const list = useListControls(groups, {
+    searchText: (g) => [g.name, g.id, scopeLabel(g.owner_scope ?? PLATFORM)],
+    columns,
+    initialSort: 'name',
+  });
+  useAccessBadge(groups?.length ?? null, 'group');
+
   if (selected) {
     // Listed here, or reached by a link from another page (a person's, a policy's): a group
     // owned elsewhere is shown as IAM lets the caller read it, never changed here. The page
     // needs only the group and its attachments: it opens whether the list was read or not.
     const listed = groups?.find((g) => g.id === selected);
     return (
-      <div className="access-group">
+      <div className="access-group org-settings-users-main">
         <button type="button" className="access-person-back" onClick={() => setSelected(null)}>
           <ArrowLeft size={14} /> Groups
         </button>
@@ -116,79 +150,139 @@ export function GroupsView({
     return error ? <p className="access-source-note" role="alert">{error}</p> : <p className="access-empty">Loading…</p>;
   }
 
+  const create = (
+    <form
+      className="access-group-create platform-users-inline"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const value = name.trim();
+        if (!value) return;
+        void act(async () => {
+          await api.createGroup(scope.value ? { name: value, scope: scope.value } : { name: value });
+          setName('');
+          setCreating(false);
+        });
+      }}
+    >
+      <input
+        className="platform-users-input access-input-grow"
+        aria-label="Group name"
+        placeholder="New group name"
+        value={name}
+        autoFocus
+        onChange={(e) => setName(e.target.value)}
+      />
+      <button type="submit" className="platform-users-button platform-users-button-primary" disabled={!name.trim()}>
+        Create group
+      </button>
+      <button type="button" className="platform-users-button" onClick={() => setCreating(false)}>
+        Cancel
+      </button>
+    </form>
+  );
+
   return (
-    <div className="access-group">
-      {error && <p className="access-source-note" role="alert">{error}</p>}
+    <div className="access-group org-settings-users-main">
       {can('iam:CreateGroup') && (
-        <form
-          className="access-group-create"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const value = name.trim();
-            if (!value) return;
-            void act(async () => {
-              await api.createGroup(scope.value ? { name: value, scope: scope.value } : { name: value });
-              setName('');
-            });
-          }}
-        >
-          <input className="access-input access-input-grow" aria-label="Group name" placeholder="New group name" value={name} onChange={(e) => setName(e.target.value)} />
-          <button type="submit" className="access-button access-button-primary" disabled={!name.trim()}>
+        <AccessHeaderAction>
+          <button
+            type="button"
+            className="org-settings-primary-button"
+            data-action="create-group"
+            onClick={() => setCreating(true)}
+          >
+            <Plus size={16} />
             Create group
           </button>
-        </form>
+        </AccessHeaderAction>
       )}
-      <div className="access-group-layout">
-        <div className="access-table-wrap">
-          <table className="access-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Id</th>
-                <th>Owner</th>
-                <th className="access-num">Members</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map((group) => (
-                <tr key={group.id} className="access-table-row" data-group={group.id}>
-                  <td>
-                    <button type="button" className="access-row-toggle" onClick={() => setSelected(group.id)}>
-                      {group.name ?? group.id}
+      {error && (
+        <div className="org-settings-users-alert" role="alert">
+          <span>{error}</span>
+        </div>
+      )}
+      {creating && create}
+      <ListSearch
+        value={list.search}
+        onChange={list.setSearch}
+        placeholder="Search name, id, owner…"
+        label="Search groups"
+        shown={list.visible.length}
+        total={groups.length}
+        noun="group"
+        filtered={list.filtered}
+        onClear={list.clear}
+      />
+      <div className="org-settings-users-table-wrap">
+        <table className="org-settings-users-table" aria-label="Groups">
+          <ListHead columns={columns} controls={list} />
+          <tbody>
+            {list.visible.map((group) => (
+              <tr
+                key={group.id}
+                data-group={group.id}
+                title="Open its members and what it holds"
+                {...rowOpener(() => setSelected(group.id))}
+              >
+                <td>
+                  <NameCell name={group.name ?? group.id} detail={group.id} />
+                </td>
+                <td>{scopeLabel(group.owner_scope ?? PLATFORM)}</td>
+                <td data-field="members">{counts[group.id] ?? '–'}</td>
+                <RowActions>
+                    <button
+                      type="button"
+                      className="org-settings-users-edit"
+                      data-action="open"
+                      title="Open"
+                      aria-label={`Open ${group.name ?? group.id}`}
+                      onClick={() => setSelected(group.id)}
+                    >
+                      <Pencil size={16} />
                     </button>
-                  </td>
-                  <td className="access-mono">{group.id}</td>
-                  <td>{scopeLabel(group.owner_scope ?? PLATFORM)}</td>
-                  <td className="access-num">{counts[group.id] ?? '–'}</td>
-                  <td>
                     {can('iam:DeleteGroup') && ownedHere(scope, group.owner_scope) && (
-                      <button type="button" className="access-button" aria-label={`Delete ${group.name ?? group.id}`} onClick={() => setDeleting(group)}>
-                        Delete
+                      <button
+                        type="button"
+                        className="org-settings-users-remove"
+                        title="Delete"
+                        aria-label={`Delete ${group.name ?? group.id}`}
+                        onClick={() => setDeleting(group)}
+                      >
+                        <Trash2 size={16} />
                       </button>
                     )}
-                  </td>
-                </tr>
-              ))}
-              {groups.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="access-empty">No groups.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                </RowActions>
+              </tr>
+            ))}
+            {groups.length > 0 && list.visible.length === 0 && (
+              <tr>
+                <td colSpan={columns.length + 1} className="org-settings-users-no-match">
+                  No groups match the current search and filters
+                </td>
+              </tr>
+            )}
+            {groups.length === 0 && (
+              <tr>
+                <td colSpan={columns.length + 1} className="org-settings-users-no-match">
+                  No groups.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
       {deleting && (
-        <div className="access-group-confirm" role="dialog" aria-label="Delete group">
+        <div className="access-group-confirm platform-users-deletion" role="dialog" aria-label="Delete group">
           <p>
             Delete <strong>{deleting.name ?? deleting.id}</strong>? Its members lose what it gave them.
           </p>
           <div className="access-group-actions">
-            <button type="button" className="access-button" onClick={() => setDeleting(null)}>Cancel</button>
+            <button type="button" className="platform-users-button" onClick={() => setDeleting(null)}>
+              Cancel
+            </button>
             <button
               type="button"
-              className="access-button access-button-primary"
+              className="platform-users-button platform-users-button-danger"
               onClick={() => {
                 const target = deleting;
                 setDeleting(null);

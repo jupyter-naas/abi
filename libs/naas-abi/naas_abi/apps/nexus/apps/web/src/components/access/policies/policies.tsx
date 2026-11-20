@@ -1,10 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, CornerDownRight, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, CornerDownRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { AttachmentView, PolicyView } from '@/lib/iam-admin/types';
 import type { AccessViewProps } from '../access-props';
+import {
+  AccessHeaderAction,
+  ListHead,
+  ListSearch,
+  NameCell,
+  RowActions,
+  rowOpener,
+  useAccessBadge,
+  useListControls,
+  type ListColumn,
+} from '../access-list';
 import { NEW_POLICY } from '../access-paths';
 import { PLATFORM, ownerOf } from '../access-scope';
 import { roleOfPolicy } from '../roles/role-change';
@@ -80,7 +91,6 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
   const [confirming, setConfirming] = useState<string | null>(null);
   // IAM's refusal of a delete (a parent with sub-policies), shown at its row.
   const [refusals, setRefusals] = useState<Record<string, string>>({});
-  const [filter, setFilter] = useState('');
   const listedAt = scope.value ?? undefined;
   const here = ownerOf(scope);
   // The listed policies' owners, and that of one opened by its id (a parent, a link).
@@ -174,6 +184,32 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus, opened, policies, held]);
 
+  const ownerLabel = (policy: PolicyView) => owners[policy.owner_scope ?? PLATFORM]?.label ?? '';
+  const columns: ListColumn<PolicyView>[] = [
+    { id: 'name', label: 'Policy', sortBy: (p) => p.name.toLowerCase(), values: (p) => [p.name] },
+    { id: 'owner', label: 'Owner', sortBy: ownerLabel, values: (p) => [ownerLabel(p)] },
+    {
+      id: 'kind',
+      label: 'Kind',
+      sortBy: (p) => managedMark(p) ?? 'custom',
+      values: (p) => [managedMark(p) ?? 'custom'],
+    },
+    {
+      id: 'statements',
+      label: 'Statements',
+      sortBy: (p) => p.document.statements.length,
+      values: (p) => [String(p.document.statements.length)],
+    },
+    { id: 'revision', label: 'Revision', sortBy: (p) => p.revision, values: (p) => [String(p.revision)] },
+  ];
+  const list = useListControls(policies, { searchText: (p) => [p.name, p.id, ownerLabel(p)], columns });
+  const heldColumns: ListColumn<Held>[] = [
+    { id: 'name', label: 'Policy', sortBy: (h) => h.name.toLowerCase(), values: (h) => [h.name] },
+    { id: 'holders', label: 'Held by', sortBy: (h) => h.holders, values: (h) => [String(h.holders)] },
+  ];
+  const heldList = useListControls(held, { searchText: (h) => [h.name, h.id], columns: heldColumns });
+  useAccessBadge(lists ? policies?.length ?? null : holdsOnly ? held?.length ?? null : null, 'policy', 'policies', !!next);
+
   if (error && (policies === null || held === null)) return <p className="access-policy-error" role="alert">{error}</p>;
   if (policies === null || held === null) return <p className="access-empty">Loading…</p>;
 
@@ -231,174 +267,198 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
     );
   }
 
-  const wanted = filter.trim().toLowerCase();
-  // Filtered, a flat list of what matches; else the tree.
-  const rows = wanted
-    ? policies.filter((p) => `${p.name} ${p.id}`.toLowerCase().includes(wanted)).map((policy) => ({ policy, depth: 0 }))
-    : policyTree(policies);
-  const heldRows = held.filter((h) => !wanted || `${h.name} ${h.id}`.toLowerCase().includes(wanted));
+  // Searched, filtered or sorted, a flat list of what matches; else the tree.
+  const rows =
+    list.filtered || list.sortKey
+      ? list.visible.map((policy) => ({ policy, depth: 0 }))
+      : policyTree(policies);
+
+  const nameCell = (policy: PolicyView, depth: number) => (
+    <span className="access-policy-tree" style={{ paddingLeft: `${depth * 1.25}rem` }}>
+      {depth > 0 && <CornerDownRight size={12} className="access-policy-tree-mark" aria-label="Sub-policy" />}
+      <NameCell
+        name={policy.name}
+        detail={policy.id}
+        badge={
+          <>
+            {managedMark(policy) && (
+              <span
+                className="platform-users-badge access-policy-badge"
+                data-managed={managedMark(policy)}
+                title="Managed: IAM writes this policy, read-only"
+              >
+                {managedMark(policy)}
+              </span>
+            )}
+            {policy.managed_from === 'general' && (
+              <span
+                className="platform-users-badge access-policy-badge"
+                data-managed-from="general"
+                title="Set from Workspace settings › General › Features. Changed here, General shows it read-only."
+              >
+                managed from General
+              </span>
+            )}
+          </>
+        }
+      />
+      {refusals[policy.id] && (
+        <p className="access-policy-error" role="alert" data-delete-refusal="">
+          {refusals[policy.id]}
+        </p>
+      )}
+    </span>
+  );
+  const controls = lists ? list : heldList;
 
   return (
-    <div className="access-policies">
-      <div className="access-policy-toolbar">
-        {(lists || holdsOnly) && (
-          <input
-            type="search"
-            className="access-policy-input"
-            aria-label="Filter policies"
-            placeholder="Filter policies"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-          />
-        )}
-        {can('iam:CreatePolicy') && (
+    <div className="access-policies org-settings-users-main">
+      {can('iam:CreatePolicy') && (
+        <AccessHeaderAction>
           <button
             type="button"
-            className="access-policy-button access-policy-button-primary"
+            className="org-settings-primary-button"
+            data-action="create-policy"
             onClick={() => select({ kind: 'new' })}
           >
-            <Plus size={14} /> New policy
+            <Plus size={16} />
+            Create policy
           </button>
-        )}
-      </div>
-      {error && <p className="access-policy-error" role="alert">{error}</p>}
+        </AccessHeaderAction>
+      )}
+      {error && (
+        <div className="org-settings-users-alert access-policy-error" role="alert">
+          <span>{error}</span>
+        </div>
+      )}
+      {(lists || holdsOnly) && (
+        <ListSearch
+          value={controls.search}
+          onChange={controls.setSearch}
+          placeholder="Search name, id, owner…"
+          label="Search policies"
+          shown={lists ? list.visible.length : heldList.visible.length}
+          total={lists ? policies.length : held.length}
+          noun="policy"
+          plural="policies"
+          filtered={controls.filtered}
+          onClear={controls.clear}
+        />
+      )}
 
       {lists ? (
-        <table className="access-policy-table" aria-label="Policies">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Id</th>
-              <th>Owner</th>
-              <th>Statements</th>
-              <th>Revision</th>
-              <th aria-label="Actions" />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(({ policy, depth }) => (
-              <tr key={policy.id} data-policy={policy.id} data-depth={depth}>
-                <td>
-                  <span className="access-policy-tree" style={{ paddingLeft: `${depth * 1.25}rem` }}>
-                    {depth > 0 && <CornerDownRight size={12} className="access-policy-tree-mark" aria-label="Sub-policy" />}
-                    <button
-                      type="button"
-                      className="access-policy-link"
-                      onClick={() => select({ kind: 'policy', policy })}
-                    >
-                      {policy.name}
-                    </button>
-                    {managedMark(policy) && (
-                      <span
-                        className="access-policy-badge"
-                        data-managed={managedMark(policy)}
-                        title="Managed: IAM writes this policy, read-only"
-                      >
-                        {managedMark(policy)}
-                      </span>
-                    )}
-                    {policy.managed_from === 'general' && (
-                      <span
-                        className="access-policy-badge"
-                        data-managed-from="general"
-                        title="Set from Workspace settings › General › Features. Changed here, General shows it read-only."
-                      >
-                        managed from General
-                      </span>
-                    )}
-                  </span>
-                </td>
-                <td>
-                  <code>{policy.id}</code>
-                </td>
-                <td data-policy-owner="">
-                  {linkTo(policy) ? (
-                    <a className="access-policy-link" href={linkTo(policy)!}>
-                      {ownerOfPolicy(policy)?.label}
-                    </a>
-                  ) : (
-                    ownerOfPolicy(policy)?.label
-                  )}
-                </td>
-                <td>{policy.document.statements.length}</td>
-                <td>{policy.revision}</td>
-                <td className="access-policy-row-actions">
-                  {mayDelete(policy) && (
-                    confirming === policy.id ? (
-                      <span className="access-policy-confirm">
-                        Delete {policy.name}?{' '}
-                        <button type="button" className="access-policy-button access-policy-button-danger" onClick={() => void remove(policy)}>
-                          Confirm delete
-                        </button>
-                        <button type="button" className="access-policy-button" onClick={() => setConfirming(null)}>
-                          Keep
-                        </button>
-                      </span>
+        <div className="org-settings-users-table-wrap">
+          <table className="org-settings-users-table" aria-label="Policies">
+            <ListHead columns={columns} controls={list} />
+            <tbody>
+              {rows.map(({ policy, depth }) => (
+                <tr
+                  key={policy.id}
+                  data-policy={policy.id}
+                  data-depth={depth}
+                  title="Open the policy"
+                  {...rowOpener(() => select({ kind: 'policy', policy }))}
+                >
+                  <td>{nameCell(policy, depth)}</td>
+                  <td data-policy-owner="">
+                    {linkTo(policy) ? (
+                      <a className="access-policy-link" href={linkTo(policy)!}>
+                        {ownerOfPolicy(policy)?.label}
+                      </a>
                     ) : (
-                      <button
-                        type="button"
-                        className="access-policy-icon-button"
-                        aria-label={`Delete ${policy.name}`}
-                        onClick={() => setConfirming(policy.id)}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )
-                  )}
-                  {refusals[policy.id] && (
-                    <p className="access-policy-error" role="alert" data-delete-refusal="">
-                      {refusals[policy.id]}
-                    </p>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="access-policy-muted">
-                  No policies{filter ? ' match' : ''}.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                      ownerOfPolicy(policy)?.label
+                    )}
+                  </td>
+                  <td>{managedMark(policy) ?? 'custom'}</td>
+                  <td>{policy.document.statements.length}</td>
+                  <td>{policy.revision}</td>
+                  <RowActions>
+                      {confirming === policy.id ? (
+                        <span className="access-policy-confirm">
+                          Delete {policy.name}?{' '}
+                          <button
+                            type="button"
+                            className="platform-users-button platform-users-button-danger"
+                            onClick={() => void remove(policy)}
+                          >
+                            Confirm delete
+                          </button>
+                          <button type="button" className="platform-users-button" onClick={() => setConfirming(null)}>
+                            Keep
+                          </button>
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="org-settings-users-edit"
+                            data-action="open"
+                            title={mayUpdate(policy) ? 'Edit' : 'Open'}
+                            aria-label={`Open ${policy.name}`}
+                            onClick={() => select({ kind: 'policy', policy })}
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          {mayDelete(policy) && (
+                            <button
+                              type="button"
+                              className="org-settings-users-remove"
+                              title="Delete"
+                              aria-label={`Delete ${policy.name}`}
+                              onClick={() => setConfirming(policy.id)}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </>
+                      )}
+                  </RowActions>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="org-settings-users-no-match">
+                    {list.filtered ? 'No policies match the current search and filters.' : 'No policies.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       ) : holdsOnly ? (
-        <table className="access-policy-table" aria-label="Policies held here">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Id</th>
-              <th>Held by</th>
-            </tr>
-          </thead>
-          <tbody>
-            {heldRows.map((h) => (
-              <tr key={h.id} data-policy={h.id} data-held-by={h.holders}>
-                <td>
-                  <button type="button" className="access-policy-link" onClick={() => void openPolicy(h.id)}>
-                    {h.name}
-                  </button>
-                </td>
-                <td>
-                  <code>{h.id}</code>
-                </td>
-                <td>{h.holders}</td>
-              </tr>
-            ))}
-            {heldRows.length === 0 && (
-              <tr>
-                <td colSpan={3} className="access-policy-muted">
-                  {filter ? 'No policies match.' : 'No policy is held here.'}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <div className="org-settings-users-table-wrap">
+          <table className="org-settings-users-table" aria-label="Policies held here">
+            <ListHead columns={heldColumns} controls={heldList} actions={false} />
+            <tbody>
+              {heldList.visible.map((h) => (
+                <tr
+                  key={h.id}
+                  data-policy={h.id}
+                  data-held-by={h.holders}
+                  title="Open who holds it"
+                  {...rowOpener(() => void openPolicy(h.id))}
+                >
+                  <td>
+                    <NameCell name={h.name} detail={h.id} />
+                  </td>
+                  <td>{h.holders}</td>
+                </tr>
+              ))}
+              {heldList.visible.length === 0 && (
+                <tr>
+                  <td colSpan={2} className="org-settings-users-no-match">
+                    {heldList.filtered ? 'No policies match the current search and filters.' : 'No policy is held here.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <p className="access-policy-muted">You may create policies here, not list them.</p>
       )}
       {next && (
-        <button type="button" className="access-policy-button" onClick={() => void more()}>
+        <button type="button" className="org-settings-users-secondary-button" onClick={() => void more()}>
           Load more
         </button>
       )}

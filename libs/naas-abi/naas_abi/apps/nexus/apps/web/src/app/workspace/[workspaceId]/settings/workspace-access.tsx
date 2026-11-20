@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import { AccessPage, type AccessHrefs } from '@/components/access/access-page';
+import { AccessHeaderSlot } from '@/components/access/access-list';
 import {
   pageFocus,
   workspaceAccessPath,
@@ -54,6 +55,9 @@ export function WorkspaceAccess({ section }: { section: ContainerAccessPage }) {
   const pathname = usePathname();
   const { workspaceId, scope } = useWorkspaceScope();
   const [nonce, setNonce] = useState(0);
+  // The page's own action (Create …) goes after Refresh, as on Platform › Users.
+  const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
+  const [badge, setBadge] = useState<string | null>(null);
   const navigate = useCallback((href: string) => router.push(href), [router]);
   const hrefs = useMemo<AccessHrefs>(
     () => ({
@@ -63,14 +67,22 @@ export function WorkspaceAccess({ section }: { section: ContainerAccessPage }) {
     [workspaceId],
   );
   return (
-    <div className="space-y-6">
+    <div className="access-settings-page">
       <SettingsPageHeader
         title={accessSection(section).label}
+        badge={badge ?? undefined}
         description={SUBTITLES[section]}
-        actions={<RefreshButton onClick={() => setNonce((n) => n + 1)} />}
+        actions={
+          <>
+            <RefreshButton onClick={() => setNonce((n) => n + 1)} />
+            <AccessHeaderSlot onSlot={setHeaderSlot} />
+          </>
+        }
       />
       {scope ? (
         <AccessPage
+          headerSlot={headerSlot}
+          onBadge={setBadge}
           section={section}
           scopes={[scope]}
           focus={pageFocus(pathname, workspaceAccessPath(workspaceId, section))}

@@ -117,7 +117,7 @@ describe('PoliciesView', () => {
 
   it('shows no create or delete to a caller who may not', async () => {
     const api = await open((action) => action === 'iam:ListPolicies');
-    expect(button('New policy')).toBeUndefined();
+    expect(button('Create policy')).toBeUndefined();
     expect(document.querySelector('[aria-label="Delete Graph reader"]')).toBeNull();
     await mounted!.click(document.querySelector('[data-policy="pol_1"] button'));
     expect(button('Save changes')).toBeUndefined();
@@ -141,7 +141,7 @@ describe('PoliciesView at a workspace', () => {
     await validated();
   };
   const newPolicy = async (name: string) => {
-    await mounted!.click(button('New policy') ?? null);
+    await mounted!.click(button('Create policy') ?? null);
     await mounted!.flush();
     await mounted!.type(field('Policy name'), name);
   };
@@ -299,7 +299,7 @@ describe('PoliciesView at a workspace', () => {
       document: { version: '2026-10-13', statements: [{ effect: 'Allow' as const, actions: ['nexus:ListFiles'], resources: ['${scope}/nexus:file/*'] }] },
     };
     await open(() => true, { listPolicies: vi.fn().mockResolvedValue({ items: [owned, member], next_after: null }) }, wsScope);
-    await mounted!.click(button('New policy') ?? null);
+    await mounted!.click(button('Create policy') ?? null);
     await mounted!.flush();
     const start = field('Start from a built-in role') as HTMLSelectElement;
     for (const value of ['builtin.member', '']) {
@@ -351,7 +351,7 @@ describe('PoliciesView at a workspace', () => {
       document: { version: '2026-10-13', statements: [{ effect: 'Allow' as const, actions: ['nexus:ListFiles'], resources: ['${scope}/nexus:file/*'] }] },
     };
     await open(() => true, { listPolicies: vi.fn().mockResolvedValue({ items: [owned, member], next_after: null }) }, wsScope);
-    await mounted!.click(button('New policy') ?? null);
+    await mounted!.click(button('Create policy') ?? null);
     await mounted!.flush();
     const start = field('Start from a built-in role') as HTMLSelectElement;
     expect([...start.options].map((o) => o.value)).toEqual(['', 'builtin.member']);
@@ -396,7 +396,7 @@ describe('PoliciesView sub-policies', () => {
       Promise.resolve({ ...analysts, id: 'pol_new', name: input.name, document: input.document, parent_id: 'pol_o' }),
     );
     await open(() => true, { ...listed, publishers, createPolicy }, wsScope);
-    await mounted!.click(button('New policy') ?? null);
+    await mounted!.click(button('Create policy') ?? null);
     await mounted!.flush();
     await mounted!.type(field('Policy name'), 'Analysts');
     const parent = field('Sub-policy of') as HTMLSelectElement;
@@ -430,7 +430,7 @@ describe('PoliciesView sub-policies', () => {
       parent && options?.derive ? Promise.reject(new IamAdminError(refusal, 403)) : Promise.resolve(adminPublishers),
     );
     await open(() => true, { ...listed, publishers: refusing }, wsScope);
-    await mounted!.click(button('New policy') ?? null);
+    await mounted!.click(button('Create policy') ?? null);
     await mounted!.flush();
     await mounted!.type(field('Policy name'), 'Mine');
     const parent = field('Sub-policy of') as HTMLSelectElement;
@@ -449,7 +449,7 @@ describe('PoliciesView sub-policies', () => {
       parent && fail ? Promise.reject(new IamAdminError('IAM is not available on this server.', 503)) : Promise.resolve(withinO),
     );
     await open(() => true, { ...listed, publishers: flaky }, wsScope);
-    await mounted!.click(button('New policy') ?? null);
+    await mounted!.click(button('Create policy') ?? null);
     await mounted!.flush();
     await mounted!.type(field('Policy name'), 'Mine');
     const parent = field('Sub-policy of') as HTMLSelectElement;
@@ -481,7 +481,7 @@ describe('PoliciesView sub-policies', () => {
       parent ? new Promise<PublishersView>((resolve) => (arrive = resolve)) : Promise.resolve(adminPublishers),
     );
     await open(() => true, { ...listed, publishers: slow }, wsScope);
-    await mounted!.click(button('New policy') ?? null);
+    await mounted!.click(button('Create policy') ?? null);
     await mounted!.flush();
     // Agents chosen, no agent yet: an unfinished choice.
     await mounted!.click(field('Open acme.people Agents'));
@@ -551,7 +551,7 @@ describe('PoliciesView, no leak', () => {
     );
     const api = await open((action) => action === 'iam:CreatePolicy', { publishers: vi.fn().mockResolvedValue(onlyA), resources }, wsScope);
     expect(api.listPolicies).not.toHaveBeenCalled();
-    await mounted!.click(button('New policy') ?? null);
+    await mounted!.click(button('Create policy') ?? null);
     await mounted!.flush();
 
     expect([...document.querySelectorAll('[data-builder-type]')].map((e) => e.getAttribute('data-builder-type'))).toEqual([

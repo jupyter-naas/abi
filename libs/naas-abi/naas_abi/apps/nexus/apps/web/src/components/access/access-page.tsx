@@ -4,6 +4,7 @@ import './access-base.css';
 import './access.css';
 
 import { useMemo } from 'react';
+import { AccessBadgeContext, AccessHeaderSlotContext } from './access-list';
 import { createIamAdminApi, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { InviteProviders } from '@/lib/invitations';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
@@ -44,6 +45,10 @@ export type AccessPageProps = {
   api?: IamAdminApi;
   directory?: AccessDirectory;
   loadProviders?: () => Promise<InviteProviders>;
+  /** Where the page puts its own action (Create …): a slot in its level's page header. */
+  headerSlot?: HTMLElement | null;
+  /** Told the count badge of the list shown (null: none), for the page title. */
+  onBadge?: (badge: string | null) => void;
 };
 
 /**
@@ -66,6 +71,8 @@ export function AccessPage({
   api,
   directory,
   loadProviders,
+  headerSlot = null,
+  onBadge,
 }: AccessPageProps) {
   const client = useMemo(() => api ?? createIamAdminApi(), [api]);
   const people = useMemo(() => directory ?? createAccessDirectory(), [directory]);
@@ -148,9 +155,13 @@ export function AccessPage({
   }
 
   return (
-    <div className="access-tab" data-scope={scope.value ?? 'platform'} data-section={section}>
-      {picker && <div className="access-header">{picker}</div>}
-      {body}
-    </div>
+    <AccessBadgeContext.Provider value={onBadge ?? null}>
+    <AccessHeaderSlotContext.Provider value={headerSlot}>
+      <div className="access-tab" data-scope={scope.value ?? 'platform'} data-section={section}>
+        {picker && <div className="access-header">{picker}</div>}
+        {body}
+      </div>
+    </AccessHeaderSlotContext.Provider>
+    </AccessBadgeContext.Provider>
   );
 }

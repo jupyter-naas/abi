@@ -153,7 +153,7 @@ describe('Access, one page per section at every level', () => {
   it('gives a delegated lister the policies to read, and no button to change them', async () => {
     const { api } = await render('delegated lister', wsScope, 'policies');
     expect(api.listPolicies).toHaveBeenCalledWith(undefined, 'abi:nexus:organization/acme/nexus:workspace/ws-1');
-    expect(button('New policy')).toBeUndefined();
+    expect(button('Create policy')).toBeUndefined();
     expect(api.publishers).not.toHaveBeenCalled();
   });
 
@@ -161,7 +161,7 @@ describe('Access, one page per section at every level', () => {
     const { api } = await render('policy builder', wsScope, 'policies');
     expect(api.listPolicies).not.toHaveBeenCalled();
     expect(mounted!.host.textContent).toContain('You may create policies here, not list them.');
-    expect(button('New policy')).toBeDefined();
+    expect(button('Create policy')).toBeDefined();
   });
 
   it('lets a workspace admin create groups and policies in their workspace, and nothing of the platform', async () => {
@@ -169,7 +169,7 @@ describe('Access, one page per section at every level', () => {
     expect(button('Create group')).toBeDefined();
     await mounted?.unmount();
     await render('workspace admin', wsScope, 'policies');
-    expect(button('New policy')).toBeDefined();
+    expect(button('Create policy')).toBeDefined();
     await mounted?.unmount();
     await render('workspace admin', PLATFORM_ACCESS_SCOPE, 'policies');
     expect(refused()).not.toBeNull();

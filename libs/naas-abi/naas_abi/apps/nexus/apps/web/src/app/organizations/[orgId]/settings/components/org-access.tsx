@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import { AccessPage, type AccessHrefs } from '@/components/access/access-page';
+import { AccessHeaderSlot } from '@/components/access/access-list';
 import {
   organizationAccessPath,
   organizationPersonPath,
@@ -34,6 +35,9 @@ export function OrgAccess({ section }: { section: ContainerAccessPage }) {
   const pathname = usePathname();
   const [workspaces, setWorkspaces] = useState<OrgWorkspace[]>([]);
   const [nonce, setNonce] = useState(0);
+  // The page's own action (Create …) goes after Refresh, as on Platform › Users.
+  const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
+  const [badge, setBadge] = useState<string | null>(null);
   // The workspace the address picks (`?in=<workspace id>`).
   const inWorkspace = useSearchParams()?.get('in') ?? null;
 
@@ -75,21 +79,27 @@ export function OrgAccess({ section }: { section: ContainerAccessPage }) {
     <div className="access-settings-page">
       <OrgSettingsPageHeader
         title={accessSection(section).label}
+        badge={badge ?? undefined}
         subtitle={SUBTITLES[section]}
         actions={
-          <button
-            type="button"
-            className="org-settings-users-secondary-button"
-            data-action="refresh"
-            onClick={() => setNonce((n) => n + 1)}
-            title="Refresh"
-            aria-label="Refresh"
-          >
-            <RefreshCw size={16} />
-          </button>
+          <>
+            <button
+              type="button"
+              className="org-settings-users-secondary-button"
+              data-action="refresh"
+              onClick={() => setNonce((n) => n + 1)}
+              title="Refresh"
+              aria-label="Refresh"
+            >
+              <RefreshCw size={16} />
+            </button>
+            <AccessHeaderSlot onSlot={setHeaderSlot} />
+          </>
         }
       />
       <AccessPage
+        headerSlot={headerSlot}
+        onBadge={setBadge}
         section={section}
         scopes={scopes}
         picked={picked}

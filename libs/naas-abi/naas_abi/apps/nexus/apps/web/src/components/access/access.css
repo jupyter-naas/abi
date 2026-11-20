@@ -1,5 +1,13 @@
 /* components/access — the Roles & permissions shell: the scope picker and the section tabs */
 
+/* A level's Access page: its header, then the section, spaced as Platform › Users. */
+.access-settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
 .access-tab {
   display: flex;
   flex-direction: column;
