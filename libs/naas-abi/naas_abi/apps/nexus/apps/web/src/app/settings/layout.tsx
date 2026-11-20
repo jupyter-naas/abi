@@ -64,7 +64,6 @@ function PlatformSettingsForbidden({ onRetry }: { onRetry?: () => void }) {
 export default function PlatformSettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? PLATFORM_SETTINGS_INDEX;
   const router = useRouter();
-  useRememberSettingsPath(pathname);
   const { status, actions, retry } = usePlatformSettingsAccess({ fresh: true });
   const isMobile = useIsMobile();
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
@@ -116,6 +115,8 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
 
   const ready = status === 'ready';
   const allowed = ready && (item ? holds(item.needs, actions) : groups.length > 0);
+  // Reopened only once the page opens: not while the access is read, refused, or the index.
+  useRememberSettingsPath(item && allowed ? pathname : null);
 
   let content: React.ReactNode;
   if (status === 'checking') content = <SettingsLoading />;
