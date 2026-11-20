@@ -41,6 +41,27 @@
     the configured roles.
   - This also works through Zitadel or Keycloak. Before, a configured user who signed
     in through them was refused ("email already in use").
+- **API changes** (for scripts and integrations calling Nexus):
+  - `POST /api/workspaces/{id}/members/invite` and `POST /api/organizations/{id}/members/invite`
+    now answer the person added, the same way whether their account was created or linked:
+    `{status: "added", user: {id, email, name, status}, member, provider, sign_in_email_sent,
+    warning}`. They no longer answer an invitation. `sign_in_email_sent` is true only when a
+    mail was sent.
+  - Inviting someone who already holds a role there answers **409**. It used to resend
+    their invitation: use `POST .../members/{user_id}/resend` instead.
+  - **New routes:**
+    - `GET /api/workspaces/{id}/members/candidates?q=` (the organization's people,
+      at least 2 characters, at most 10 results);
+    - `POST /api/workspaces/{id}/members` (add someone who exists);
+    - `POST /api/workspaces/{id}/members/{user_id}/resend` and its organization
+      counterpart;
+    - `DELETE /api/organizations/{id}/members/{user_id}/access` (remove someone
+      with workspace access only, from every workspace of the organization).
+  - Linking an existing account writes their organization profile (job title, bio, ...)
+    only with an organization role granted in the same call. A workspace grant alone
+    leaves it as it is.
+  - **Organization settings › Analytics** count the organization's people as its
+    directory lists them, including people with a role in one of its workspaces only.
 
 ## Upgrade notes (next release): Nexus Analytics in settings
 

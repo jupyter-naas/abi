@@ -98,6 +98,12 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
             .all()
         )
 
+        # The rows are read: end the read before asking IAM, which takes a while on a
+        # large install, so the sync holds no pooled connection meanwhile. Detached
+        # first, the rows keep what they loaded whatever the session expires.
+        self.db.expunge_all()
+        await self.db.rollback()
+
         # Roles are IAM's: the graph mirrors its attachments, never the old rows.
         # The organization's directory: its members, and whoever holds a role only
         # in one of its workspaces (linked to it, with no org role).
@@ -105,12 +111,17 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
         organization_members = [
             (org, member) for org in organizations for member in directories.get(org.id, [])
         ]
+        # Every workspace's members in one pass over the roles' attachments (one per
+        # workspace was 115 passes on one install, each over every attachment).
+        containers = {
+            workspace.id: workspace_container(workspace.organization_id, workspace.id)
+            for workspace in workspaces
+        }
+        held = await MEMBERSHIPS.members_of(list(containers.values()))
         members = [
             (workspace, member)
             for workspace in workspaces
-            for member in await MEMBERSHIPS.members(
-                workspace_container(workspace.organization_id, workspace.id)
-            )
+            for member in held.get(containers[workspace.id], [])
         ]
         platform_admins = {u.id for u in users if await AUTHZ.allowed("ManageSystem", user=u.id)}
 

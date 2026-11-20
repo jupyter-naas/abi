@@ -98,12 +98,24 @@ def _invalidate_settings_cache() -> None:
     invalidate_on_startup()
 
 
+_identity_graph_sync_lock: asyncio.Lock | None = None
+
+
 async def _sync_identity_graph() -> None:
     """Rebuild graph/nexus-identity from Postgres and the running configuration:
     users and persons, organizations, workspaces, memberships and access roles,
     features and policies, and their setup processes. Event payloads only hold
-    ids; this graph resolves them to people.
+    ids; this graph resolves them to people. One at a time: the boot's and one an
+    identity event scheduled would each read everything and rewrite the same graph.
     """
+    global _identity_graph_sync_lock
+    if _identity_graph_sync_lock is None:
+        _identity_graph_sync_lock = asyncio.Lock()
+    async with _identity_graph_sync_lock:
+        await _sync_identity_graph_now()
+
+
+async def _sync_identity_graph_now() -> None:
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule

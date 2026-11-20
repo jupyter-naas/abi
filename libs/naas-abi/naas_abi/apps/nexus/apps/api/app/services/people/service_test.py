@@ -417,7 +417,46 @@ async def test_someone_who_signed_in_under_another_email_is_linked_not_duplicate
     assert list(world.store.rows) == ["usr_sub-bob"]
     assert world.access.roles["usr_sub-bob"] == {WS_SCOPE: "member"}
     assert world.access.pending == {} and world.idp.deleted == []
-    assert world.store.profiles == {("org-1", "usr_sub-bob"): {"job_title": "CFO"}}
+    # A workspace grant alone never rewrites an existing person's organization profile.
+    assert world.store.profiles == {}
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_admin_linking_someone_leaves_their_org_profile_alone(world):
+    """A workspace admin types the email of an organization member who is not in the
+    workspace yet: they are linked and added, and their profile in the organization
+    (job title, bio...) stays theirs: editing it is an organization admin's."""
+    world.store.rows["alice"] = PlatformUser(
+        "alice", "alice@example.com", "Alice", UserStatus.ACTIVE, "builtin"
+    )
+    world.store.profiles[("org-1", "alice")] = {"job_title": "CFO"}
+
+    result = await _create(
+        world, email="alice@example.com", organization_id="org-1", profile={"job_title": "Intern"}
+    )
+
+    assert result.user.id == "alice" and not result.created
+    assert world.access.roles["alice"] == {WS_SCOPE: "member"}
+    assert world.store.profiles == {("org-1", "alice"): {"job_title": "CFO"}}
+
+
+@pytest.mark.asyncio
+async def test_an_org_grant_on_a_link_writes_the_profile(world):
+    """Who may give an organization role may edit its people: with an organization
+    grant IAM accepted, the link writes the profile."""
+    world.store.rows["alice"] = PlatformUser(
+        "alice", "alice@example.com", "Alice", UserStatus.ACTIVE, "builtin"
+    )
+
+    await _create(
+        world,
+        email="alice@example.com",
+        grants=(ORG,),
+        organization_id="org-1",
+        profile={"job_title": "CFO"},
+    )
+
+    assert world.store.profiles == {("org-1", "alice"): {"job_title": "CFO"}}
 
 
 @pytest.mark.asyncio
@@ -601,3 +640,15 @@ async def test_a_creation_with_no_grant_writes_no_organization_profile(world):
     invitation names none)."""
     await _create(world, grants=(), organization_id="org-1", profile={"job_title": "Spy"})
     assert world.store.profiles == {}
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_provider_is_refused_whether_the_email_has_an_account_or_not(world):
+    """The answer does not tell an address with an account from a new one."""
+    world.store.rows["carl"] = PlatformUser(
+        "carl", "carl@example.com", "Carl", UserStatus.ACTIVE, "builtin"
+    )
+    for email in ("carl@example.com", "new@example.com"):
+        with pytest.raises(NoProviderError):
+            await _create(world, email=email, provider="nope")
+    assert world.access.roles.get("carl") is None

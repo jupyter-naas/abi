@@ -165,6 +165,12 @@ class PeopleService:
         name = " ".join((name or "").split()) or None
         steps = await self._plan(grants, may_grant_owner)
         kept_profile = _profile(profile)
+        if provider:
+            # A provider asked for is checked whether the email has an account or not:
+            # an unknown one is refused the same way, so the answer tells nothing.
+            known, _default = await self.identity.providers()
+            if provider not in {p.name for p in known}:
+                raise NoProviderError(f"{provider!r} is not an identity provider")
         existing = await self.store.by_email(email)
         if existing is not None:
             return await self._link(
@@ -374,9 +380,15 @@ class PeopleService:
         organization_id: str | None,
     ) -> CreateOrLinkResult:
         await self._apply(user.id, steps, by)
-        # The profile is the inviting organization's: written only with a grant
-        # IAM accepted there, never about someone the call gave nothing.
-        if organization_id and profile and steps:
+        # Someone who exists has a profile of their own in the organization: a link
+        # writes it only with an organization grant IAM accepted (who may give an
+        # organization role may edit its people), never with a workspace grant
+        # alone (a workspace admin cannot rewrite an org member's profile).
+        org_granted = any(
+            s.grant.scope == "organization" and s.grant.scope_id == organization_id
+            for s in steps
+        )
+        if organization_id and profile and org_granted:
             await self.store.write_profile(organization_id, user.id, profile)
             await self.store.commit()
         sent = await self._notify(user, by, steps, organization_id=organization_id)
