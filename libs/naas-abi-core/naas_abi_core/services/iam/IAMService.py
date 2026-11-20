@@ -75,6 +75,7 @@ from naas_abi_core.services.iam.iam_catalog import CATALOG, SEALS
 from naas_abi_core.services.iam.IAMPorts import (
     KIND_PREFIXES,
     Attachment,
+    AuditEvent,
     Bound,
     ContainerRecord,
     CreatedKey,
@@ -82,6 +83,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     EffectiveStatement,
     Explanation,
     FilterResult,
+    GrantableAction,
     GrantableCatalog,
     GrantNotHeldError,
     GroupMapping,
@@ -100,6 +102,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     ManifestRecord,
     ManifestStatus,
     ManifestSubmission,
+    Membership,
     NameRewriter,
     Page,
     PendingGrant,
@@ -117,6 +120,7 @@ from naas_abi_core.services.iam.IAMPorts import (
 )
 from naas_abi_core.services.iam.names import (
     EVERYWHERE,
+    MY_CONTAINERS_SCOPE,
     PLATFORM_SCOPE,
     UNRESOLVED,
     as_container,
@@ -124,6 +128,7 @@ from naas_abi_core.services.iam.names import (
     container_of_scope,
     has_wildcard,
     is_below,
+    is_membership_scope,
     is_old_scope,
     matches,
     owner_ancestors,
@@ -187,11 +192,14 @@ def policy_resource(policy_id: str, owner_scope: str = PLATFORM_SCOPE) -> str:
 def attachment_resource(policy_id: str, principal_id: str, scope: str | None) -> str:
     """Named in the attachment's scope's container, so no ``${scope}`` grant
     reaches past its scope; below a container, in that container ("Grant only
-    what you hold" checks what it grants under it). An unscoped one, and one at
-    the platform, at the platform, which only unscoped grants reach (the
+    what you hold" checks what it grants under it). An unscoped one, one at
+    the platform and one at ``${my workspaces}`` (which may reach any
+    container), at the platform, which only unscoped grants reach (the
     platform admin's)."""
     container = (
-        PLATFORM_SCOPE if scope is None else as_container(container_of_scope(scope))
+        PLATFORM_SCOPE
+        if scope is None or is_membership_scope(scope)
+        else as_container(container_of_scope(scope))
     )
     return resource_name(
         "iam",
@@ -365,6 +373,7 @@ class IAMService(IIAMService, PolicySource):
         self._floors = _TTLCache(cache_ttl_seconds, 1)
         self._pending_index: tuple[int, frozenset[tuple[str, str]]] | None = None
         self._listeners: list[Callable[[int], None]] = []
+        self._audit_listeners: list[Callable[[AuditEvent], None]] = []
         # Nothing is cached yet: the store as it is now is what this service saw.
         self._seen_revision: int | None = store.revision()
         self._seal_key: bytes | None = None
@@ -574,10 +583,53 @@ class IAMService(IIAMService, PolicySource):
             # A module id names one module: an account of a reserved id, or of
             # one another account holds, holds nothing.
             return Subject(principal.id, status, ())
-        for attachment, group in self._held_attachments(principal, record):
-            statements += self._statements_of(
-                attachment.policy_id, attachment, group, fresh=fresh
+        held = self._held_attachments(principal, record)
+        memberships: list[tuple[str, str]] | None = None
+        # The roles reached at a container that brings the platform companions,
+        # through ${my workspaces}: (role, group holding it, membership group).
+        companion_roles: list[tuple[str, str | None, str]] = []
+        for attachment, group in held:
+            if not is_membership_scope(attachment.scope):
+                statements += self._statements_of(
+                    attachment.policy_id, attachment, group, fresh=fresh
+                )
+                continue
+            if memberships is None:
+                memberships = self._memberships(principal, record)
+            reached = self._membership_reach(
+                attachment.policy_id, group, memberships, fresh=fresh
             )
+            if not reached:
+                # Applied nowhere, its Denies still refuse as written.
+                statements += [
+                    effective
+                    for effective in self._statements_of(
+                        attachment.policy_id,
+                        replace(attachment, scope=None),
+                        group,
+                        fresh=fresh,
+                    )
+                    if effective.statement.effect == "Deny"
+                ]
+            for container, membership_group in reached:
+                statements += [
+                    replace(effective, membership_group=membership_group)
+                    for effective in self._statements_of(
+                        attachment.policy_id,
+                        replace(attachment, scope=container),
+                        group,
+                        fresh=fresh,
+                    )
+                ]
+                if attachment.policy_id in roles.ROLES and self._brings_companions(
+                    container
+                ):
+                    companion_roles.append(
+                        (attachment.policy_id, group, membership_group)
+                    )
+        statements += self._membership_companion(
+            companion_roles, {a.policy_id for a, _ in held}, fresh=fresh
+        )
         if principal.kind == "user":
             # builtin.self is held by every user, implicitly.
             statements += self._statements_of(roles.SELF, None, None, fresh=fresh)
@@ -600,6 +652,89 @@ class IAMService(IIAMService, PolicySource):
             if (bound := bind_variables(effective.statement, variables)) is not None
         ]
         return Subject(principal.id, status, tuple(statements))
+
+    def _memberships(
+        self, principal: CallPrincipal, record: PrincipalRecord | None
+    ) -> list[tuple[str, str]]:
+        """``(membership group, container)`` of each active membership group of
+        the principal, static (``IAMStore.memberships_of``) or carried in the
+        token's ``grp``: read for the principal alone, never by scanning groups."""
+        found: dict[str, str] = {}
+        if record is not None:
+            for membership in self.store.memberships_of(record.id):
+                found[membership.group_id] = membership.container
+        for group_id in sorted(principal.groups):
+            if group_id in found:
+                continue
+            group = self._find_group(group_id)
+            if group is not None and group.membership_of:
+                found[group_id] = group.membership_of
+        return sorted(
+            (group_id, container)
+            for group_id, container in found.items()
+            if self._active(group_id)
+        )
+
+    def _membership_reach(
+        self,
+        policy_id: str,
+        holder_group: str | None,
+        memberships: Sequence[tuple[str, str]],
+        *,
+        fresh: bool = False,
+    ) -> list[tuple[str, str]]:
+        """Where a policy attached at ``${my workspaces}`` applies: each
+        ``(container, membership group)`` of ``memberships`` within the owner of
+        the policy and of the group holding it (``holder_group``; None: the
+        principal itself, the platform's), each container once."""
+        policy = (
+            self._load_policy(policy_id) if fresh else self._cached_policy(policy_id)
+        )
+        if policy is None:
+            return []
+        holder_owner = PLATFORM_SCOPE
+        if holder_group is not None:
+            group = self._find_group(holder_group)
+            holder_owner = group.owner_scope if group is not None else UNRESOLVED
+        reached: dict[str, str] = {}
+        for membership_group, container in memberships:
+            if container in reached:
+                continue
+            if within_owner(policy.owner_scope, container) and within_owner(
+                holder_owner, container
+            ):
+                reached[container] = membership_group
+        return sorted(reached.items())
+
+    def _membership_companion(
+        self,
+        reached: Sequence[tuple[str, str | None, str]],
+        held: set[str],
+        *,
+        fresh: bool = False,
+    ) -> list[EffectiveStatement]:
+        """The platform companion the roles reached through ``${my workspaces}``
+        bring (``reached``: role, holding group, membership group), as an
+        attachment of them at the container would: ``builtin.platform.member``
+        for a member, admin or owner role, ``.viewer`` for viewer roles alone.
+        Held while the membership lasts, never stored; none when the principal
+        holds it (or the member one) already."""
+        member = [r for r in reached if r[0] in roles.PLATFORM_MEMBER_ROLES]
+        viewer = [r for r in reached if r[0] == roles.VIEWER]
+        if member:
+            companion, (_, group, membership_group) = roles.PLATFORM_MEMBER, member[0]
+            if companion in held:
+                return []
+        elif viewer:
+            companion, (_, group, membership_group) = roles.PLATFORM_VIEWER, viewer[0]
+            if held & {roles.PLATFORM_VIEWER, roles.PLATFORM_MEMBER}:
+                return []
+        else:
+            return []
+        return [
+            replace(effective, membership_group=membership_group)
+            for effective in self._statements_of(companion, None, group, fresh=fresh)
+        ]
 
     def _statements_of(
         self,
@@ -884,6 +1019,13 @@ class IAMService(IIAMService, PolicySource):
         doomed = [c for c in self.store.list_containers() if within(c.name, name)]
         names = {c.name for c in doomed}
         changed = self._drop_owned(names)
+        for doomed_name in sorted(names):
+            # A membership group of a container that is gone makes no member.
+            for group_id in self.store.membership_groups(doomed_name):
+                group = self._find_group(group_id)
+                if group is not None:
+                    self.store.update_principal(replace(group, membership_of=None))
+                    changed = True
         detached = self._detach_at(names)
         for grant in self.store.list_pending_grants():
             if grant.scope is not None and container_of_scope(grant.scope) in names:
@@ -1542,21 +1684,260 @@ class IAMService(IIAMService, PolicySource):
     # Groups
     # =========================================================================
 
-    def create_group(self, name: str, *, scope: str | None = None) -> PrincipalRecord:
+    def create_group(
+        self,
+        name: str,
+        *,
+        scope: str | None = None,
+        membership_of: str | None = None,
+        level: bool = False,
+    ) -> PrincipalRecord:
         """A group owned by ``scope``: the platform (``abi:``, the default) or a
         registered container. Its name carries the owner, so whoever may
-        ``iam:CreateGroup`` there creates it."""
+        ``iam:CreateGroup`` there creates it. ``membership_of``: a membership
+        group of that registered container, at or below the owner; ``level``: a
+        level group, which only the platform's grants mark (``mark_group``)."""
         if not name:
             raise ValueError("A group needs a name")
         owner = validate_owner_scope(scope) if scope is not None else PLATFORM_SCOPE
         group_id = new_id("grp")
         self.require("iam:CreateGroup", group_resource(group_id, owner))
         self._check_owner_known(owner)
+        if membership_of is not None:
+            self._check_membership_of(owner, membership_of)
+        if level:
+            self._require_level_marker(group_id)
         record = self.store.create_principal(
-            PrincipalRecord(id=group_id, kind="group", name=name, owner_scope=owner)
+            PrincipalRecord(
+                id=group_id,
+                kind="group",
+                name=name,
+                owner_scope=owner,
+                membership_of=membership_of,
+                level_group=level,
+            )
         )
         self._changed()
         return record
+
+    def mark_group(
+        self, group_id: str, *, membership_of: str | None = None, level: bool = False
+    ) -> PrincipalRecord:
+        """Set a group's markers, both at once (AGENTS.md, "Groups").
+
+        ``iam:UpdateGroup`` on the group as its owner names it; changing
+        ``level`` also needs it on the group's platform name, which only
+        unscoped grants reach (the platform admin, the first-party accounts).
+        A new ``membership_of`` makes each member a member of that container:
+        checked as adding each to a membership group of it (``_require_reach``).
+        Every member's next decision reads the change; the change listeners
+        (the connection warden) hear it."""
+        group = self._require_group("iam:UpdateGroup", group_id)
+        if group.status == "deleted":
+            raise IAMNotFoundError(f"Group {group_id} not found")
+        if level != group.level_group:
+            self._require_level_marker(group_id)
+        if (membership_of, level) == (group.membership_of, group.level_group):
+            return group
+        if membership_of is not None and membership_of != group.membership_of:
+            self._check_membership_of(group.owner_scope, membership_of)
+            with grants.budget():  # one budget for every member
+                for member_id in self.store.list_group_members(group_id):
+                    if membership_of not in self._member_containers(member_id):
+                        self._require_reach(
+                            self._membership_attachments(member_id), [membership_of]
+                        )
+        record = self.store.update_principal(
+            replace(group, membership_of=membership_of, level_group=level)
+        )
+        self._changed()
+        return record
+
+    def list_memberships(self, principal_id: str) -> list[Membership]:
+        """The memberships of ``principal_id`` (its membership groups, not
+        deleted) whose group the caller may read (``iam:GetGroup``)."""
+        found: list[tuple[Membership, str]] = []
+        for membership in self.store.memberships_of(principal_id):
+            group = self._find_group(membership.group_id)
+            if group is not None and group.status != "deleted":
+                found.append((membership, group_resource(group.id, group.owner_scope)))
+        allowed = set(self.filter("iam:GetGroup", [n for _, n in found]).allowed)
+        return [membership for membership, name in found if name in allowed]
+
+    def list_container_members(self, container: str) -> list[str]:
+        """The members of ``container``: of its membership groups (not deleted)
+        the caller may read (``iam:GetGroup``), sorted, each once."""
+        groups = [
+            group
+            for group in (
+                self._find_group(group_id)
+                for group_id in self.store.membership_groups(container)
+            )
+            if group is not None and group.status != "deleted"
+        ]
+        names = {g.id: group_resource(g.id, g.owner_scope) for g in groups}
+        allowed = set(self.filter("iam:GetGroup", names.values()).allowed)
+        members: set[str] = set()
+        for group in groups:
+            if names[group.id] in allowed:
+                members.update(self.store.list_group_members(group.id))
+        return sorted(members)
+
+    def _check_membership_of(self, owner: str, container: str) -> None:
+        """A membership group is of one registered container, at or below the
+        group's owner."""
+        if (
+            container == PLATFORM_SCOPE
+            or is_below(container)
+            or self._known_container(container) != container
+        ):
+            raise ValueError(
+                f"{container} is not a registered container: a membership group "
+                "is of one container"
+            )
+        if not within_owner(owner, container):
+            raise ValueError(
+                f"A group of {owner} is a membership group of a container there "
+                f"or inside it, not of {container}"
+            )
+
+    def _require_level_marker(self, group_id: str) -> None:
+        """Marking or unmarking a level group is the platform's: decided as
+        ``iam:UpdateGroup`` on the group's platform name, which only unscoped
+        grants reach, as IdP group mappings are."""
+        name = group_resource(group_id)
+        if not self.authorize("iam:UpdateGroup", name).allowed:
+            raise PermissionDeniedError(
+                "iam:UpdateGroup",
+                name,
+                message=(
+                    "Only the platform's grants mark a level group: its members "
+                    "may be changed by the admins of any of their containers"
+                ),
+            )
+
+    def _member_containers(self, member_id: str) -> list[str]:
+        """The containers ``member_id`` is a member of now, through its active
+        static membership groups."""
+        return sorted(
+            {
+                m.container
+                for m in self.store.memberships_of(member_id)
+                if self._active(m.group_id)
+            }
+        )
+
+    def _membership_attachments(
+        self, member_id: str
+    ) -> list[tuple[Attachment, str | None]]:
+        """The attachments at ``${my workspaces}`` that reach ``member_id``: its
+        own and those of its active static groups, each with the group it comes
+        through (None: its own)."""
+        holders: dict[str, str | None] = {member_id: None}
+        for group_id in self.store.groups_of(member_id):
+            if self._active(group_id):
+                holders[group_id] = group_id
+        return [
+            (attachment, holders[attachment.principal_id])
+            for attachment in self.store.attachments_for(list(holders))
+            if is_membership_scope(attachment.scope)
+        ]
+
+    def _require_reach(
+        self,
+        attachments: Sequence[tuple[Attachment, str | None]],
+        containers: Sequence[str],
+    ) -> None:
+        """Grant only what you hold, for attachments at ``${my workspaces}``
+        reaching ``containers``: what each gives at each of them within the
+        owners of its policy and of the group holding it (``_membership_reach``)
+        is held by the caller there."""
+        pairs = [("-", container) for container in containers]
+        for attachment, holder in attachments:
+            policy = self._load_policy(attachment.policy_id)
+            if policy is None:
+                continue
+            at = [
+                container
+                for container, _ in self._membership_reach(
+                    policy.id, holder, pairs, fresh=True
+                )
+            ]
+            if at:
+                self._require_held(
+                    policy.document,
+                    at,
+                    policy_id=policy.id,
+                    parents=self._parents(policy),
+                )
+
+    def _require_member_change(
+        self, action: str, group_id: str, member_id: str
+    ) -> tuple[PrincipalRecord, tuple[str, ...]]:
+        """``action`` (``iam:AddGroupMember`` or ``iam:RemoveGroupMember``) on
+        the group, as its owner names it. For a level group, also allowed to
+        whoever holds it on the group named in one of the person's containers
+        (within the group's owner): an admin of any of their workspaces, of
+        their organisation, the platform admin. Returns the group and those
+        containers (empty when the group's own name allowed it)."""
+        group = self._find_group(group_id)
+        if group is not None and group.level_group and group.status != "deleted":
+            if self.authorize(
+                action, group_resource(group_id, group.owner_scope)
+            ).allowed:
+                return group, ()
+            containers = tuple(
+                container
+                for container in self._member_containers(member_id)
+                if within_owner(group.owner_scope, container)
+                and self.authorize(action, group_resource(group_id, container)).allowed
+            )
+            if containers:
+                return group, containers
+        return self._require_group(action, group_id), ()
+
+    def add_audit_listener(self, listener: Callable[[AuditEvent], None]) -> None:
+        """``listener(event)`` after each change IAM audits: a person joining or
+        leaving a level group. Each is logged too."""
+        self._audit_listeners.append(listener)
+
+    def remove_audit_listener(self, listener: Callable[[AuditEvent], None]) -> None:
+        if listener in self._audit_listeners:
+            self._audit_listeners.remove(listener)
+
+    def _audit(
+        self,
+        action: str,
+        group: PrincipalRecord,
+        member_id: str,
+        containers: tuple[str, ...],
+    ) -> None:
+        ctx = current_call_context()
+        event = AuditEvent(
+            action=action,
+            group_id=group.id,
+            member_id=member_id,
+            by=ctx.principal.id,
+            on_behalf_of=ctx.on_behalf_of.id if ctx.on_behalf_of else None,
+            containers=containers,
+            at=datetime.now(UTC),
+        )
+        where = (
+            f" as an admin of {', '.join(containers)}"
+            if containers
+            else " on the group itself"
+        )
+        logger.info(
+            f"IAM audit: {action} {member_id} in the level group {group.id} by "
+            f"{event.by}"
+            + (f" for {event.on_behalf_of}" if event.on_behalf_of else "")
+            + where
+        )
+        for listener in list(self._audit_listeners):
+            try:
+                listener(event)
+            except Exception as exc:  # noqa: BLE001 - a listener never fails a write
+                logger.warning(f"IAM audit listener failed: {exc!r}")
 
     def get_group(self, group_id: str) -> PrincipalRecord:
         return self._require_group("iam:GetGroup", group_id)
@@ -1643,8 +2024,15 @@ class IAMService(IIAMService, PolicySource):
         attachment of their own within it. The new member gets every
         attachment of the group, so the caller holds what each grants at its
         scope (``_require_held``), but for the companions IAM keeps in step with
-        the group's roles (``_companions``): they follow the roles."""
-        group = self._require_group("iam:AddGroupMember", group_id)
+        the group's roles (``_companions``): they follow the roles. An
+        attachment at ``${my workspaces}`` is checked at each container the
+        member is, or becomes, a member of; joining a membership group, so are
+        the member's own (``_require_reach``). Joining a level group is allowed
+        to the admins of any of the person's containers, and its attachments
+        at ``${my workspaces}`` are not checked: audited (``_audit``)."""
+        group, routed = self._require_member_change(
+            "iam:AddGroupMember", group_id, member_id
+        )
         try:
             member = self._get_principal(member_id)
         except IAMNotFoundError:
@@ -1669,9 +2057,17 @@ class IAMService(IIAMService, PolicySource):
         attachments = self.store.list_attachments(principal_id=group_id)
         companions = self._companions(attachments)
         held: dict[str, list[str | None]] = {}
+        reaching: list[tuple[Attachment, str | None]] = []
         for attachment in attachments:
-            if (attachment.policy_id, attachment.scope) not in companions:
-                held.setdefault(attachment.policy_id, []).append(attachment.scope)
+            if (attachment.policy_id, attachment.scope) in companions:
+                continue
+            if is_membership_scope(attachment.scope):
+                if not group.level_group:  # a level group's are the exception
+                    reaching.append((attachment, group_id))
+                continue
+            held.setdefault(attachment.policy_id, []).append(attachment.scope)
+        current = self._member_containers(member_id)
+        joined = group.membership_of
         with grants.budget():  # one budget for every attachment of the group
             for policy_id, scopes in sorted(held.items()):
                 policy = self._load_policy(policy_id)
@@ -1682,20 +2078,37 @@ class IAMService(IIAMService, PolicySource):
                         policy_id=policy_id,
                         parents=self._parents(policy),
                     )
+            self._require_reach(
+                reaching, sorted({*current, *([joined] if joined else [])})
+            )
+            if joined is not None and joined not in current:
+                self._require_reach(self._membership_attachments(member_id), [joined])
         self.store.add_group_member(group_id, member_id)
         self._changed()
+        if group.level_group:
+            self._audit("iam:AddGroupMember", group, member_id, routed)
 
     def remove_group_member(self, group_id: str, member_id: str) -> bool:
-        self._require_group("iam:RemoveGroupMember", group_id)
+        """Leaving a level group is allowed to the admins of any of the
+        person's containers, as joining it, and audited."""
+        group, routed = self._require_member_change(
+            "iam:RemoveGroupMember", group_id, member_id
+        )
         if member_id in self.store.list_group_members(group_id):
             # Leaving the group drops what is attached to it for the member, its
-            # Denies included: decided like attaching them to the member.
+            # Denies included: decided like attaching them to the member (but a
+            # level group's at ${my workspaces}, the exception).
             self._require_lift_attachments(
-                group_id, member_id, restricts_caller=lambda: self._is_caller(member_id)
+                group_id,
+                member_id,
+                restricts_caller=lambda: self._is_caller(member_id),
+                skip_membership_scope=group.level_group,
             )
         removed = self.store.remove_group_member(group_id, member_id)
         if removed:
             self._changed()
+            if group.level_group:
+                self._audit("iam:RemoveGroupMember", group, member_id, routed)
         return removed
 
     def list_group_members(self, group_id: str) -> list[str]:
@@ -1789,11 +2202,15 @@ class IAMService(IIAMService, PolicySource):
         return record
 
     def _belongs_to(self, principal_id: str, top: str) -> bool:
-        """Whether a principal has an attachment of its own within ``top``."""
+        """Whether a principal has an attachment of its own within ``top``, or
+        is a member of a container within it (a membership group's)."""
         return any(
             a.scope is not None
+            and not is_membership_scope(a.scope)
             and within(as_container(container_of_scope(a.scope)), top)
             for a in self.store.list_attachments(principal_id=principal_id)
+        ) or any(
+            within(m.container, top) for m in self.store.memberships_of(principal_id)
         )
 
     def _leave_groups_of(self, principal_id: str, top: str) -> None:
@@ -1966,7 +2383,11 @@ class IAMService(IIAMService, PolicySource):
         deleted, or a group owned elsewhere, ``_check_receives``). It needs no
         permission of its own: what it lists is what the caller may attach."""
         who = principal_id or "*"
-        if scope is None:
+        if scope is None or is_membership_scope(scope):
+            # ${my workspaces} is named at the platform: the platform's policies,
+            # confined to ${scope}, for whoever may attach unscoped.
+            if scope is not None:
+                self._scope_checked(scope)
             owner = PLATFORM_SCOPE
             owners = [PLATFORM_SCOPE]
         else:
@@ -2640,11 +3061,19 @@ class IAMService(IIAMService, PolicySource):
             )
 
     def _require_lift_attachments(
-        self, holder_id: str, grantee: str, *, restricts_caller: Callable[[], bool]
+        self,
+        holder_id: str,
+        grantee: str,
+        *,
+        restricts_caller: Callable[[], bool],
+        skip_membership_scope: bool = False,
     ) -> None:
         """``_require_lift`` for each attachment of ``holder_id`` (a group) that
-        the change removes from ``grantee`` (a member, or the group itself)."""
+        the change removes from ``grantee`` (a member, or the group itself);
+        ``skip_membership_scope``: but those at ``${my workspaces}``."""
         for attachment in self.store.list_attachments(principal_id=holder_id):
+            if skip_membership_scope and is_membership_scope(attachment.scope):
+                continue
             self._require_lift(
                 attachment.policy_id,
                 grantee,
@@ -2758,7 +3187,7 @@ class IAMService(IIAMService, PolicySource):
         if not held:
             self._require_held(
                 policy.document,
-                [scope],
+                self._granted_at(principal, policy, scope),
                 policy_id=policy_id,
                 parents=self._parents(policy),
             )
@@ -2769,6 +3198,36 @@ class IAMService(IIAMService, PolicySource):
             self._sync_platform_roles(principal_id)
         self._changed()
         return attachment
+
+    def _granted_at(
+        self, principal: PrincipalRecord, policy: Policy, scope: str | None
+    ) -> list[str | None]:
+        """Where attaching ``policy`` to ``principal`` at ``scope`` grants: the
+        scope; at ``${my workspaces}``, each container the principal (a group:
+        each of its members) is a member of now, within the owners of the policy
+        and of the principal."""
+        if not is_membership_scope(scope):
+            return [scope]
+        members = (
+            self.store.list_group_members(principal.id)
+            if principal.kind == "group"
+            else [principal.id]
+        )
+        holder = principal.id if principal.kind == "group" else None
+        found: set[str] = set()
+        for member_id in members:
+            memberships = [
+                (m.group_id, m.container)
+                for m in self.store.memberships_of(member_id)
+                if self._active(m.group_id)
+            ]
+            found.update(
+                container
+                for container, _group in self._membership_reach(
+                    policy.id, holder, memberships, fresh=True
+                )
+            )
+        return [*sorted(found)]
 
     def _check_attachable(self, policy: Policy, scope: str | None) -> None:
         if not within_owner(policy.owner_scope, scope):
@@ -2826,7 +3285,7 @@ class IAMService(IIAMService, PolicySource):
         if detached:
             if policy_id in roles.ROLES:
                 self._sync_role_companions(principal_id)
-            if scope is not None:
+            if scope is not None and not is_membership_scope(scope):
                 self._leave_groups_of(
                     principal_id, top_container(as_container(container_of_scope(scope)))
                 )
@@ -2925,14 +3384,59 @@ class IAMService(IIAMService, PolicySource):
         Denies. About the caller only, like ``explain`` of oneself, it needs no
         ``iam:*`` action. With ``parent``, what a sub-policy of it owned at
         ``scope`` may grant: within the parent's chain (``_grantable_chain``);
-        with ``derive``, for a new one, refused as ``create_policy`` would."""
+        with ``derive``, for a new one, refused as ``create_policy`` would.
+        At ``${my workspaces}``, what the caller holds at every container
+        (``_grantable_anywhere``)."""
         validate_scope(scope)
+        if is_membership_scope(scope):
+            if parent is not None:
+                raise ValueError(
+                    f"A sub-policy is owned by a container, not {MY_CONTAINERS_SCOPE}"
+                )
+            return self._grantable_anywhere()
         # The parent first: a refused one costs no holdings.
         chain = self._grantable_chain(parent, scope, derive=derive) if parent else None
         holdings = self._holdings(current_call_context(), scope)
         if chain is None:
             return holdings.grantable(scope)
         return holdings.grantable(scope, parents=chain)
+
+    def _grantable_anywhere(self) -> list[GrantableCatalog]:
+        """What the caller may grant at ``${my workspaces}``, which may reach any
+        container: per catalog, each action and the patterns a role writes for
+        it (``${scope}/<service>:<type>/*``, and ``${scope}`` for a container
+        type) that the caller holds below every container (``names.EVERYWHERE``),
+        as ``_require_held`` checks such an attachment of a policy whose holder's
+        containers are not known. It may say less than the caller holds, never
+        more; it stops proving past ``grants.CALL_BUDGET``."""
+        holdings = self._holdings(current_call_context(), EVERYWHERE)
+        found: list[GrantableCatalog] = []
+        with grants.budget():
+            for catalog in self._registry.all():
+                actions: list[GrantableAction] = []
+                for spec in catalog.actions:
+                    action = catalog.qualified(spec.name)
+                    candidates: list[str] = []
+                    for type_name in spec.resource_types:
+                        declared = catalog.resource_type(type_name)
+                        if declared is None or declared.placement == "platform":
+                            continue  # a scope never reaches what the platform holds
+                        if declared.container and "${scope}" not in candidates:
+                            candidates.append("${scope}")
+                        candidates.append(f"${{scope}}/{catalog.service}:{type_name}/*")
+                    kept = tuple(
+                        pattern
+                        for pattern in candidates
+                        if holdings.first_uncovered(
+                            [Statement("Allow", (action,), (pattern,))], EVERYWHERE
+                        )
+                        is None
+                    )
+                    if kept:
+                        actions.append(GrantableAction(action, kept))
+                if actions:
+                    found.append(GrantableCatalog(catalog.service, tuple(actions)))
+        return found
 
     def _grantable_chain(
         self, parent_id: str, scope: str, *, derive: bool
@@ -3152,6 +3656,9 @@ class IAMService(IIAMService, PolicySource):
                 f"{MAX_DEPTH}): give it a parent that exists first"
             )
         chain = [p.statements for p in parents]
+        # ``${my workspaces}`` may reach any container: held there means held at
+        # every one (a caller that knows the containers passes them instead).
+        scopes = [EVERYWHERE if is_membership_scope(s) else s for s in scopes]
         with grants.budget():  # one budget for every scope
             for scope in dict.fromkeys(scopes):
                 holdings = self._holdings(ctx, scope)
@@ -3341,13 +3848,27 @@ class IAMService(IIAMService, PolicySource):
             holder_id: self._companions(attachments)
             for holder_id, attachments in by_holder.items()
         }
-        return [
+        kept = [
             (attachment, via)
             for attachment, via in found
             if attachment.policy_id != roles.SELF
             and (attachment.policy_id, attachment.scope)
             not in companions[attachment.principal_id]
         ]
+        # One at ${my workspaces} is held at each of the person's containers.
+        memberships = self._memberships(holder, person)
+        expanded: list[tuple[Attachment, str | None]] = []
+        for attachment, via in kept:
+            if not is_membership_scope(attachment.scope):
+                expanded.append((attachment, via))
+                continue
+            expanded += [
+                (replace(attachment, scope=container), via)
+                for container, _group in self._membership_reach(
+                    attachment.policy_id, via, memberships, fresh=True
+                )
+            ]
+        return expanded
 
     def _first_not_held(
         self,
@@ -3479,6 +4000,7 @@ class IAMService(IIAMService, PolicySource):
         provider, email = _grantee(provider, email)
         if scope is not None:
             self._scope_checked(scope)
+            _refuse_membership_scope(scope, "An invitation")
         self._require_attach(policy_id, _invitee(provider, email), scope)
         policy = self.store.get_policy(policy_id)
         self._check_attachable(policy, scope)
@@ -3626,6 +4148,7 @@ class IAMService(IIAMService, PolicySource):
         provider, claim_value = _grantee(provider, claim_value, email=False)
         if scope is not None:
             validate_scope(scope)
+            _refuse_membership_scope(scope, "An IdP group binding")
         self._require_attach(policy_id, _bound_group(provider, claim_value), scope)
         policy = self.store.get_policy(policy_id)
         self._check_attachable(policy, scope)
@@ -5035,6 +5558,15 @@ def _unbounded(effective: EffectiveStatement) -> list[Statement]:
         ],
         effective.scope,
     )
+
+
+def _refuse_membership_scope(scope: str, what: str) -> None:
+    """``${my workspaces}`` is an attachment's scope only."""
+    if is_membership_scope(scope):
+        raise ValueError(
+            f"{what} is made at a container or the platform, not at "
+            f"{MY_CONTAINERS_SCOPE}: attach the policy to a group there"
+        )
 
 
 def _binding_owner(scope: str | None) -> str:

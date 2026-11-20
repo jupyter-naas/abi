@@ -454,6 +454,7 @@ def _deciding(
         via_group=effective.via_group,
         bounded_by=bounded_by,
         through=effective.through,
+        membership_group=effective.membership_group,
     )
 
 

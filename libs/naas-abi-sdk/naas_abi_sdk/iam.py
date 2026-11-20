@@ -150,6 +150,27 @@ class IamClient:
             "abi.iam.v1.list_principal_groups", request, pb.ListPrincipalGroupsResponse
         )
 
+    async def mark_group(self, request: pb.MarkGroupRequest) -> pb.MarkGroupResponse:
+        return await self._transport.call(
+            "abi.iam.v1.mark_group", request, pb.MarkGroupResponse
+        )
+
+    async def list_memberships(
+        self, request: pb.ListMembershipsRequest
+    ) -> pb.ListMembershipsResponse:
+        return await self._transport.call(
+            "abi.iam.v1.list_memberships", request, pb.ListMembershipsResponse
+        )
+
+    async def list_container_members(
+        self, request: pb.ListContainerMembersRequest
+    ) -> pb.ListContainerMembersResponse:
+        return await self._transport.call(
+            "abi.iam.v1.list_container_members",
+            request,
+            pb.ListContainerMembersResponse,
+        )
+
     async def map_idp_group(
         self, request: pb.MapIdpGroupRequest
     ) -> pb.MapIdpGroupResponse:

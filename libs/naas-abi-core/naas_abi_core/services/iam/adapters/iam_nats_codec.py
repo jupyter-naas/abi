@@ -35,6 +35,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     KeyRecord,
     KeyRefusedError,
     ManifestRecord,
+    Membership,
     PendingGrant,
     PermissionDeniedError,
     Placement,
@@ -76,6 +77,9 @@ OPERATIONS = {
     "remove_group_member": "RemoveGroupMember",
     "list_group_members": "ListGroupMembers",
     "list_principal_groups": "ListPrincipalGroups",
+    "mark_group": "MarkGroup",
+    "list_memberships": "ListMemberships",
+    "list_container_members": "ListContainerMembers",
     "map_idp_group": "MapIdpGroup",
     "unmap_idp_group": "UnmapIdpGroup",
     "list_idp_group_mappings": "ListIdpGroupMappings",
@@ -213,6 +217,8 @@ def principal_to_pb(record: PrincipalRecord) -> pb.Principal:
         display_name=record.display_name,
         owner_id=record.owner_id,
         owner_scope=record.owner_scope,
+        membership_of=record.membership_of,
+        level_group=record.level_group,
     )
     return _stamped(message, created_at=record.created_at, updated_at=record.updated_at)
 
@@ -233,7 +239,17 @@ def principal_from_pb(message: pb.Principal) -> PrincipalRecord:
         created_at=_datetime(message, "created_at"),
         updated_at=_datetime(message, "updated_at"),
         owner_scope=message.owner_scope or PLATFORM_SCOPE,
+        membership_of=_optional(message, "membership_of"),
+        level_group=message.level_group,
     )
+
+
+def membership_to_pb(membership: Membership) -> pb.Membership:
+    return pb.Membership(group_id=membership.group_id, container=membership.container)
+
+
+def membership_from_pb(message: pb.Membership) -> Membership:
+    return Membership(message.group_id, message.container)
 
 
 def policy_to_pb(policy: Policy) -> pb.Policy:
@@ -513,6 +529,7 @@ def explanation_to_pb(explanation: Explanation) -> pb.Explanation:
                     for b in statement.bounded_by
                 ],
                 through=list(statement.through),
+                membership_group=statement.membership_group,
             )
         )
     return message
@@ -537,6 +554,7 @@ def explanation_from_pb(message: pb.Explanation) -> Explanation:
                 for b in s.bounded_by
             ),
             through=tuple(s.through),
+            membership_group=_optional(s, "membership_group"),
         )
     return Explanation(
         allowed=message.allowed,

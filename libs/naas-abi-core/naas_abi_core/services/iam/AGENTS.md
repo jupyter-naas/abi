@@ -93,11 +93,14 @@ model_registry, discovery, source_control, coding_environment) use
 | `tests/grant_contract.py` | Grant only what you hold: the refusals and what keeps working, in process and over NATS |
 | `tests/view_as_contract.py` | Viewing as a principal: the scenario's cast (Root, Acme, Alpha, Bravo, Olivia, Bob, Carol, Dave), what is allowed and refused, groups, the budget and what the roles give, in process |
 | `tests/sub_policy_contract.py` | Sub-policies: what they grant, live narrowing, inherited Denies, `explain`, the refusals, deriving, deleting, in process and over NATS |
+| `IAMService_membership_test.py` | Membership and level groups and `${my workspaces}`: equal to the role at W for every catalog action at viewer, member and admin level, freshness, the ceiling's Deny, no reach without a membership, `explain`, grant only what you hold and the level-group exception, markers, listing, `grantable` |
 
 ## Ports
 
 **`IAMStore`** (secondary): principals (unique `(issuer, subject)` for users,
-unique service-account names), static group members, IdP group mappings,
+unique service-account names; a group's markers `membership_of` and `level_group`), static
+group members (and, read for one member or one container, the memberships they make:
+`memberships_of(member)`, `membership_groups(container)`), IdP group mappings,
 policies with optimistic revisions and their parents (`list_sub_policies`; a
 parent is not deleted while it has sub-policies), attachments (unique per policy, principal
 and scope; read by principal, by policy, or for several principals or policies at once:
@@ -204,6 +207,31 @@ attachments `att_`). Ids never change and are never reused.
   token, ten minutes at most.
 - A user's effective groups are their static groups plus the token's `grp`. A
   service account has static groups only.
+- **Membership groups.** A group marked `membership_of: <container>` (a registered
+  container at or below the group's owner: "<W> workspace", owned by W, of W) makes each of
+  its active members a **member of that container**: there, and only there, the policies
+  they hold at `${my workspaces}` apply ("Attachments and scope"). A person's memberships are
+  read for that person alone (`IAMStore.memberships_of`, one indexed read, with the token's
+  `grp` groups' markers), cached with their subject and dropped with it on every change: a
+  join, a leave, a marker set or cleared take effect at the next decision, and the change
+  listeners (the NATS connection warden, ADR `20261119_kick_connections_on_iam_change`) end
+  the module connections whose permissions moved. A member of a container belongs to its top
+  container (`_belongs_to`): it may join the other groups owned there. Deleting a container
+  clears the markers that name it.
+- **Level groups.** A group marked `level_group` ("Members", "Viewers") holds the generic
+  level policies at `${my workspaces}`. Who joins or leaves it is decided as for any group
+  (`iam:AddGroupMember` / `iam:RemoveGroupMember` on it), **or** by whoever holds that action
+  on the group as named in one of the person's containers within the group's owner
+  (`<container>/iam:group/<group>`: an admin of any of their workspaces, of their
+  organisation, the platform admin). Either way, its attachments at `${my workspaces}` are
+  not checked against what the writer holds ("Grant only what you hold"), and the change is
+  audited (`IAMService.add_audit_listener`, `AuditEvent`, and a log line). Marking or
+  unmarking a level group is decided as `iam:UpdateGroup` on the group's platform name, which
+  only unscoped grants reach (the platform admin, `engine`, `api`), as IdP mappings are.
+- **Markers.** `create_group(name, scope=, membership_of=, level=)` and
+  `mark_group(group_id, membership_of=, level=)` (both markers at once; `iam:UpdateGroup` on
+  the group). A new `membership_of` on a group that has members is checked as adding each of
+  them to a membership group of that container.
 
 **Service accounts**
 
@@ -312,6 +340,7 @@ group or service account) with an optional `scope`:
 | `<container>/*` | **Below**: the container and every container under it, at any depth, each as if the policy were attached there | each container from `<container>` down to the resource's own (below) |
 | `abi:` | The platform: platform-level resources | `abi:` (`${scope}/` reads `abi:`) |
 | none | The policy uses no `${scope}` | none |
+| `${my workspaces}` (`names.MY_CONTAINERS_SCOPE`) | **Each container the holder is a member of**: for a user or an account, the containers of its membership groups; through a group, those of the member being evaluated. Only those within the owner of the policy and of the principal it is attached to. Nowhere else: a holder in no membership group reaches nothing through it | each of those containers, one at a time, as if the policy were attached there |
 
 A policy attached at a scope must write every Allow resource pattern `${scope}` or
 `${scope}/…` (a Deny only narrows, so it may name anything): the scope only fills
@@ -349,8 +378,20 @@ scope (`list_policies(scope=)`, `attachable_policies`, Nexus `/attachable-polici
 offer it to them.
 
 An attachment is named at its scope's container, `<container>/iam:attachment/<policy>/<principal>`
-(a below one too; the platform's and an unscoped one `abi:iam:attachment/…`, which only
-unscoped statements reach). Attaching below a container grants at every container under it,
+(a below one too; the platform's, an unscoped one and one at `${my workspaces}`
+`abi:iam:attachment/…`, which only unscoped statements reach: attaching at `${my workspaces}`,
+which may reach any container, is the platform admin's and the first-party accounts').
+
+**`${my workspaces}`.** A level policy is attached once, to a level group, at
+`${my workspaces}`; a "<W> workspace" membership group says where. "Members" holding the
+member role there plus "<W> workspace" decides as the member role attached at W does, the
+platform companion included (`builtin.platform.member` while a member, admin or owner role
+reaches a container whose type brings it, `.viewer` for viewer roles alone; derived when
+the subject is computed, never stored). A Deny reached elsewhere (W's ceiling, attached to
+"<W> workspace") still wins. Its Denies apply at each container it reaches, and once as
+written when it reaches none. It is an attachment's scope only: an invitation
+(`create_pending_grant`) or an IdP binding at it is refused (`ValueError`), and no listing
+is at it. Attaching below a container grants at every container under it,
 so "Grant only what you hold" checks it there: an admin of an organisation's own level holds
 nothing in its workspaces and attaches nothing below it.
 
@@ -421,6 +462,11 @@ abi:model_registry:model/gpt-x                      (the platform: no container)
   policies, groups and unscoped attachments are named at the platform
   (`abi:iam:policy/<id>`), and the rule that keeps them from the scopes is explicit
   (see "Attachments and scope": `${scope}` never reaches them).
+- **`${my workspaces}` is no name.** `names.MY_CONTAINERS_SCOPE` is an attachment scope
+  only, a literal that never starts with `abi:`: IAM resolves it, when it decides, to the
+  containers of the holder's membership groups and fills `${scope}` with each. It names no
+  container, owns nothing, places nothing and is never listed at; its attachments are named
+  at the platform (`abi:iam:attachment/<policy>/<principal>`).
 
 **Encoding ids.** The id is percent-encoded UTF-8: every octet outside
 `unreserved` is encoded, including `:`, `/`, `*`, `?`, `%` and spaces. Each
@@ -602,7 +648,8 @@ decide(ctx, action, resource):
 
 principal_decision(X):
   S = statements of every policy attached to X and to each of X's effective groups,
-      and, for a sub-policy, the Deny statements of each policy of its chain
+      one at ${my workspaces} once per container X is a member of (its ${scope} that
+      container), and, for a sub-policy, the Deny statements of each policy of its chain
   if any Deny statement in S matches:   EXPLICIT_DENY
   if any Allow statement in S matches,
      and, for a sub-policy's, an Allow of each policy of its chain matches too:
@@ -656,7 +703,10 @@ delete action (before: `iam:PutScope`, `iam:DeleteScope`).
   existing install").
 - Reasons: `allow`, `explicit_deny`, `implicit_deny`, `suspended`, `sealed`.
   `explain` returns the outcome, the reason and the deciding statement (side,
-  policy id, statement index or `sid`, attachment, scope, group), and the chain: for an
+  policy id, statement index or `sid`, attachment, scope, group; through
+  `${my workspaces}`: `scope` the container it applied at, `via_group` the group holding
+  the policy, the level group, and `membership_group` the membership group that made the
+  container the principal's), and the chain: for an
   Allow of a sub-policy, `bounded_by`, the statement of each parent that allowed it too,
   nearest first; for a parent's Deny refusing through a sub-policy, `through`, the
   sub-policies it was reached by, the attached one first.
@@ -1432,13 +1482,25 @@ through the SDK, the CLI and Nexus alike.
 | `create_policy` | the document, within its chain's for a sub-policy | its owner's: a container's, or for a platform policy unscoped and at the platform (`abi:`), never below its owner (see "Where a policy is held") |
 | `update_policy` with a new document or a new parent | the new document within the new chain's; and, when the parent changes or the new document may let through what the old one did not, an Allow added or widened or a Deny lifted or narrowed (`IAMService._widens`), each policy below it within its new chain's | as `create_policy`, plus every scope it is attached or invited at; for each policy below, its own |
 | `attach_policy` (user, group, service account) | the policy | the attachment's (below a container: at it and at every container under it) |
-| `add_group_member` | every attachment of the group, but IAM's companions of its roles, which follow them: the unscoped `builtin.platform.*` its role sync wants for the group's roles (`IAMService._companions`). A platform policy attached to the group by hand is checked like any other | each attachment's |
+| `add_group_member` | every attachment of the group, but IAM's companions of its roles, which follow them: the unscoped `builtin.platform.*` its role sync wants for the group's roles (`IAMService._companions`). A platform policy attached to the group by hand is checked like any other. Joining a membership group, also the member's own attachments at `${my workspaces}` (theirs and their groups'), which now reach its container. A level group's attachments at `${my workspaces}` are not checked (the exception below) | each attachment's; one at `${my workspaces}` at each container the member is or becomes a member of (within the owners); the member's own at the joined container |
+| `attach_policy` at `${my workspaces}` | the policy | each container the principal (a group: each of its members) is a member of now, within the owners |
+| `mark_group` with a new `membership_of` | each member's attachments at `${my workspaces}` | the new container |
 | `create_pending_grant` | the policy | the invitation's |
 | `bind_idp_group` | the policy, before the group is made, unless the binding is there already | the binding's |
 | `approve_manifest`, narrowed or not | the approved document, its module variables bound | unscoped (the module's policy is attached unscoped) |
 
 Attaching what is attached already, inviting again, binding again or adding a member a
 group holds grants nothing new and is not checked.
+
+**The one exception: a level group.** Joining or leaving a group marked `level_group`
+changes a person's level in every container they are a member of. It is allowed to whoever
+may add or remove members of the group itself, and to whoever may on the group as named in
+one of the person's containers (an admin of any of their workspaces, an org admin, the
+platform admin: "Principals", "Level groups"), even where the writer holds less than the
+group's `${my workspaces}` policies give; those are not checked, its other attachments are.
+Every such change is audited (`AuditEvent`: the action, the group, the person, the writer
+and the user it acts for, the containers that allowed it). Only the platform's grants mark
+a level group.
 
 **Where a policy is held.** A policy grants nothing until it is attached, invited to or
 bound, and each of those is checked at its own scope; a policy below it grants within it,
@@ -1449,6 +1511,11 @@ be attached in, as a container's policy is not held at every container under its
 "<O> access" (the platform's, attached below O) is held unscoped, at `abi:` and at `<O>/*`:
 a Deny of the writer in a workspace of another organisation never stops it, one in a
 workspace of O does (#1519). It holds for every writer, the platform admin as any other.
+A policy attached at `${my workspaces}` is held where it applies: at each container its
+holder is a member of when it is attached, and at the container of each later membership
+when that membership is made (joining a membership group, `mark_group`); a check that does
+not know the holder's containers (`update_policy`, removing one that carries a Deny) holds
+it below every container (`abi:*`).
 
 **Removing a restriction.** `detach_policy`, `revoke_pending_grant` and
 `unbind_idp_group` of a customer policy holding a Deny are decided like attaching it there
@@ -1576,6 +1643,14 @@ covers in part lists the Deny in `excluded`, written as the resources are (`${sc
 the part of it under the scope, as stored when none can be told). It may say less than the
 caller reaches there, never more, and it stops listing past `grants.CALL_BUDGET`. Like `explain` of oneself it is about the caller only, so it needs no `iam:*`
 action, and a module's connection may always ask (`broker.IAM_ALWAYS`).
+
+`iam.grantable("${my workspaces}")` is what may be granted there, which may be any
+container: per catalog, each action and the patterns a role writes for it
+(`${scope}/<service>:<type>/*`, `${scope}` for a container type) that the caller holds below
+every container (`abi:*`), checked as `_require_held` would (`_grantable_anywhere`). The
+policy builder offers that scope with it; with `parent` it is refused (a sub-policy is owned
+by a container). `attachable_policies("${my workspaces}")` lists the platform's policies
+confined to `${scope}` that the caller may attach unscoped.
 
 `iam.grantable(scope, parent=<policy>)` (`GrantableRequest.parent`) is what a sub-policy of
 `parent` owned at `scope` may grant: the same, within the parent's chain (`Holdings.grantable(
@@ -1738,8 +1813,12 @@ finds a person; filtered by `iam:ListPrincipals`
 like the list),
 `suspend_principal`, `resume_principal`, `delete_principal` (keeps the id, drops
 attachments and memberships), groups (`create_group`, `update_group` (a rename),
-`add_group_member`, `map_idp_group`, ...; groups cannot contain groups; `create_group(name, scope=)`, its
-owner a container or the platform; `list_principal_groups(principal_id)`: the groups a
+`add_group_member`, `map_idp_group`, ...; groups cannot contain groups; `create_group(name, scope=,
+membership_of=, level=)`, its owner a container or the platform; `mark_group(group_id,
+membership_of=, level=)`: both markers; `list_memberships(principal_id)`: its
+`Membership(group_id, container)`s whose group the caller may `iam:GetGroup`;
+`list_container_members(container)`: the members of its membership groups the caller may
+`iam:GetGroup`; `add_audit_listener(listener)`: the audited level-group changes, in process; `list_principal_groups(principal_id)`: the groups a
 principal is a member of, at every level, each kept only where the caller may
 `iam:GetGroup` it, as reading its members takes, so it tells no one a membership they could
 not read from the group: a principal the caller sees nothing of has none), policies (`create_policy(name, document, scope=, parent=)`
@@ -1820,7 +1899,7 @@ nor in the SDK. No store schema change: the owner was a column already.
 
 Names: `principal_resource`, `view_as_resource(principal id, container)`, `group_resource(id, owner_scope)`,
 `policy_resource(id, owner_scope)`, `attachment_resource` (at its scope's container; at the
-platform for a platform or unscoped one), `placement_resource`, `container_resource`,
+platform for a platform, an unscoped or a `${my workspaces}` one), `placement_resource`, `container_resource`,
 `catalog_resource`.
 
 ## Tokens
@@ -2288,6 +2367,9 @@ services:
   boot. The Docker templates reuse the deployment's `POSTGRES_*` secrets
   (schema `abi_iam`); `services.iam.store.dsn` points elsewhere.
 - Memory: tests.
+- Schema 7 (SQLite and PostgreSQL, `iam_sql._migrate_memberships`): a group's markers,
+  `iam_principals.membership_of` (indexed, `iam_principals_membership`) and `level_group`;
+  a store of an earlier version gets them unset at its next opening.
 - `allow_all` is selected only by writing it; `AllowAllAuthorizer` warns when built.
   Fresh installs enforce policies.
 
@@ -2328,7 +2410,11 @@ offered by the broker to whoever may `iam:AttachPolicy`; `list_principal_groups`
 (`ListPrincipalGroupsRequest`, `ListPrincipalGroupsResponse.groups`) and the search text of
 `list_principals` (`ListPrincipalsRequest.text`, absent for every principal), each offered by
 the broker as the other lists, to whoever holds its action (`iam:GetGroup`,
-`iam:ListPrincipals`); the same refusals,
+`iam:ListPrincipals`); membership and level groups: `Principal.membership_of` and
+`Principal.level_group`, `CreateGroupRequest.membership_of` and `.level`, `mark_group`
+(`MarkGroupRequest`, `iam:UpdateGroup`), `list_memberships` (`ListMembershipsRequest`,
+`Membership`) and `list_container_members` (`ListContainerMembersRequest`, `principal_ids`),
+both `iam:GetGroup` (IAM's catalog 11), and `DecidingStatement.membership_group`; the same refusals,
 with the same codes and messages, in process, over NATS and through the SDK. There is no
 set operation (the sets are gone: `get_set`, `effective_set`, `list_sets`, `put_set` and
 their messages were removed; IAM's catalog 7 drops `iam:GetSet` and `iam:PutSet`). Containers:
@@ -2689,6 +2775,20 @@ organisation's admin views as people of its workspaces; the platform admin as an
 platform admin. Nexus keeps the view and adds no role check of its own. `builtin.api` holds
 `iam:ViewAs` so that Nexus may ask for the viewer. IAM's catalog is version 9; the roles are
 regenerated and keep every other statement as it was.
+
+**Membership groups and `${my workspaces}` (#1583, #1584).**
+*Decision.* "Where" and "what" are two groups: a membership group of a container (W's
+"<W> workspace") and a level group holding a generic level policy at `${my workspaces}`.
+IAM resolves that scope when it decides, from the person's membership groups (one indexed
+read, cached with the subject), within the owners of the policy and of its holder. The
+platform companion of a role reached so is derived, not stored. Attaching there is named at
+the platform; a level group is marked by the platform's grants, and joining or leaving one
+is allowed to the admins of any of the person's containers without the held check of its
+`${my workspaces}` policies, audited.
+*Consequences.* One source of truth (the groups), and `explain` names both groups. A
+policy at `${my workspaces}` is checked where it reaches when it is attached and when a
+membership is made; a check that cannot know the containers holds it below every one.
+A person whose only tie to an organisation is a membership group belongs to it.
 
 ## Known limits and open questions
 
