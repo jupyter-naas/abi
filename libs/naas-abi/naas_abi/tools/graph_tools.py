@@ -20,7 +20,6 @@ from langchain_core.tools import BaseTool, tool
 
 from naas_abi.agents.feature.context import active_feature_resource_id
 from naas_abi.agents.feature.runtime import (
-    check_member,
     clip,
     guarded,
     jsonable,
@@ -45,8 +44,34 @@ def _service() -> Any:
         return GraphService()
 
 
-def _workspace_graphs(workspace_id: str) -> list[Any]:
-    packs = run(_service().list_graphs(workspace_id=workspace_id))
+def _scoped_service(user_id: str, workspace_id: str) -> Any | dict[str, str]:
+    """The graph service bound to this caller's workspace scope, as for HTTP.
+
+    ``GraphService`` refuses every read without an access scope; this is the
+    same membership check and policy load as ``workspace_graph_service``.
+    """
+    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.workspace_policy import (
+        load_workspace_scope,
+    )
+
+    service = _service()
+
+    async def _scope(db: Any) -> Any:
+        role = await require_member(db, user_id, workspace_id)
+        if isinstance(role, dict):
+            return role
+        return await load_workspace_scope(
+            db, service._get_catalog_store(), workspace_id, role
+        )
+
+    scope = run_db(_scope)
+    if isinstance(scope, dict):
+        return scope
+    return service.for_scope(scope)
+
+
+def _workspace_graphs(service: Any, workspace_id: str) -> list[Any]:
+    packs = run(service.list_graphs(workspace_id=workspace_id))
     return [graph for pack in packs for graph in pack.graphs]
 
 
@@ -86,10 +111,10 @@ def graph_tools() -> list[BaseTool]:
         open_graph = active_feature_resource_id(GRAPH_RESOURCE_KIND)
 
         def _run() -> Any:
-            role = check_member(user_id, workspace_id)
-            if isinstance(role, dict):
-                return role
-            packs = run(_service().list_graphs(workspace_id=workspace_id))
+            service = _scoped_service(user_id, workspace_id)
+            if isinstance(service, dict):
+                return service
+            packs = run(service.list_graphs(workspace_id=workspace_id))
             return {
                 "open_graph": open_graph,
                 "packs": [
@@ -117,13 +142,12 @@ def graph_tools() -> list[BaseTool]:
         wanted = graph
 
         def _run() -> Any:
-            role = check_member(user_id, workspace_id)
-            if isinstance(role, dict):
-                return role
-            target = _resolve_graph(wanted, _workspace_graphs(workspace_id))
+            service = _scoped_service(user_id, workspace_id)
+            if isinstance(service, dict):
+                return service
+            target = _resolve_graph(wanted, _workspace_graphs(service, workspace_id))
             if isinstance(target, dict):
                 return target
-            service = _service()
             kpis = run(
                 service.get_graph_kpis(workspace_id=workspace_id, graph_uri=target.uri)
             )
@@ -154,14 +178,14 @@ def graph_tools() -> list[BaseTool]:
         wanted = graph
 
         def _run() -> Any:
-            role = check_member(user_id, workspace_id)
-            if isinstance(role, dict):
-                return role
-            target = _resolve_graph(wanted, _workspace_graphs(workspace_id))
+            service = _scoped_service(user_id, workspace_id)
+            if isinstance(service, dict):
+                return service
+            target = _resolve_graph(wanted, _workspace_graphs(service, workspace_id))
             if isinstance(target, dict):
                 return target
             network = run(
-                _service().search_network(
+                service.search_network(
                     workspace_id=workspace_id,
                     graph_uri=target.uri,
                     search_query=query.strip(),
@@ -190,14 +214,14 @@ def graph_tools() -> list[BaseTool]:
         wanted = graph
 
         def _run() -> Any:
-            role = check_member(user_id, workspace_id)
-            if isinstance(role, dict):
-                return role
-            target = _resolve_graph(wanted, _workspace_graphs(workspace_id))
+            service = _scoped_service(user_id, workspace_id)
+            if isinstance(service, dict):
+                return service
+            target = _resolve_graph(wanted, _workspace_graphs(service, workspace_id))
             if isinstance(target, dict):
                 return target
             detail = run(
-                _service().discover_instance_detail(
+                service.discover_instance_detail(
                     workspace_id=workspace_id,
                     graph_uris=[target.uri],
                     instance_uri=instance_uri.strip(),
