@@ -133,6 +133,9 @@ export type PolicyView = {
   description: string;
   /** Built-in and module policies: IAM writes them, they are read-only here. */
   managed: boolean;
+  /** `general`: a feature's policy Workspace settings › General › Features writes (who may use
+   *  that feature there). Still a policy like any: edited here, General shows it read-only. */
+  managed_from?: 'general' | null;
   revision: number;
   /** Who owns it: `abi:` (the platform) or a container, `abi:nexus:organization/<org>` or
    *  its workspace's `abi:nexus:organization/<org>/nexus:workspace/<ws>`. */

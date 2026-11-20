@@ -87,6 +87,18 @@ describe('PoliciesView', () => {
     expect(document.querySelector('[aria-label="Delete Graph reader"]')).not.toBeNull();
   });
 
+  it('marks a feature policy General › Features writes, and no other', async () => {
+    const feature = { ...readerPolicy, id: 'pol_feat', name: 'Feature · Chat', managed_from: 'general' as const };
+    await open(() => true, {
+      listPolicies: vi.fn().mockResolvedValue({ items: [readerPolicy, feature], next_after: null }),
+    });
+    expect(document.querySelector('[data-policy="pol_feat"] [data-managed-from]')?.textContent).toBe(
+      'managed from General',
+    );
+    expect(document.querySelector('[data-policy="pol_1"] [data-managed-from]')).toBeNull();
+    expect(document.querySelector('[aria-label="Delete Feature · Chat"]')).not.toBeNull();
+  });
+
   it('opens a managed policy read-only', async () => {
     await open(() => true);
     await mounted!.click(document.querySelector('[data-policy="builtin.viewer"] button'));
