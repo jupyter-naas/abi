@@ -68,12 +68,7 @@ import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
 import { chatFailureText, chatResponseError, humanizeChatProviderError } from '@/lib/chat-provider-error';
-import {
-  endsOnUnfinishedTurn,
-  stopTurn,
-  UNFINISHED_TURN_POLL_MS,
-  UNFINISHED_TURN_POLLS,
-} from '@/lib/unfinished-turn';
+import { endsOnUnfinishedTurn, stopTurn, watchUnfinishedTurn } from '@/lib/unfinished-turn';
 import {
   buildContextUsage,
   parseStreamTokenUsage,
@@ -1096,8 +1091,8 @@ export function ChatInterface({
   }, [activeConversationId, loadConversationMessages]);
 
   // A thread this surface is not streaming that ends on an unfinished reply
-  // (its page went away mid-turn) shows the server's copy, asked for until
-  // the turn the server kept running has written it.
+  // (its page went away mid-turn, or the server is still writing it) shows the
+  // server's copy, asked for until the turn the server kept running is done.
   const activeTurnUnfinished = useWorkspaceStore((s) => {
     const conv = s.conversations.find((c) => c.id === activeConversationId);
     return Boolean(conv && !conv.isDraft && endsOnUnfinishedTurn(conv.messages));
@@ -1106,18 +1101,19 @@ export function ChatInterface({
     if (!activeConversationId?.startsWith('conv-')) return;
     if (!activeTurnUnfinished || isStreaming || isSubmittingRef.current) return;
     const conversationId = activeConversationId;
-    let polls = 0;
-    const poll = () => {
-      if (isSubmittingRef.current) return;
-      polls += 1;
-      void loadConversationMessages(conversationId, { replaceLocal: true });
-    };
-    poll();
-    const timer = setInterval(() => {
-      if (polls >= UNFINISHED_TURN_POLLS) clearInterval(timer);
-      else poll();
-    }, UNFINISHED_TURN_POLL_MS);
-    return () => clearInterval(timer);
+    return watchUnfinishedTurn(
+      () => {
+        if (!isSubmittingRef.current) {
+          void loadConversationMessages(conversationId, { replaceLocal: true });
+        }
+      },
+      () => {
+        const conv = useWorkspaceStore
+          .getState()
+          .conversations.find((c) => c.id === conversationId);
+        return conv?.messages[conv.messages.length - 1]?.content;
+      },
+    );
   }, [activeConversationId, activeTurnUnfinished, isStreaming, loadConversationMessages]);
 
   // Handle typing indicators

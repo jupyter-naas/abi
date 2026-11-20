@@ -15,7 +15,7 @@ import {
 } from '@/lib/slides-pane-conversation';
 import { sheetsPaneConversationKey, dropSheetsPaneConversationKeys } from '@/lib/sheets-pane-conversation';
 import { conversationTitleFromPrompt } from '@/lib/office-auto-title';
-import { TURN_STOPPED } from '@/lib/unfinished-turn';
+import { serverReplyContent, TURN_STOPPED } from '@/lib/unfinished-turn';
 import { hasSession, useAuthStore } from './auth';
 import { useDocumentsStore } from './documents';
 import { useSlidesStore } from './slides';
@@ -535,7 +535,7 @@ const mapApiMessage = (message: ApiChatMessage): Message => {
   return {
     id: message.id,
     role: message.role,
-    content: message.content,
+    content: serverReplyContent(message.content, meta.turn_status),
     timestamp: new Date(message.created_at || Date.now()),
     agent: message.agent || undefined,
     modelId:

@@ -64,6 +64,36 @@ describe('loadConversationMessages after a turn its page left', () => {
     expect(endsOnUnfinishedTurn(thread())).toBe(true);
   });
 
+  it('shows the text a reply still being written has so far, as streaming', async () => {
+    const serverCopy = (content: string, turn_status: string) => ({
+      ok: true,
+      json: async () => ({
+        id: conversationId,
+        workspace_id: 'ws-a',
+        messages: [
+          { id: 'msg-user', role: 'user', content: 'List my files' },
+          { id: 'msg-answer', role: 'assistant', content, metadata: { turn_status } },
+        ],
+      }),
+    });
+
+    authFetch.mockResolvedValue(serverCopy('Here are the files', 'streaming'));
+    await useWorkspaceStore.getState().loadConversationMessages(conversationId, {
+      replaceLocal: true,
+    });
+
+    expect(thread()[1].content).toBe('Here are the files▌');
+    expect(endsOnUnfinishedTurn(thread())).toBe(true);
+
+    authFetch.mockResolvedValue(serverCopy(ANSWER, 'done'));
+    await useWorkspaceStore.getState().loadConversationMessages(conversationId, {
+      replaceLocal: true,
+    });
+
+    expect(thread()[1].content).toBe(ANSWER);
+    expect(endsOnUnfinishedTurn(thread())).toBe(false);
+  });
+
   it('marks the reply the server saved as stopped, and asks no more', async () => {
     authFetch.mockResolvedValue({
       ok: true,

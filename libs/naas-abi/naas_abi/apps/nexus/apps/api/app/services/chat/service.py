@@ -79,10 +79,12 @@ REGENERATE_OF_KEY = "regenerate_of"
 SUPERSEDED_BY_KEY = "superseded_by"
 REGENERATE_REPLAY_KEY = "regenerate_replay"
 
-# How a streamed assistant reply ended: "done", "failed" or "stopped" (the
-# user's Stop: the content is what it had written by then). A reply without the
-# key predates it.
+# Where a streamed assistant reply is: "streaming" while its turn runs (the
+# content is what it has written so far), then "done", "failed" or "stopped"
+# (the user's Stop: the content is what it had written by then). A reply without
+# the key predates it and is finished.
 TURN_STATUS_KEY = "turn_status"
+TURN_STREAMING = "streaming"
 TURN_DONE = "done"
 TURN_FAILED = "failed"
 TURN_STOPPED = "stopped"
@@ -1081,7 +1083,7 @@ class ChatService:
         regenerate_of: str | None = None,
     ) -> tuple[str, str]:
         user_metadata: dict | None = None
-        assistant_metadata: dict | None = None
+        assistant_metadata: dict = {TURN_STATUS_KEY: TURN_STREAMING}
         if regenerate_of:
             # The replayed prompt is a duplicate of an earlier one: persisted for
             # the audit trail, hidden from the thread the user and the model see.
@@ -1089,7 +1091,7 @@ class ChatService:
                 REGENERATE_REPLAY_KEY: True,
                 REGENERATE_OF_KEY: regenerate_of,
             }
-            assistant_metadata = {REGENERATE_OF_KEY: regenerate_of}
+            assistant_metadata[REGENERATE_OF_KEY] = regenerate_of
 
         user_msg_id = await self.create_message(
             user_id=user_id,

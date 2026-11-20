@@ -213,6 +213,9 @@ async def test_create_streaming_message_pair_creates_user_then_assistant() -> No
     assert user_msg_id.startswith("msg-")
     assert assistant_msg_id.startswith("msg-")
     assert adapter.create_message.await_count == 2
+    # The reply is marked as written while the turn runs: a reload shows it unfinished.
+    _, assistant_call = adapter.create_message.await_args_list
+    assert json.loads(assistant_call.kwargs["metadata_"]) == {"turn_status": "streaming"}
 
 
 @pytest.mark.asyncio
@@ -238,7 +241,10 @@ async def test_create_streaming_message_pair_tags_regenerated_turn() -> None:
         "regenerate_replay": True,
         "regenerate_of": "msg-old",
     }
-    assert json.loads(assistant_call.kwargs["metadata_"]) == {"regenerate_of": "msg-old"}
+    assert json.loads(assistant_call.kwargs["metadata_"]) == {
+        "turn_status": "streaming",
+        "regenerate_of": "msg-old",
+    }
 
 
 @pytest.mark.asyncio

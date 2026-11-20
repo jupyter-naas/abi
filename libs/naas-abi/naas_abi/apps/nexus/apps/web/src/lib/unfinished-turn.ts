@@ -7,8 +7,18 @@ export const STREAMING_CARET = '▌';
 export const UNFINISHED_TURN_POLL_MS = 3000;
 export const UNFINISHED_TURN_POLLS = 40;
 
-/** `metadata.turn_status` of a reply the user's Stop ended. */
+/** `metadata.turn_status` of a reply the server is still writing, and of one the user's Stop ended. */
+export const TURN_STREAMING = 'streaming';
 export const TURN_STOPPED = 'stopped';
+
+/**
+ * A reply's content as the server saved it. One it is still writing holds
+ * what it has written so far and ends on the caret, as a live stream does: the
+ * thread shows it streaming and asks for it again.
+ */
+export function serverReplyContent(content: string, turnStatus: unknown): string {
+  return turnStatus === TURN_STREAMING ? `${content}${STREAMING_CARET}` : content;
+}
 
 type TurnMessage = { role: string; content: unknown; stopped?: boolean };
 
@@ -25,6 +35,33 @@ export function endsOnUnfinishedTurn(messages: ReadonlyArray<TurnMessage>): bool
   if (last.stopped) return false;
   const content = last.content.trimEnd();
   return content === '' || content.endsWith(STREAMING_CARET);
+}
+
+/**
+ * Ask for the server's copy of an unfinished turn (`load`) now, then every
+ * UNFINISHED_TURN_POLL_MS until the returned function is called. A turn still
+ * writing (the thread's last content, `lastContent`, changes) is asked for as
+ * long as it writes; after UNFINISHED_TURN_POLLS asks with no change it is
+ * given up (its server may have died with it).
+ */
+export function watchUnfinishedTurn(load: () => void, lastContent: () => unknown): () => void {
+  let polls = 0;
+  let seen = lastContent();
+  const poll = () => {
+    polls += 1;
+    load();
+  };
+  poll();
+  const timer = setInterval(() => {
+    const now = lastContent();
+    if (now !== seen) {
+      seen = now;
+      polls = 0;
+    }
+    if (polls >= UNFINISHED_TURN_POLLS) clearInterval(timer);
+    else poll();
+  }, UNFINISHED_TURN_POLL_MS);
+  return () => clearInterval(timer);
 }
 
 type Fetcher = (url: string, options?: RequestInit) => Promise<Response>;
