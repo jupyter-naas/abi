@@ -1,17 +1,20 @@
 """Expose an existing Agent or IntentAgent through the standalone async host.
 
 The SDK never imports this adapter. Only the provider needs ABI core. Cancellation
-waits for synchronous inference to finish, so its conversation claim is not freed
-while the worker thread can still perform side effects.
+stops the run at its next step (``agent_turn_stop``) and waits for the synchronous
+worker to end, so its conversation claim is not freed while the worker thread can
+still perform side effects.
 """
 
 from __future__ import annotations
 
 import asyncio
+import threading
 from collections.abc import AsyncIterator
 from typing import Any, Protocol
 
 from naas_abi_core.services.agent.Agent import Agent, AgentSharedState
+from naas_abi_core.services.agent.context import agent_turn_stop
 
 
 class RemoteInvocationContext(Protocol):
@@ -33,7 +36,10 @@ class RemoteAgentAdapter:
         self.agent = agent
 
     async def invoke(self, prompt: str, context: RemoteInvocationContext) -> str:
+        stop = threading.Event()
+
         def execute() -> str:
+            agent_turn_stop.set(stop)
             agent = self.agent.duplicate(
                 agent_shared_state=AgentSharedState(thread_id=context.thread_id)
             )
@@ -44,6 +50,7 @@ class RemoteAgentAdapter:
             return await asyncio.shield(task)
         except asyncio.CancelledError:
             context.cancelled.set()
+            stop.set()
             await task
             raise
 
@@ -61,12 +68,17 @@ class RemoteAgentAdapter:
                 except TimeoutError:
                     pass
 
+        stop = threading.Event()
+
         def produce() -> None:
+            agent_turn_stop.set(stop)
             agent = self.agent.duplicate(
                 agent_shared_state=AgentSharedState(thread_id=context.thread_id)
             )
             for event in agent.stream_invoke(prompt):
-                if not context.cancelled.is_set():
+                if context.cancelled.is_set():
+                    stop.set()
+                else:
                     asyncio.run_coroutine_threadsafe(
                         deliver(_wire_event(event)), loop
                     ).result()
@@ -82,4 +94,5 @@ class RemoteAgentAdapter:
         finally:
             if not task.done():
                 context.cancelled.set()
+                stop.set()
             await asyncio.shield(task)

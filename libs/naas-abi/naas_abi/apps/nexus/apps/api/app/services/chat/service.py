@@ -79,6 +79,14 @@ REGENERATE_OF_KEY = "regenerate_of"
 SUPERSEDED_BY_KEY = "superseded_by"
 REGENERATE_REPLAY_KEY = "regenerate_replay"
 
+# How a streamed assistant reply ended: "done", "failed" or "stopped" (the
+# user's Stop: the content is what it had written by then). A reply without the
+# key predates it.
+TURN_STATUS_KEY = "turn_status"
+TURN_DONE = "done"
+TURN_FAILED = "failed"
+TURN_STOPPED = "stopped"
+
 # Prepended to the replayed prompt on the way to the provider — never stored.
 # Dropping the previous answer from the transcript is not enough: agents run with
 # their own thread memory (the in-process ABI agent only ever receives the latest

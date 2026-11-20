@@ -63,4 +63,30 @@ describe('loadConversationMessages after a turn its page left', () => {
 
     expect(endsOnUnfinishedTurn(thread())).toBe(true);
   });
+
+  it('marks the reply the server saved as stopped, and asks no more', async () => {
+    authFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: conversationId,
+        workspace_id: 'ws-a',
+        messages: [
+          { id: 'msg-user', role: 'user', content: 'List my files' },
+          {
+            id: 'msg-answer',
+            role: 'assistant',
+            content: '',
+            metadata: { turn_status: 'stopped' },
+          },
+        ],
+      }),
+    });
+
+    await useWorkspaceStore.getState().loadConversationMessages(conversationId, {
+      replaceLocal: true,
+    });
+
+    expect(thread()[1]).toMatchObject({ content: '', stopped: true });
+    expect(endsOnUnfinishedTurn(thread())).toBe(false);
+  });
 });

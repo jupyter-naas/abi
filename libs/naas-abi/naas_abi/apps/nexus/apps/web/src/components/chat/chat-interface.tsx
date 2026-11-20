@@ -70,6 +70,7 @@ import { PdfViewer } from '@/components/files/pdf-viewer';
 import { chatFailureText, chatResponseError, humanizeChatProviderError } from '@/lib/chat-provider-error';
 import {
   endsOnUnfinishedTurn,
+  stopTurn,
   UNFINISHED_TURN_POLL_MS,
   UNFINISHED_TURN_POLLS,
 } from '@/lib/unfinished-turn';
@@ -609,6 +610,9 @@ export function ChatInterface({
   // created several awaits later). This ref carries that intent across the gap
   // so the button is never a no-op.
   const stopRequestedRef = useRef(false);
+  // The conversation whose turn the open stream relays: the server runs a turn
+  // to its end when its stream is left, so Stop has to name it.
+  const streamConversationIdRef = useRef<string | null>(null);
   const [showConnecting, setShowConnecting] = useState(false);
   const gotFirstTokenRef = useRef(false);
   const connectingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2485,6 +2489,7 @@ export function ChatInterface({
           const controller = new AbortController();
           streamControllerRef.current = controller;
           if (stopRequestedRef.current) controller.abort();
+          streamConversationIdRef.current = conversationId ?? null;
           const response = await fetch(`${getApiBase()}/api/chat/stream`, {
           method: 'POST',
           headers: { 
@@ -2724,6 +2729,7 @@ export function ChatInterface({
         if (connectingTimerRef.current) clearTimeout(connectingTimerRef.current);
         setShowConnecting(false);
         streamControllerRef.current = null;
+        streamConversationIdRef.current = null;
       }
       } else {
         // Non-streaming for other providers
@@ -2916,7 +2922,17 @@ export function ChatInterface({
 
   const stableStopStream = useCallback(() => {
     stopRequestedRef.current = true;
+    const conversationId = streamConversationIdRef.current;
     streamControllerRef.current?.abort();
+    if (!conversationId) return;
+    // The reply the server kept, marked stopped, replaces what the stream had shown.
+    void stopTurn(conversationId).then((stopped) => {
+      if (stopped) {
+        void useWorkspaceStore
+          .getState()
+          .loadConversationMessages(conversationId, { replaceLocal: true });
+      }
+    });
   }, []);
 
   const handleSubmitRef = useRef(handleSubmit);
@@ -4521,6 +4537,16 @@ const MessageBubble = React.memo(function MessageBubble({
             </ReactMarkdown>
           )}
         </div>
+
+        {!isUser && message.stopped && (
+          <div
+            className="flex items-center gap-1.5 px-1 text-[12px] leading-4 text-muted-foreground"
+            data-testid="message-stopped"
+          >
+            <Square size={10} aria-hidden />
+            Stopped
+          </div>
+        )}
 
         {/* Artifact built this turn: opens it on the Slides or Documents surface */}
         {slidesDeckCard && (

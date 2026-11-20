@@ -75,6 +75,7 @@ from naas_abi_core.services.agent.context import (
     slides_step_limit_message,
     slides_turn_active,
     tool_scope_refused,
+    turn_stopped,
 )
 from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
     AgentAIMessageEmitted,
@@ -269,6 +270,8 @@ _MAX_TOOL_RESULT_CHARS = 8_000
 _OLD_TOOL_RESULT_STUB = (
     "[Old tool result cleared. Call the tool again if you need the full content.]"
 )
+# The answer to a tool call the turn's Stop kept from running.
+TURN_STOPPED_TOOL_REPLY = "[Not run: the user stopped the turn.]"
 
 
 def _tool_message_name(message: ToolMessage) -> str:
@@ -2098,6 +2101,9 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         self,
         state: ABIAgentState,
     ) -> Command[Literal["call_tools", "__end__", "current_active_agent"]]:
+        if turn_stopped():
+            logger.debug(f"⏹️  Turn stopped: agent '{self._name}' calls no model")
+            return Command(goto="__end__")
         self._state.set_current_active_agent(self.name)
         logger.debug(f"🧠 Calling model for agent '{self._name}'")
         self._notify_call_model(self._name)
@@ -2308,7 +2314,29 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
         # Initialize the called tools list.
         called_tools: list[BaseTool] = []
-        for tool_call in tool_calls:
+        for index, tool_call in enumerate(tool_calls):
+            if turn_stopped():
+                # Every call the model made gets its answer: a thread ending on
+                # an unanswered tool call is refused by the provider next turn.
+                logger.debug(
+                    f"⏹️  Turn stopped: {len(tool_calls) - index} tool call(s) not made"
+                )
+                results.append(
+                    Command(
+                        goto="__end__",
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    content=TURN_STOPPED_TOOL_REPLY,
+                                    name=call["name"],
+                                    tool_call_id=call["id"],
+                                )
+                                for call in tool_calls[index:]
+                            ]
+                        },
+                    )
+                )
+                return self._one_routing_write_per_step(results)
             tool_name: str = tool_call["name"]
             logger.debug(f"🛠️  Calling tool: {tool_name}")
 

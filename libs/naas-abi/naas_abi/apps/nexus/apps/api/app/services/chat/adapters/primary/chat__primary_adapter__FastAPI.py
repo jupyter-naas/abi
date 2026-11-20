@@ -47,6 +47,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     to_message,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__streaming import (
+    stop_turns,
     stream_chat_response,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_ingestion import (
@@ -390,6 +391,23 @@ async def stream_chat(
 ):
     await authorize_turn_standalone(request, current_user)
     return await stream_chat_response(request=request, current_user=current_user)
+
+
+@router.post("/conversations/{conversation_id}/stop", dependencies=[declares("SendMessage")])
+async def stop_turn(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Stop the turn the conversation is answering: its reply keeps what it had
+    written, marked stopped. Who may send in the conversation may stop it.
+
+    Leaving the stream (a reload, a navigation) stops nothing: the turn runs to
+    its end. Only turns running in this process are reached (``stop_turns``).
+    """
+    with bind_registry(db) as registry:
+        await own_conversation(registry.chat, current_user, conversation_id, "SendMessage")
+    return {"stopped": await stop_turns(conversation_id)}
 
 
 @router.patch("/conversations/{conversation_id}", dependencies=[declares("UpdateConversation")])

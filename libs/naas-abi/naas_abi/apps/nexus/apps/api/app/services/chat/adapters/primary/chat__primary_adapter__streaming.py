@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -24,7 +26,13 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__schemas import (
     ChatRequest,
 )
-from naas_abi.apps.nexus.apps.api.app.services.chat.service import ProviderNotConfiguredError
+from naas_abi.apps.nexus.apps.api.app.services.chat.service import (
+    TURN_DONE,
+    TURN_FAILED,
+    TURN_STATUS_KEY,
+    TURN_STOPPED,
+    ProviderNotConfiguredError,
+)
 from naas_abi.apps.nexus.apps.api.app.services.ollama import DEFAULT_CHAT_MODEL_TAG
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
@@ -235,34 +243,54 @@ async def turn_container(workspace_id: str) -> str | None:
 
 
 _END_OF_TURN = object()
+# How long a Stop waits for its turns to save what they had written.
+STOP_WAIT_SECONDS = 10.0
+
+
+@dataclass
+class _Turn:
+    conversation_id: str | None
+    stop: threading.Event = field(default_factory=threading.Event)
+    started: bool = False
+
+
 # Strong references: the event loop keeps only weak ones to its tasks.
-_TURNS_IN_FLIGHT: set[asyncio.Task[None]] = set()
+_TURNS_IN_FLIGHT: dict[asyncio.Task[None], _Turn] = {}
 
 
 def _turn_finished(task: asyncio.Task[None]) -> None:
-    _TURNS_IN_FLIGHT.discard(task)
+    _TURNS_IN_FLIGHT.pop(task, None)
     if not task.cancelled() and task.exception() is not None:
         logger.error("Chat turn failed", exc_info=task.exception())
 
 
-def _outlives_client(frames: AsyncIterator[str]) -> AsyncIterator[str]:
+def _outlives_client(
+    frames: AsyncIterator[str], conversation_id: str | None = None
+) -> AsyncIterator[str]:
     """Relay ``frames`` to the client while a task of their own runs them to
     their end, so the turn persists its answer even when the client leaves.
 
-    A reload, a navigation or Stop cancels the response. Iterated by the
-    response, the turn died with it before persisting, while the agent thread
-    went on answering: the assistant row pre-created at the start kept its
-    empty content, an empty bubble for good. A delegated turn sends no text
-    until the sub-agent's whole answer, so any reload during it did that.
+    A reload or a navigation cancels the response. Iterated by the response,
+    the turn died with it before persisting, while the agent thread went on
+    answering: the assistant row pre-created at the start kept its empty
+    content, an empty bubble for good. A delegated turn sends no text until
+    the sub-agent's whole answer, so any reload during it did that. Only Stop
+    ends a turn (``stop_turns``).
 
     The task starts at the response's first read, in its context: the turn's
-    ContextVars (usable agents, identity) are the ones it always ran with.
+    ContextVars (usable agents, identity) are the ones it always ran with, and
+    its stop flag (``agent_turn_stop``) reaches the agent's threads.
     """
 
     async def relay() -> AsyncIterator[str]:
+        from naas_abi_core.services.agent.context import agent_turn_stop
+
         queue: asyncio.Queue[object] = asyncio.Queue()
+        turn = _Turn(conversation_id)
 
         async def run_turn() -> None:
+            turn.started = True
+            agent_turn_stop.set(turn.stop)
             try:
                 async for frame in frames:
                     queue.put_nowait(frame)
@@ -270,12 +298,34 @@ def _outlives_client(frames: AsyncIterator[str]) -> AsyncIterator[str]:
                 queue.put_nowait(_END_OF_TURN)
 
         task = asyncio.create_task(run_turn())
-        _TURNS_IN_FLIGHT.add(task)
+        _TURNS_IN_FLIGHT[task] = turn
         task.add_done_callback(_turn_finished)
         while (frame := await queue.get()) is not _END_OF_TURN:
             yield str(frame)
 
     return relay()
+
+
+async def stop_turns(conversation_id: str) -> int:
+    """Stop the turns ``conversation_id`` has running in this process; how many.
+
+    The stop flag keeps the agent from starting another model or tool call
+    (a remote agent's run is cancelled over NATS when its stream is left), and
+    cancelling the task ends the stream there: the reply keeps what it had
+    written, marked stopped. Returns once they have saved it, or after
+    ``STOP_WAIT_SECONDS``. A task not started yet has never run a line, so it
+    gets the flag only, and its turn saves itself stopped once it ends.
+    """
+    turns = [
+        (t, turn) for t, turn in _TURNS_IN_FLIGHT.items() if turn.conversation_id == conversation_id
+    ]
+    for task, turn in turns:
+        turn.stop.set()
+        if turn.started:
+            task.cancel()
+    if turns:
+        await asyncio.wait([task for task, _ in turns], timeout=STOP_WAIT_SECONDS)
+    return len(turns)
 
 
 async def stream_chat_response(
@@ -754,6 +804,8 @@ async def stream_chat_response(
     async def generate():
         import asyncio
 
+        from naas_abi_core.services.agent.context import turn_stopped
+
         full_response = ""
         loop = asyncio.get_running_loop()
         last_flush = loop.time()
@@ -816,7 +868,7 @@ async def stream_chat_response(
                 yield yield_data
                 await maybe_flush_incremental()
 
-        async def persist_final_metadata() -> None:
+        async def persist_final_metadata(turn_status: str) -> None:
             if not assistant_msg_id:
                 return
             # Mark any leftover running steps as done — same finalisation the
@@ -833,6 +885,7 @@ async def stream_chat_response(
                 # request here made the footer report a mini model while the
                 # deck was written by the slides model.
                 "llm_model": provider_config.llm_model or request.llm_model,
+                TURN_STATUS_KEY: turn_status,
             }
             try:
                 await persist_stream_metadata(
@@ -843,6 +896,18 @@ async def stream_chat_response(
                 )
             except Exception:
                 logger.warning("Failed to persist stream metadata", exc_info=True)
+
+        async def persist_reply(turn_status: str) -> None:
+            if not assistant_msg_id:
+                return
+            await persist_stream_content(
+                user_id=current_user.id,
+                conversation_id=conversation_id,
+                assistant_msg_id=assistant_msg_id,
+                full_response=full_response,
+                touch_conversation=True,
+            )
+            await persist_final_metadata(turn_status)
 
         try:
             # Include ``assistant_message_id`` on the very first frame so the
@@ -934,10 +999,11 @@ async def stream_chat_response(
                     )
                 except Exception:
                     logger.error("Failed to finalize stream messages to DB", exc_info=True)
-                await persist_final_metadata()
-                if request.regenerate_of and full_response.strip():
+                stopped = turn_stopped()
+                await persist_final_metadata(TURN_STOPPED if stopped else TURN_DONE)
+                if request.regenerate_of and full_response.strip() and not stopped:
                     # Only once the refreshed answer actually exists — a failed
-                    # regeneration must leave the original answer on screen.
+                    # or stopped regeneration leaves the original answer on screen.
                     try:
                         await mark_message_superseded(
                             user_id=current_user.id,
@@ -957,6 +1023,14 @@ async def stream_chat_response(
                 yield f"data: {json.dumps({'sources': final_sources})}\n\n"
 
             yield "data: [DONE]\n\n"
+        except asyncio.CancelledError:
+            # Stop (``stop_turns``), or the server shutting down: the reply keeps
+            # what it had written, marked stopped.
+            try:
+                await asyncio.shield(persist_reply(TURN_STOPPED))
+            except Exception:
+                logger.warning("Failed to persist a stopped reply", exc_info=True)
+            raise
         except Exception as exc:
             escaped_error = json.dumps(client_error_message(exc))[1:-1]
             logger.error(
@@ -968,18 +1042,13 @@ async def stream_chat_response(
                 request.agent,
             )
             try:
-                if assistant_msg_id:
-                    await persist_stream_content(
-                        user_id=current_user.id,
-                        conversation_id=conversation_id,
-                        assistant_msg_id=assistant_msg_id,
-                        full_response=full_response,
-                        touch_conversation=True,
-                    )
-                    await persist_final_metadata()
+                await persist_reply(TURN_STOPPED if turn_stopped() else TURN_FAILED)
             except Exception:
                 logger.warning("Failed to persist partial content on error", exc_info=True)
             yield f'data: {{"error": "{escaped_error}"}}\n\n'
             yield "data: [DONE]\n\n"
 
-    return StreamingResponse(_outlives_client(generate()), media_type="text/event-stream")
+    return StreamingResponse(
+        _outlives_client(generate(), conversation_id=conversation_id),
+        media_type="text/event-stream",
+    )

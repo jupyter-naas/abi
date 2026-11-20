@@ -196,6 +196,14 @@ agent_container: ContextVar[str | None]     # the container of the call (its nam
 
 Propagate across async tasks / raw threads with `contextvars.copy_context()`.
 
+`agent_turn_stop` (a `threading.Event`, read with `turn_stopped()`) stops a turn
+from outside it: whoever runs the turn binds it (Nexus's chat Stop, a remote
+host's cancel), and once it is set `call_model` calls no model and `call_tools`
+runs no further tool. Each tool call the model made and that did not run is
+answered `TURN_STOPPED_TOOL_REPLY`, so the thread never ends on an unanswered
+call (providers refuse the next turn on one). A tool already running finishes:
+a thread cannot be interrupted. Tests: `Agent_turn_stop_test.py`.
+
 `agent_user_id` and `agent_container` are views of the call's `CallContext`
 (`engine/call_context.py`, through the event service's `event_actor_user_id` and
 `event_actor_container`): there is no second source of identity. The context
@@ -262,7 +270,8 @@ Integration tests (require infra):
 
 RemoteAgentAdapter wraps an existing Agent/IntentAgent as an async SDK host
 handler without importing the SDK. It duplicates per invocation with an isolated
-thread ID and preserves SSE events. Cancellation must wait for the synchronous
-worker to stop before the host releases its conversation claim. Cover both
+thread ID and preserves SSE events. Cancellation sets the invocation's
+`agent_turn_stop`, so the run ends at its next step, and must wait for the
+synchronous worker to stop before the host releases its conversation claim. Cover both
 invocation and cancellation in RemoteAgentAdapter_test.py; the full network
 regression is examples/standalone_module/agent_integration_test.py.

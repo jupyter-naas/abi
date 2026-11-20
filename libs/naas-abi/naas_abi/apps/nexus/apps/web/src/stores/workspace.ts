@@ -15,6 +15,7 @@ import {
 } from '@/lib/slides-pane-conversation';
 import { sheetsPaneConversationKey, dropSheetsPaneConversationKeys } from '@/lib/sheets-pane-conversation';
 import { conversationTitleFromPrompt } from '@/lib/office-auto-title';
+import { TURN_STOPPED } from '@/lib/unfinished-turn';
 import { hasSession, useAuthStore } from './auth';
 import { useDocumentsStore } from './documents';
 import { useSlidesStore } from './slides';
@@ -72,6 +73,7 @@ export interface Message {
   regenerateOf?: string; // Assistant message id this turn re-ran
   supersededBy?: string; // Newer answer that replaced this one (set server-side)
   replayedPrompt?: boolean; // Prompt re-sent by a refresh (duplicate of an earlier one)
+  stopped?: boolean; // The user's Stop ended this reply; it keeps what was written until then
   // Author attribution (preserved across sessions and users)
   authorId?: string;
   authorName?: string;
@@ -550,6 +552,7 @@ const mapApiMessage = (message: ApiChatMessage): Message => {
     ...(typeof regenerateOf === 'string' ? { regenerateOf } : {}),
     ...(typeof supersededBy === 'string' ? { supersededBy } : {}),
     ...(meta.regenerate_replay === true ? { replayedPrompt: true } : {}),
+    ...(meta.turn_status === TURN_STOPPED ? { stopped: true } : {}),
     feedback: fb === 'like' || fb === 'dislike' ? fb : null,
     feedbackDetails: hasDetails
       ? {

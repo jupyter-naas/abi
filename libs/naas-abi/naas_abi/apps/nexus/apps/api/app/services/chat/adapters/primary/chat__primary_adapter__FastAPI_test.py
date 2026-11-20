@@ -181,15 +181,21 @@ def world(team: NexusIam, monkeypatch: pytest.MonkeyPatch):
             return False
 
     streamed: list[str] = []
+    stopped: list[str] = []
 
     async def stream(request, current_user):
         streamed.append(current_user.id)
         return JSONResponse({"streamed": True})
 
+    async def stop_turns(conversation_id):
+        stopped.append(conversation_id)
+        return 1
+
     for module in (chat_api, chat_dependencies):
         monkeypatch.setattr(module, "bind_registry", bind)
     monkeypatch.setattr(chat_dependencies, "AsyncSessionLocal", Session)
     monkeypatch.setattr(chat_api, "stream_chat_response", stream)
+    monkeypatch.setattr(chat_api, "stop_turns", stop_turns)
     monkeypatch.setattr(chat_api, "ChatIngestionJobService", FakeJobs)
     monkeypatch.setattr(chat_api, "publish_chat_ingestion_job", published.append)
 
@@ -210,6 +216,7 @@ def world(team: NexusIam, monkeypatch: pytest.MonkeyPatch):
         storage=storage,
         published=published,
         streamed=streamed,
+        stopped=stopped,
         client=client,
     )
 
@@ -444,6 +451,35 @@ def test_a_member_streams_a_turn(world) -> None:
 
     assert response.status_code == 200
     assert world.streamed == ["member"]
+
+
+def test_a_member_stops_the_turn_of_their_conversation(world) -> None:
+    world.chat.add("member", "conv-m")
+
+    response = call(world, "member", "POST", "/api/chat/conversations/conv-m/stop")
+
+    assert response.status_code == 200
+    assert response.json() == {"stopped": 1}
+    assert world.stopped == ["conv-m"]
+
+
+def test_only_who_may_send_in_a_conversation_stops_its_turn(world) -> None:
+    world.chat.add("member", "conv-m")
+    world.chat.add("viewer", "conv-v")
+    # Not theirs: no such conversation for a member of the workspace, no access
+    # for someone outside it. A viewer may not send, so may not stop either.
+    refused = {
+        user: call(world, user, "POST", f"/api/chat/conversations/{conv}/stop").status_code
+        for user, conv in (
+            ("owner", "conv-m"),
+            ("admin", "conv-m"),
+            ("stranger", "conv-m"),
+            ("viewer", "conv-v"),
+        )
+    }
+
+    assert refused == {"owner": 404, "admin": 404, "stranger": 403, "viewer": 403}
+    assert world.stopped == []
 
 
 def test_a_turn_cannot_borrow_the_workspace_of_another(world) -> None:

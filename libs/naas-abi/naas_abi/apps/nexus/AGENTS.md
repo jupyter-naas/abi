@@ -96,6 +96,12 @@ Chat streaming receives three wire formats (OpenAI JSON-per-line, Anthropic type
 
 Event types: `token | thinking | tool_call | link | file | error | done`. See `docs/ESSENTIALS.md` for protocol examples.
 
+**A turn outlives its page; only Stop ends it.** `POST /api/chat/stream` runs the turn in a task of its own (`_outlives_client`) and relays its frames: a reload or a navigation leaves the stream, the turn runs to its end and saves its answer. Stop is `POST /api/chat/conversations/{id}/stop` (`stop_turns`), gated like sending: the caller's own conversation (`own_conversation`, 404 otherwise, 403 outside the workspace) and `SendMessage` on it. It sets the turn's stop flag (core `agent_turn_stop`: an in-process agent starts no further model or tool call, a tool already running finishes) and cancels the task: the provider stream closes, and a remote agent's run is cancelled over NATS by the stream's `finally` (`handle.cancel()`, which sets the flag on the module's host). The route returns once the reply is saved, `{"stopped": <turns>}`.
+
+The assistant reply carries `metadata.turn_status` once its turn ends: `done`, `failed` or `stopped` (with the text written until then). The web app's Stop calls the route, then shows the server's copy, marked "Stopped". A reply without the key predates it.
+
+Decision: turns are tracked in the memory of the API process that runs them. Consequences: the API runs as one uvicorn process, so a Stop reaches its turn; with several API replicas behind a balancer, a Stop that lands on another replica finds nothing (`{"stopped": 0}`) and that turn runs to its end. A deployment that scales the API out needs sticky routing per conversation, or a broadcast of the stop (the bus) to every replica.
+
 ## Multi-tenancy and IAM
 
 Everything below `organizations` is scoped to `workspace_id`: agents, conversations, secrets, graph nodes, inference servers.

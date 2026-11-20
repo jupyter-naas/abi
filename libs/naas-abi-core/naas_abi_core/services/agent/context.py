@@ -25,6 +25,7 @@ handles the thread copy.
 
 from __future__ import annotations
 
+import threading
 import weakref
 from contextvars import ContextVar
 
@@ -60,6 +61,20 @@ agent_workspace_enabled_class_names: ContextVar[frozenset[str] | None] = Context
 agent_usable_module_scopes: ContextVar[frozenset[tuple[str, str, str]] | None] = (
     ContextVar("agent_usable_module_scopes", default=None)
 )
+# Set by whoever runs a turn and may stop it (a chat's Stop, a remote host's
+# cancel). An agent reads it between steps (``turn_stopped``): once it is set no
+# model call and no tool call starts, and the turn ends at its next step. A tool
+# already running finishes: a thread cannot be interrupted.
+agent_turn_stop: ContextVar[threading.Event | None] = ContextVar(
+    "agent_turn_stop", default=None
+)
+
+
+def turn_stopped() -> bool:
+    stop = agent_turn_stop.get()
+    return stop is not None and stop.is_set()
+
+
 # A tool's metadata key naming the object that exposed it (``Expose.as_tools``):
 # a string, so tracing serializes it; ``exposer`` finds the object.
 EXPOSED_BY = "abi_exposed_by"
