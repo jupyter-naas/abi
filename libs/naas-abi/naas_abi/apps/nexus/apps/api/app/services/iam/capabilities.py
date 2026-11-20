@@ -6,18 +6,18 @@ Made on demand, never by default: none exists until someone asks for one
 
 | Group | Policy | Attached |
 |---|---|---|
-| "Workflow runners" | "Workflow runners", the organization's, a sub-policy of "<O> access": ``RunWorkflow``, ``ReadWorkflowRuns``, ``RunPipeline``, ``ReadPipelineRuns`` on ``${scope}/module:workflow/*`` and ``.../pipeline/*`` | below the organization (``<O>/*``) |
+| "Workflow runners" | "Workflow runners", the organization's, a sub-policy of "<O> access": ``RunWorkflow``, ``ReadWorkflowRuns``, ``RunPipeline``, ``ReadPipelineRuns`` on ``${scope}/module:workflow/*`` and ``.../pipeline/*`` | at ``${my workspaces}``: each workspace of the organization its member is in, through its "<W> workspace" membership group |
 | "Models · all" | the platform's "Models · all" (``model_sets``) | without a scope |
 
 "Models · all" is the platform's group, one per deployment, not an
 organization's: IAM attaches a group an organization owns only at a scope there
 or below, and a scope reaches only what is in it, never the platform's models.
 
-A Member in "Workflow runners" runs the workflows and pipelines the workspace
-offers; one outside it runs none. Which workflows is still the ceiling's: the
-organization's offer bounds the policy (its parent), and a workspace's allow-list
-bounds it there once the level policies are attached at ``${my workspaces}``
-(S1/S2: ``attach_at`` then names that scope).
+A Member in "Workflow runners" runs workflows and pipelines in the workspaces
+they belong to (core ``${my workspaces}``, within the organization that owns the
+group and the policy); one outside it runs none. Which workflows is bounded by the
+organization's offer (the policy's parent); a workspace's own allow-list bounds it
+only where IAM bounds a ``${my workspaces}`` grant by it (a Deny in it wins).
 
 Written as ``api`` for no user: the caller (S2/S6's routes) authorized the
 request first. Idempotent: found by owner and name.
@@ -28,11 +28,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_below, org_container
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import SECTIONS
 from naas_abi_core.services.iam import module_scopes
 from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError
-from naas_abi_core.services.iam.names import PLATFORM
+from naas_abi_core.services.iam.names import MY_CONTAINERS_SCOPE, PLATFORM
 from naas_abi_core.services.iam.policy import POLICY_VERSION
 
 Capability = Literal["workflow_runners", "models_all"]
@@ -119,14 +119,14 @@ def ensure_capability(
     """The capability group (made if missing) holding its policy: "Workflow
     runners" of ``org_id``, or the platform's "Models · all" (``org_id`` unused).
     ``org_access``: "<O> access", the parent of "Workflow runners" (its bound);
-    ``attach_at``: where "Workflow runners" is attached (below the organization by
+    ``attach_at``: where "Workflow runners" is attached (``${my workspaces}`` by
     default). As ``api``."""
     name = NAMES[capability]
     if capability == "workflow_runners":
         container = org_container(org_id)
         group_id = _group(iam, name, container)
         policy_id = _runners_policy(iam, container, org_access)
-        scope: str | None = attach_at or org_below(org_id)
+        scope: str | None = attach_at or MY_CONTAINERS_SCOPE
     elif capability == "models_all":
         from naas_abi.apps.nexus.apps.api.app.services.iam.model_sets import model_policies
 

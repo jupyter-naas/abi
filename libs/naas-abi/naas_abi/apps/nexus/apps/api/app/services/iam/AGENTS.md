@@ -341,8 +341,9 @@ and the names' moves, is the same before and after, and again changes nothing):
   allowed**: a module agent's in-process turn lends the models of its agents to whoever may use them
   (`provider_runtime.agents_own_models`, core `model_registry/agent_models.py`).
 - **Capability groups** (`capabilities.py`), made on demand: "Workflow runners", the organization's,
-  holding a policy (a sub-policy of "<O> access") running every workflow and pipeline, attached below the
-  organization until `${my workspaces}` exists; "Models · all", the platform's (a group an organization
+  holding a policy (a sub-policy of "<O> access") running every workflow and pipeline, attached at
+  `${my workspaces}` (the workspaces of the organization its member belongs to, through their "<W>
+  workspace" membership groups); "Models · all", the platform's (a group an organization
   owns is attached only at a scope there, which never reaches a platform model).
 - **`builtin.self`** (catalog 16): no `CreateOrganization`, no personal `CreateWorkspace`;
   `nexus_config.personal_workspaces: true` gives the latter back (`bootstrap.apply_access_settings`).

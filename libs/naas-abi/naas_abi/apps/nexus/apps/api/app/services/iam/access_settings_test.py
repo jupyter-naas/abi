@@ -177,6 +177,11 @@ def test_workflow_runners_is_made_on_demand_and_lets_a_member_run_workflows(worl
         policy = world.iam.get_policy(runners.policy_id)
     assert (group.name, group.owner_scope) == (WORKFLOW_RUNNERS, org_container("acme"))
     assert (policy.owner_scope, policy.parent_id) == (org_container("acme"), org.access_policy_id)
+    assert runners.scope == "${my workspaces}"
+    # The member belongs to W through its workspace group (S2's "<W> workspace").
+    with as_service_account("api"):
+        w_group = world.iam.create_group("W workspace", scope=W, membership_of=W)
+        world.iam.add_group_member(w_group.id, world.principal("member"))
     # Not in the group: refused. In it: allowed, within what the organization offers.
     assert not _allowed(world, "member", "module:RunWorkflow", _workflow())
     with as_service_account("api"):
@@ -185,6 +190,12 @@ def test_workflow_runners_is_made_on_demand_and_lets_a_member_run_workflows(worl
     assert _allowed(world, "member", "module:ReadWorkflowRuns", _workflow())
     other = module_scopes.scope_resource("workflow", "new.module", "x", container=W)
     assert not _allowed(world, "member", "module:RunWorkflow", other)
+    # Nowhere they do not belong.
+    world.workspace("acme", "w3")
+    w3 = module_scopes.scope_resource(
+        "workflow", "acme.sales", "nightly", container=workspace_container("acme", "w3")
+    )
+    assert not _allowed(world, "member", "module:RunWorkflow", w3)
 
 
 def test_models_all_is_a_group_holding_every_model(world):
