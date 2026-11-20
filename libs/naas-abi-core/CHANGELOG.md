@@ -24,6 +24,15 @@
 
 <!-- version list -->
 
+## v6.1.0 (2026-11-20)
+
+### Features
+
+- **nexus**: Configured users are invited people of their provider
+  ([#1570](https://github.com/jupyter-naas/abi/pull/1570),
+  [`ed6a47d`](https://github.com/jupyter-naas/abi/commit/ed6a47db2f75ae30f918a880c0e45674b2ce5afc))
+
+
 ## v6.0.0 (2026-11-19)
 
 ### Features
