@@ -12,12 +12,16 @@ import { ROLE_LABELS as BUILT_IN_ROLE_LABELS, assignableRoles, changeMemberRole,
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
 import { orgSettingsSectionPath } from '../../lib/nav';
+import { organizationRemoval, removableFromOrganization, removalConfirmation } from '../users-model';
 import {
   changedProfileFields,
+  initialOrgRole,
+  orgRoleChanged,
   saveMemberChanges,
   PROFILE_FIELDS,
   type MemberDetails,
   type MemberProfileField,
+  type OrgRoleChoice,
 } from './member-details';
 import '@/app/account/profile/profile.css';
 import '../users.css';
@@ -79,15 +83,21 @@ export default function OrgUserProfilePage() {
   const orgId = params.orgId as string;
   const userId = params.userId as string;
   const authUser = useAuthStore((state) => state.user);
-  const { updateMemberProfile, uploadMemberAvatar, removeMemberAvatar, removeMember, fetchMembers } =
-    useOrganizationStore();
+  const {
+    updateMemberProfile,
+    uploadMemberAvatar,
+    removeMemberAvatar,
+    removeMember,
+    removeFromOrganization,
+    fetchMembers,
+  } = useOrganizationStore();
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   const [details, setDetails] = useState<MemberDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [draft, setDraft] = useState(emptyDraft);
-  const [orgRole, setOrgRole] = useState<'admin' | 'member'>('member');
+  const [orgRole, setOrgRole] = useState<OrgRoleChoice>('member');
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -117,7 +127,7 @@ export default function OrgUserProfilePage() {
           PROFILE_FIELDS.map((field) => [field, data.organization_profile[field] ?? ''])
         ) as Record<MemberProfileField, string>
       );
-      setOrgRole(data.member.role === 'admin' ? 'admin' : 'member');
+      setOrgRole(initialOrgRole(data.member.role));
     } catch {
       setLoadError('Failed to load this user. Please try again.');
     } finally {
@@ -143,9 +153,10 @@ export default function OrgUserProfilePage() {
   const isSelf = member.user_id === authUser?.id;
   const isOwner = member.role === 'owner';
   const canEditOrgRole = roleChangeable({ role: member.role, inherited: false, userId: member.user_id, selfId: authUser?.id });
-  const canRemove = !isOwner && !isSelf;
+  const workspaceOnly = member.role === null;
+  const canRemove = removableFromOrganization(member.role, member.user_id, authUser?.id);
   const changes = changedProfileFields(orgProfile, draft);
-  const roleChanged = canEditOrgRole && orgRole !== member.role;
+  const roleChanged = orgRoleChanged(orgRole, member.role, canEditOrgRole);
   const dirty = Object.keys(changes).length > 0 || roleChanged;
   // Always the account name (users.name): an organization cannot rename someone.
   const displayName = account.name || account.email || 'Unknown';
@@ -177,18 +188,21 @@ export default function OrgUserProfilePage() {
   };
 
   const handleRemove = async () => {
-    if (
-      !(await confirm({
-        title: `Remove ${displayName} from this organization?`,
-        confirmLabel: 'Remove',
-      }))
-    ) {
+    // The workspaces they hold a role in themselves (not those their org role reaches).
+    const ownWorkspaces = workspaces.filter((w) => w.role && w.source === 'workspace').map((w) => w.name);
+    if (!(await confirm(removalConfirmation(displayName, member.role, ownWorkspaces)))) {
       return;
     }
     setError('');
     setRemoving(true);
     try {
-      await removeMember(orgId, member.user_id);
+      if (organizationRemoval(member.role) === 'all-access') {
+        await removeFromOrganization(orgId, member.user_id);
+      } else {
+        await removeMember(orgId, member.user_id);
+      }
+      // The Users list: someone whose org role was taken stays while a workspace links them.
+      await fetchMembers(orgId);
       router.push(orgSettingsSectionPath(orgId, 'users'));
     } catch (err) {
       setError(formatError(err, 'Failed to remove this user'));
@@ -383,7 +397,7 @@ export default function OrgUserProfilePage() {
             <select
               id="org-member-role"
               value={isOwner ? 'owner' : orgRole}
-              onChange={(event) => setOrgRole(event.target.value as 'admin' | 'member')}
+              onChange={(event) => setOrgRole(event.target.value as OrgRoleChoice)}
               className="account-profile-field-input"
               disabled={!canEditOrgRole}
               title={
@@ -397,11 +411,14 @@ export default function OrgUserProfilePage() {
               {isOwner ? (
                 <option value="owner">{BUILT_IN_ROLE_LABELS.owner}</option>
               ) : (
-                assignableRoles('organization').map((role) => (
-                  <option key={role} value={role}>
-                    {BUILT_IN_ROLE_LABELS[role]}
-                  </option>
-                ))
+                <>
+                  {workspaceOnly && <option value="">None (workspace access only)</option>}
+                  {assignableRoles('organization').map((role) => (
+                    <option key={role} value={role}>
+                      {BUILT_IN_ROLE_LABELS[role]}
+                    </option>
+                  ))}
+                </>
               )}
             </select>
           </div>

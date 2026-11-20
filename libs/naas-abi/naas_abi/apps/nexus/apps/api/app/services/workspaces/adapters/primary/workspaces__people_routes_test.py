@@ -509,3 +509,79 @@ async def test_a_workspace_only_persons_details_are_the_org_admins_to_read(api) 
     assert [(w["id"], w["role"]) for w in body["workspaces"] if w["role"]] == [("ws-2", "viewer")]
     assert outside.status_code == 404
     assert refused.status_code == 403
+
+
+# -- remove from organization --------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_only_person_is_removed_from_the_organization_in_one_step(api) -> None:
+    """Org settings › Users › Remove from organization: every workspace of the org
+    in one step. Their account stays, and so does what they hold elsewhere."""
+    await MEMBERSHIPS.grant("flo", "viewer", WS1)
+    await MEMBERSHIPS.grant("flo", "member", workspace_container("org-2", "ws-9"))
+    async with api.as_("admin") as http:
+        # Not an org role to take (the org-role removal is the other route).
+        org_role_only = await http.delete("/api/organizations/org-1/members/flo")
+        removed = await http.delete("/api/organizations/org-1/members/flo/access")
+        directory = (await http.get("/api/organizations/org-1/members")).json()
+        again = await http.delete("/api/organizations/org-1/members/flo/access")
+    assert org_role_only.status_code == 404
+    assert removed.status_code == 200, removed.text
+    assert sorted(removed.json()["workspace_ids"]) == ["ws-1", "ws-2"]
+    assert "flo" not in {m["user_id"] for m in directory}
+    assert await MEMBERSHIPS.roles_of("flo") == {workspace_container("org-2", "ws-9"): "member"}
+    assert again.status_code == 404
+    assert await api.people.get("flo") is not None
+
+
+@pytest.mark.asyncio
+async def test_removing_from_the_organization_takes_any_org_role_too(api) -> None:
+    async with api.as_("admin") as http:
+        removed = await http.delete("/api/organizations/org-1/members/member/access")
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["workspace_ids"] == ["ws-1"]
+    assert await role("member", ORG) is None and await role("member", WS1) is None
+
+
+@pytest.mark.asyncio
+async def test_an_org_owner_is_never_removed_from_the_organization_this_way(api) -> None:
+    async with api.as_("admin") as http:
+        refused = await http.delete("/api/organizations/org-1/members/owner/access")
+    async with api.as_("owner") as http:
+        themselves = await http.delete("/api/organizations/org-1/members/owner/access")
+    assert refused.status_code == 400, refused.text
+    assert themselves.status_code == 400, themselves.text
+    assert await role("owner", ORG) == "owner" and await role("owner", WS1) == "owner"
+
+
+@pytest.mark.asyncio
+async def test_only_who_may_remove_org_members_removes_from_the_organization(api) -> None:
+    for user in ("wsadmin", "member", "stranger"):
+        async with api.as_(user) as http:
+            refused = await http.delete("/api/organizations/org-1/members/flo/access")
+        assert refused.status_code == 403, (user, refused.text)
+    assert await role("flo", WS2) == "viewer"
+    async with api.as_("admin") as http:
+        outside = await http.delete("/api/organizations/org-1/members/outsider/access")
+    assert outside.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_owner_leaves_only_by_an_owner_and_never_as_the_last(api) -> None:
+    """Every change is checked before the first: a refusal changes nothing."""
+    await MEMBERSHIPS.grant("flo", "owner", WS2)
+    await MEMBERSHIPS.grant("flo", "member", WS1)
+    async with api.as_("admin") as http:
+        by_admin = await http.delete("/api/organizations/org-1/members/flo/access")
+    async with api.as_("owner") as http:
+        last = await http.delete("/api/organizations/org-1/members/flo/access")
+    assert by_admin.status_code == 403, by_admin.text
+    assert last.status_code == 409, last.text
+    assert "WS-2" in last.json()["detail"]
+    assert await role("flo", WS2) == "owner" and await role("flo", WS1) == "member"
+    await MEMBERSHIPS.grant("owner", "owner", WS2)
+    async with api.as_("owner") as http:
+        removed = await http.delete("/api/organizations/org-1/members/flo/access")
+    assert removed.status_code == 200, removed.text
+    assert await role("flo", WS2) is None and await role("flo", WS1) is None

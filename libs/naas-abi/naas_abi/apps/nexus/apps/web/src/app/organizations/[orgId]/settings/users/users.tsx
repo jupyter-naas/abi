@@ -25,7 +25,14 @@ import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore, type OrganizationMember } from '@/stores/organization';
 import { InvitedBadge, ResendButton } from '@/components/people/member-status';
 import { createPeopleApi } from '@/lib/people';
-import { orgUserRoleLabel, orgUserRoleRank, WORKSPACE_ACCESS_ONLY } from './users-model';
+import {
+  orgUserRoleLabel,
+  orgUserRoleRank,
+  organizationRemoval,
+  removableFromOrganization,
+  removalConfirmation,
+  WORKSPACE_ACCESS_ONLY,
+} from './users-model';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
@@ -143,6 +150,7 @@ export default function OrgUsersPage() {
   const {
     fetchMembers,
     removeMember,
+    removeFromOrganization,
     membersCache,
     membersLoading,
   } = useOrganizationStore();
@@ -336,20 +344,29 @@ export default function OrgUsersPage() {
     setOpenPickerUserId(userId);
   };
 
-  const handleRemove = async (userId: string) => {
+  const handleRemove = async (user: OrganizationMember) => {
     if (!orgId || !canManage) return;
     if (
-      !(await confirmAction({
-        title: 'Remove this user from the organization?',
-        confirmLabel: 'Remove',
-      }))
+      !(await confirmAction(
+        removalConfirmation(
+          user.name || user.email || 'this user',
+          user.role,
+          assignedNamesByUser[user.userId] || []
+        )
+      ))
     ) {
       return;
     }
     setActionError('');
+    setActionNotice('');
     try {
-      await removeMember(orgId, userId);
-      await loadMemberWorkspaces();
+      if (organizationRemoval(user.role) === 'all-access') {
+        await removeFromOrganization(orgId, user.userId);
+      } else {
+        await removeMember(orgId, user.userId);
+      }
+      // Someone whose org role was taken stays listed while a workspace links them.
+      await Promise.all([fetchMembers(orgId), loadMemberWorkspaces()]);
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Failed to remove user';
@@ -697,12 +714,8 @@ export default function OrgUsersPage() {
                   const assignedNames = assignedNamesByUser[user.userId] || [];
                   const summary = summarizeWorkspaces(assignedNames);
                   const isPickerOpen = openPickerUserId === user.userId;
-                  // Someone with workspace access only leaves through their workspaces.
                   const canRemove =
-                    canManage &&
-                    user.role !== null &&
-                    user.role !== 'owner' &&
-                    user.userId !== authUser?.id;
+                    canManage && removableFromOrganization(user.role, user.userId, authUser?.id);
                   const summaryLabel =
                     workspacesLoading && assignedNames.length === 0
                       ? 'Loading...'
@@ -820,8 +833,9 @@ export default function OrgUsersPage() {
                                   <button
                                     type="button"
                                     className="org-settings-users-remove"
-                                    onClick={() => void handleRemove(user.userId)}
-                                    title="Remove user"
+                                    onClick={() => void handleRemove(user)}
+                                    title="Remove from organization"
+                                    aria-label={`Remove ${user.name || user.email || 'user'} from the organization`}
                                   >
                                     <Trash2 size={16} />
                                   </button>
