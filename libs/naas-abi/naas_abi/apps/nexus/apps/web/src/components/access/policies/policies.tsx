@@ -297,6 +297,15 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
                         {managedMark(policy)}
                       </span>
                     )}
+                    {policy.managed_from === 'general' && (
+                      <span
+                        className="access-policy-badge"
+                        data-managed-from="general"
+                        title="Set from Workspace settings › General › Features. Changed here, General shows it read-only."
+                      >
+                        managed from General
+                      </span>
+                    )}
                   </span>
                 </td>
                 <td>
