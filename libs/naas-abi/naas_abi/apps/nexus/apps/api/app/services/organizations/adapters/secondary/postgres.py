@@ -25,7 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationWorkspaceRecord,
     UserRecord,
 )
-from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import status_of_row
+from naas_abi.apps.nexus.apps.api.app.services.people.port import status_of_row
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 

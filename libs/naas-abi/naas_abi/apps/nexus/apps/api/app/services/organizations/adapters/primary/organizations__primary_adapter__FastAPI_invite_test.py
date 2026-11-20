@@ -25,7 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import UserRec
 from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationService,
 )
-from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import get_people_service
+from naas_abi.apps.nexus.apps.api.app.services.people import runtime as people_runtime
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_testing import (
     FakePeopleService,
 )
@@ -34,6 +34,14 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_testing import 
 @pytest.fixture(autouse=True)
 def _team(team):
     return team
+
+
+@pytest.fixture(autouse=True)
+def _people_runtime():
+    """``_client`` installs its people service; the one before comes back after."""
+    previous = people_runtime.RUNTIME
+    yield
+    people_runtime.configure(previous)
 
 
 @pytest.fixture(autouse=True)
@@ -68,7 +76,7 @@ def _client(people: FakePeopleService) -> TestClient:
     app.dependency_overrides[org_api.get_organization_service] = lambda: OrganizationService(
         adapter=adapter
     )
-    app.dependency_overrides[get_people_service] = lambda: people
+    people_runtime.configure(people)
     # The drive sync (best effort) gets a storage and no database here.
     app.dependency_overrides[org_api._get_object_storage] = lambda: _MemoryStorage()
     app.dependency_overrides[org_api.get_db] = lambda: _NoDb()
@@ -127,15 +135,3 @@ def test_someone_with_no_account_needs_an_identity_provider() -> None:
 
     assert resp.status_code == 422
     assert "No identity provider is configured" in resp.json()["detail"]
-
-
-def test_without_the_people_service_inviting_is_unavailable() -> None:
-    client = _client(FakePeopleService())
-    client.app.dependency_overrides.pop(get_people_service)
-    client.app.dependency_overrides[org_api.get_db] = lambda: _NoDb()
-
-    resp = client.post(
-        "/organizations/org-1/members/invite", json={"email": "a@example.com", "role": "member"}
-    )
-
-    assert resp.status_code == 503

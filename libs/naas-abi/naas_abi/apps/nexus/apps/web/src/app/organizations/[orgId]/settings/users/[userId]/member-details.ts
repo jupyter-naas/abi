@@ -39,7 +39,12 @@ export interface MemberDetails {
     id: string;
     organization_id: string;
     user_id: string;
-    role: 'owner' | 'admin' | 'member';
+    /** Null: no org role, only access to some of the organization's workspaces. */
+    role: 'owner' | 'admin' | 'member' | null;
+    /** Where they are linked to the organization from (an older answer has none: an org role). */
+    source?: 'organization' | 'workspace';
+    /** Invited: created, has not signed in yet. */
+    status?: 'active' | 'invited';
     email: string | null;
     name: string | null;
     created_at: string | null;
@@ -106,4 +111,24 @@ export async function saveMemberChanges({
     await refreshed();
   }
   return null;
+}
+
+/** The org role picked on the page: admin, member, or '' for none (workspace access only). */
+export type OrgRoleChoice = 'admin' | 'member' | '';
+
+/** What the role field starts at: the member's org role, or none for workspace access only. */
+export function initialOrgRole(role: MemberDetails['member']['role']): OrgRoleChoice {
+  return role === 'admin' || role === 'member' ? role : '';
+}
+
+/**
+ * Whether saving changes the org role. "None" is never sent: it is where someone with workspace
+ * access only starts, and an org role is taken back by removing them from the organization.
+ */
+export function orgRoleChanged(
+  choice: OrgRoleChoice,
+  role: MemberDetails['member']['role'],
+  editable: boolean
+): choice is 'admin' | 'member' {
+  return editable && choice !== '' && choice !== role;
 }

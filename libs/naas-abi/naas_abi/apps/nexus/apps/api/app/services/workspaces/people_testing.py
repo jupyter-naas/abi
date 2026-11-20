@@ -1,37 +1,46 @@
-"""A people service for tests, until the real one (#1567) is wired in.
+"""An in-memory people service for the member routes' and the tools' tests.
 
 It keeps its users in memory and grants through the real ``MEMBERSHIPS``, on
 behalf of ``by``, so IAM still decides who may grant what: only the account
-store and the mail are faked. Installed with
-``app.dependency_overrides[get_people_service] = lambda: fake``.
+store, the provider and the mail are faked. It raises ``services/people``'s own
+errors. Installed for every caller (routes, agent tools, platform invite) the way
+the real service is, through the people runtime: ``with installed(fake): ...``.
 """
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
-from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
-    MEMBERSHIPS,
-    UnknownUserError,
-)
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
-from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+from naas_abi.apps.nexus.apps.api.app.services.people import runtime as people_runtime
+from naas_abi.apps.nexus.apps.api.app.services.people.port import (
+    AddedUser,
+    AlreadyMemberError,
     CreateOrLinkResult,
     Grant,
+    OwnerGrantRefusedError,
     PlatformUser,
+    ProviderInfo,
+    UnknownUserError,
     UserStatus,
 )
 
-
-class AlreadyMemberError(Exception):
-    """The person already holds a role wherever they were to be given one."""
+NEXUS = ProviderInfo("nexus", "Nexus", "https://nexus.test", "builtin")
 
 
-class OwnerGrantRefusedError(Exception):
-    """Only an owner makes an owner."""
+@contextmanager
+def installed(people: Any) -> Iterator[Any]:
+    """``people`` is the people service of every caller until the block ends."""
+    previous = people_runtime.configure(people)
+    try:
+        yield people
+    finally:
+        people_runtime.configure(previous)
 
 
 @dataclass
@@ -50,6 +59,10 @@ class FakePeopleService:
             }
         )
 
+    def service(self, _db: Any) -> FakePeopleService:
+        """The people runtime's factory (``installed``): this service, any session."""
+        return self
+
     def invited(self, user_id: str) -> None:
         self.users[user_id] = replace(self.users[user_id], status=UserStatus.INVITED)
 
@@ -58,7 +71,7 @@ class FakePeopleService:
             return org_container(grant.scope_id)
         scope = await AUTHZ.container_of(grant.scope_id)
         if scope is None:
-            raise UnknownUserError(grant.scope_id)
+            raise ValueError(f"Unknown workspace {grant.scope_id}")
         return scope
 
     async def _attach(
@@ -69,7 +82,7 @@ class FakePeopleService:
         scopes = [(await self._scope(g), g) for g in grants]
         held = [await MEMBERSHIPS.role_at(user_id, s) for s, g in scopes if g.role is not None]
         if held and all(r is not None for r in held):
-            raise AlreadyMemberError(user_id)
+            raise AlreadyMemberError(user_id, scopes[0][0])
         for scope, grant in scopes:
             if grant.role is not None:
                 await MEMBERSHIPS.grant(user_id, grant.role, scope, by=by)
@@ -115,11 +128,12 @@ class FakePeopleService:
             provisioned=created,
             sign_in_email_sent=self.sent,
             warning=None,
+            provider=NEXUS,
         )
 
     async def add_existing(
         self, *, user_id: str, grants: Sequence[Grant], by: Any, may_grant_owner: bool = False
-    ) -> PlatformUser:
+    ) -> AddedUser:
         self.calls.append(
             (
                 "add_existing",
@@ -135,7 +149,7 @@ class FakePeopleService:
         if user is None:
             raise UnknownUserError(user_id)
         await self._attach(user_id, grants, by, may_grant_owner)
-        return user
+        return AddedUser(**user.__dict__, sign_in_email_sent=self.sent)
 
     async def get(self, user_id: str) -> PlatformUser | None:
         return self.users.get(user_id)

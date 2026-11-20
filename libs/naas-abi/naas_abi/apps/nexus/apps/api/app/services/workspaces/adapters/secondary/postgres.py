@@ -19,7 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import SqlDefaultsStore
-from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import status_of_row
+from naas_abi.apps.nexus.apps.api.app.services.people.port import status_of_row
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     InferenceServerCreateInput,
     InferenceServerRecord,

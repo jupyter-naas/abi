@@ -213,22 +213,64 @@ async def _caller(db: Any, user_id: str) -> Any:
     )
 
 
-async def _create_or_link(db: Any, user_id: str, **kwargs: Any) -> dict[str, Any]:
-    """``PeopleService.create_or_link`` for the asking user: the person's account
-    made or linked, given ``grants`` on the asker's behalf (IAM decides), and
-    mailed. The answer never tells whether the account was made or linked."""
-    from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
-        PeopleServiceUnavailableError,
-        people_http_error,
-        people_status,
+async def _invite_limits(
+    user_id: str,
+    email: str,
+    *,
+    endpoint: str,
+    organization_id: str | None,
+    workspace_id: str | None,
+) -> dict[str, Any] | None:
+    """The invite routes' limits, for the agent's invitations too: the asking
+    user's and the address's, and the organization's day of invitation mail. An
+    error to report when one is reached, else None."""
+    from fastapi import HTTPException
+
+    from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+        check_invitation_mail_quota,
+        check_rate_limit,
     )
 
+    try:
+        await check_rate_limit(f"user:{user_id}", endpoint)
+        await check_rate_limit(f"email:{email}", endpoint)
+        await check_invitation_mail_quota(organization_id, workspace_id)
+    except HTTPException as exc:
+        return {"error": str(exc.detail), "email": email}
+    return None
+
+
+async def _create_or_link(
+    db: Any,
+    user_id: str,
+    *,
+    limits_endpoint: str,
+    workspace_id: str | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """``PeopleService.create_or_link`` for the asking user: the person's account
+    made or linked, given ``grants`` on the asker's behalf (IAM decides), and
+    mailed. The answer never tells whether the account was made or linked. The
+    invite routes' limits apply (``limits_endpoint``: whose counters)."""
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+        people_http_error,
+        people_status,
+        provider_view,
+    )
+
+    limited = await _invite_limits(
+        user_id,
+        kwargs["email"],
+        endpoint=limits_endpoint,
+        organization_id=kwargs.get("organization_id"),
+        workspace_id=workspace_id,
+    )
+    if limited is not None:
+        return limited
     try:
         result = await _people_service(db).create_or_link(
             by=await _caller(db, user_id), **kwargs
         )
-    except PeopleServiceUnavailableError:
-        return {"error": "Inviting people is not available on this platform yet"}
     except MembershipDenied:
         raise
     except Exception as exc:
@@ -245,6 +287,7 @@ async def _create_or_link(db: Any, user_id: str, **kwargs: Any) -> dict[str, Any
             "name": user.name,
             "status": people_status(user.status),
         },
+        "provider": provider_view(result.provider),
         "sign_in_email_sent": result.sign_in_email_sent,
         "warning": result.warning,
     }
@@ -457,6 +500,8 @@ def nexus_admin_tools() -> list[BaseTool]:
             return await _create_or_link(
                 db,
                 user_id,
+                limits_endpoint="/api/workspaces/members/invite",
+                workspace_id=workspace_id,
                 email=email,
                 name=display_name,
                 provider=None,
@@ -655,6 +700,8 @@ def nexus_admin_tools() -> list[BaseTool]:
             out = await _create_or_link(
                 db,
                 user_id,
+                limits_endpoint="/api/organizations/members/invite",
+                workspace_id=workspace_id or None,
                 email=email,
                 name=display_name,
                 provider=None,
