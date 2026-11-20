@@ -12,7 +12,7 @@ Settings › Users (web: `apps/web/src/app/settings/users/`, Nexus `AGENTS.md`, 
   account), whether they are a platform admin (IAM's `builtin.platform_admin`) and their organizations.
 - **Invite** through Nexus's invitations (`services/invites`), the one way someone is invited: an invitation to
   the platform alone (no organization, no role, no grant). The provider makes the person exist; their access is
-  attached once they have an account (Roles & permissions).
+  attached once they have an account (their page under Users, a policy's page in Access).
 - **Rename** (Nexus's row and the provider's account ABI made: a sign-in refreshes the name from the provider), and
   **superadmin** on or off.
 - **Deactivate / reactivate**: IAM suspends the user (no sign-in through `identity.authenticate`, no API call: a
@@ -26,7 +26,7 @@ Settings › Users (web: `apps/web/src/app/settings/users/`, Nexus `AGENTS.md`, 
   `deleted_at` set, its email released (`<id>@deleted.internal`, never matched by a lookup, an invitation or a
   sign-in), and every read of `services/auth` and of the sign-in skips it.
 
-Access is not shown or changed here: a row opens the person's page in Roles & permissions.
+Access is not shown or changed in the list: a row opens the person's page under Users (`/settings/users/<IAM id>`).
 
 ## Files
 
@@ -93,7 +93,7 @@ at the provider).
 - **Audited first, fail-closed.** Every change goes through `run_audited` into the IAM admin's log (`audit_logs`,
   `iam.<operation>`, service `iam`): `invite_user`, `rename_user`, `grant_platform_admin`, `revoke_platform_admin`,
   `suspend_user`, `resume_user`, `delete_user`, each `requested` then `succeeded` or `failed`, with the actor, the
-  account's id and its email. Roles & permissions › Audit shows them.
+  account's id and its email. Platform Settings › Access › Audit shows them.
 - **IAM first, then the provider.** Deactivating, reactivating and deleting an account change IAM first (its
   refusal stops everything); the provider follows, and what it could not do is the answer's `warning`, as is a
   lookup of the person's account at a provider that failed (it was not changed there). An invitee has no IAM
