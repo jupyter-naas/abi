@@ -216,8 +216,11 @@ attachments `att_`). Ids never change and are never reused.
   join, a leave, a marker set or cleared take effect at the next decision, and the change
   listeners (the NATS connection warden, ADR `20261119_kick_connections_on_iam_change`) end
   the module connections whose permissions moved. A member of a container belongs to its top
-  container (`_belongs_to`): it may join the other groups owned there. Deleting a container
-  clears the markers that name it.
+  container (`_belongs_to`): it may join the other groups owned there. **The first tie**: a
+  first-party account acting for no user (Nexus, after its route authorized the change) may
+  add a user who belongs to nothing yet to a membership group, and that membership ties them
+  to its top container; any other writer, and any other group, still takes only the users who
+  belong there (#1585). Deleting a container clears the markers that name it.
 - **Level groups.** A group marked `level_group` ("Members", "Viewers") holds the generic
   level policies at `${my workspaces}`. Who joins or leaves it is decided as for any group
   (`iam:AddGroupMember` / `iam:RemoveGroupMember` on it), **or** by whoever holds that action
@@ -389,7 +392,22 @@ platform companion included (`builtin.platform.member` while a member, admin or 
 reaches a container whose type brings it, `.viewer` for viewer roles alone; derived when
 the subject is computed, never stored). A Deny reached elsewhere (W's ceiling, attached to
 "<W> workspace") still wins. Its Denies apply at each container it reaches, and once as
-written when it reaches none. It is an attachment's scope only: an invitation
+written when it reaches none.
+
+**Bounds** (#1585, the intersection of ADR `20261120_access_levels_and_groups` item 4). What a
+membership group of C holds **at C itself** is C's **bound**, not a grant: "<W> workspace"
+holding "<W> access" at W. Its Allows grant nothing; its Denies (and its chain's) apply to its
+members as any Deny. When a customer policy attached at `${my workspaces}` is expanded at C,
+each of its Allows counts only where every bound of C allows it too, the bound's chain
+included (each bound is one more `Bound` of the statement, as a parent is: several bounds at
+C let an Allow through if any of them does). So a level policy ("Member access", generic,
+`${scope}/module:agent/*`) gives at W only what W offers. A **built-in role** expanded there
+is not bounded: generated from the catalogs, it holds no module scope and no policy-only type,
+which are what a bound offers. A container whose membership groups hold nothing at it is not
+narrowed. What the group holds elsewhere (unscoped, below C, at `${my workspaces}`) grants as
+usual. `explain` names the bound in `bounded_by`. No stored field: the rule reads the group's
+`membership_of` and the attachment's scope (`IAMService._is_bound`, `_membership_bounds`,
+`_bounded`). It is an attachment's scope only: an invitation
 (`create_pending_grant`) or an IdP binding at it is refused (`ValueError`), and no listing
 is at it. Attaching below a container grants at every container under it,
 so "Grant only what you hold" checks it there: an admin of an organisation's own level holds
@@ -649,6 +667,8 @@ decide(ctx, action, resource):
 principal_decision(X):
   S = statements of every policy attached to X and to each of X's effective groups,
       one at ${my workspaces} once per container X is a member of (its ${scope} that
+      container; a customer policy's Allows there bounded by the container's bounds),
+      but only the Denies of a bound (a membership group's attachment at its own
       container), and, for a sub-policy, the Deny statements of each policy of its chain
   if any Deny statement in S matches:   EXPLICIT_DENY
   if any Allow statement in S matches,
@@ -2791,6 +2811,17 @@ is allowed to the admins of any of the person's containers without the held chec
 policy at `${my workspaces}` is checked where it reaches when it is attached and when a
 membership is made; a check that cannot know the containers holds it below every one.
 A person whose only tie to an organisation is a membership group belongs to it.
+
+**Bounds and the first tie (#1585).**
+*Decision.* What a membership group holds at its own container is that container's bound:
+it grants nothing, and it bounds the customer policies its members reach there through
+`${my workspaces}` (built-in roles excepted), as a parent bounds a sub-policy. A first-party
+account acting for no user may add someone who belongs to nothing yet to a membership group.
+*Consequences.* "<W> workspace" holding "<W> access" is the intersection the ADR asked for:
+a Member uses at W only what W offers, a Viewer only what the Viewer level and W's offer both
+allow. No stored field, no new scope: the rule reads `membership_of` and the attachment's
+scope. A grant to all of W's people (a shared graph) is attached to "<W> workspace" elsewhere
+than at W (unscoped). Nexus makes a person's first membership itself, after authorizing it.
 
 ## Known limits and open questions
 
