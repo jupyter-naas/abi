@@ -5,7 +5,6 @@ on that name, and what it holds is ``<workspace>/nexus:...``. A role attached at
 one brings the platform companions (an organization's own level does not)."""
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import action, rtype
-from naas_abi_core.services.iam.catalog import PlatformAccess
 
 TYPES = (
     # A workspace sits in its organization, or at the platform in none.
@@ -44,5 +43,7 @@ ACTIONS = (
     action("UpdateResourceAccess", "admin", "resource_access"),
 )
 
-# Every user may create a personal workspace, at the platform (``builtin.self``).
-PLATFORM_ACCESS = (PlatformAccess(("workspace/*",), self_=("CreateWorkspace",)),)
+# A personal workspace (at the platform, in no organization) is no user's to create
+# by default (catalog 16): ``nexus_config.personal_workspaces`` gives every user
+# ``CreateWorkspace`` on ``abi:nexus:workspace/*`` as a self grant
+# (``bootstrap.self_grants``). In an organization, its admins create workspaces.

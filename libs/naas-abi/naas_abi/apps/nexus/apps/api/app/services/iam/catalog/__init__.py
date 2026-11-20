@@ -56,7 +56,10 @@ SERVICE = "nexus"
 #     ``ReadAnalyticsConversation`` on ``analytics_conversation``).
 # 15: the platform analytics app removed: ``ReadAnalytics``, ``WriteAnalytics`` (and
 #     the ``analytics`` singleton) deprecated, authorizing nothing.
-VERSION = 15
+# 16: ``builtin.self`` loses ``CreateOrganization`` and the personal ``CreateWorkspace``
+#     (no ``self_`` platform access row any more; ``nexus_config.personal_workspaces``
+#     gives the latter back as a self grant).
+VERSION = 16
 
 _MODULES = (
     organizations,

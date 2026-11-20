@@ -90,6 +90,8 @@ CHANGED = {
     ),
 }
 
+SELF_CREATES = ("nexus:CreateOrganization", "nexus:CreateWorkspace")
+
 
 def _org(org: str) -> str:
     return container_name("nexus", "organization", org)
@@ -177,7 +179,15 @@ def test_nobody_gains_or_loses_access(tmp_path, fixture):
     assert report.counts["containers"] == 6
     after = _decisions(iam, fixture)
     changed = {k for k in before if before[k] != after[k]}
-    assert changed == CHANGED, sorted(changed - CHANGED)
+    # Catalog 16: creating an organization or a personal workspace is no user's own
+    # (``builtin.self``) any more; only lost, never gained.
+    no_longer_self = {
+        k
+        for k in changed
+        if k[1] in SELF_CREATES and k[2].startswith("abi:-:-:") and before[k] and not after[k]
+    }
+    assert no_longer_self
+    assert changed - no_longer_self == CHANGED, sorted(changed - no_longer_self - CHANGED)
     assert sum(before.values()) > 300
 
 

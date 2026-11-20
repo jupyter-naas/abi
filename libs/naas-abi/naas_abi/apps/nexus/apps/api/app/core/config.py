@@ -5,6 +5,7 @@ Application configuration using pydantic-settings.
 from functools import lru_cache
 from typing import Any, Literal
 
+from naas_abi.apps.nexus.access_config import NexusModelsConfig
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
 from naas_abi.apps.nexus.user_seed_config import UserSeedConfig
@@ -416,6 +417,9 @@ class WorkspaceSeedConfig(BaseModel):
     default_agent: str | None = None
     agents: list[str] | None = None
     apps: list[str] | None = None
+    # Shared modules offered whole (every agent, app, workflow and pipeline of
+    # each, by module id), listed in "<W> access" beside the agents and apps.
+    modules: list[str] | None = None
     # Initial assignments only; saved workspace resource policies take precedence.
     # Ontology catalog ids (``module:filename.ttl``). Exclusive when a list
     # is set: listed on, others off. Missing, null and empty lists show none.
@@ -502,6 +506,13 @@ class Settings(BaseSettings):
 
     # Organization seed configs (upserted by slug on startup)
     organizations: list[OrganizationSeedConfig] = Field(default_factory=list)
+
+    # Every user may create a personal workspace (in no organization) only when
+    # on; organizations are the platform admins' to create either way.
+    personal_workspaces: bool = False
+    # The levels' model sets: ``models.member_set`` is the Member default set
+    # (canonical model ids; empty by default, a deployment names its own).
+    models: NexusModelsConfig = Field(default_factory=NexusModelsConfig)
 
     # App
     app_name: str = "NEXUS API"

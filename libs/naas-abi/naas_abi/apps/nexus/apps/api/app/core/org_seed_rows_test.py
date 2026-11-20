@@ -86,6 +86,8 @@ def people(nexus_db, nexus_iam: NexusIam, monkeypatch: pytest.MonkeyPatch):
 
     for uid in ("pat", "ops"):
         nexus_iam.user(uid)
+    # Creating an organization is no user's by default (catalog 16): Pat is given it.
+    nexus_iam.may_create_organizations("pat")
     monkeypatch.setattr(nexus_config.settings, "organizations", [])
     # The seeds read where IAM's names are from this database: it has no
     # ``iam_migrations`` table, so nothing is to move (container paths).

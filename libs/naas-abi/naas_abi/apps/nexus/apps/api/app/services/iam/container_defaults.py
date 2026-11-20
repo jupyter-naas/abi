@@ -46,6 +46,14 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     org_of,
     workspace_container,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
+    Offer,
+    in_offer_form,
+    instances_only,
+    offer_document,
+    offer_of,
+    with_offer,
+)
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMPorts import (
@@ -173,6 +181,11 @@ class DefaultsStore(Protocol):
         """The organization's name, to label defaults made for it late."""
         ...
 
+    async def workspace_seed(self, workspace_id: str) -> tuple[str | None, Any] | None:
+        """The workspace's slug and stored ``catalog_seed``, what its offer is made
+        from (``workspace_offer.seeded_offer``); None when it has no row."""
+        ...
+
 
 class SqlDefaultsStore:
     """``container_defaults`` through the session of the request or the start-up
@@ -229,6 +242,17 @@ class SqlDefaultsStore:
         ).first()
         return str(row[0]) if row and row[0] else None
 
+    async def workspace_seed(self, workspace_id: str) -> tuple[str | None, Any] | None:
+        row = (
+            await self.db.execute(
+                text("SELECT slug, catalog_seed FROM workspaces WHERE id = :w"),
+                {"w": workspace_id},
+            )
+        ).first()
+        if row is None:
+            return None
+        return (str(row[0]) if row[0] else None), _parsed_seed(row[1])
+
     async def delete_within(self, container: str) -> None:
         # A prefix compared as text, never a LIKE pattern: ids may hold ``_`` or ``%``.
         prefix = container + "/"
@@ -240,6 +264,71 @@ class SqlDefaultsStore:
             {"c": container, "n": len(prefix), "prefix": prefix},
         )
         await self.db.flush()
+
+
+def _parsed_seed(raw: Any) -> dict[str, Any] | None:
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import parse_catalog_seed
+
+    if raw is None or isinstance(raw, dict):
+        return raw
+    return parse_catalog_seed(str(raw))
+
+
+def enabled_features() -> list[str]:
+    """The deployment's enabled features: what a new workspace offers until its
+    Features setting turns one off."""
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import enabled_feature_catalog
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+
+    try:
+        return list(enabled_feature_catalog(live_settings().feature_flags))
+    except Exception:  # noqa: BLE001 - no settings: no feature offered
+        logger.exception("The enabled features could not be read: a new workspace offers none")
+        return []
+
+
+def new_workspace_offer(slug: str | None, catalog_seed: dict[str, Any] | None) -> Offer:
+    """What a new workspace offers: its seed's agents, apps and shared modules
+    (``workspace_offer.seeded_offer``), and every enabled feature. The unresolved
+    seed refs are logged."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import seeded_offer
+
+    features = enabled_features()
+    seeded = seeded_offer(slug, catalog_seed, features=features)
+    if seeded is None:
+        return Offer(features=frozenset(features))
+    offer, unresolved = seeded
+    if unresolved:
+        logger.warning(
+            f"Workspace {slug}: not offered, its module is not loaded: {', '.join(unresolved)}"
+        )
+    return offer
+
+
+def widen_offer(iam: Any, policy_id: str | None, offer: Offer) -> bool:
+    """Add ``offer`` to the allow-list ``policy_id`` (an "<O> access" or a
+    "<W> access" in offer form): never removes. A ceiling of an older version
+    (not in offer form) is left to the access migration. As ``api``; whether it
+    changed."""
+    if not policy_id or offer.is_empty():
+        return False
+    try:
+        policy = iam.get_policy(policy_id)
+    except (IAMNotFoundError, ResourceNotFoundError):
+        return False
+    if not in_offer_form(policy.document):
+        logger.info(f"{policy_id} ({policy.name}) is no allow-list yet: the access migration's")
+        return False
+    held = offer_of(policy.document)
+    wanted = held.merged(offer)
+    if wanted == held:
+        return False
+    iam.update_policy(
+        policy.id,
+        expected_revision=policy.revision,
+        document=with_offer(policy.document, wanted),
+    )
+    return True
 
 
 def defaults_store_of(adapter: Any) -> DefaultsStore | None:
@@ -414,13 +503,17 @@ def make_workspace(
     parent: str | None,
     adopt: str | None = None,
     made_before: MadeBefore | None = None,
+    offer: Offer | None = None,
 ) -> DefaultsRecord:
-    """ "<W> access" (the workspace's, allowing nothing, a sub-policy of ``parent``:
-    the organization's access) attached to "<W> admins" at the workspace, and the two
-    groups; with ``adopt``, that policy instead, attached to nothing. Idempotent, and a
-    failure leaves nothing. As ``api``."""
+    """ "<W> access" (the workspace's, a sub-policy of ``parent``: the
+    organization's access) attached to "<W> admins" at the workspace, and the two
+    groups; with ``adopt``, that policy instead, attached to nothing. The access
+    policy is the allow-list of ``offer`` (``workspace_offer``): what the workspace
+    offers, by name; nothing without one. Idempotent, and a failure leaves nothing.
+    As ``api``."""
     container = workspace_container(org_id, workspace_id)
     name, description = access_name(label), access_description(container, label)
+    document = offer_document(offer) if offer is not None else nothing_document()
     return _ensure(
         iam,
         container=container,
@@ -428,7 +521,7 @@ def make_workspace(
         access=adopt,
         make_access=lambda: str(
             iam.create_policy(
-                name, nothing_document(), description=description, scope=container, parent=parent
+                name, document, description=description, scope=container, parent=parent
             ).id
         ),
         find_access=lambda: _access_made_before(
@@ -652,6 +745,7 @@ class ContainerDefaults:
         if store is None or moves_pending():
             return None
         parent = None
+        org_record = None
         if org_id:
             org_record = await store.get(org_container(org_id))
             if org_record is None:
@@ -660,8 +754,20 @@ class ContainerDefaults:
                     store, lambda iam: make_org_late(iam, org_id, org_label)
                 )
             parent = org_record.access_policy_id
+        # A workspace in an organization offers its seed and the enabled features,
+        # bounded by the organization's offer (its parent): the creator's picks never
+        # reach beyond it. One in none has no parent to bound it: it offers nothing
+        # until the platform administrators widen it, as before.
+        offer = None
+        if org_id:
+            seed_of = getattr(store, "workspace_seed", None)
+            seed = await seed_of(workspace_id) if callable(seed_of) else None
+            offer = new_workspace_offer(*(seed or (None, None)))
         return await self._record(
-            store, lambda iam: make_workspace(iam, org_id, workspace_id, label, parent=parent)
+            store,
+            lambda iam: make_workspace(
+                iam, org_id, workspace_id, label, parent=parent, offer=offer
+            ),
         )
 
     async def dropped(self, store: DefaultsStore | None, container: str) -> None:
@@ -764,6 +870,9 @@ class Report:
     notes: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
     reparented: list[str] = field(default_factory=list)
+    # Access policies a configured workspace's seed added to (its own and its
+    # organization's allow-lists).
+    offered: list[str] = field(default_factory=list)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), sort_keys=True)
@@ -857,16 +966,60 @@ def adopt_workspace_access(iam: Any, policy: Policy, container: str, report: Rep
     return str(policy.id)
 
 
+def apply_seeded_offers(
+    iam: Any,
+    workspaces: Mapping[str, tuple[str | None, str]],
+    records: Mapping[str, DefaultsRecord],
+    offers: Mapping[str, Offer],
+    report: Report,
+) -> None:
+    """A configured workspace's seed (``offers``: ``{workspace id: Offer}``, the
+    configuration's own entries) is in its allow-list and its organization's:
+    what it names is added, never removed (as the seeds' app rows: what a person
+    turned off is offered again at the next start while the configuration names
+    it). The features are added to the organization's only: the workspace's are
+    its Features setting's (its own were set when it was made). A ceiling of an
+    older version is left to the access migration. As ``api``."""
+    by_org: dict[str, Offer] = {}
+    for workspace_id, offer in sorted(offers.items()):
+        if workspace_id not in workspaces:
+            continue
+        org_id = workspaces[workspace_id][0]
+        record = records.get(workspace_container(org_id, workspace_id))
+        try:
+            if record is not None and widen_offer(
+                iam, record.access_policy_id, instances_only(offer)
+            ):
+                report.offered.append(record.container)
+        except Exception as exc:  # noqa: BLE001 - the others go on; this one at the next start
+            logger.exception(f"The seed of {workspace_id} is not in its access policy")
+            report.failed.append(f"{workspace_id}: {exc}")
+        if org_id:
+            by_org[org_id] = by_org.get(org_id, Offer()).merged(offer)
+    for org_id, offer in sorted(by_org.items()):
+        record = records.get(org_container(org_id))
+        try:
+            if record is not None and widen_offer(iam, record.access_policy_id, offer):
+                report.offered.append(record.container)
+        except Exception as exc:  # noqa: BLE001 - the others go on; this one at the next start
+            logger.exception(f"The seeds of {org_id}'s workspaces are not in its access policy")
+            report.failed.append(f"{org_id}: {exc}")
+
+
 def plan_and_apply(
     iam: Any,
     orgs: Mapping[str, str],
     workspaces: Mapping[str, tuple[str | None, str]],
     known: Mapping[str, DefaultsRecord],
+    offers: Mapping[str, Offer] | None = None,
 ) -> tuple[list[DefaultsRecord], Report]:
     """For each organization (``{id: name}``) and workspace (``{id: (org, name)}``)
     with no record yet, adopt what the sets' move made or make new defaults (what an
     earlier attempt made and did not record is found again, never made twice), then
-    put the groups in step with the roles. As ``api``; pure of the database."""
+    put the groups in step with the roles. A configured workspace (``offers``) is
+    made with its seed's allow-list, and its seed added to its organization's and
+    its own (``apply_seeded_offers``). As ``api``; pure of the database."""
+    offers = offers or {}
     report = Report(notes=list(NOTES))
     missing_orgs = [o for o in sorted(orgs) if org_container(o) not in known]
     missing_workspaces = [
@@ -874,6 +1027,7 @@ def plan_and_apply(
     ]
     if not missing_orgs and not missing_workspaces:
         reparent_workspace_access(iam, workspaces, known, report)
+        apply_seeded_offers(iam, workspaces, known, offers, report)
         return [], report
     # Every policy, listed once: what the move made, and what an attempt made before.
     policies = _pages(iam.list_policies)
@@ -918,6 +1072,7 @@ def plan_and_apply(
                     label,
                     parent=org_record.access_policy_id if org_record else None,
                     made_before=made_before,
+                    offer=offers.get(workspace_id),
                 )
                 report.made.append(container)
             records[container] = record
@@ -926,6 +1081,7 @@ def plan_and_apply(
             logger.exception(f"No access policy and groups for {container}")
             report.failed.append(f"{container}: {exc}")
     reparent_workspace_access(iam, workspaces, records, report)
+    apply_seeded_offers(iam, workspaces, records, offers, report)
     holders = holders_by_container(iam) if made else {}
     for record in made:
         try:
@@ -991,6 +1147,38 @@ async def read_nexus(
 MOVES = ("policy_tree_v1", "container_names_v1")
 
 
+async def configured_offers(db: AsyncSession) -> dict[str, Offer]:
+    """``{workspace id: Offer}`` of the workspaces the configuration seeds
+    (``nexus_config.organizations[].workspaces[]``, by slug): their agents, apps
+    and shared modules, and the enabled features. Only the configuration's own
+    entries: a ``catalog_seed`` a creator stored is not the platform's to widen
+    an organization with."""
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import _yaml_seed
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
+        engine_agent_resolver,
+        seeded_offer,
+    )
+
+    rows = (await db.execute(text("SELECT id, slug FROM workspaces"))).all()
+    configured = [(str(w), str(slug)) for w, slug in rows if slug and _yaml_seed(str(slug))]
+    if not configured:
+        return {}
+    features = enabled_features()
+    resolve = engine_agent_resolver()
+    offers: dict[str, Offer] = {}
+    for workspace_id, slug in configured:
+        seeded = seeded_offer(slug, None, features=features, resolve_agent=resolve)
+        if seeded is None:
+            continue
+        offer, unresolved = seeded
+        if unresolved:
+            logger.warning(
+                f"Workspace {slug}: not offered, its module is not loaded: {', '.join(unresolved)}"
+            )
+        offers[workspace_id] = offer
+    return offers
+
+
 async def migrate(db: AsyncSession, defaults: ContainerDefaults = CONTAINER_DEFAULTS) -> Report:
     """Give every organization and workspace with none its access policy and default
     groups (adopting what the sets' move made), then record ``container_defaults_v1``
@@ -1008,8 +1196,9 @@ async def migrate(db: AsyncSession, defaults: ContainerDefaults = CONTAINER_DEFA
             return report
     orgs, workspaces = await read_nexus(db)
     known = {record.container: record for record in await store.all()}
+    offers = await configured_offers(db)
     made, report = await run_in_threadpool(
-        lambda: _as_api(lambda iam: plan_and_apply(iam, orgs, workspaces, known))
+        lambda: _as_api(lambda iam: plan_and_apply(iam, orgs, workspaces, known, offers))
     )
     for record in made:
         await store.put(record)
@@ -1064,8 +1253,12 @@ __all__ = [
     "make_org",
     "make_workspace",
     "members_name",
+    "apply_seeded_offers",
+    "configured_offers",
     "migrate",
     "moves_pending",
+    "new_workspace_offer",
     "nothing_document",
     "sync",
+    "widen_offer",
 ]
