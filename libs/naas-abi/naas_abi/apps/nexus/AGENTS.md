@@ -553,7 +553,7 @@ src/app/workspace/[workspaceId]/files/
 
 | Component | Purpose | Used by |
 |---|---|---|
-| `FilesViewPicker` | Drive and View pickers, stacked (Drive above View): `OntologyMultiPicker` in its `single` mode | `files-section.tsx` |
+| `FilesViewPicker` | Drive and View pickers, stacked (Drive above View): `SearchPicker` in its `single` mode | `files-section.tsx` |
 | `FilesViewsRoot` | All Views: one folder per view the caller may open | `browse.tsx` |
 | `FilesMobileToolbar` | Add, refresh, view mode, search (mobile) | `browse.tsx` |
 | `FilesMobileRow` | OneDrive-style list row | `browse.tsx` |

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Box, ChevronRight, LayoutGrid, Search, X } from 'lucide-react';
-import { OntologyMultiPicker } from '@/components/shell/sidebar/ontology-multi-picker';
+import { SearchPicker } from '@/components/shell/sidebar/search-picker';
 import { OntologyTopicIcon } from '@/components/ontology/ontology-topic-icon';
 import { useOntologyIconsStore } from '@/stores/ontology-icons';
 import { useOntologyTreeKeyboard } from '@/hooks/use-ontology-tree-keyboard';
@@ -272,8 +272,8 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
     </button>
     <div className="graph-explorer-sidebar">
       <div className="graph-explorer-sidebar-tools">
-      <div className="ontology-sidebar-filters">
-        <OntologyMultiPicker
+      <div className="search-picker-stack">
+        <SearchPicker
           {...graphPickerProps}
           items={workspaceGraphs.map((g) => ({
             value: g.uri,
@@ -294,7 +294,7 @@ export function GraphExplorerSidebar({ workspaceId }: { workspaceId: string }) {
             }))
           }
         />
-        <OntologyMultiPicker
+        <SearchPicker
           {...classPickerProps}
           items={classes
             .filter((c) => c.count > 0)

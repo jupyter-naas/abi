@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from '@/components/shell/sidebar/collapsible-section';
-import { OntologyMultiPicker } from '@/components/shell/sidebar/ontology-multi-picker';
+import { SearchPicker } from '@/components/shell/sidebar/search-picker';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { MapsLayerBrandIcon } from './maps-layer-brand-icon';
 import { mapsIconMap } from '../lib/maps-icons';
@@ -187,8 +187,8 @@ export function MapsDatasetGroups({
         </span>
       </Link>
 
-      <div className="ontology-sidebar-filters shell-sidebar-home-gutter mb-2">
-        <OntologyMultiPicker
+      <div className="search-picker-stack shell-sidebar-home-gutter mb-2">
+        <SearchPicker
           key={`groups:${workspaceId}`}
           items={groupOptions}
           value={groups}
@@ -200,7 +200,7 @@ export function MapsDatasetGroups({
           noun="groups"
           allLabel="All groups"
         />
-        <OntologyMultiPicker
+        <SearchPicker
           key={`feeds:${workspaceId}`}
           items={feedOptions}
           value={feeds}

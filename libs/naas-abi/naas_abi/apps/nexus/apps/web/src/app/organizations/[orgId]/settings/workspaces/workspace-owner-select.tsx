@@ -14,7 +14,7 @@ import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { viewFlagActive } from '@/lib/view-flag';
 import { authFetch } from '@/stores/auth';
-import '@/components/shell/sidebar/ontology-picker.css';
+import '@/components/shell/sidebar/search-picker.css';
 
 export type OrgMemberOption = {
   userId: string;
@@ -196,7 +196,7 @@ export function WorkspaceOwnerSelect({
   const triggerDisabled = disabled || loading;
 
   return (
-    <div ref={wrapRef} className="ontology-picker">
+    <div ref={wrapRef} className="search-picker">
       <button
         ref={triggerRef}
         type="button"
@@ -211,7 +211,7 @@ export function WorkspaceOwnerSelect({
           }
         }}
         className={cn(
-          'ontology-picker-trigger account-profile-field-input min-h-9 justify-between text-sm text-foreground',
+          'search-picker-trigger account-profile-field-input min-h-9 justify-between text-sm text-foreground',
           value && 'is-filtered'
         )}
         aria-label={`Workspace owner: ${triggerLabel}`}
@@ -220,7 +220,7 @@ export function WorkspaceOwnerSelect({
         aria-controls={open ? listId : undefined}
         title={triggerLabel}
       >
-        <span className="ontology-picker-label">{triggerLabel}</span>
+        <span className="search-picker-label">{triggerLabel}</span>
         <ChevronDown size={14} className="shrink-0 opacity-70" />
       </button>
       {open &&

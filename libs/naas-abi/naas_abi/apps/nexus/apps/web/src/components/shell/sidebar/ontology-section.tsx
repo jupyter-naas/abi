@@ -15,7 +15,7 @@ import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { ontologyBrowser } from '@/lib/ontology-navigation';
 import { dashboardRoute } from '@/lib/ontology-dashboard';
-import './ontology-picker.css';
+import './search-picker.css';
 import { ontologyApiQuery } from '@/lib/ontology-query';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';

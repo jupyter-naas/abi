@@ -1,6 +1,6 @@
 'use client';
 
-import { OntologyMultiPicker } from '@/components/shell/sidebar/ontology-multi-picker';
+import { SearchPicker } from '@/components/shell/sidebar/search-picker';
 import type { FileView } from '@/lib/file-views';
 import {
   FILES_DRIVES,
@@ -35,8 +35,8 @@ export function FilesViewPicker({ views, drive, view, onDriveChange, onViewChang
   const chosenView = viewItems.find((choice) => choice.value === view);
   const chosenDrive = DRIVE_ITEMS.find((option) => option.value === drive);
   return (
-    <div className="ontology-sidebar-filters mb-1.5" data-testid="files-view-picker">
-      <OntologyMultiPicker
+    <div className="search-picker-stack mb-1.5" data-testid="files-view-picker">
+      <SearchPicker
         single
         ariaLabel="Choose drive"
         items={DRIVE_ITEMS}
@@ -49,7 +49,7 @@ export function FilesViewPicker({ views, drive, view, onDriveChange, onViewChang
         allLabel={ALL_DRIVES.label}
         noun="drives"
       />
-      <OntologyMultiPicker
+      <SearchPicker
         single
         ariaLabel="Choose view"
         items={viewItems.map((choice) => ({ value: choice.value, label: choice.label }))}
