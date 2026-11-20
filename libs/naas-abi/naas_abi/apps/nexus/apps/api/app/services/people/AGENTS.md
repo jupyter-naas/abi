@@ -12,7 +12,7 @@ interface the organization and workspace routes code against).
 | File | Role |
 |---|---|
 | `port.py` | The contract's records (`UserStatus`, `Grant`, `PlatformUser`, `CreateOrLinkResult`), its errors, and the ports: `PeopleStorePort` (rows), `IdentityGateway` (providers), `AccessGateway` (IAM), `PeopleMailer` |
-| `service.py` | `PeopleService`: `create_or_link`, `add_existing`, `get`, `by_email`, `search`, `resend`, `activate` |
+| `service.py` | `PeopleService`: `create_or_link`, `add_existing`, `get`, `by_email`, `search`, `resend`, `activate`, `provision` (the configuration's people) |
 | `runtime.py` | `RUNTIME`, `get_people_service` (the route dependency); tests `configure` another |
 | `adapters/secondary/postgres.py` | `users` (`migrations/0074_users_status.sql`: `status`, `activated_at`), the organization profile, `provisioned_identities` |
 | `adapters/secondary/engine.py` | The engine's identity (provisioning as `api`) and IAM (pending grants, roles and policies as `api` on behalf of the inviting person; principals and take-backs as `api`) |
@@ -46,6 +46,17 @@ interface the organization and workspace routes code against).
   IAM's user of that id (made on first sight, as for the old login's rows), so the person is listed as invited
   everywhere. Their first sign-in through that provider, email verified, binds the row (`iam.link_user`, which
   keeps the roles): the trust IAM's pending grants have. ADR: `docs/adr/20261119_people_rows_from_invitation.md`.
+- **The configuration's people** (`users:`, `core/org_seed.py`; `config.users.yaml`, `core/users_import.py`) are
+  rows of the same shape: `invited`, unbound, naming the provider they sign in through (`users[].provider`, else
+  the default, else the built-in one; none known: the old login's row, `active`, no provider). The seeds make the
+  rows themselves (in their transaction, with the profile and superadmin flag), then ask `provision(user_id)`
+  in the background: the account at the row's provider, as Nexus (the operator's configuration is the warrant,
+  as an authorized invitation is), recorded as ABI's when made; never a binding (their first verified sign-in
+  there binds the row) and never a mail. A configured row no provider signs in yet is given its provider.
+- **The pending invitations of before** became rows of the same shapes once (`services/invites/migration.py`):
+  bound when the built-in provider or Nexus made the account, else unbound naming the invitation's provider,
+  with the grants the invitation held attached as `api`. ADR: `docs/adr/20261119_platform_user_directory.md`
+  (one user database, the derived directory, no org role on workspace add, create-or-link and its privacy).
 - **Search** needs 2 characters, matches name or email (any case), stays among the ids the caller passes (the
   route's directory), and returns at most 20.
 

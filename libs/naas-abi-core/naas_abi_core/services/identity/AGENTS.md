@@ -285,7 +285,17 @@ does not hold). Organizations stay an ABI concept: a provider is not per organiz
 ## Invitations and provisioning
 
 An administrator invites someone who has no account yet (Nexus People, Invite, or `abi user invite`; the
-lower level `abi iam invite`). Three things happen:
+lower level `abi iam invite`).
+
+**In Nexus a person is a user from the moment they are invited** (`services/people` of the Nexus API, epic #1566):
+the invitation authorizes its roles as pending grants on the inviting person's behalf, makes the account at the
+provider (step 2 below), makes Nexus's `users` row (`invited`, its id the IAM user of the provider's identity) and
+attaches the roles to it directly, then withdraws the pending grants. A provider that makes no account
+(`provisioning: none`) leaves the row unbound, naming the provider: the first sign-in through it with the
+address verified binds it (`iam.link_user`), the trust a pending grant's claim has. The pending invitations of
+before were moved into such users once (`abi user migrate-invitations`;
+`docs/adr/20261119_platform_user_directory.md`). The lower level below (`abi iam invite`, pending grants claimed
+at sign-in) is unchanged:
 
 1. **IAM keeps the roles** as pending grants (`builtin.<role>` at the organization's or workspace's scope, for
    that email on that provider), claimed by whoever first signs in through that provider with the address verified.

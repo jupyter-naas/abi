@@ -2,6 +2,17 @@
 
 ## Purpose
 
+**Since the people directory (epic #1566), an invitation is a person.** The organization, workspace and
+platform invite routes, the agent tools and the CLI create or link a `users` row (`invited` until the first
+sign-in) through `services/people` (`PeopleService.create_or_link`), which attaches the roles directly: no
+`invitations` row is made any more. The upgrade moves every pending invitation into such a person once
+(`migration.py`, "Moving the pending invitations" below; ADR `docs/adr/20261119_platform_user_directory.md`).
+What stays here, for the transition and for what is not a person: the `invitations` table and its routes
+(list, resend, revoke what the move left pending), the sign-in claim (`runtime.claimer`) of those and of the
+pending grants `abi iam invite` makes, the provider list (`/api/invitations/providers`), the mail texts and the
+IdP group bindings.
+
+What follows is how an invitation worked before, which the pending ones still do until they are moved.
 Admins give access to people who do not exist yet. An invitation to an
 email, through one identity provider, does three things:
 
@@ -35,15 +46,19 @@ IdP group bindings are the same idea for a whole group of a provider: the member
 | `names.py` | Scopes of orgs and workspaces: their container names (`services/iam/names.py`; a workspace with no org at the platform, `abi:nexus:workspace/<ws>`) |
 | `invitation_email.py` | The invitation mail's text |
 | `views.py` | The answers of the routes (no service behind them, so the org and workspace routers can import them) |
-| `runtime.py` | `RUNTIME`: builds the service from the engine's, `claimer` (the sign-in hook), `get_invitation_service` (the route dependency); tests `configure` another |
+| `runtime.py` | `RUNTIME`: builds the service from the engine's, `claimer` (the sign-in hook), `get_invitation_service` (the route dependency); tests `configure` another. The move's runner: `migrate_pending_invitations` (lock, record), `migrate_when_ready` (the start's, retried while a provider does not answer), `migrate_from_cli` |
+| `migration.py` | `InvitationMigration`: each pending invitation becomes an invited person (`MigrationGateway`: the engine's identity and IAM as `api`; `MigrationReport`) |
 | `adapters/primary/invites__primary_adapter__FastAPI.py` | `/api/invitations/...` and `/api/idp-groups/...` |
 | `adapters/secondary/postgres.py` | The `invitations` table (`migrations/0060_add_invitations.sql`) |
-| `adapters/secondary/engine.py` | The engine's identity and IAM: grants and bindings as `api` on behalf of the inviting person, reads, withdrawals and an authorized invitation's provisioning as `api` for nobody |
+| `adapters/secondary/engine.py` | The engine's identity and IAM: grants and bindings as `api` on behalf of the inviting person, reads, withdrawals and an authorized invitation's provisioning as `api` for nobody; `EngineMigrationGateway` for the move |
 | `adapters/secondary/mailer.py` | The invitation mail through the engine's email service |
 | `mail.py` | The email service, the dev-frontend subject mark, and the notice mailed to someone who already had an account (`send_added_notice`) |
 
 ## Routes
 
+- The member invite routes below are `services/people`'s now (S2, `services/workspaces`, `services/organizations`):
+  they answer `{status: "added", user, member, ...}` the same way whether the person was created or linked. What
+  this bullet says of them is how they answered before.
 - `POST /api/organizations/{org}/members/invite` and
   `POST /api/workspaces/{ws}/members/invite` (optional `provider`, optional `policy_ids`: at most
   20 customer policies, attached at the invite's workspace, else the organization; a `builtin.*`
@@ -115,6 +130,32 @@ IdP group bindings are the same idea for a whole group of a provider: the member
   `migrations/0065_invitation_policies.sql`); the web's invite forms offer what the inviter may attach
   there (`attachable-policies`).
 
+## Moving the pending invitations
+
+`migration.py`, run once at start in the background (`main._migrate_pending_invitations`, after the moves of IAM's
+names: the grants are named in container paths), under an advisory lock (`MIGRATION_LOCK`, PostgreSQL), recorded
+in `iam_migrations` (`invitations_to_people_v1`) once a run left nothing to retry; `abi user migrate-invitations`
+(a dry run until `--apply`) runs it again whatever the record says. Every step is idempotent: a run that stopped
+half-way is finished by the next, a second run changes nothing. The invitations of one person at one provider move
+together (they share grants). For each:
+
+1. **The person.** A row that holds the email is linked (never a duplicate). Else `find_provisioned_user`: an
+   account the built-in provider proves at every sign-in, or one Nexus made (`provisioned_identities`), is bound
+   now (`iam.ensure_user`; the row's id is that principal); anything else (`provisioning: none`, a Zitadel or
+   Keycloak account someone else made, no account) is an unbound row (`user-<hex>`) naming the invitation's
+   provider, bound by the first sign-in through it with the email verified (`services/oidc` `_may_bind`): no more
+   trust than the pending grant had. The row is `invited`.
+2. **The access.** What the pending grants still hold is attached as `api` for no user (authorized when the
+   invitation was made): a role through `MEMBERSHIPS.grant`, never lowering one held at the scope (the org-wide
+   mirror and the default groups follow), a customer policy with `attach_policy`.
+3. **The rest.** The grants are revoked, the invitation's organization profile is written, the invitation is marked
+   `migrated` (`accepted_user_id` the row).
+
+A provider that does not answer keeps its invitations pending (they keep working: claimed at sign-in), retried
+every `MIGRATION_RETRY_SECONDS` during that start, then at the next. One whose provider is gone from the
+configuration, or whose account belongs to a deleted user, is reported and left (it would never move). Revoked and
+accepted invitations are left alone.
+
 ## Decisions
 
 - **An invitation is a pending grant, not an account.** A person is `(issuer, sub)` and their account exists at
@@ -166,7 +207,9 @@ IdP group bindings are the same idea for a whole group of a provider: the member
 uv run pytest libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/invites --import-mode=importlib --no-cov -q
 ```
 
-`invitation_demo_test.py` is the demo end to end (invite Bob, the IdP creates him, he signs in with a code, he is a member of the workspace): Nexus's migrations on SQLite, its
+`migration_test.py` drives the move with fakes (bound, unbound, linked, deferred, twice);
+`migration_engine_test.py` runs it on a real IAM and SQLite (roles held after it, grants gone, recorded, run again
+changes nothing). `invitation_demo_test.py` is the demo end to end (invite Bob, the IdP creates him, he signs in with a code, he is a member of the workspace): Nexus's migrations on SQLite, its
 middleware and routers, the engine's identity service and IAM, the built-in IdP over real HTTP
 and the filesystem email adapter. `service_test.py` drives the service with fakes.
 `adapters/secondary/engine_test.py` and `adapters/primary/invites__primary_adapter__FastAPI_test.py`

@@ -777,6 +777,99 @@ class TestSettingsOtherThanBuiltinNeverLink(NexusHarness):
         assert landed.headers["location"] == f"{WEB}/auth/login?sso_error=email_in_use"
 
 
+class TestConfiguredPeopleSignIn(NexusHarness):
+    """The configuration's people (``core/org_seed.py``, ``core/users_import.py``) and
+    the old login's rows the configuration names: a row that names its provider is
+    bound by a verified sign-in through that provider, Zitadel or Keycloak alike
+    (before, only the built-in provider bound a row, so these answered
+    ``email_in_use``)."""
+
+    @pytest.fixture(scope="class")
+    def harness(self):
+        with FakeIdP(redirect_uri=CALLBACK) as idp:
+            yield idp
+
+    @pytest.fixture(params=["zitadel", "keycloak"])
+    def provisioning(self, request, monkeypatch):
+        monkeypatch.setattr(self, "provisioning", request.param)
+        return request.param
+
+    async def _configured(self, sessions, iam, email, *, provider, status):
+        async with sessions() as db:
+            db.add(
+                UserModel(
+                    id="user-seed-1",
+                    email=email,
+                    name="Seeded",
+                    status=status,
+                    idp_provider=provider,
+                )
+            )
+            await db.commit()
+        with as_service_account("engine"):
+            principal = iam.ensure_user(LEGACY_ISSUER, "user-seed-1", provider="nexus")
+            iam.attach_policy("builtin.member", principal.id, TestInvitedPeopleSignIn.WS)
+        return principal
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", ["invited", "active"])
+    async def test_a_verified_sign_in_through_the_named_provider_binds_the_row(
+        self, provisioning, nexus, harness, status
+    ):
+        client, iam, sessions = nexus
+        identity = runtime.RUNTIME.identity._identity()
+        assert identity._providers[harness.provider_name].provisioning == provisioning
+        email = f"sam-{os.urandom(3).hex()}@example.com"
+        principal = await self._configured(
+            sessions, iam, email, provider=harness.provider_name, status=status
+        )
+        user = harness.create_user(email)
+
+        landed = await self._sign_in(client, harness, user)
+
+        assert landed.headers["location"].startswith(f"{WEB}/auth/callback"), landed.headers
+        assert (await client.get("/api/auth/me")).json()["id"] == "user-seed-1"
+        async with sessions() as db:
+            row = (
+                await db.execute(select(UserModel).where(UserModel.id == "user-seed-1"))
+            ).scalar_one()
+        assert (row.status, row.principal_id, row.idp_subject) == (
+            "active",
+            principal.id,
+            user.subject,
+        )
+        held = {
+            (a.policy_id, a.scope) for a in iam.store.list_attachments(principal_id=principal.id)
+        }
+        assert ("builtin.member", TestInvitedPeopleSignIn.WS) in held
+
+    @pytest.mark.asyncio
+    async def test_an_unverified_email_never_binds(self, provisioning, nexus, harness):
+        client, iam, sessions = nexus
+        email = f"tom-{os.urandom(3).hex()}@example.com"
+        await self._configured(
+            sessions, iam, email, provider=harness.provider_name, status="active"
+        )
+        user = harness.create_user(email)
+        harness._users[user.subject].email_verified = False
+
+        await self._sign_in(client, harness, user)
+
+        assert (await client.get("/api/auth/me")).json()["id"] != "user-seed-1"
+
+    @pytest.mark.asyncio
+    async def test_a_row_naming_another_provider_is_not_bound_here(
+        self, provisioning, nexus, harness
+    ):
+        client, iam, sessions = nexus
+        email = f"una-{os.urandom(3).hex()}@example.com"
+        await self._configured(sessions, iam, email, provider="elsewhere", status="active")
+
+        landed = await self._sign_in(client, harness, harness.create_user(email))
+
+        assert landed.headers["location"] == f"{WEB}/auth/login?sso_error=email_in_use"
+
+
 class TestInvitedPeopleSignIn(NexusHarness):
     """Someone invited is a row before they sign in (``services/people``): their first
     sign-in makes it active. One no provider made (``provisioning: none``, the

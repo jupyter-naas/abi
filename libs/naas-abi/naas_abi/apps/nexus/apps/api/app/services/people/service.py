@@ -502,6 +502,27 @@ class PeopleService:
             user, choice, by, placement, account_made=_has_account(user)
         )
 
+    async def provision(self, user_id: str) -> Provisioned | None:
+        """Make the person's account at the provider their row names, as Nexus: for
+        the people the platform's configuration names (``core/org_seed.py``,
+        ``core/users_import.py``), whom the operator's configuration warrants as an
+        authorized invitation does. Nothing else: a row no provider binds yet stays
+        unbound (the first sign-in through that provider, email verified, binds it:
+        ``services/oidc``), and nobody is mailed. An account made here is recorded
+        as ABI's. None when the provider makes no account (``provisioning: none``);
+        the provider's failures propagate (``ProvisioningFailedError``)."""
+        user = await self.store.get(user_id)
+        if user is None:
+            raise UnknownUserError(user_id)
+        choice = await self._provider_of(user)
+        provisioned = await self.identity.provision(choice, user.email, user.name)
+        if provisioned is not None and provisioned.created and provisioned.subject:
+            await self.store.record_provisioned(
+                choice.name, provisioned.subject, user.email, now=self._clock()
+            )
+            await self.store.commit()
+        return provisioned
+
     async def activate(self, user_id: str) -> None:
         """The person signed in for the first time: ``invited`` → ``active``."""
         if await self.store.activate(user_id, now=self._clock()):
