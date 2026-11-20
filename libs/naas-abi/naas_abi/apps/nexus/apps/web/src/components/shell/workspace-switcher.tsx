@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { dockShowsLabels } from '@/lib/shell-columns';
 import { WorkspaceMark, WorkspaceMarkFrame } from './workspace-mark';
+import { toggleWorkspacesPanel } from './toggle-workspaces-panel';
 
 /**
  * Workspace mark at the top of the dock. Clicking it opens the Workspaces
@@ -14,8 +15,6 @@ export function WorkspaceSwitcher() {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const dockWidth = useWorkspaceStore((s) => s.dockWidth);
   const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
-  const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
-  const closeWorkspacesPanel = useWorkspaceStore((s) => s.closeWorkspacesPanel);
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
   const labeled = dockShowsLabels(dockWidth);
   const open = activePanelSection === 'workspaces';
@@ -25,7 +24,7 @@ export function WorkspaceSwitcher() {
       <button
         type="button"
         // Closing puts back the column Workspaces covered (e.g. the Events feed).
-        onClick={() => (open ? closeWorkspacesPanel() : setActivePanelSection('workspaces'))}
+        onClick={toggleWorkspacesPanel}
         aria-label="Workspaces"
         aria-expanded={open}
         title="Workspaces"
