@@ -23,7 +23,6 @@ vi.mock('next/link', async () => {
 });
 vi.mock('@/hooks/use-is-mobile', () => ({ useIsMobile: () => false }));
 vi.mock('@/hooks/use-dev-route-warmup', () => ({ useDevRouteWarmup: () => undefined }));
-vi.mock('@/hooks/use-remember-settings-scope', () => ({ useRememberSettingsPath: () => undefined }));
 vi.mock('@/hooks/use-platform-settings-access', () => ({
   usePlatformSettingsAccess: () => ({ status: 'ready', actions: {}, retry: () => undefined }),
 }));
@@ -64,6 +63,7 @@ vi.mock('@/stores/auth', () => ({
 }));
 
 import { createElement } from 'react';
+import { settingsLevelReturnPath, settingsReturnPath } from '@/lib/settings-scope-path';
 import OrganizationSettingsLayout from './layout';
 
 let mounted: Mounted | null = null;
@@ -72,6 +72,7 @@ afterEach(async () => {
   mounted = null;
   state.replaced = [];
   state.readsAnalytics = false;
+  window.sessionStorage.clear();
 });
 
 async function render(): Promise<string> {
@@ -112,5 +113,24 @@ describe('organization settings by URL (UJ-O1)', () => {
     await mounted?.unmount();
     state.readsAnalytics = true;
     expect(await render()).toContain('Analytics');
+  });
+
+  it('remember a section once it opens, never a refused one or one that sends the caller elsewhere', async () => {
+    state.role = 'member';
+    state.access = { actions: { 'iam:ListPolicies': false } };
+    expect(await render()).toContain('You have no access to these settings');
+    expect(settingsReturnPath('nothing')).toBe('nothing');
+
+    await mounted?.unmount();
+    state.access = { actions: { 'iam:ListPolicies': true } };
+    await render();
+    expect(state.replaced).toEqual(['/organizations/acme/settings/roles']);
+    expect(settingsReturnPath('nothing')).toBe('nothing');
+
+    await mounted?.unmount();
+    state.role = 'admin';
+    expect(await render()).toContain('GENERAL PAGE');
+    expect(settingsReturnPath('nothing')).toBe('/organizations/acme/settings/general');
+    expect(settingsLevelReturnPath('organization')).toBe('/organizations/acme/settings/general');
   });
 });

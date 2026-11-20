@@ -24,7 +24,7 @@ vi.mock('@/hooks/use-settings-levels', () => ({ useSettingsTabs: () => ({ tabs: 
 vi.mock('@/hooks/use-is-mobile', () => ({ useIsMobile: () => state.mobile }));
 vi.mock('@/hooks/use-dev-route-warmup', () => ({ useDevRouteWarmup: () => undefined }));
 vi.mock('@/hooks/use-workspace-resources', () => ({
-  useWorkspaceResources: () => ({ resources: null }),
+  useWorkspaceResources: () => ({ status: 'ready', resources: null }),
   reloadWorkspaceResources: async () => undefined,
 }));
 vi.mock('@/hooks/use-feature', () => ({ useFeature: () => state.settingsByRole }));
@@ -41,6 +41,7 @@ vi.mock('@/stores/workspace', () => {
 });
 
 import { createElement } from 'react';
+import { settingsLevelReturnPath, settingsReturnPath } from '@/lib/settings-scope-path';
 import SettingsLayout from './layout';
 
 let mounted: Mounted | null = null;
@@ -50,6 +51,7 @@ afterEach(async () => {
   state.replaced = [];
   state.mobile = false;
   state.path = '/workspace/ws-1/settings/general';
+  window.sessionStorage.clear();
 });
 
 async function render(): Promise<string> {
@@ -103,5 +105,33 @@ describe('workspace settings by URL (UJ-W1)', () => {
     mounted = null;
     expect(await render()).toContain('GENERAL PAGE');
     state.path = '/workspace/ws-1/settings/general';
+  });
+});
+
+describe('the workspace settings page Settings reopens', () => {
+  it('is remembered once the page opens, never when it is refused or sends the caller elsewhere', async () => {
+    state.settingsByRole = false;
+    state.access = { actions: { 'iam:ListPolicies': false } };
+    expect(await render()).toContain('You have no access to these settings');
+    expect(settingsReturnPath('nothing')).toBe('nothing');
+
+    await mounted?.unmount();
+    state.access = { actions: { 'iam:ListPolicies': true } };
+    await render();
+    expect(state.replaced).toEqual(['/workspace/ws-1/settings/permissions']);
+    expect(settingsReturnPath('nothing')).toBe('nothing');
+
+    await mounted?.unmount();
+    state.settingsByRole = true;
+    expect(await render()).toContain('GENERAL PAGE');
+    expect(settingsReturnPath('nothing')).toBe('/workspace/ws-1/settings/general');
+    expect(settingsLevelReturnPath('workspace')).toBe('/workspace/ws-1/settings/general');
+  });
+
+  it('is not the index', async () => {
+    state.settingsByRole = true;
+    state.path = '/workspace/ws-1/settings';
+    await render();
+    expect(settingsReturnPath('nothing')).toBe('nothing');
   });
 });

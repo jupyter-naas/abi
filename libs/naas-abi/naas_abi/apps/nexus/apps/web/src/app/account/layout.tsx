@@ -31,7 +31,8 @@ export default function AccountLayout({
   const [borderRadius, setBorderRadius] = useState('0');
   const { tabs, level } = useSettingsTabs({ mobile: isMobile });
 
-  useRememberSettingsPath(pathname);
+  // Every account page opens; the index is the phone's list, never reopened.
+  useRememberSettingsPath(sectionLabel ? pathname : null);
 
   useEffect(() => {
     let cancelled = false;

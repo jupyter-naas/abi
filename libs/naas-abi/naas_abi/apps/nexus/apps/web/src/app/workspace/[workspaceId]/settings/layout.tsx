@@ -52,10 +52,8 @@ export default function SettingsLayout({
   );
   // A page of something the caller may not use here has nothing to manage.
   // Read again each time the settings open: a module or a policy changed since shows.
-  const { resources } = useWorkspaceResources(workspaceId, { refresh: true });
+  const { status: resourcesStatus, resources } = useWorkspaceResources(workspaceId, { refresh: true });
   const item = settingsItemFor(pathname);
-  // Only a page of the column is reopened: not the index, nor a former URL that redirects.
-  useRememberSettingsPath(item ? pathname : null);
   const outsideSet = Boolean(item && resources && !settingsItemShown(item, resources));
   // Who may open these pages at all: the dock's rule (useWorkspaceSettingsAccess). Someone
   // who holds only `iam:` rights here goes to Roles & permissions; anyone else is told no.
@@ -66,6 +64,11 @@ export default function SettingsLayout({
       router.replace(`/workspace/${workspaceId}${settingsLandingPath(access)}`);
     }
   }, [access, opens, workspaceId, router]);
+  // Only a page of the column that opens is reopened: not the index, a former URL that
+  // redirects, nor a page refused, outside the set, or not decided yet.
+  useRememberSettingsPath(
+    item && opens === true && resourcesStatus === 'ready' && !outsideSet ? pathname : null
+  );
   const page =
     opens === null || (access === 'iam' && opens === false) ? null : opens === false ? (
       <SettingsNoAccess of="workspace" />

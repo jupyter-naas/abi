@@ -5,7 +5,7 @@ import { usePathname, useParams, useRouter } from 'next/navigation';
 import { Building2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
-import { useRememberSettingsScope } from '@/hooks/use-remember-settings-scope';
+import { useRememberSettingsPath } from '@/hooks/use-remember-settings-scope';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { opensRolesAndPermissions } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
@@ -107,7 +107,13 @@ export default function OrganizationSettingsLayout({
   });
   const [layoutKey, setLayoutKey] = useState(0);
 
-  useRememberSettingsScope(pathname);
+  // Reopened only once its section opens: not while the role or the access is read, not
+  // refused, not the index, nor a section that sends the caller to Roles & permissions.
+  const sectionOpens =
+    !!sectionLabel &&
+    (settingsAccess === 'admin' || settingsAccess === 'iam') &&
+    !orgSectionRedirect({ section, role: viewerRole, roleKnown, holdsIam, accessSettled: !accessLoading });
+  useRememberSettingsPath(sectionOpens ? pathname : null);
 
   useEffect(() => {
     const fetchOrg = async () => {
