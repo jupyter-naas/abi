@@ -29,7 +29,19 @@ def _default() -> IamAdminService:
         EngineIamGateway(),
         SqlAdminAuditLog(lambda: database.async_engine, prefix=AUDIT_PREFIX),
         managed_from=SqlFeaturePolicyStore(lambda: database.AsyncSessionLocal()).managed_among,
+        org_access_of=_org_access_of,
     )
+
+
+async def _org_access_of(org_id: str) -> str | None:
+    """ "<O> access", as ``container_defaults`` recorded it for the organization."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+        CONTAINER_DEFAULTS,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
+
+    record = await CONTAINER_DEFAULTS.record_of(org_container(org_id))
+    return record.access_policy_id if record is not None else None
 
 
 _provider: Provider = _default

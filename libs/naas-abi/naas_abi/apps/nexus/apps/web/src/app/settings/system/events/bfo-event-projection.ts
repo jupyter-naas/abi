@@ -534,7 +534,7 @@ export function buildEventGraphPayload(event: PlatformEvent): EventGraphPayload 
     realizables.push(make('Realizable', `Workspace ${actorRole}`, field('workspace_role', actorRole), true, true));
   }
   if (identity?.actor?.is_superadmin) {
-    realizables.push(make('Realizable', 'Platform superadmin', field('is_superadmin', 'true'), true, true));
+    realizables.push(make('Realizable', 'Platform admin', field('is_superadmin', 'true'), true, true));
   }
   const tool = firstField(event, ['tool_name', 'toolName']);
   if (tool) realizables.push(make('Realizable', tool, field('tool_name', tool), true, true));

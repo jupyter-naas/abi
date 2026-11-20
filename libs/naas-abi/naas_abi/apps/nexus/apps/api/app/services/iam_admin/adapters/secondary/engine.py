@@ -17,6 +17,11 @@ from typing import Any, cast
 
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+from naas_abi.apps.nexus.apps.api.app.services.iam.capabilities import (
+    CapabilityGroup,
+    ensure_capability,
+    find_capability,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.port import (
     IamGateway,
     IamUnavailableError,
@@ -113,4 +118,29 @@ class EngineIamGateway(IamGateway):
         return any(
             a.scope is not None and within(as_container(container_of_scope(a.scope)), top)
             for a in attachments
+        )
+
+    def capability(
+        self,
+        org_id: str | None,
+        capability: str,
+        *,
+        org_access: str | None = None,
+        create: bool = False,
+    ) -> CapabilityGroup | None:
+        iam = self._iam()
+        kind = cast(Any, capability)
+        with as_service_account("api"):
+            if create:
+                return ensure_capability(iam, org_id or "", kind, org_access=org_access)
+            group_id = find_capability(iam, org_id or "", kind)
+            if group_id is None:
+                return None
+            held = list(iam.list_attachments(principal_id=group_id))
+        first = held[0] if held else None
+        return CapabilityGroup(
+            capability,
+            group_id,
+            str(first.policy_id) if first is not None else "",
+            first.scope if first is not None else None,
         )

@@ -1,0 +1,40 @@
+/* Platform settings › Models › Sets */
+
+.model-sets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.model-sets-title {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground-hex);
+}
+
+.model-sets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-4);
+}
+
+.model-sets-models {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-sm);
+}
+
+.model-sets-all {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+}
+
+.model-sets-group {
+  margin-top: var(--space-1);
+}
