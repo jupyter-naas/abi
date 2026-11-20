@@ -438,6 +438,20 @@ def test_a_configured_row_no_provider_signs_in_yet_is_given_its_provider(
     assert bound.idp_provider == "builtin"
 
 
+def test_only_the_configured_people_no_provider_signs_in_yet_are_made_at_it() -> None:
+    """Someone who signed in has their account: an account their provider's admins
+    removed (offboarding at a shared realm) is never made again at each start."""
+    rows = {
+        "new@example.com": SimpleNamespace(principal_id=None, idp_issuer=None),
+        "old@example.com": SimpleNamespace(principal_id=None, idp_issuer=None),
+        "eve@corp.test": SimpleNamespace(principal_id="usr_eve", idp_issuer="https://corp.test"),
+    }
+
+    assert org_seed.not_signed_in_yet(
+        rows, ["new@example.com", "eve@corp.test", "old@example.com", "gone@example.com"]
+    ) == ["new@example.com", "old@example.com"]
+
+
 @pytest.fixture
 def seed_users(monkeypatch: pytest.MonkeyPatch):
     def run(existing_user, users: list[UserSeedConfig]):

@@ -22,9 +22,10 @@ Nexus has no login of its own: a configured user is a person of the people
 directory (``services/people``) who signs in at an identity provider: the one
 ``users[].provider`` names, else the default one, else the built-in one, else the
 only one. Their row is made here ``invited``, with no password and no identity
-yet, naming that provider; they are made to exist there in the background, as the
-people service makes an invited person (``provision_configured_users``), when it
-can (``builtin``, ``zitadel``, ``keycloak``; ``none`` makes nobody). Their first
+yet, naming that provider; until they sign in, they are made to exist there in the
+background, as the people service makes an invited person
+(``provision_configured_users``), when it can (``builtin``, ``zitadel``,
+``keycloak``; ``none`` makes nobody). Their first
 sign-in through that provider, with the address verified there, binds the row
 (``services/oidc``), which keeps the roles configured here and makes it
 ``active``. A row the configuration names that no provider signs in yet (made
@@ -784,7 +785,11 @@ async def _apply_configuration_seeds() -> None:
             logger.exception("Failed to apply the configured memberships to IAM")
 
     if settings.users:
-        _provision_in_background([_normalize_email(str(u.email)) for u in settings.users])
+        _provision_in_background(
+            not_signed_in_yet(
+                users_by_email, [_normalize_email(str(u.email)) for u in settings.users]
+            )
+        )
 
     logger.info(
         "Configuration seeds applied (users=%d, organizations=%d)",
@@ -803,6 +808,20 @@ _provisioning_tasks: set[asyncio.Task[None]] = set()
 
 class _NotYet(Exception):  # noqa: N818 - a signal: the provider does not answer yet
     pass
+
+
+def not_signed_in_yet(users_by_email: dict[str, Any], emails: list[str]) -> list[str]:
+    """The configured people no provider signs in yet (their row holds no identity),
+    those the seeds make at their provider. Someone who signed in has an account
+    there: one their provider's admins removed since is never made again here."""
+    done: list[str] = []
+    for email in emails:
+        row = users_by_email.get(email)
+        if row is None or getattr(row, "principal_id", None) or getattr(row, "idp_issuer", None):
+            continue
+        if email not in done:
+            done.append(email)
+    return done
 
 
 async def provision_configured_users(people: Any, emails: list[str]) -> list[str]:
