@@ -28,14 +28,13 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     UserModel,
     WorkspaceModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.analytics.adapters.primary.analytics__primary_adapter__scoped import (  # noqa: E501
+    scoped_analytics_over,
+)
 from naas_abi.apps.nexus.apps.api.app.services.analytics.adapters.secondary.analytics__secondary_adapter__postgres import (  # noqa: E501
     AnalyticsSecondaryAdapterPostgresEvents,
-    AnalyticsSecondaryAdapterPostgresQueries,
 )
 from naas_abi.apps.nexus.apps.api.app.services.analytics.port import AnalyticsScope, RecordedEvent
-from naas_abi.apps.nexus.apps.api.app.services.analytics.scoped_service import (
-    ScopedAnalyticsService,
-)
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -157,9 +156,8 @@ async def measure(engine, runs: int, now: datetime) -> None:
             for run in range(runs):
                 scope = _scope(kind, run % ORGS)
                 async with AsyncSession(engine) as db:
-                    service = ScopedAnalyticsService(
-                        AnalyticsSecondaryAdapterPostgresQueries(db), now=lambda: now
-                    )
+                    # As the API builds it: the overview's reads run at the same time.
+                    service = scoped_analytics_over(db, now=lambda: now)
                     window = service.window(scope, period)
                     figures: dict[str, Any] = {
                         "overview": service.overview,

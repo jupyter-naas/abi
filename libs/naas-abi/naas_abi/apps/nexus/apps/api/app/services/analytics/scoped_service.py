@@ -10,8 +10,10 @@ resolves emails and workspace names at read time (events never store emails).
 
 from __future__ import annotations
 
+import asyncio
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
+from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime
 from typing import Any
 
@@ -92,14 +94,36 @@ def series(window: PeriodWindow, values: Sequence[int]) -> list[TimeseriesPoint]
     return [TimeseriesPoint(date=label, value=value) for label, value in found.items()]
 
 
+# Opens a query port on a connection of its own (closed on exit): reads that may run
+# at the same time as others.
+QueriesFactory = Callable[[], AbstractAsyncContextManager[AnalyticsQueryPort]]
+
+
 class ScopedAnalyticsService:
     def __init__(
         self,
         queries: AnalyticsQueryPort,
         now: Callable[[], datetime] | None = None,
+        *,
+        parallel: QueriesFactory | None = None,
     ) -> None:
         self.queries = queries
         self._now = now or (lambda: datetime.now(UTC))
+        self._parallel = parallel
+
+    async def _together(self, *reads: Callable[[AnalyticsQueryPort], Awaitable[Any]]) -> list[Any]:
+        """The results of ``reads``, in order: at the same time, each on a connection of
+        its own, when the service has ``parallel``; else one after another on
+        ``queries`` (one connection runs one statement at a time)."""
+        if self._parallel is None:
+            return [await read(self.queries) for read in reads]
+        factory = self._parallel
+
+        async def apart(read: Callable[[AnalyticsQueryPort], Awaitable[Any]]) -> Any:
+            async with factory() as queries:
+                return await read(queries)
+
+        return list(await asyncio.gather(*(apart(read) for read in reads)))
 
     def window(self, scope: AnalyticsScope, period: str) -> PeriodWindow:
         return resolve_period(period, scope.timezone, self._now())
@@ -178,11 +202,13 @@ class ScopedAnalyticsService:
     # -- figures -----------------------------------------------------------------
 
     async def overview(self, scope: AnalyticsScope, window: PeriodWindow) -> OverviewResponse:
-        aggregate = await self.queries.overview(scope, window)
-        users = await self.queries.users(scope, window)
-        pages = await self.queries.pages(scope, window)
-        workspaces = await self.queries.workspaces(scope, window)
-        recent = await self.queries.events(scope, window, limit=RECENT_ACTIVITY)
+        aggregate, users, pages, workspaces, recent = await self._together(
+            lambda q: q.overview(scope, window),
+            lambda q: q.users(scope, window),
+            lambda q: q.pages(scope, window),
+            lambda q: q.workspaces(scope, window),
+            lambda q: q.events(scope, window, limit=RECENT_ACTIVITY),
+        )
         emails = await self._emails(
             [u.user_id for u in users[:TOP]] + [str(e.get("user_id") or "") for e in recent]
         )

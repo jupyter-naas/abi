@@ -24,7 +24,9 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -72,7 +74,7 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import get_service_regis
 from naas_abi.apps.nexus.apps.api.app.services.view_as.confinement import (
     outside_this_organization,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 logger = logging.getLogger(__name__)
 
@@ -94,10 +96,31 @@ def get_analytics_queries(db: AsyncSession = Depends(get_db)) -> AnalyticsQueryP
     return AnalyticsSecondaryAdapterPostgresQueries(db)
 
 
-def get_scoped_analytics(
-    queries: AnalyticsQueryPort = Depends(get_analytics_queries),
+def scoped_analytics_over(
+    db: AsyncSession, *, now: Callable[[], datetime] | None = None
 ) -> ScopedAnalyticsService:
-    return ScopedAnalyticsService(queries)
+    """The service over the session ``db``; on PostgreSQL, a page's several reads (the
+    overview's five) also run at the same time, each on a session of its own from the
+    same engine (one connection runs one statement at a time). SQLite (tests, a single
+    file or memory connection) reads one after another."""
+    queries = AnalyticsSecondaryAdapterPostgresQueries(db)
+    bind = db.bind
+    # An engine hands out connections; a session bound to one connection (a test's
+    # transaction) cannot share it between statements running at once.
+    if not isinstance(bind, AsyncEngine) or bind.dialect.name != "postgresql":
+        return ScopedAnalyticsService(queries, now=now)
+    sessions = async_sessionmaker(bind, class_=AsyncSession, expire_on_commit=False)
+
+    @asynccontextmanager
+    async def apart() -> AsyncIterator[AnalyticsQueryPort]:
+        async with sessions() as session:
+            yield AnalyticsSecondaryAdapterPostgresQueries(session)
+
+    return ScopedAnalyticsService(queries, now=now, parallel=apart)
+
+
+def get_scoped_analytics(db: AsyncSession = Depends(get_db)) -> ScopedAnalyticsService:
+    return scoped_analytics_over(db)
 
 
 # ---------------------------------------------------------------------------

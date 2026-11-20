@@ -686,25 +686,40 @@ class AnalyticsSecondaryAdapterPostgresQueries(AnalyticsQueryPort):
         if self._empty(scope):
             return []
         h = AnalyticsHourlyModel
-        views = func.sum(h.count)
-        rows = await self.db.execute(
-            select(
-                h.page_path,
-                views,
-                func.count(distinct(h.user_id)),
-                func.max(AnalyticsPageModel.page_title),
-            )
-            .outerjoin(
-                AnalyticsPageModel,
-                and_(
-                    AnalyticsPageModel.organization_id == h.organization_id,
-                    AnalyticsPageModel.workspace_id == h.workspace_id,
-                    AnalyticsPageModel.page_path == h.page_path,
-                ),
-            )
+        # Views per page and user first (one row per pair instead of per hour), so the
+        # unique users of a page are a plain count, not a sorted DISTINCT over every
+        # hourly row; the titles are joined once per page, not per hourly row.
+        per_user = (
+            select(h.page_path.label("page_path"), func.sum(h.count).label("views"))
             .where(*self._hourly(scope, window), h.event_name == PAGE_VIEWED, h.page_path != "")
-            .group_by(h.page_path)
-            .order_by(views.desc(), h.page_path)
+            .group_by(h.page_path, h.user_id)
+            .subquery()
+        )
+        views = func.sum(per_user.c.views)
+        per_page = (
+            select(
+                per_user.c.page_path.label("page_path"),
+                views.label("views"),
+                func.count().label("users"),
+            )
+            .group_by(per_user.c.page_path)
+            .subquery()
+        )
+        t = AnalyticsPageModel
+        title_where = [t.workspace_id.in_(scope.workspace_ids)]
+        if scope.organization_id:
+            # A title sent from one organization never shows in another's.
+            title_where.append(t.organization_id == scope.organization_id)
+        titles = (
+            select(t.page_path.label("page_path"), func.max(t.page_title).label("title"))
+            .where(*title_where)
+            .group_by(t.page_path)
+            .subquery()
+        )
+        rows = await self.db.execute(
+            select(per_page.c.page_path, per_page.c.views, per_page.c.users, titles.c.title)
+            .outerjoin(titles, titles.c.page_path == per_page.c.page_path)
+            .order_by(per_page.c.views.desc(), per_page.c.page_path)
         )
         return [
             PageAggregate(
