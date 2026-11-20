@@ -152,7 +152,8 @@ describe('who sees what in Settings', () => {
     expect(seen.opens.Platform).toBe('/settings/general');
     expect(platform.level).toBe('Platform');
     expect(Object.keys(platform.column)).toEqual(PLATFORM_GROUPS);
-    expect(platform.column.Administration).toEqual(['General', 'Organizations', 'Users', 'Drives']);
+    expect(platform.column.Administration).toEqual(['General', 'Organizations', 'Users']);
+    expect(platform.column.Resources).toContain('Drives');
     expect(platform.column.Access).toEqual(PLATFORM_ACCESS);
     expect(platform.column.System).toEqual(expect.arrayContaining(['Overview', 'Jobs', 'Layers', 'Diagrams']));
     // A policy's page and a person's keep the Platform column.
