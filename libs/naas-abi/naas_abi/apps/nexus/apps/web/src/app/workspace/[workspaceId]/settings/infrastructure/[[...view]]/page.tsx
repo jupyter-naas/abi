@@ -4,7 +4,7 @@ import {
   INFRASTRUCTURE_LAYERS_PATH,
 } from '@/app/settings/system/system-tabs';
 
-/** The map of the code is the platform's, in the Console (System › Layers, Diagrams). */
+/** The map of the code is the platform's, in Settings › Platform (System › Layers, Diagrams). */
 export default async function InfrastructureRedirectPage({
   params,
 }: {

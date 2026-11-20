@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CONSOLE_PATH,
   DRIVES_ITEM,
-  firstConsolePath,
   firstPlatformSettingsPath,
   holds,
   GENERAL_ITEM,
-  isConsolePath,
   laysOutOwnPanes,
   NEXUS_TABLES_ITEM,
   ORGANIZATIONS_ITEM,
@@ -15,8 +12,6 @@ import {
   platformSettingsItemFor,
   ROLES_ITEM,
   USERS_ITEM,
-  visibleAdministrationItems,
-  visibleConsoleGroups,
   visiblePlatformSettingsGroups,
   type PlatformActions,
 } from './nav';
@@ -155,6 +150,7 @@ describe('what the caller sees', () => {
     expect(ids(systemReader)).toContain('tables');
     expect(ids(systemReader)).toContain('system-events');
     expect(ids(systemReader)).toContain('service-triple_store');
+    expect(ids(systemReader)).toEqual(expect.arrayContaining(['system-layers', 'system-diagrams']));
     const groups = visiblePlatformSettingsGroups(systemReader);
     expect(groups.map((group) => group.label)).toEqual(GROUPS);
     expect(groups[0].items.map((item) => item.label)).toEqual(['General', 'Organizations']);
@@ -186,39 +182,6 @@ describe('what the caller sees', () => {
     expect(holds({ anyOf: 'iam' }, { 'nexus:ReadSystem': true })).toBe(false);
     expect(holds({ anyOf: 'iam' }, { 'iam:Explain': true })).toBe(true);
     expect(holds({ anyOf: 'iam' }, { 'iam:Explain': false })).toBe(false);
-  });
-});
-
-describe('Settings and the Console', () => {
-  it('keeps Administration in Settings (the Platform level) and the rest in the Console', () => {
-    expect(visibleAdministrationItems(platformAdmin).map((item) => item.label)).toEqual([
-      'General',
-      'Organizations',
-      'Users',
-      'Roles & permissions',
-      'Drives',
-    ]);
-    expect(visibleConsoleGroups(platformAdmin).map((group) => group.label)).toEqual([
-      'System',
-      'Activity',
-      'Resources',
-      'Data',
-    ]);
-  });
-
-  it('opens the Console on its first page, and to no one who may only set things', () => {
-    expect(firstConsolePath(systemReader)).toBe('/settings/system');
-    expect(visibleConsoleGroups(userLister)).toEqual([]);
-    expect(firstConsolePath(delegatedIamAdmin)).toBeNull();
-  });
-
-  it('tells a Console page from a platform setting', () => {
-    expect(isConsolePath('/settings/system/layers')).toBe(true);
-    expect(isConsolePath('/settings/tables/users/u-1')).toBe(true);
-    expect(isConsolePath(CONSOLE_PATH)).toBe(true);
-    expect(isConsolePath('/settings/users')).toBe(false);
-    expect(isConsolePath('/settings')).toBe(false);
-    expect(isConsolePath('/account/profile')).toBe(false);
   });
 });
 

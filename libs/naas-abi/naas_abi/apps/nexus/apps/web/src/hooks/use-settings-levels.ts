@@ -1,28 +1,37 @@
 'use client';
 
 import { useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import { accountSettingsNavVisible } from '@/app/account/lib/nav';
 import { orgSettingsNavForRole, type OrgSettingsNavItem } from '@/app/organizations/[orgId]/settings/lib/nav';
-import { visibleAdministrationItems } from '@/app/settings/lib/nav';
+import { visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
 import { opensRolesAndPermissions } from '@/components/access/access-sections';
 import { organizationContainer, workspaceContainer } from '@/components/access/access-scope';
-import { settingsLevels, type SettingsLevel } from '@/components/settings/settings-levels';
+import {
+  currentSettingsLevel,
+  settingsLevels,
+  settingsTabs,
+  type SettingsLevel,
+  type SettingsTab,
+} from '@/components/settings/settings-levels';
 import { SETTINGS_GROUPS, visibleSettingsGroups, workspaceOrganization } from '@/components/shell/settings-nav';
+import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
 import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { useWorkspaceSettingsAccess } from '@/hooks/use-workspace-settings-access';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
+import { settingsLevelReturnPath } from '@/lib/settings-scope-path';
 import { useWorkspaceStore } from '@/stores/workspace';
+
+type PageOrganization = { id: string; items: OrgSettingsNavItem[] };
 
 /**
  * The levels of Settings the caller may open (`settingsLevels`), each read with the rule
  * its own pages apply. ``organization``: the one an organization's settings page has
  * already read (its role there, its IAM access), which wins over the current workspace's.
  */
-export function useSettingsLevels({
-  organization,
-}: { organization?: { id: string; items: OrgSettingsNavItem[] } } = {}): SettingsLevel[] {
+export function useSettingsLevels({ organization }: { organization?: PageOrganization } = {}): SettingsLevel[] {
   const workspace = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId));
   const flags = workspace?.featureFlags;
   const workspaceAccess = useWorkspaceSettingsAccess();
@@ -70,7 +79,7 @@ export function useSettingsLevels({
         ? { id: activeId, name: listed?.name ?? activeId, items: organizationItems, current: activeId === workspaceOrgId }
         : null,
       otherOrganizations: orgs.filter((o) => o.id !== activeId).map((o) => ({ id: o.id, name: o.name })),
-      platform: platformStatus === 'ready' ? visibleAdministrationItems(actions) : [],
+      platform: platformStatus === 'ready' ? visiblePlatformSettingsGroups(actions) : [],
     });
   }, [
     workspace,
@@ -87,4 +96,35 @@ export function useSettingsLevels({
     platformStatus,
     actions,
   ]);
+}
+
+/**
+ * A Settings layout's levels: the tabs of its header (`settingsTabs`) and the level its
+ * column lists, the page's. ``mobile``: a tab opens its level's list.
+ */
+export function useSettingsTabs({
+  organization,
+  mobile,
+}: {
+  organization?: PageOrganization;
+  mobile: boolean;
+}): { tabs: SettingsTab[]; level: SettingsLevel | null } {
+  const pathname = usePathname() ?? '';
+  const levels = useSettingsLevels({ organization });
+  const view = useMemo(
+    () => ({
+      tabs: settingsTabs(levels, pathname, { mobile, lastVisited: settingsLevelReturnPath }),
+      level: currentSettingsLevel(levels, pathname),
+    }),
+    [levels, pathname, mobile]
+  );
+  const hrefs = useMemo(
+    () => [
+      ...view.tabs.filter((tab) => !tab.active).map((tab) => tab.href),
+      ...(view.level?.groups.flatMap((group) => group.links.map((l) => l.href)) ?? []),
+    ],
+    [view]
+  );
+  useDevRouteWarmup(hrefs);
+  return view;
 }

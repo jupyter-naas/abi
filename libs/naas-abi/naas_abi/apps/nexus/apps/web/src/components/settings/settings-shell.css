@@ -26,14 +26,63 @@
   --workspace-accent-hsl: 160 84% 45%;
 }
 
-/* The column of Settings: one section per level (Account, Workspace, Organization,
-   Platform), a level's later groups named under it (Workspace › Features). */
-.settings-level + .settings-level {
-  margin-top: var(--space-6);
+/* The levels of Settings (Platform, Organization, Workspace, Account), one tab each,
+   under the header. On a phone they scroll sideways. */
+.settings-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border-hex);
+  background-color: var(--surface-subtle-hex);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
 
-.settings-level-title,
-.settings-console-group-title {
+.settings-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-tab {
+  flex-shrink: 0;
+  max-width: 280px;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 2px solid transparent;
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.settings-tab:hover {
+  color: var(--foreground-hex);
+}
+
+.settings-tab-active,
+.settings-tab-active:hover {
+  border-bottom-color: var(--color-primary);
+  color: var(--foreground-hex);
+}
+
+@media (max-width: 767px) {
+  .settings-tabs {
+    padding: 0 var(--space-3);
+  }
+}
+
+/* The column of Settings: the pages of the tab's level, in groups (Platform › System,
+   Workspace › Features); a level's first group is named by its tab. */
+.settings-level-group + .settings-level-group {
+  margin-top: var(--space-4);
+}
+
+.settings-level-group-title {
   margin: 0 0 var(--space-2);
   padding: 0 var(--space-3);
   font-size: var(--font-size-xs);
@@ -43,27 +92,10 @@
   letter-spacing: 0.04em;
 }
 
-.settings-level-group + .settings-level-group {
-  margin-top: var(--space-3);
-}
-
-.settings-level-group-title {
-  margin: 0 0 var(--space-1);
-  padding: 0 var(--space-3);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--muted-foreground-hex);
-}
-
-.settings-level .org-settings-nav-item-label,
-.settings-console-group .org-settings-nav-item-label {
+.settings-level-group .org-settings-nav-item-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.settings-console-group + .settings-console-group {
-  margin-top: var(--space-4);
 }
 
 /* A page that lays out its own panes: the whole area, edge to edge. */

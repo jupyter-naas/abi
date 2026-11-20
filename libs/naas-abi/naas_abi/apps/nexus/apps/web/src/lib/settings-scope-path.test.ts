@@ -4,6 +4,7 @@ import {
   forgetSettingsPaths,
   isWorkspaceSettingsPath,
   rememberSettingsPath,
+  settingsLevelReturnPath,
   settingsReturnPath,
   settingsScopeFromPathname,
 } from './settings-scope-path';
@@ -28,36 +29,44 @@ describe('settingsScopeFromPathname', () => {
   });
 });
 
-describe('the last Settings and Console pages', () => {
+describe('the last Settings pages', () => {
   afterEach(() => {
     sessionStorage.clear();
   });
 
   it('reopens the last Settings page, whatever its level', () => {
-    rememberSettingsPath('settings', '/account/appearance');
-    rememberSettingsPath('settings', '/organizations/acme/settings/users');
-    expect(settingsReturnPath('settings', '/account/profile')).toBe('/organizations/acme/settings/users');
+    rememberSettingsPath('/account/appearance');
+    rememberSettingsPath('/organizations/acme/settings/users');
+    expect(settingsReturnPath('/account/profile')).toBe('/organizations/acme/settings/users');
   });
 
-  it('keeps the Console apart', () => {
-    rememberSettingsPath('settings', '/workspace/ws-1/settings/agents');
-    rememberSettingsPath('console', '/settings/system/jobs');
-    expect(settingsReturnPath('settings', '/account/profile')).toBe('/workspace/ws-1/settings/agents');
-    expect(settingsReturnPath('console', '/settings/system')).toBe('/settings/system/jobs');
+  it('keeps the last page of each level, for its tab', () => {
+    rememberSettingsPath('/settings/system/jobs');
+    rememberSettingsPath('/workspace/ws-1/settings/agents');
+    rememberSettingsPath('/account/appearance');
+    expect(settingsLevelReturnPath('platform')).toBe('/settings/system/jobs');
+    expect(settingsLevelReturnPath('workspace')).toBe('/workspace/ws-1/settings/agents');
+    expect(settingsLevelReturnPath('account')).toBe('/account/appearance');
+    expect(settingsLevelReturnPath('organization')).toBeNull();
   });
 
   it('falls back when nothing was visited, or the stored path is not a settings page', () => {
-    expect(settingsReturnPath('settings', '/account/profile')).toBe('/account/profile');
-    rememberSettingsPath('settings', '/workspace/ws-1/chat');
-    rememberSettingsPath('settings', '//evil.example/account');
-    expect(settingsReturnPath('settings', '/account/profile')).toBe('/account/profile');
+    expect(settingsReturnPath('/account/profile')).toBe('/account/profile');
+    rememberSettingsPath('/workspace/ws-1/chat');
+    rememberSettingsPath('//evil.example/account');
+    expect(settingsReturnPath('/account/profile')).toBe('/account/profile');
+    sessionStorage.setItem('nexus-settings-return-path:level:platform', '/workspace/ws-1/settings/general');
+    expect(settingsLevelReturnPath('platform')).toBeNull();
   });
 
-  it('forgets both at sign-out, so the next person starts from their own landing', () => {
-    rememberSettingsPath('settings', '/organizations/acme/settings/users');
-    rememberSettingsPath('console', '/settings/system/jobs');
+  it('forgets them all at sign-out, the Console\'s old one too, so the next person starts from their own landing', () => {
+    rememberSettingsPath('/organizations/acme/settings/users');
+    rememberSettingsPath('/settings/users');
+    sessionStorage.setItem('nexus-settings-return-path:console', '/settings/system/jobs');
     forgetSettingsPaths();
-    expect(settingsReturnPath('settings', '/account/profile')).toBe('/account/profile');
-    expect(settingsReturnPath('console', '/settings/system')).toBe('/settings/system');
+    expect(settingsReturnPath('/account/profile')).toBe('/account/profile');
+    expect(settingsLevelReturnPath('organization')).toBeNull();
+    expect(settingsLevelReturnPath('platform')).toBeNull();
+    expect(sessionStorage.length).toBe(0);
   });
 });

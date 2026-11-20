@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
-import { rememberSettingsPath, type SettingsArea } from '@/lib/settings-scope-path';
+import { rememberSettingsPath } from '@/lib/settings-scope-path';
 
-/** Writes the current pathname into sessionStorage as the last page of its area. */
-export function useRememberSettingsPath(pathname: string | null | undefined, area: SettingsArea = 'settings'): void {
+/** Writes the current pathname into sessionStorage as the last Settings page, and its level's. */
+export function useRememberSettingsPath(pathname: string | null | undefined): void {
   useEffect(() => {
-    if (pathname) rememberSettingsPath(area, pathname);
-  }, [pathname, area]);
+    if (pathname) rememberSettingsPath(pathname);
+  }, [pathname]);
 }

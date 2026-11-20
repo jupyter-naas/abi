@@ -1,13 +1,13 @@
 # ABI infrastructure
 
-Console → System maps the shared ABI Python codebase, one page per view:
+Settings → Platform → System maps the shared ABI Python codebase, one page per view:
 **Layers** (`/settings/system/layers`, the 3D map) and **Diagrams**
 (`/settings/system/diagrams`). The code is the platform's, not a workspace's, so
 both pages need `nexus:ReadSystem`, like the rest of System. The former workspace
 URLs (`/workspace/<id>/settings/infrastructure[/layers|/diagrams]`) redirect here.
 It does not query secrets, send source to a model, or represent the actual deployment.
 
-- The Console's list is the left column; Architecture and Inspector are the
+- The Platform tab's list is the left column; Architecture and Inspector are the
   page's right-hand column (a disclosure on mobile).
 - File exports the snapshot; View contains fit, zoom, decomposition and dependency controls.
 - Click a layer (in the map or the Architecture list) to isolate it and animate to a fitted,
@@ -67,7 +67,7 @@ metrics, and exclusion of inferred, unresolved and self dependencies.
 
 ## Layers and Diagrams
 
-Open either from Console → System. The selection (layer, component) is
+Open either from Settings → Platform → System. The selection (layer, component) is
 kept when moving between them. The diagram always shows
 all components and directed dependencies; selecting a component highlights its
 neighborhood without hiding cross-layer connections. Drag to pan and scroll to

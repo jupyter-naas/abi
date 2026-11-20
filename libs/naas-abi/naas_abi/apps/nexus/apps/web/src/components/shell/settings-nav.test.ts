@@ -105,7 +105,7 @@ describe('workspace settings nav', () => {
     expect(settingsItemFor('/workspace/ws-1/chat')).toBeUndefined();
   });
 
-  it('has no Infrastructure: the map of the code is the platform\'s, in the Console', () => {
+  it('has no Infrastructure: the map of the code is the platform\'s, in Platform › System', () => {
     expect(visibleSettingsGroups(null).map((group) => group.label)).toEqual(['General', 'Features']);
     expect(settingsItemFor('/workspace/ws-1/settings/infrastructure/layers')).toBeUndefined();
   });
