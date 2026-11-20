@@ -177,15 +177,14 @@ def test_the_allowlists_have_no_stale_entries(table) -> None:
     assert sorted(set(ACCOUNT_ROUTES) & set(PUBLIC_ROUTES)) == []
 
 
-# Workspace settings > General › Features: read as the workspace's configuration, saved
-# as the IAM writes the caller makes (``services/feature_access``).
+# Workspace settings > General › Features and Agents/Apps: read as the workspace's
+# configuration, saved as the IAM write the caller makes on "<W> access"
+# (``services/feature_access``).
 FEATURE_ACCESS_ROUTES: dict[tuple[str, str], tuple[str, ...]] = {
     ("GET", "/api/workspaces/{workspace_id}/feature-access"): ("GetWorkspaceConfiguration",),
-    ("PUT", "/api/workspaces/{workspace_id}/feature-access"): (
-        "iam:CreatePolicy",
-        "iam:AttachPolicy",
-        "iam:DetachPolicy",
-    ),
+    ("PUT", "/api/workspaces/{workspace_id}/feature-access"): ("iam:UpdatePolicy",),
+    ("GET", "/api/workspaces/{workspace_id}/offer"): ("GetWorkspaceConfiguration",),
+    ("PUT", "/api/workspaces/{workspace_id}/offer"): ("iam:UpdatePolicy",),
 }
 
 

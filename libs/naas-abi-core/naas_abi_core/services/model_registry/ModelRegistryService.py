@@ -34,6 +34,10 @@ from naas_abi_core.models.Model import (
 )
 from naas_abi_core.services.iam.guard import ServiceGuard
 from naas_abi_core.services.iam.listing import ResourceLister, named_lister
+from naas_abi_core.services.model_registry.agent_models import (
+    AGENT_ACTIONS,
+    current_agent_models,
+)
 from naas_abi_core.services.model_registry.iam_catalog import CATALOG
 from naas_abi_core.services.model_registry.ModelRegistryPort import (
     ChatProviderFactory,
@@ -113,9 +117,21 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
     # ------------------------------------------------------------------ authorization
 
     def _require(self, action: str, canonical_id: str) -> None:
+        if action in AGENT_ACTIONS and self._agent_allows(canonical_id):
+            return
         self._guard.require(
             action, "model", canonical_id, not_found=_not_found(canonical_id)
         )
+
+    def _agent_allows(self, canonical_id: str) -> bool:
+        """Whether the agent whose turn this is owns the model and the caller may
+        use that agent (``agent_models.py``): its own model is always allowed."""
+        lent = current_agent_models()
+        scopes = lent.owners.get(canonical_id) if lent is not None else None
+        iam = self._guard.iam
+        if not scopes or iam is None or lent is None:
+            return False
+        return any(iam.authorize(lent.action, scope).allowed for scope in scopes)
 
     def authorize_use(self, canonical_id: str, action: UseAction) -> dict[str, Any]:
         """Require ``action`` (``Chat``, ``ChatStream`` or ``Embed``) on the model

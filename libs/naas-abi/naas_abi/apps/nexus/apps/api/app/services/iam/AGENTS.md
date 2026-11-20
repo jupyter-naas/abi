@@ -27,6 +27,9 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `feature_overrides.py` | Startup, once: the per-workspace feature overrides of earlier versions (`migrate_feature_overrides`, `iam_migrations` `workspace_feature_sets_v1`) |
 | `policy_tree.py` | Startup, once: the sets and the workspace toggles become access policies and their sub-policies (`migrate_sets`, `iam_migrations` `policy_tree_v1`); `pending()` until it is recorded |
 | `container_names.py` | Startup, once, after `policy_tree_v1`: organizations and workspaces registered as IAM containers, and every name IAM stored in the old grammar rewritten to container paths (`LegacyNames`, `migrate_names`, `iam_migrations` `container_names_v1`); `pending()` until it is recorded |
+| `workspace_offer.py` | "<W> access" as an allow-list ("Ceilings as allow-lists"): `Offer`, `offer_document`, `offer_of`, `with_offer`, `in_offer_form`, `offer_from_seed`, `seeded_offer` |
+| `model_sets.py` | "Models · member", "Models · all", "Models · embeddings" (platform policies kept in step with `nexus_config.models.member_set` at start, `ensure_configured`); `level_model_policy_ids(iam, level)` for the level groups |
+| `capabilities.py` | Capability groups made on demand (`ensure_capability`): an organization's "Workflow runners", the platform's "Models · all" |
 | `container_defaults.py` | Each organization's and workspace's access policy and its members and admins groups ("Access policies and default groups"): made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), kept in step with the roles (`sync_scope`, from `MEMBERSHIPS`), forgotten with it (`dropped`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
 | `../invites/migration.py` | Startup, once (background, after the moves): each pending Nexus invitation becomes an invited `users` row holding what its pending grants held, attached as `api` for no user (they were authorized at invitation), the grants withdrawn (`iam_migrations` `invitations_to_people_v1`, `abi user migrate-invitations`; `services/invites/AGENTS.md`) |
 | `module_moves.py` | Startup, once, after `container_names_v1`: a module scope a remote module serves now (`MOVES`: the X app, `app/naas_abi_marketplace.applications.x/x_proxy` to `app/applications.x/x_proxy`) renamed in policy documents and keys' narrowing (`iam.rewrite_names(MovedScopes)`, `iam_migrations` `module_moves_v1`): a pattern naming the old item names the new one, a wildcard over the old module gets the new item beside it, one already reaching it is left. Nexus's rows of the app id: migration `0072_remote_x_app.sql` |
@@ -52,7 +55,8 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
   is how they reach every workspace of the org; org members and viewers inherit nothing. Creating a workspace needs
   `CreateWorkspace` on the new workspace's name as placed, `<org container>/nexus:workspace/<new id>` (an org owner's
   or admin's), never a request field; one with no organization is a personal workspace at the platform,
-  `abi:nexus:workspace/<new id>`, which every user may create (`builtin.self`).
+  `abi:nexus:workspace/<new id>`, which no user may create unless `nexus_config.personal_workspaces` is on
+  (a self grant, `bootstrap.self_grants`; catalog 16). Organizations are the platform admins' to create.
 - **Names are built by `names.py` alone.** No f-string makes a name, a scope or a `${scope}` pattern elsewhere: an
   organization is `org_container(org)`, a workspace `workspace_container(org, ws)` (or `AUTHZ.container_of(ws)`
   when only its id is known), a resource `nexus_resource(type, container=, id=)`, a module scope
@@ -143,8 +147,8 @@ module per router family:
 
 | Module | Resource types |
 |---|---|
-| `organizations.py` | `organization` (a container: `CreateOrganization` `creates`, `DeleteOrganization` `deletes` and `owner_only`), `member`, `domain`, `billing`; every user's `CreateOrganization` is a `PLATFORM_ACCESS` row (`organization/*`) |
-| `workspaces.py` | `workspace` (a container with `platform_companions`: `CreateWorkspace` `creates`, `DeleteWorkspace` `deletes` and `owner_only`), `member`, `server`, `resource_access`; every user's personal `CreateWorkspace` is a `PLATFORM_ACCESS` row (`workspace/*`) |
+| `organizations.py` | `organization` (a container: `CreateOrganization` `creates`, `DeleteOrganization` `deletes` and `owner_only`), `member`, `domain`, `billing`; no user's `CreateOrganization` (catalog 16: the platform admins') |
+| `workspaces.py` | `workspace` (a container with `platform_companions`: `CreateWorkspace` `creates`, `DeleteWorkspace` `deletes` and `owner_only`), `member`, `server`, `resource_access`; the personal `CreateWorkspace` is a self grant only with `nexus_config.personal_workspaces` |
 | `features.py` | `feature/<key>` (`UseFeature`), `policy_only`: no role holds it |
 | `chat.py`, `agents.py`, `apps.py`, `workflows.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` (`ListModuleScopes`); `workflow` (its settings: listed, deprecated switch) |
 | `files.py`, `datasets.py`, `office.py` | `file` (drive + path; Organization Files' `ListOrgFiles`, `GetOrgFile`, and admin-level `PutOrgFile`, `DeleteOrgFile` on `<org>/nexus:file/organization/<path>`), `my_file`, `user_storage`, `root_storage`, `platform_file` (Platform Files: `ListPlatformFiles`, `GetPlatformFile`, `PutPlatformFile`, `DeletePlatformFile`) and `system_file` (System Files: `ListObjectStoreFiles`, `GetObjectStoreFile`, `PutObjectStoreFile`, `DeleteObjectStoreFile`), both platform-level and `policy_only`; `dataset`; `project` (slides, documents, sheets) |
@@ -315,6 +319,35 @@ and the names' moves, is the same before and after, and again changes nothing):
 - **Recorded** in `iam_migrations` once nothing failed; a failure (logged, named in the report's `failed`) is tried
   again at the next start, the rest kept.
 
+## Ceilings as allow-lists, model sets, capability groups (#1586)
+
+- **"<W> access" is an allow-list** (`workspace_offer.py`): sections by `sid` (`OfferAgents`,
+  `OfferApps`, `OfferWorkflows`, `OfferPipelines`, `OfferFeatures`) name each agent, app, workflow,
+  pipeline (by name, or `<module>/*` for a shared module offered whole) and feature W offers; nothing
+  else, no `module:agent/*` and no Deny list. A module added to the platform is offered nowhere until
+  added. A new workspace in an organization offers its seed (`catalog_seed` or the configuration's
+  `agents`, `apps`, `modules`, its default agent) and every enabled feature, bounded by "<O> access" (its
+  parent); one in no organization offers nothing until widened. At each start a configured workspace's
+  seed (the configuration's own entries only) is added to its "<W> access" (instances only: features
+  are its Features setting's) and to its organization's (`apply_seeded_offers`, never removes; a ceiling
+  of an older version, not in offer form, is left to the access migration, S4).
+- **Workspace › Features and the offer** (`services/feature_access`) edit "<W> access" as the caller
+  (`iam:UpdatePolicy`): Everyone is the feature offered, Nobody not; Only… is refused. Agents, apps,
+  workflows and pipelines: `GET/PUT /api/workspaces/{id}/offer`.
+- **Model sets** (`model_sets.py`): no level reaches a model through `builtin.platform.*` any more.
+  "Models · member" (`nexus_config.models.member_set`, empty by default), "Models · all" (`model/*`),
+  "Models · embeddings" (`Embed` on `model/*`, `Resolve` on the embedding models) are platform policies,
+  attached by the level groups (S2, `level_model_policy_ids`). **An agent's own model is always
+  allowed**: a module agent's in-process turn lends the models of its agents to whoever may use them
+  (`provider_runtime.agents_own_models`, core `model_registry/agent_models.py`).
+- **Capability groups** (`capabilities.py`), made on demand: "Workflow runners", the organization's,
+  holding a policy (a sub-policy of "<O> access") running every workflow and pipeline, attached at
+  `${my workspaces}` (the workspaces of the organization its member belongs to, through their "<W>
+  workspace" membership groups); "Models · all", the platform's (a group an organization
+  owns is attached only at a scope there, which never reaches a platform model).
+- **`builtin.self`** (catalog 16): no `CreateOrganization`, no personal `CreateWorkspace`;
+  `nexus_config.personal_workspaces: true` gives the latter back (`bootstrap.apply_access_settings`).
+
 ## The upgrade: sets and toggles become policies
 
 Before, three things decided whether a user used a module's item or a feature in a workspace: the policies (and
@@ -452,7 +485,7 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
 - **Platform-level types.** A workspace role never reaches a platform-level resource. IAM keeps two
   managed policies in step with attachments: `builtin.platform.member` (held while the principal has a
   `member`, `admin` or `owner` attachment at a workspace or below an organization) and `builtin.platform.viewer`
-  (only `viewer` attachments): the platform's models (`model_registry`), the apps, agents and modules it
+  (only `viewer` attachments): no model (a model set's, "Model sets" below), the apps, agents and modules it
   may open or invoke (`discovery`), views, templates, its own runs, its own keys and so on (the `workspace` type's
   `platform_companions`). Attachments at an organization's own container bring neither: an org member who belongs to no workspace cannot chat with
   models or open apps. Because Nexus calls as `api` on behalf of the user, the user must hold these too.
@@ -532,9 +565,8 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
 - **Who makes accounts in the provider's directory.** An invitation IAM authorized: the route's
   `InviteOrganizationMember` / `InviteWorkspaceMember` at its scope, then its pending grants accepted on the inviting
   person's behalf. Nexus then makes the account as `api` (`identity:ProvisionUser` is `builtin.api`'s), so an
-  organization admin or a workspace owner needs no right at the provider. Every user may create an organization
-  (`CreateOrganization` is a platform member's; a setting to turn that off does not exist) and invite from it, so what
-  bounds it is the invite routes' rate limits and `invitation_mails_per_day`; the account's email stays unverified
+  organization admin or a workspace owner needs no right at the provider. Only platform admins create organizations
+  (catalog 16), and what bounds invitations is the invite routes' rate limits and `invitation_mails_per_day`; the account's email stays unverified
   until a code mailed to the address proves it. The platform-level invite (no grant) keeps to the inviting user's own
   `identity:ProvisionUser`. See `services/invites/AGENTS.md`.
 - **Smaller guarantees.** `is_superadmin` is asked of IAM where it is shown (`/auth/me`, `/admin/me`,

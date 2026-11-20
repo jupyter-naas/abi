@@ -35,6 +35,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     SERVICE,
     WORKSPACE,
     is_org_container,
+    nexus_resource,
     org_below,
     org_of,
 )
@@ -192,6 +193,32 @@ class NexusIam:
         """Grant a user one module scope (``authz.ModuleScope``) at a workspace."""
         resource = scope.resource(PLATFORM).removeprefix(PLATFORM)
         return self.allow(user_id, [scope.action()], [f"${{scope}}/{resource}"], workspace_scope)
+
+    def may_create_organizations(self, user_id: str, *, principal_id: str | None = None) -> str:
+        """Attach to a Nexus user (or the IAM principal ``principal_id``, a user of an
+        identity provider) a platform policy allowing ``CreateOrganization``: no user
+        holds it from ``builtin.self`` (catalog 16). Returns the policy id."""
+        resource = nexus_resource(ORGANIZATION, container=PLATFORM, id="-").rsplit("/", 1)[0]
+        with as_service_account("engine"):
+            principal = (
+                principal_id
+                or self.iam.ensure_user(LEGACY_NEXUS_ISSUER, user_id, provider="nexus").id
+            )
+            policy = self.iam.create_policy(
+                f"create-organizations-{user_id}-{uuid.uuid4().hex[:8]}",
+                {
+                    "version": "2026-10-13",
+                    "statements": [
+                        {
+                            "effect": "Allow",
+                            "actions": [f"{SERVICE}:CreateOrganization"],
+                            "resources": [resource + "/*"],
+                        }
+                    ],
+                },
+            )
+            self.iam.attach_policy(policy.id, principal)
+        return policy.id
 
     def platform_admin(self, user_id: str) -> None:
         with as_service_account("api"):

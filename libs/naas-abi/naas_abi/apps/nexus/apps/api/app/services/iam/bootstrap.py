@@ -35,6 +35,10 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     Memberships,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    PLATFORM,
+    SERVICE,
+    WORKSPACE,
+    nexus_resource,
     org_container,
     workspace_container,
 )
@@ -108,9 +112,39 @@ def shared_repo_grants(
     return grants
 
 
+def self_grants(personal_workspaces: bool) -> list[roles.SelfGrant]:
+    """What every user holds in ``builtin.self`` by the deployment's choice:
+    creating a personal workspace (at the platform, in no organization) when
+    ``nexus_config.personal_workspaces`` is on; nothing otherwise. Creating an
+    organization is never a user's (the platform admins')."""
+    if not personal_workspaces:
+        return []
+    every_workspace = nexus_resource(WORKSPACE, container=PLATFORM, id="-").rsplit("/", 1)[0]
+    return [roles.SelfGrant(f"{SERVICE}:CreateWorkspace", (every_workspace + "/*",))]
+
+
+def apply_access_settings(iam: Any) -> None:
+    """The deployment's access choices, at start: the self grants
+    (``personal_workspaces``) as the engine, the model-set policies
+    (``models.member_set``, ``model_sets``) as ``api``. A failure of the model
+    sets is logged: nobody holds a model set until a start makes them."""
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+    from naas_abi.apps.nexus.apps.api.app.services.iam import model_sets
+
+    live = live_settings()
+    with as_service_account("engine"):
+        iam.set_self_grants(self_grants(bool(getattr(live, "personal_workspaces", False))))
+    try:
+        with as_service_account("api"):
+            model_sets.ensure_configured(iam)
+    except Exception:  # noqa: BLE001 - the API starts; the sets are made at the next start
+        logger.exception("The model-set policies could not be made")
+
+
 async def register_catalog() -> None:
     """Register the ``nexus`` catalog and the shared repository's platform
-    grants, as the engine."""
+    grants, as the engine; then the deployment's access settings
+    (``apply_access_settings``)."""
     grants = shared_repo_grants(settings.coding_repo_id, settings.shared_dataset_namespaces)
 
     def work() -> None:
@@ -118,6 +152,7 @@ async def register_catalog() -> None:
         with as_service_account("engine"):
             iam.register_catalog(NEXUS_CATALOG)
             iam.set_platform_grants(grants)
+        apply_access_settings(iam)
 
     await run_in_threadpool(work)
 

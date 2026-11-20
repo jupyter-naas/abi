@@ -8,7 +8,6 @@ the owners' and admins' to read (#1346), so their list and get actions are
 """
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import action, rtype
-from naas_abi_core.services.iam.catalog import PlatformAccess
 
 TYPES = (
     # An organization sits at the platform.
@@ -48,5 +47,5 @@ ACTIONS = (
     action("UpdateRoleFeatures", "admin", "role_features"),
 )
 
-# Every user may create an organization (``builtin.self``).
-PLATFORM_ACCESS = (PlatformAccess(("organization/*",), self_=("CreateOrganization",)),)
+# Creating an organization is the platform admins' (``builtin.platform_admin``): no
+# user holds it from ``builtin.self`` (catalog 16).

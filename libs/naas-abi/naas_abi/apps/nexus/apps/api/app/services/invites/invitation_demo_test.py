@@ -782,9 +782,26 @@ async def test_unbinding_answers_like_binding(nexus, idp, alice):
 # -- who may make accounts in the provider's directory ---------------------------------
 
 
-async def _carol_with_her_own_org(idp, sessions):
-    """Any signed-in user may create an organization; she owns it."""
+async def _carol_with_her_own_org(idp, iam):
+    """Carol is let create an organization (no user may by default, catalog 16); she
+    owns it."""
     carol = await sign_in(idp, idp.create_user("carol@example.com"))
+    me = (await carol.get("/api/auth/me")).json()
+    with as_service_account("engine"):
+        policy = iam.create_policy(
+            "Carol creates organizations",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Allow",
+                        "actions": ["nexus:CreateOrganization"],
+                        "resources": ["abi:nexus:organization/*"],
+                    }
+                ],
+            },
+        )
+        iam.attach_policy(policy.id, me["id"])
     made = await carol.post("/api/organizations", json={"name": "Carol Co", "slug": "carol-co"})
     assert made.status_code == 200, made.text
     return carol, made.json()["id"]
@@ -805,7 +822,7 @@ async def test_an_organization_admins_invitation_makes_an_account_they_sign_in_w
     provider's self-signup off, as here, the person could otherwise never get a code
     (#1520)."""
     _, iam, sessions = nexus
-    carol, org_id = await _carol_with_her_own_org(idp, None)
+    carol, org_id = await _carol_with_her_own_org(idp, iam)
     sent = await _invite(carol, org_id, "dana@corp.example")
     assert sent.status_code == 200, sent.text
     result = sent.json()
@@ -845,7 +862,7 @@ async def test_an_invitation_iam_refuses_makes_no_account(nexus, idp, alice):
     """The authorized invitation is the warrant, and nothing else: Carol may not
     invite to an organization she has no role in, nor a viewer to their workspace."""
     _, iam, _ = nexus
-    carol, _ = await _carol_with_her_own_org(idp, None)
+    carol, _ = await _carol_with_her_own_org(idp, iam)
     refused = await _invite(carol, ORG, "victim@corp.example")
     assert refused.status_code == 403, refused.text
     viewer = await sign_in(idp, idp.create_user("viewer@example.com"))

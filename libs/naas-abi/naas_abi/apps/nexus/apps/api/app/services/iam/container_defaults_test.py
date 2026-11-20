@@ -425,7 +425,8 @@ async def test_the_delete_route_is_the_owners_and_refuses_while_workspaces_remai
         assert (await http.delete("/api/organizations/org-1")).status_code in (403, 404)
     with as_service_account("api"):
         assert team.iam.container("nexus", "organization", "org-1") is None
-    # The platform admin deletes one too.
+    # The platform admin deletes one too (Bob is let create organizations: no user may).
+    team.may_create_organizations("bob")
     async with api("bob") as http:
         made = await http.post("/api/organizations", json={"name": "Beta Corp", "slug": "beta"})
         assert made.status_code == 200, made.text

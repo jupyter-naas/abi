@@ -239,7 +239,18 @@ async def test_a_workspace_is_created_only_in_an_organization_the_caller_may(api
 
 
 @pytest.mark.asyncio
-async def test_a_workspace_without_an_organization_is_the_callers_own(api) -> None:
+async def test_a_workspace_without_an_organization_is_the_callers_own(
+    api, team, monkeypatch
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+    from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import apply_access_settings
+
+    # No user creates a personal workspace unless the deployment allows it.
+    async with api("stranger") as http:
+        refused = await http.post("/api/workspaces", json={"name": "Solo", "slug": "solo"})
+        assert refused.status_code == 403, refused.text
+    monkeypatch.setattr(live_settings(), "personal_workspaces", True, raising=False)
+    apply_access_settings(team.iam)
     async with api("stranger") as http:
         made = await http.post("/api/workspaces", json={"name": "Solo", "slug": "solo"})
         assert made.status_code == 200, made.text
