@@ -108,6 +108,16 @@ and `<owner>.stream_close`; a large call also uses the `transfer.*` subjects).
 - In process, an embedding model is used directly once resolved: its use is
   checked as `Resolve`; `Embed` is checked over NATS.
 - Registering models is boot work and is not checked.
+- **An agent's own model** (`agent_models.py`). No role reaches a model (core
+  `roles.py`: no `model_registry` row in the platform policies); a person's
+  models are a model set's. The in-process caller that runs a module agent's turn
+  (Nexus's `provider_runtime.agents_own_models`) wraps it in
+  `agent_models(action, {canonical id: [agent scope names]})`: inside it,
+  `Resolve`, `Chat` and `ChatStream` on a model the agent owns are authorized as
+  `action` (`module:UseAgent`) on one of its scopes for the caller, instead of
+  the model's own action. Any other model, and `Embed`, stay the caller's. A
+  context variable, set in process only; `gated_model_ids(model)` reads which
+  models an agent was built with from the registry's gates.
 
 ## Remote registry and inference
 

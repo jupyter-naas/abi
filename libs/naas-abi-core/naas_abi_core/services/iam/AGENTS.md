@@ -1064,7 +1064,7 @@ attachment per scope.
 | `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `UpdateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}/iam:policy/*` and `${scope}/iam:group/*`); `iam:ListAttachments` on `${scope}/iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}/iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere; one owned above is listed there only where it is attached at the scope or above, "Service API"); `iam:ViewAs` on `${scope}/iam:view_as/*` (a statement of its own: "Viewing as a principal") | every `policy_only` type; every module scope type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; every `owner_only` action |
 | `builtin.owner` | admin (`iam:ViewAs` included), plus every action on every `attachment/…` (owner included) and every `owner_only` action | every `policy_only` type; every module scope type; `iam:MapIdpGroup`, `iam:UnmapIdpGroup` |
 | `builtin.platform_admin` | `*` on `*` (attached without scope) | sealed resources |
-| `builtin.self` | held implicitly by every user (no attachment row, unknown users included; `explain` shows it with no attachment id) | none |
+| `builtin.self` | held implicitly by every user (no attachment row, unknown users included; `explain` shows it with no attachment id): the catalogs' `self_` rows, plus the deployment's **self grants** (`set_self_grants`, `roles.SelfGrant`, stored as `GrantSelf…` statements and read back by every regeneration, as the platform grants are: Nexus's personal workspaces when its configuration allows them) | none |
 
 - **IAM administration is the admins' and owners'.** Viewers and members hold nothing
   of the `iam` catalog at their scope (no list, no read): every IAM administration
@@ -1086,10 +1086,12 @@ attachment per scope.
 - **Platform types.** A role at a container never reaches a platform-level resource
   (`abi:<service>:…`). Two more managed policies, kept in step with role attachments by IAM,
   carry what members need there (`roles.PLATFORM_TYPES` is the kernel services' table:
-  models, discovery modules/agents/apps/runs, views, coding templates, the user's own
+  discovery modules/agents/apps/runs, views, coding templates, the user's own
   forge/coder/activity/key/principal resources, drives; a first-party catalog adds its rows
-  with `platform_access`, as Nexus does for creating an organization, provider models and a
-  user's own files and storage): `builtin.platform.member` while the principal has a
+  with `platform_access`, as Nexus does for provider models and a user's own files and
+  storage). **No model**: neither policy holds a `model_registry` action; models are a
+  model set's (a policy on `model/<canonical id>`, Nexus's "Models · <set>"), and an
+  agent's own model is decided by the agent's scope (`model_registry/agent_models.py`): `builtin.platform.member` while the principal has a
   `member`, `admin` or `owner` attachment that brings the companions,
   `builtin.platform.viewer` while it has only `viewer` ones. **An attachment brings them**
   when it is below a container, or at a container whose type its catalog marks

@@ -1608,6 +1608,11 @@ class IIAMService(ABC):
         serving engine's IAM only)."""
         raise NotImplementedError("Platform grants are set on the serving engine")
 
+    def set_self_grants(self, grants: Sequence[Any]) -> None:
+        """What the deployment gives every user in ``builtin.self`` (the serving
+        engine's IAM only)."""
+        raise NotImplementedError("Self grants are set on the serving engine")
+
     def retired_policies(self) -> list[Policy]:
         """The retired managed policies still in force (the serving engine's IAM
         only): ``roles.RETIRED_POLICY_PREFIXES``."""

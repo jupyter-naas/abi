@@ -4854,6 +4854,27 @@ class IAMService(IIAMService, PolicySource):
         self._refresh_builtin_policies(tuple(grants))
         self._changed()
 
+    def set_self_grants(self, grants: Sequence[roles.SelfGrant]) -> None:
+        """What the deployment gives every user beyond the catalogs' ``self_`` rows
+        (``roles.SelfGrant``: Nexus's personal workspaces). Replaces the previous
+        set. Stored in ``builtin.self`` (``GrantSelf…`` statements), which every
+        regeneration of the managed policies reads them back from
+        (``roles.stored_self_grants``). Needs ``iam:RegisterCatalog`` on the
+        catalog of each action granted."""
+        # Who changes a grant must register its catalog: those set and those withdrawn.
+        changed = (*grants, *self._stored_self_grants())
+        for service in sorted({grant.action.partition(":")[0] for grant in changed}):
+            self.require("iam:RegisterCatalog", catalog_resource(service))
+        self._refresh_builtin_policies(self_grants=tuple(grants))
+        self._changed()
+
+    def _stored_self_grants(self) -> tuple[roles.SelfGrant, ...]:
+        try:
+            stored = self.store.get_policy(roles.SELF)
+        except IAMNotFoundError:
+            return ()
+        return tuple(roles.stored_self_grants(stored))
+
     def _stored_platform_grants(self) -> tuple[roles.PlatformGrant, ...]:
         def stored(policy_id: str) -> Policy | None:
             try:
@@ -4868,13 +4889,19 @@ class IAMService(IIAMService, PolicySource):
         )
 
     def _refresh_builtin_policies(
-        self, grants: tuple[roles.PlatformGrant, ...] | None = None
+        self,
+        grants: tuple[roles.PlatformGrant, ...] | None = None,
+        *,
+        self_grants: tuple[roles.SelfGrant, ...] | None = None,
     ) -> None:
         """Regenerate the managed policies. ``grants`` replaces the platform grants
-        (``set_platform_grants``); otherwise the ones already stored are kept."""
+        (``set_platform_grants``) and ``self_grants`` the self grants
+        (``set_self_grants``); otherwise the ones already stored are kept."""
         if grants is None:
             grants = self._stored_platform_grants()
-        for policy in roles.builtin_policies(self._registry, grants):
+        if self_grants is None:
+            self_grants = self._stored_self_grants()
+        for policy in roles.builtin_policies(self._registry, grants, self_grants):
             self.store.put_managed_policy(policy)
 
     # =========================================================================
