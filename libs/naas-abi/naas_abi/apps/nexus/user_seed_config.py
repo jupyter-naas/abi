@@ -27,6 +27,10 @@ class UserSeedConfig(BaseModel):
     job_title: str | None = None
     bio: str | None = None
     is_superadmin: bool = False
+    # The identity provider they sign in through (its ``name``); default: the
+    # default provider, else the built-in one. Their row names it, and their first
+    # sign-in there, email verified, opens it (``core/org_seed.py``).
+    provider: str | None = None
 
     @model_validator(mode="before")
     @classmethod

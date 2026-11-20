@@ -516,3 +516,35 @@ async def test_resend_is_for_invited_people_and_activate_makes_them_active(world
         await world.service.resend(user_id=made.id, by=ADMIN)
     with pytest.raises(UnknownUserError):
         await world.service.resend(user_id="ghost", by=ADMIN)
+
+
+@pytest.mark.asyncio
+async def test_provision_makes_a_configured_persons_account_as_nexus_and_nothing_else(world):
+    """The configuration's people (core/org_seed.py): their row is unbound and names
+    its provider; the account is made as Nexus (no inviting person), recorded as
+    ABI's, and the row stays as it is (their verified sign-in binds it), unmailed."""
+    world.store.rows["user-seed"] = PlatformUser(
+        "user-seed", "sam@example.com", "Sam", UserStatus.INVITED, "builtin"
+    )
+
+    made = await world.service.provision("user-seed")
+
+    assert made is not None and made.created
+    assert world.idp.calls == [("sam@example.com", None)]
+    assert world.store.provisioned == {("builtin", "sub-sam")}
+    assert world.store.rows["user-seed"].id == "user-seed" and world.mailer.invitations == []
+    # Again: found at the provider, nothing new recorded.
+    again = await world.service.provision("user-seed")
+    assert again is not None and not again.created
+
+
+@pytest.mark.asyncio
+async def test_provision_asks_nothing_of_a_provider_that_manages_its_people(world):
+    world.store.rows["user-seed"] = PlatformUser(
+        "user-seed", "dan@corp.example", "Dan", UserStatus.INVITED, "corp"
+    )
+
+    assert await world.service.provision("user-seed") is None
+    assert world.store.provisioned == set()
+    with pytest.raises(UnknownUserError):
+        await world.service.provision("ghost")

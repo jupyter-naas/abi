@@ -9,8 +9,10 @@
   account holds refuses the sign-in. Two exceptions bind a row no provider signs
   in yet to the identity and to its IAM user, which keeps its roles, groups and
   data (``_link_legacy_user``): the old built-in login's users, at the *built-in*
-  provider, which proves an address by mailing it a code; and someone invited
-  through a provider that made no account (``services/people``), at that provider.
+  provider, which proves an address by mailing it a code; and a row that names
+  its provider (someone invited through a provider that made no account,
+  ``services/people``; the configuration's people, ``core/org_seed.py``), at that
+  provider, with the email verified there.
 * **Activation**: a row an invitation made is ``invited`` until this first
   sign-in makes it ``active``.
 * **The session** is a random secret in an httpOnly cookie; Nexus stores its
@@ -377,12 +379,17 @@ class OidcSignInService:
 
     async def _may_bind(self, unbound: OidcUser, provider: str) -> bool:
         """Whether this sign-in, with the row's email verified, takes a row no
-        provider signs in yet. Someone invited through a provider that made no
-        account (``provisioning: none``) is bound through that provider alone, the
-        trust IAM's pending grants have; a row of the old built-in login through
-        the built-in provider, which proves the address with a mailed code."""
-        if unbound.status == "invited":
-            return unbound.idp_provider == provider
+        provider signs in yet. A row that names its provider (an invitation, the
+        configuration's people: ``core/org_seed.py``, a moved pending invitation)
+        is bound through that provider, whatever it is: the trust IAM's pending
+        grants have (a verified email at the provider they name). An invited row
+        through that one alone; a row of the old built-in login also through the
+        built-in provider, which proves the address with a mailed code, as is any
+        row naming no provider."""
+        if unbound.idp_provider and unbound.idp_provider == provider:
+            return True
+        if unbound.status == "invited" and unbound.idp_provider:
+            return False
         return await self._is_builtin(provider)
 
     async def _is_builtin(self, provider: str) -> bool:

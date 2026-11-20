@@ -7,9 +7,11 @@ Settings › Users (web: `apps/web/src/app/settings/users/`, Nexus `AGENTS.md`, 
 
 - **The directory**: every Nexus account (a `users` row, `invited` from the invitation that made it until the
   first sign-in: `services/people`) and everyone with a pending invitation of before that and no row (by email; id
-  `invited:<email>`, until #1570 moves them), each with their IAM id, whether they signed in at least once
-  ("invited, not yet": an `invited` row, a row of the old login or one the configuration seeds, never linked to a
-  provider; an invitee), whether they are deactivated (IAM suspended the user; for an invitee, their provider disabled the
+  `invited:<email>`): the start after the upgrade moves those into `invited` rows
+  (`services/invites/migration.py`), so only an invitation whose provider did not answer then is still listed this
+  way. Each with their IAM id, whether they signed in at least once
+  ("invited, not yet": an `invited` row, which the configuration's people are too (`core/org_seed.py`), a row of
+  the old login never linked to a provider; an invitee), whether they are deactivated (IAM suspended the user; for an invitee, their provider disabled the
   account), whether they are a platform admin (IAM's `builtin.platform_admin`) and their organizations.
 - **Invite** through the platform's people (`services/people`), the one way someone is invited: an invitation to
   the platform alone (no organization, no role, no grant). The person's account exists at once (`status:
@@ -103,7 +105,8 @@ at the provider).
 - **Only an account ABI made is changed at the provider.** At ABI's own provider (`provisioning: builtin`)
   every account is ABI's. At a shared realm (Keycloak, Zitadel), an invitation may find an account that already
   existed there (`ensure_user`'s existing-account path: nothing created); only one an invitation created is
-  recorded (`provisioned_identities`, migration `0068`, written by `services/invites`) and is ABI's
+  recorded (`provisioned_identities`, migration `0068`, written by `services/people`, and by `services/invites`
+  before it; the configuration's people made at their provider are recorded too) and is ABI's
   (`AccountService._split`). Renaming, deactivating and deleting change ABI's accounts only: the person's own
   account stays as it is, used by their other applications, and the answer and the deletion plan say so ("Their
   account at <provider> is theirs, not ABI's"); their access to ABI is what ends (IAM, sessions, keys). An

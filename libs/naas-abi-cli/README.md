@@ -437,6 +437,14 @@ abi org workspaces --org org-...
 All of these accept `--dry-run` (prints the intended API call) and
 `--api-url` / `--token`.
 
+**Pending invitations of an older Nexus** become invited users at its first start; to
+move those whose provider did not answer then:
+
+```bash
+abi user migrate-invitations            # dry run: the invitations still pending
+abi user migrate-invitations --apply    # each becomes an invited user, same access
+```
+
 **Moving an older project to the identity provider** (accounts of the removed
 password / magic-link login):
 

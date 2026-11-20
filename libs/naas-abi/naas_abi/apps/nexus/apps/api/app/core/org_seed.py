@@ -18,11 +18,19 @@ People are managed in the platform (Org > Users, workspace Members, Admin >
 Users). Config ``members`` lists are deprecated and ignored: existing rows are
 kept, and ``core.users_import`` replays a snapshot without overwriting roles.
 
-Nexus has no login of its own: a configured user is a person of the built-in
-identity provider. Their Nexus account is made here without a password, and they
-are made to exist at the provider (``provision_seed_users``); their first sign-in
-there, with the address verified by the code mailed to it, links the account
-(``services/oidc``), which keeps the roles configured here.
+Nexus has no login of its own: a configured user is a person of the people
+directory (``services/people``) who signs in at an identity provider: the one
+``users[].provider`` names, else the default one, else the built-in one, else the
+only one. Their row is made here ``invited``, with no password and no identity
+yet, naming that provider; they are made to exist there in the background, as the
+people service makes an invited person (``provision_configured_users``), when it
+can (``builtin``, ``zitadel``, ``keycloak``; ``none`` makes nobody). Their first
+sign-in through that provider, with the address verified there, binds the row
+(``services/oidc``), which keeps the roles configured here and makes it
+``active``. A row the configuration names that no provider signs in yet (made
+before this, or by the old login) is given that provider too. With no identity
+service (Nexus alone) the row is made as before: no provider named, linked at the
+first sign-in through the built-in provider.
 """
 
 import asyncio
@@ -200,30 +208,121 @@ def warn_on_placeholder_superadmins(users: list[Any]) -> list[str]:
     return found
 
 
+def identity_providers() -> tuple[dict[str, str], str | None]:
+    """``({name: provisioning}, default)`` of the engine's identity providers;
+    ``({}, None)`` without an identity service (Nexus alone, tests)."""
+    from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.secondary.engine import (
+        default_identity,
+    )
+    from naas_abi_core.engine.call_context import as_service_account
+
+    identity = default_identity()
+    if identity is None:
+        return {}, None
+    try:
+        with as_service_account("api"):
+            found = {str(p.name): str(p.provisioning) for p in identity.list_providers()}
+            default = identity.default_provider
+    except Exception:  # noqa: BLE001 - the rows are made as before, no provider named
+        logger.exception("The identity providers could not be listed for the configured users")
+        return {}, None
+    return found, (str(default) if default else None)
+
+
+def seed_provider(
+    requested: str | None, providers: dict[str, str], default: str | None
+) -> str | None:
+    """The provider a configured person signs in through: the one named, else the
+    default, else the built-in one, else the only one; None when none is known."""
+    if requested:
+        if requested in providers:
+            return requested
+        logger.warning(
+            "users: names the identity provider %r, which is not configured: the default "
+            "one is used",
+            requested,
+        )
+    if default and default in providers:
+        return default
+    builtin = next((name for name, kind in providers.items() if kind == "builtin"), None)
+    if builtin is not None:
+        return builtin
+    return next(iter(providers)) if len(providers) == 1 else None
+
+
+def configured_row(
+    *,
+    email: str,
+    name: str,
+    provider: str | None,
+    now: datetime,
+    **profile: Any,
+) -> UserModel:
+    """A person the configuration (or a people snapshot) names, as the people service
+    leaves someone invited whom no provider made yet: ``invited``, unbound, naming
+    the provider whose verified sign-in binds them. No provider known: the row of
+    before (``active``, linked through the built-in provider)."""
+    return UserModel(
+        id=f"user-{uuid4().hex[:12]}",
+        email=email,
+        name=name,
+        status="invited" if provider else "active",
+        idp_provider=provider,
+        created_at=now,
+        updated_at=now,
+        **profile,
+    )
+
+
+def name_the_provider(user: Any, provider: str | None, now: datetime) -> bool:
+    """Give a configured row that no provider signs in yet, and that names none, the
+    provider the configuration says: its verified sign-in there binds it (before,
+    only the built-in provider's did). True when it changed."""
+    if (
+        provider is None
+        or getattr(user, "idp_provider", None)
+        or getattr(user, "principal_id", None)
+        or getattr(user, "idp_issuer", None)
+    ):
+        return False
+    user.idp_provider = provider
+    user.updated_at = now
+    return True
+
+
 async def _upsert_users(session: AsyncSession) -> dict[str, UserModel]:
     users_by_email: dict[str, UserModel] = {}
     now = datetime.now(UTC).replace(tzinfo=None)
     warn_on_placeholder_superadmins(list(settings.users))
+    providers, default = await asyncio.to_thread(identity_providers)
 
     for user_cfg in settings.users:
         normalized_email = _normalize_email(str(user_cfg.email))
+        provider = seed_provider(user_cfg.provider, providers, default)
         user = await _get_user_by_email(session, normalized_email)
         if user is None:
-            user = UserModel(
-                id=f"user-{uuid4().hex[:12]}",
+            user = configured_row(
                 email=normalized_email,
                 name=user_cfg.name,
+                provider=provider,
+                now=now,
                 avatar=user_cfg.avatar,
                 organization=user_cfg.organization,
                 job_title=user_cfg.job_title,
                 bio=user_cfg.bio,
                 is_superadmin=user_cfg.is_superadmin,
-                created_at=now,
-                updated_at=now,
             )
             session.add(user)
-            logger.info("Created user email=%s from config", normalized_email)
+            logger.info(
+                "Created user email=%s from config (signs in through %s)",
+                normalized_email,
+                provider or "the built-in provider",
+            )
         else:
+            if name_the_provider(user, provider, now):
+                logger.info(
+                    "User email=%s signs in through %s from config", normalized_email, provider
+                )
             logger.info(
                 "User email=%s already exists; skipping config-driven updates",
                 normalized_email,
@@ -685,7 +784,7 @@ async def _apply_configuration_seeds() -> None:
             logger.exception("Failed to apply the configured memberships to IAM")
 
     if settings.users:
-        _provision_in_background([(str(u.email).strip().lower(), u.name) for u in settings.users])
+        _provision_in_background([_normalize_email(str(u.email)) for u in settings.users])
 
     logger.info(
         "Configuration seeds applied (users=%d, organizations=%d)",
@@ -694,7 +793,7 @@ async def _apply_configuration_seeds() -> None:
     )
 
 
-# -- the configured users at the built-in identity provider -----------------------------------
+# -- the configured users at their identity provider -----------------------------------------
 
 # The provider runs as a module: the API may boot before it answers.
 _PROVISION_RETRY_SECONDS = 5.0
@@ -702,69 +801,97 @@ _PROVISION_ATTEMPTS = 60
 _provisioning_tasks: set[asyncio.Task[None]] = set()
 
 
-def _builtin_provider(identity: Any) -> str | None:
-    """The built-in identity provider (``provisioning: builtin``), when there is one."""
-    for provider in identity.list_providers():
-        if getattr(provider, "provisioning", None) == "builtin":
-            return str(provider.name)
-    return None
+class _NotYet(Exception):  # noqa: N818 - a signal: the provider does not answer yet
+    pass
 
 
-def provision_seed_users(identity: Any, users: list[tuple[str, str]]) -> list[str]:
-    """Make each ``(email, name)`` exist at the built-in provider, as ``api``.
-
-    Returns the emails made or found. ``ProviderUnavailableError`` when the
-    provider does not answer yet (the caller tries again); no built-in provider
-    configured: nobody is provisioned, and nothing is an error (the provider's
-    people are made in the provider, or nobody signs in)."""
-    from naas_abi_core.engine.call_context import as_service_account
-
-    with as_service_account("api"):
-        provider = _builtin_provider(identity)
-        if provider is None:
-            return []
-        done: list[str] = []
-        for email, name in users:
-            made = identity.provision_user(provider, email, name=name)
-            logger.info(
-                "Configured user %s %s at the %s identity provider: they sign in with the "
-                "code it emails to that address",
-                email,
-                "created" if getattr(made, "created", False) else "found",
-                provider,
-            )
-            done.append(email)
-        return done
-
-
-async def _provision_when_ready(identity: Any, users: list[tuple[str, str]]) -> None:
+async def provision_configured_users(people: Any, emails: list[str]) -> list[str]:
+    """Make each configured person exist at the provider their row names, through
+    the people service (``PeopleService.provision``: as Nexus, an account it makes
+    recorded as ABI's). Returns the emails done (made, found, or nothing to make);
+    ``_NotYet`` when the provider does not answer yet. Another failure is logged and
+    that person skipped (the next start tries again)."""
+    from naas_abi.apps.nexus.apps.api.app.services.people.port import (
+        NoProviderError,
+        ProvisioningFailedError,
+    )
     from naas_abi_core.services.identity.IdentityPorts import ProviderUnavailableError
 
+    done: list[str] = []
+    for email in emails:
+        user = await people.by_email(email)
+        if user is None:
+            done.append(email)
+            continue
+        try:
+            made = await people.provision(user.id)
+        except ProvisioningFailedError as exc:
+            if isinstance(exc.__cause__, ProviderUnavailableError):
+                raise _NotYet(str(exc)) from exc
+            logger.exception("Could not make the configured user %s at %s", email, user.provider)
+            done.append(email)
+            continue
+        except NoProviderError as exc:
+            logger.warning(
+                "The configured user %s has no identity provider to be made at: %s", email, exc
+            )
+            done.append(email)
+            continue
+        if made is not None:
+            logger.info(
+                "Configured user %s %s at the %s identity provider: their first sign-in "
+                "there, address verified, opens their account",
+                email,
+                "created" if made.created else "found",
+                user.provider,
+            )
+        done.append(email)
+    return done
+
+
+async def _provision_when_ready(people_of: Any, emails: list[str]) -> None:
+    """``people_of()``: an async context giving a people service on a session of its
+    own. Tried again while the provider does not answer (making someone twice finds
+    them)."""
     for attempt in range(_PROVISION_ATTEMPTS):
         try:
-            await asyncio.to_thread(provision_seed_users, identity, users)
+            async with people_of() as people:
+                await provision_configured_users(people, emails)
             return
-        except ProviderUnavailableError as exc:
+        except _NotYet as exc:
             if attempt == 0:
-                logger.info(f"The built-in identity provider is not ready yet: {exc}")
+                logger.info(f"The identity provider is not ready yet: {exc}")
             await asyncio.sleep(_PROVISION_RETRY_SECONDS)
-        except Exception:  # noqa: BLE001 - never stops the API; `abi user migrate` redoes it
+        except Exception:  # noqa: BLE001 - never stops the API; the next start does it
             logger.exception("Could not provision the configured users at the identity provider")
             return
     logger.warning(
-        "The built-in identity provider never answered: run `abi user migrate --apply` "
-        "once it is up to make the configured users exist there"
+        "The identity provider never answered: the configured users are made there at the "
+        "next start"
     )
 
 
-def _provision_in_background(users: list[tuple[str, str]]) -> None:
+def _people_session() -> Any:
+    from contextlib import asynccontextmanager
+
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.services.people import runtime as people_runtime
+
+    @asynccontextmanager
+    async def opened() -> Any:
+        async with AsyncSessionLocal() as db:
+            yield people_runtime.RUNTIME.service(db)
+
+    return opened()
+
+
+def _provision_in_background(emails: list[str]) -> None:
     from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.secondary.engine import (
         default_identity,
     )
 
-    identity = default_identity()
-    if identity is None:
+    if default_identity() is None:
         return
-    task = asyncio.create_task(_provision_when_ready(identity, users))
+    task = asyncio.create_task(_provision_when_ready(_people_session, emails))
     _provisioning_tasks.add(task)
     task.add_done_callback(_provisioning_tasks.discard)
