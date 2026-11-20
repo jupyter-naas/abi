@@ -25,6 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
 __all__ = [
     "AccessGateway",
     "Actor",
+    "AddedUser",
     "AlreadyActiveError",
     "AlreadyMemberError",
     "CreateOrLinkResult",
@@ -49,6 +50,8 @@ __all__ = [
     "UnknownUserError",
     "UserStatus",
     "Warrant",
+    "people_status",
+    "status_of_row",
 ]
 
 Role = Literal["owner", "admin", "member", "viewer"]
@@ -91,6 +94,15 @@ class PlatformUser:
 
 
 @dataclass(frozen=True)
+class AddedUser(PlatformUser):
+    """What ``add_existing`` answers: the person (still a ``PlatformUser``), and
+    whether the mail telling them (the "added" notice, or the invitation again for
+    someone who never signed in) was sent."""
+
+    sign_in_email_sent: bool = False
+
+
+@dataclass(frozen=True)
 class CreateOrLinkResult:
     user: PlatformUser
     # Internal: whether a new row was made. A route never says it (the answer of
@@ -102,6 +114,9 @@ class CreateOrLinkResult:
     # The inviting person may not create accounts at the provider (a platform
     # invitation, which no grant warrants): none was made, the mail says so.
     provisioning_skipped: bool = False
+    # The provider the person signs in with (the one chosen, or the one their row
+    # names when linked); None when it is not configured any more.
+    provider: ProviderInfo | None = None
 
 
 class Actor(Protocol):
@@ -367,3 +382,20 @@ class PeopleMailer(ABC):
     @abstractmethod
     async def added(self, *, to_email: str, inviter_name: str | None, placement: Placement) -> bool:
         """The notice to someone active that they were added somewhere."""
+
+
+# =============================================================================
+# How a status reads
+# =============================================================================
+
+
+def people_status(status: object) -> str:
+    """A status as the API spells it (``invited``, ``active``)."""
+    return str(getattr(status, "value", status))
+
+
+def status_of_row(row: object) -> str:
+    """A ``users`` row's status (``users.status``); a row read without the column
+    is ``active``, as every row from before invitations made rows."""
+    status = getattr(row, "status", None)
+    return people_status(status) if status else UserStatus.ACTIVE.value

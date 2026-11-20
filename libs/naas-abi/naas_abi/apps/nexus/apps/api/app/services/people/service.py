@@ -52,6 +52,7 @@ from naas_abi.apps.nexus.apps.api.app.services.people.port import (
     ROLES,
     AccessGateway,
     Actor,
+    AddedUser,
     AlreadyActiveError,
     AlreadyMemberError,
     CreateOrLinkResult,
@@ -232,6 +233,7 @@ class PeopleService:
             sign_in_email_sent=sent,
             warning=provisioned.warning if provisioned else None,
             provisioning_skipped=skipped,
+            provider=choice,
         )
 
     async def _make(
@@ -279,7 +281,8 @@ class PeopleService:
                 ),
                 now=now,
             )
-            if organization_id and profile:
+            # As for a link: an organization's profile only with a grant it gave.
+            if organization_id and profile and steps:
                 await self.store.write_profile(organization_id, user.id, profile)
             # Committed before IAM attaches: a row IAM vouches for by asking Nexus.
             await self.store.commit()
@@ -378,7 +381,12 @@ class PeopleService:
             await self.store.commit()
         sent = await self._notify(user, by, steps, organization_id=organization_id)
         return CreateOrLinkResult(
-            user=user, created=False, provisioned=False, sign_in_email_sent=sent, warning=None
+            user=user,
+            created=False,
+            provisioned=False,
+            sign_in_email_sent=sent,
+            warning=None,
+            provider=await self._known_provider_of(user),
         )
 
     # =========================================================================
@@ -392,15 +400,23 @@ class PeopleService:
         grants: Sequence[Grant],
         by: Actor,
         may_grant_owner: bool = False,
-    ) -> PlatformUser:
-        """Give an existing person ``grants`` on behalf of ``by`` and tell them."""
+    ) -> AddedUser:
+        """Give an existing person ``grants`` on behalf of ``by`` and tell them.
+        The answer is the person, and whether the mail telling them was sent."""
         user = await self.store.get(user_id)
         if user is None:
             raise UnknownUserError(user_id)
         steps = await self._plan(grants, may_grant_owner)
         await self._apply(user.id, steps, by)
-        await self._notify(user, by, steps, organization_id=None)
-        return user
+        sent = await self._notify(user, by, steps, organization_id=None)
+        return AddedUser(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            status=user.status,
+            provider=user.provider,
+            sign_in_email_sent=sent,
+        )
 
     async def _plan(self, grants: Sequence[Grant], may_grant_owner: bool) -> list[_Step]:
         """The attachments the grants ask for, checked before anything is asked of
@@ -615,6 +631,15 @@ class PeopleService:
             if known
             else "No identity provider is configured"
         )
+
+    async def _known_provider_of(self, user: PlatformUser) -> ProviderInfo | None:
+        """The provider the person signs in with, None when it is not configured
+        (any more) or the providers cannot be read: an answer, never a failure."""
+        try:
+            return await self._provider_of(user)
+        except Exception as exc:  # noqa: BLE001 - the membership stands
+            logger.info(f"The provider of {user.id} is not known: {exc}")
+            return None
 
     async def _provider_of(self, user: PlatformUser) -> ProviderInfo:
         known, default = await self.identity.providers()

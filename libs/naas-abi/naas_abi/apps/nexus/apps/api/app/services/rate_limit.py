@@ -86,6 +86,9 @@ async def check_rate_limit(
 
 
 INVITATION_MAIL = "/api/invitations/mail"
+# A person's sign-in mail sent again (the member routes' resend, the invitations'):
+# once a window for one person, whoever asks.
+RESEND_LIMIT = "/api/invitations/resend"
 _DAY_SECONDS = 24 * 60 * 60
 
 

@@ -41,8 +41,10 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary impor
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary.workspaces__primary_adapter__FastAPI import (  # noqa: E501
     router as workspaces_router,
 )
-from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import get_people_service
-from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_testing import team_people
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_testing import (
+    installed,
+    team_people,
+)
 from naas_abi_core.engine.call_context import (
     CallContext,
     Principal,
@@ -123,7 +125,6 @@ async def api(team, nexus_db, monkeypatch):
 
     app.dependency_overrides[get_db] = session
     people = team_people(USERS)
-    app.dependency_overrides[get_people_service] = lambda: people
     app.dependency_overrides[workspaces_module.get_service_registry] = lambda: SimpleNamespace(
         agents=None
     )
@@ -137,7 +138,8 @@ async def api(team, nexus_db, monkeypatch):
         current["id"], current["scope"] = user, scope
         return AsyncClient(transport=ASGITransport(app=app), base_url="http://t")
 
-    return as_
+    with installed(people):
+        yield as_
 
 
 async def role(user: str, scope: str) -> str | None:

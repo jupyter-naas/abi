@@ -33,12 +33,18 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, w
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.primary import (
     organizations__primary_adapter__FastAPI as organizations_module,
 )
+from naas_abi.apps.nexus.apps.api.app.services.people.port import (
+    AlreadyMemberError,
+    EmailTakenError,
+    NoProviderError,
+    ProvisioningFailedError,
+    RetiredIdentityError,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary import (
     workspaces__primary_adapter__FastAPI as workspaces_module,
 )
-from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import get_people_service
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_testing import (
-    AlreadyMemberError,
+    installed,
     team_people,
 )
 
@@ -107,7 +113,6 @@ async def api(team, nexus_db, monkeypatch):
             await db.commit()
 
     app.dependency_overrides[get_db] = session
-    app.dependency_overrides[get_people_service] = lambda: people
     app.dependency_overrides[organizations_module._get_object_storage] = lambda: object()
     app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(
         id=current["id"], email=f"{current['id']}@example.com", name=current["id"].title()
@@ -117,7 +122,8 @@ async def api(team, nexus_db, monkeypatch):
         current["id"] = user
         return AsyncClient(transport=ASGITransport(app=app), base_url="http://t")
 
-    return SimpleNamespace(as_=as_, people=people)
+    with installed(people):
+        yield SimpleNamespace(as_=as_, people=people)
 
 
 async def role(user: str, scope: str) -> str | None:
@@ -204,6 +210,18 @@ async def test_adding_a_candidate_grants_the_workspace_role_only(api) -> None:
 
 
 @pytest.mark.asyncio
+async def test_an_add_says_whether_the_person_was_told(api) -> None:
+    """The notice is the service's to send: the answer says what happened."""
+    api.people.sent = False
+    async with api.as_("admin") as http:
+        added = await http.post(
+            "/api/workspaces/ws-1/members", json={"user_id": "flora", "role": "viewer"}
+        )
+    assert added.status_code == 201, added.text
+    assert added.json()["sign_in_email_sent"] is False
+
+
+@pytest.mark.asyncio
 async def test_a_workspace_only_person_is_never_given_an_org_role(api) -> None:
     async with api.as_("admin") as http:
         added = await http.post("/api/workspaces/ws-1/members", json={"user_id": "flo"})
@@ -277,6 +295,13 @@ async def test_creating_and_linking_answer_alike(api) -> None:
         assert set(body["user"]) == {"id", "email", "name", "status"}
         assert body["status"] == "added"
         assert body["member"]["role"] == "viewer"
+        # The provider they sign in with, as the invitation routes answered it.
+        assert body["provider"] == {
+            "name": "nexus",
+            "display_name": "Nexus",
+            "provisioning": "builtin",
+            "managed_in_provider": False,
+        }
     # Someone of another organization is linked: one account, the workspace role
     # only, nothing in this organization.
     assert linked.json()["user"]["id"] == "outsider"
@@ -300,16 +325,13 @@ async def test_inviting_a_member_again_is_a_conflict(api) -> None:
 
 @pytest.mark.asyncio
 async def test_the_people_services_refusals_are_http_answers(api, monkeypatch) -> None:
-    class NoProviderError(Exception):
-        pass
-
-    class ProvisioningFailedError(Exception):
-        pass
-
     for error, status in (
         (NoProviderError("none"), 422),
         (ProvisioningFailedError("down"), 502),
-        (AlreadyMemberError("x"), 409),
+        (AlreadyMemberError("x", "scope"), 409),
+        (RetiredIdentityError("retired"), 409),
+        (EmailTakenError("z@example.org"), 409),
+        (ValueError("Enter a valid email address"), 400),
     ):
 
         async def refuse(*_args, error=error, **_kwargs):
@@ -469,3 +491,21 @@ async def test_an_invalid_request_the_service_refuses_is_a_400(api, monkeypatch)
         )
     assert got.status_code == 400
     assert "is a role" in got.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_only_persons_details_are_the_org_admins_to_read(api) -> None:
+    """Org › Users lists them, and links to their page: it serves them, with no org
+    role, as someone reached through a workspace."""
+    async with api.as_("admin") as http:
+        details = await http.get("/api/organizations/org-1/members/flo")
+        outside = await http.get("/api/organizations/org-1/members/outsider")
+    async with api.as_("wsadmin") as http:
+        refused = await http.get("/api/organizations/org-1/members/flo")
+    assert details.status_code == 200, details.text
+    body = details.json()
+    assert (body["member"]["role"], body["member"]["source"]) == (None, "workspace")
+    assert body["member"]["status"] == "active"
+    assert [(w["id"], w["role"]) for w in body["workspaces"] if w["role"]] == [("ws-2", "viewer")]
+    assert outside.status_code == 404
+    assert refused.status_code == 403

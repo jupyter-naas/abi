@@ -46,6 +46,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     new_org_id,
 )
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+    RESEND_LIMIT,
     check_invitation_mail_quota,
     check_rate_limit,
     get_rate_limit_identifier,
@@ -1173,11 +1174,8 @@ async def resend_org_member_invite(
     people: PeopleServicePort = Depends(get_people_service),
 ) -> dict[str, bool]:
     """Send an invited member of the directory their sign-in mail again; 409 once
-    they signed in."""
-    await check_rate_limit(
-        get_rate_limit_identifier(request, current_user.id),
-        "/api/organizations/members/invite",
-    )
+    they signed in. Once a window for one person, then the invite limits
+    (inviting user, address, the organization's day of mail)."""
     if not await service.in_directory(org_id, user_id):
         raise HTTPException(status_code=404, detail="Member not found")
     user = await people.get(user_id)
@@ -1185,6 +1183,13 @@ async def resend_org_member_invite(
         raise HTTPException(status_code=404, detail="Member not found")
     if people_status(user.status) != UserStatus.INVITED:
         raise HTTPException(status_code=409, detail="This member has already signed in")
+    # The person's own limit first: a refused resend spends nothing else.
+    await check_rate_limit(f"invitation:{user_id}", RESEND_LIMIT, limit=1)
+    await check_rate_limit(
+        get_rate_limit_identifier(request, current_user.id),
+        "/api/organizations/members/invite",
+    )
+    await check_rate_limit(f"email:{user.email}", "/api/organizations/members/invite")
     await check_invitation_mail_quota(org_id, None)
     with people_errors(_member_denied):
         sent = await people.resend(user_id=user_id, by=current_user)

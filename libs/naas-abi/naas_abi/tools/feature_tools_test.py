@@ -277,6 +277,11 @@ def test_membership_tools_pass_the_asking_user_and_report_iams_refusals(
     )
     monkeypatch.setattr(nexus_admin_tools, "_people_service", lambda db: _People())
     monkeypatch.setattr(nexus_admin_tools, "_auth_service", lambda db: _Auth())
+
+    async def _no_limits(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(nexus_admin_tools, "_invite_limits", _no_limits)
     monkeypatch.setattr(nexus_admin_tools, "_with_db", _with_db)
     tools = {t.name: t for t in nexus_admin_tools.nexus_admin_tools()}
 
