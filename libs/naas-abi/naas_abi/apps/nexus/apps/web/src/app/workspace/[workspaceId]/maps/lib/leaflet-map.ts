@@ -391,8 +391,13 @@ export type MapsCamera = {
   zoom: number;
 };
 
-/** Initial view before fit-bounds or user interaction (matches createMapsLeaflet). */
-export const MAPS_DEFAULT_CAMERA: MapsCamera = { lat: 20, lng: 0, zoom: 2 };
+/** Initial view before fit-bounds or user interaction (matches createMapsLeaflet).
+ *
+ * The launch camera: the map opens on the United States (this deployment is a
+ * US daily situational awareness brief), and the first pins load keeps it —
+ * see `maps-feed-canvas.tsx` (`skipLaunchFitRef`), which only fits after the
+ * member interacts or switches layers. */
+export const MAPS_DEFAULT_CAMERA: MapsCamera = { lat: 39.5, lng: -98.35, zoom: 4 };
 
 export function captureMapsCamera(map: LeafletMap): MapsCamera {
   const center = map.getCenter();

@@ -195,6 +195,12 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
   // Pins the view was last fitted to: re-fit on new data, not when the same
   // pins are re-drawn (e.g. group-by-country switching at the zoom threshold).
   const fittedPinsRef = useRef<MapsPinMarker[] | null>(null);
+  // The launch camera holds until the member interacts: the first pins load
+  // does not fit-bounds the map away from it (with several global feeds on,
+  // the fit would always zoom out to the whole world). Layer switches and
+  // data refreshes after that fit as before, and a drag re-arms the user's
+  // view (preserveUserViewRef).
+  const skipLaunchFitRef = useRef(true);
   const onMapReadyRef = useRef(onMapReady);
   onMapReadyRef.current = onMapReady;
   const mapReadyExtraCleanupRef = useRef<(() => void) | null>(null);
@@ -582,14 +588,17 @@ export function MapsFeedCanvas({title, loadingLabel, readyMeta, emptyTitle='No d
       const pin = pendingFocusRef.current;
       mapRef.current.setView([pin.lat,pin.lng],14);
       pendingFocusRef.current = null;
+      skipLaunchFitRef.current = false;
     } else if (
       inspectable
       && !viewportBound
       && !preserveUserViewRef.current
+      && !skipLaunchFitRef.current
       && fittedPinsRef.current !== visiblePins
     ) {
       fitMapsBounds(mapRef.current, displayPins, {maxZoom: fitMaxZoom});
     }
+    if (skipLaunchFitRef.current && displayPins.length) skipLaunchFitRef.current = false;
     fittedPinsRef.current = visiblePins;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[displayPins,inspectable,fitMaxZoom,viewportBound,view,handleMapPinSelect]);
