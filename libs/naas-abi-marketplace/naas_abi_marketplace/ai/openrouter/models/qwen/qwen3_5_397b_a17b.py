@@ -1,0 +1,47 @@
+from datetime import datetime
+
+from langchain_openai import ChatOpenAI
+from naas_abi_core.models.Model import (
+    ChatModel,
+    ModelDefinition,
+    ModelProvider,
+)
+from naas_abi_marketplace.ai.openrouter import ABIModule
+from pydantic import SecretStr
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+class Qwen35397bA17bModel(ModelDefinition):
+    CANONICAL_ID = "qwen3.5-397b-a17b"
+    MODEL_ID = "qwen/qwen3.5-397b-a17b"
+    PROVIDER = ModelProvider.OPENROUTER
+
+    model: ChatModel = ChatModel(
+        model_id=MODEL_ID,
+        provider=PROVIDER,
+        model=ChatOpenAI(
+            model=MODEL_ID,
+            temperature=0,
+            timeout=120,
+            max_retries=3,
+            api_key=SecretStr(ABIModule.get_instance().configuration.openrouter_api_key),
+            base_url=OPENROUTER_BASE_URL,
+        ),
+        context_window=262144,
+        name="Qwen: Qwen3.5 397B A17B",
+        owner="qwen",
+        description="The Qwen3.5 series 397B-A17B native vision-language model is built on a hybrid architecture that integrates a linear attention mechanism with a sparse mixture-of-experts model, achieving higher inference efficiency. It delivers...",
+        canonical_slug="qwen/qwen3.5-397b-a17b-20260216",
+        hugging_face_id="Qwen/Qwen3.5-397B-A17B",
+        created_at=datetime.fromtimestamp(1771223018),
+        pricing={'prompt': '0.00000045', 'completion': '0.000003', 'input_cache_read': '0.00000022'},
+        architecture={'modality': 'text+image+video->text', 'input_modalities': ['text', 'image', 'video'], 'output_modalities': ['text'], 'tokenizer': 'Qwen3', 'instruct_type': None},
+        top_provider={'context_length': 262144, 'max_completion_tokens': 81920, 'is_moderated': False},
+        per_request_limits=None,
+        supported_parameters=['frequency_penalty', 'include_reasoning', 'logit_bias', 'logprobs', 'max_tokens', 'min_p', 'presence_penalty', 'reasoning', 'repetition_penalty', 'response_format', 'seed', 'stop', 'structured_outputs', 'temperature', 'tool_choice', 'tools', 'top_k', 'top_logprobs', 'top_p'],
+        default_parameters={'temperature': 0.6, 'top_p': 0.95, 'top_k': 20, 'frequency_penalty': None, 'presence_penalty': None, 'repetition_penalty': None},
+    )
+
+
+model: ChatModel = Qwen35397bA17bModel.model

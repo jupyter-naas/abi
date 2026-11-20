@@ -22,6 +22,8 @@ Options::
     --ai-dir        override the ai/ output dir (default: auto-detected)
     --only-modules  only regenerate provider __init__.py files
     --only-models   only regenerate model files
+    --from-api      add model files that the live OpenRouter catalog has and
+                    this tree does not. Existing files are left untouched.
 """
 
 from __future__ import annotations
@@ -476,6 +478,104 @@ def generate_provider_models(
 
 
 # ---------------------------------------------------------------------------
+# Live catalog
+# The snapshot path above only covers the providers someone exported by hand.
+# The public catalog is the list projects actually select from.
+# ---------------------------------------------------------------------------
+
+_OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+
+# Prefixes that already have a package name different from the author slug.
+_DIR_ALIASES = {
+    "x-ai": "xai",
+    "mistralai": "mistral",
+}
+
+
+def provider_dir_name(prefix: str) -> str:
+    """Importable package name for an OpenRouter author prefix."""
+    if prefix in _DIR_ALIASES:
+        return _DIR_ALIASES[prefix]
+    raw = prefix.removeprefix("~")
+    name = re.sub(r"[^a-z0-9]", "_", raw.lower())
+    name = re.sub(r"_+", "_", name).strip("_")
+    if prefix.startswith("~"):
+        name = f"alt_{name}"
+    if not name or not name[0].isalpha():
+        name = f"p_{name}"
+    return name
+
+
+def existing_model_ids(models_dir: Path) -> set[str]:
+    found: set[str] = set()
+    if not models_dir.is_dir():
+        return found
+    for path in models_dir.rglob("*.py"):
+        if path.name == "__init__.py":
+            continue
+        for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("MODEL_ID = "):
+                found.add(stripped.split("=", 1)[1].strip().strip('"').strip("'"))
+                break
+    return found
+
+
+def fetch_openrouter_models(url: str = _OPENROUTER_MODELS_URL) -> list[dict]:
+    import urllib.request
+
+    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        payload = json.loads(response.read().decode())
+    models = payload["data"] if isinstance(payload, dict) else payload
+    if not isinstance(models, list):
+        raise TypeError("OpenRouter catalog did not return a model list")
+    return models
+
+
+def add_missing_models(
+    models: list[dict],
+    models_dir: Path = _MODELS_DIR,
+    templates_dir: Path = _TEMPLATES_DIR,
+) -> int:
+    """Write one model file per catalog id that is not already checked in.
+
+    Existing files are not rewritten: several of them carry a hand-written
+    docstring on top of the generated body.
+    """
+    template = (templates_dir / "model.py.template").read_text()
+    have = existing_model_ids(models_dir)
+    written = 0
+    for model in models:
+        mid = model.get("id")
+        if not isinstance(mid, str) or not mid or mid in have:
+            continue
+        prefix = mid.split("/", 1)[0] if "/" in mid else "unknown"
+        provider_dir = models_dir / provider_dir_name(prefix)
+        provider_dir.mkdir(parents=True, exist_ok=True)
+        init = provider_dir / "__init__.py"
+        if not init.exists():
+            init.write_text(f'"""OpenRouter models — {prefix}."""\n')
+        fname = _to_filename(mid) + ".py"
+        target = provider_dir / fname
+        if target.exists():
+            stem = target.stem
+            n = 2
+            while (provider_dir / f"{stem}_{n}.py").exists():
+                n += 1
+            target = provider_dir / f"{stem}_{n}.py"
+        variables = _model_vars(model, prefix)
+        content = _render(template, variables)
+        # The template always imports the enum. A raw canonical id does not use it.
+        if str(variables["canonical"]).startswith('"'):
+            content = content.replace("    CanonicalModelId,\n", "")
+        target.write_text(content)
+        have.add(mid)
+        written += 1
+    return written
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -487,11 +587,21 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--ai-dir", type=Path, default=_AI_DIR)
     p.add_argument("--only-modules", action="store_true")
     p.add_argument("--only-models", action="store_true")
+    p.add_argument(
+        "--from-api",
+        action="store_true",
+        help="Add model files missing from the live OpenRouter catalog.",
+    )
     return p
 
 
 if __name__ == "__main__":
     args = _parser().parse_args()
+    if args.from_api:
+        catalog = fetch_openrouter_models()
+        added = add_missing_models(catalog, models_dir=args.models_dir)
+        print(f"[api] catalog {len(catalog)}, added {added}")
+        raise SystemExit(0)
     total = 0
     if not args.only_models:
         total += generate_provider_modules(ai_dir=args.ai_dir)
