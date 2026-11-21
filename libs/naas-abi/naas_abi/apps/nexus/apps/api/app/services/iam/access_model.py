@@ -57,16 +57,15 @@ decisions are compared with the copy's (``unverified`` names any difference).
 
 from __future__ import annotations
 
-import inspect
 import json
 import logging
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import unquote
 
-from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
+from naas_abi.apps.nexus.apps.api.app.services.iam import platform_files, runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import NEXUS_CATALOG
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
     CONTAINER_DEFAULTS,
@@ -1493,6 +1492,7 @@ class Trial:
     graph: list[tuple[str, str]]
     after: Decisions
     levels: Levels
+    copy: Any = None
 
 
 def _levels(iam: Any) -> Levels:
@@ -1522,7 +1522,7 @@ def trial(iam: Any, inputs: Inputs) -> Trial:
     after = decisions(copy, tried.plans, inputs, graph)
     report = tried.report
     report.changes = changes_of(before, after, tried.plans, inputs)
-    return Trial(report, tried.plans, graph, after, levels)
+    return Trial(report, tried.plans, graph, after, levels, copy)
 
 
 def apply_tried(
@@ -1532,6 +1532,7 @@ def apply_tried(
     decisions compared with the copy's. Returns the records to write and the
     decisions that differ from the copy's."""
     done = apply(iam, inputs, tried.levels, dry_run=False)
+    platform_files.sync_platform_files(iam)
     real = decisions(iam, tried.plans, inputs, tried.graph)
     unverified = [
         f"{key}: {real[key]} (the copy: {tried.after.get(key)})"
@@ -1687,41 +1688,15 @@ def named_universe(iam: Any) -> Universe:
     )
 
 
-DRIVE_FLAGS_MISSING = (
-    "The drive flags were not converted: services/iam/platform_files (#1590) is not there"
-)
-DRIVE_FLAGS_DRY_RUN = (
-    "The drive flags (#1590) are converted when the move is applied: a dry run does not"
-)
-
-
 async def convert_drive_flags(
-    iam: Any, db: AsyncSession
-) -> tuple[list[dict[str, Any]], str | None]:
+    iam: Any, db: AsyncSession, *, apply: bool = True
+) -> list[dict[str, Any]]:
     """The drive flags the holding table kept, converted by Platform Files
-    (``platform_files.convert_legacy_drive_flags``, #1590), which owns that table: its
-    rows (workspace, flag, action, detail), and a note when the module is not there."""
-    try:
-        from naas_abi.apps.nexus.apps.api.app.services.iam import (  # type: ignore[attr-defined]
-            platform_files,
-        )
-    except ImportError:
-        return [], DRIVE_FLAGS_MISSING
-    convert = getattr(platform_files, "convert_legacy_drive_flags", None)
-    if convert is None:
-        return [], DRIVE_FLAGS_MISSING
-    rows = convert(iam, db)
-    if inspect.isawaitable(rows):
-        rows = await rows
-    return [_row(r) for r in rows or ()], None
-
-
-def _row(row: Any) -> dict[str, Any]:
-    if is_dataclass(row) and not isinstance(row, type):
-        return asdict(row)
-    if isinstance(row, Mapping):
-        return dict(row)
-    return {"row": str(row)}
+    (``platform_files.convert_legacy_drive_flags``, #1590), which owns that table and
+    drops it: its rows (workspace, flag, action, detail). ``apply=False``: the report
+    alone, nothing changed, the table kept."""
+    changes = await platform_files.convert_legacy_drive_flags(iam, db, apply=apply)
+    return [asdict(change) for change in changes]
 
 
 async def _planned(db: AsyncSession) -> Report | None:
@@ -1792,7 +1767,11 @@ async def migrate_access(
     report = merged_report(planned, tried.report)
     report.dry_run = dry_run
     if dry_run:
-        report.notes.append(DRIVE_FLAGS_DRY_RUN)
+        try:
+            report.drive_flags = await convert_drive_flags(tried.copy, db, apply=False)
+        except Exception as exc:  # noqa: BLE001 - reported; the rest of the report stands
+            _log.exception("The drive flags could not be read")
+            report.notes.append(f"The drive flags could not be read: {exc}")
         log_report(report)
         return report
     # The whole move's report, kept before the real IAM changes: a start that
@@ -1814,13 +1793,10 @@ async def migrate_access(
     report.applied = True
     report.unverified = unverified
     try:
-        flags, note = await convert_drive_flags(iam, db)
+        report.drive_flags = await convert_drive_flags(iam, db) or report.drive_flags
     except Exception as exc:  # noqa: BLE001 - reported; the people's move stands
         _log.exception("The drive flags were not converted")
-        flags, note = [], f"The drive flags were not converted: {exc}"
-    report.drive_flags = flags or report.drive_flags
-    if note:
-        report.notes.append(note)
+        report.notes.append(f"The drive flags were not converted: {exc}")
     await _keep(db, MIGRATION_NAME, report)
     await db.execute(text("DELETE FROM iam_migrations WHERE name = :n"), {"n": PLANNED_NAME})
     await db.commit()

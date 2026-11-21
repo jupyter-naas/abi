@@ -20,6 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam import (
     access_model,
     container_defaults,
     container_names,
+    platform_files,
     policy_tree,
     role_features,
 )
@@ -44,7 +45,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     in_offer_form,
 )
 from naas_abi_core.engine.call_context import as_service_account, use_call_context
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 KIND = {TYPE_OF_KIND[k]: k for k in SECTIONS}
 UNIVERSE = access_model.Universe(
@@ -255,7 +256,7 @@ async def test_every_change_of_access_is_reported_with_its_reason(nexus_db):
         assert sorted(report.no_admin) == sorted(
             [_containers(previous)["ws-b"], _containers(previous)["ws-c"]]
         )
-        assert access_model.DRIVE_FLAGS_MISSING in report.notes
+        assert report.drive_flags == []
         kept = json.loads(await _recorded(nexus_db, access_model.MIGRATION_NAME) or "{}")
         assert kept["applied"] and kept["people"] == report.people
         assert await _recorded(nexus_db, access_model.PLANNED_NAME) is None
@@ -272,10 +273,68 @@ async def test_a_dry_run_reports_what_the_move_does_and_writes_nothing(nexus_db)
         assert _snapshot(nexus) == held and await _defaults(nexus_db) == records
         assert await _recorded(nexus_db, access_model.MIGRATION_NAME) is None
         assert await _recorded(nexus_db, access_model.PLANNED_NAME) is None
-        assert access_model.DRIVE_FLAGS_DRY_RUN in dry.notes
         applied = await _move(nexus_db, nexus)
     assert applied is not None
     assert _changes(dry, what=True) == _changes(applied, what=True)
+
+
+async def _holding_table(nexus_db, rows: list[tuple[str, bool, bool]]) -> None:
+    async with nexus_db() as db:
+        await db.execute(
+            text(
+                f"CREATE TABLE {platform_files.HOLDING_TABLE} (workspace_id TEXT PRIMARY KEY, "
+                "platform_drive_enabled BOOLEAN, system_drive_enabled BOOLEAN)"
+            )
+        )
+        for row in rows:
+            await db.execute(
+                text(f"INSERT INTO {platform_files.HOLDING_TABLE} VALUES (:w, :p, :s)"),
+                {"w": row[0], "p": row[1], "s": row[2]},
+            )
+        await db.commit()
+
+
+async def _has_holding_table(nexus_db) -> bool:
+    async with nexus_db() as db:
+        connection = await db.connection()
+        return await connection.run_sync(
+            lambda sync: inspect(sync).has_table(platform_files.HOLDING_TABLE)
+        )
+
+
+@pytest.mark.asyncio
+async def test_the_drive_flags_are_given_to_the_people_of_the_workspace_after_the_move(nexus_db):
+    """``platform_drive_enabled`` (kept by 0073) becomes Platform Files · read and
+    write for the workspace's people once they are in its groups; the dry run
+    reports it and keeps the table."""
+    nexus = previous._world()
+    with nexus.installed():
+        nexus = await _policy_tree_world_installed(nexus, nexus_db)
+        await _holding_table(nexus_db, [("ws-a", True, True)])
+        dry = await _move(nexus_db, nexus, dry_run=True)
+        assert dry is not None
+        assert {(r["workspace_id"], r["flag"], r["action"]) for r in dry.drive_flags} == {
+            ("ws-a", "platform", "converted"),
+            ("ws-a", "system", "reported"),
+        }
+        assert await _has_holding_table(nexus_db)
+        with as_service_account("engine"):
+            assert platform_files.platform_files_groups(nexus.iam) == {}
+        report = await _move(nexus_db, nexus)
+        assert report is not None
+        assert {(r["flag"], r["action"]) for r in report.drive_flags} == {
+            ("platform", "converted"),
+            ("system", "reported"),
+        }
+        assert not await _has_holding_table(nexus_db)
+        container = _containers(previous)["ws-a"]
+        with as_service_account("engine"):
+            assert platform_files.workspace_platform_files(nexus.iam, "ws-a") == "write"
+            group = platform_files.platform_files_groups(nexus.iam)["ws-a"]
+            members = set(nexus.iam.list_group_members(group))
+            assert members and members == platform_files.people_of(nexus.iam, container)
+        kept = json.loads(await _recorded(nexus_db, access_model.MIGRATION_NAME) or "{}")
+        assert len(kept["drive_flags"]) == 2
 
 
 @pytest.mark.asyncio
