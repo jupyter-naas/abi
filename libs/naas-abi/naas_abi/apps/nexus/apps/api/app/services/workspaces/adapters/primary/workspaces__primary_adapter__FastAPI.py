@@ -86,13 +86,14 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.background_image impor
     fetch_image_url,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
-    Grant,
     PeopleServicePort,
     UserStatus,
     added_result,
+    capability_group_items,
     get_people_service,
     people_errors,
     people_status,
+    workspace_grant,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceCreateInput,
@@ -242,25 +243,42 @@ class MemberProfileInput(BaseModel):
     interest: str | None = Field(default=None, max_length=1000)
 
 
-class WorkspaceMemberInvite(BaseModel):
+class WorkspaceAccessInput(BaseModel):
+    """What a person is given in the workspace (#1589): their level (None: keep
+    theirs; someone with none is a Member), whether they administer it, and the
+    capability groups (ids) they join. ``role`` is the body of before, read when
+    ``level`` and ``admin`` are absent (owner is refused)."""
+
+    level: str | None = Field(default=None, pattern=r"^(viewer|member)$")
+    admin: bool | None = None
+    capabilities: list[str] = Field(default_factory=list, max_length=20)
+    role: str | None = Field(default=None, pattern=r"^(owner|admin|member|viewer)$")
+    # Customer policies are no longer attached to a person (#1589): refused.
+    policy_ids: list[str] = Field(default_factory=list, max_length=20)
+
+
+class WorkspaceMemberInvite(WorkspaceAccessInput):
     email: str = Field(..., min_length=3, max_length=255)
-    role: str = Field(default="member", pattern=r"^(owner|admin|member|viewer)$")
     name: str | None = Field(default=None, min_length=1, max_length=120)
     # The identity provider to invite through; by default the one the email's
     # domain routes to, else the default provider.
     provider: str | None = Field(default=None, min_length=1, max_length=32)
-    # Customer policies the new member gets at this workspace beside the role
-    # (no role brings a feature: "Features of member", say).
-    policy_ids: list[str] = Field(default_factory=list, max_length=20)
     profile: MemberProfileInput | None = None
 
 
-class WorkspaceMemberAdd(BaseModel):
+class WorkspaceMemberAdd(WorkspaceAccessInput):
     """Someone of the organization's directory, added to the workspace."""
 
     user_id: str = Field(..., min_length=1, max_length=255)
-    role: str = Field(default="member", pattern=r"^(owner|admin|member|viewer)$")
-    policy_ids: list[str] = Field(default_factory=list, max_length=20)
+
+
+class WorkspaceMemberChange(BaseModel):
+    """A member's level (it applies in every workspace they work in) and whether
+    they administer this workspace; ``role``, the body of before."""
+
+    level: str | None = Field(default=None, pattern=r"^(viewer|member)$")
+    admin: bool | None = None
+    role: str | None = None
 
 
 class WorkspaceMemberCandidate(BaseModel):
@@ -768,9 +786,50 @@ async def _added_member(
     )
 
 
-async def _may_grant_owner(service: WorkspaceService, user: User, workspace_id: str) -> bool:
-    """Only an owner makes an owner: of the workspace, or of its organization."""
-    return await service.get_workspace_role(user.id, workspace_id) == "owner"
+def _grant_of(organization_id: str | None, workspace_id: str, body: WorkspaceAccessInput) -> Any:
+    if body.policy_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Policies are no longer attached to a person: name capability groups",
+        )
+    try:
+        return workspace_grant(
+            organization_id,
+            workspace_id,
+            level=body.level,
+            admin=body.admin,
+            role=body.role,
+            capabilities=body.capabilities,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _role_shown(grant: Any) -> str:
+    """The role the members list shows for someone just given ``grant``."""
+    if grant.workspaces and grant.workspaces[0].admin:
+        return "admin"
+    return grant.level or "member"
+
+
+@router.get(
+    "/{workspace_id}/capability-groups",
+    dependencies=[
+        guard("InviteWorkspaceMember", literal="-", denied="Only admins can add members")
+    ],
+)
+async def list_workspace_capability_groups(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict[str, object]:
+    """The capability groups a person may join from this workspace: its
+    organization's, then the platform's (the platform's alone for a workspace in no
+    organization). The model's own groups are not listed."""
+    workspace = await service.get_workspace(workspace_id)
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return {"items": await capability_group_items(workspace.organization_id)}
 
 
 @router.get(
@@ -811,8 +870,9 @@ async def add_workspace_member(
     service: WorkspaceService = Depends(get_workspace_service),
     people: PeopleServicePort = Depends(get_people_service),
 ) -> dict[str, object]:
-    """Add someone of the organization's directory with the role (and policies)
-    chosen, now, and notify them. Nobody outside the directory is found (404, as
+    """Add someone of the organization's directory to the workspace ("<W>
+    workspace"), with their level, whether they administer it and capability
+    groups, now, and notify them. Nobody outside the directory is found (404, as
     for an unknown id); someone already in the workspace is a 409. No org role is
     granted. The notice counts as an invitation mail: the inviting user's, the
     address's and the organization's day limits apply."""
@@ -830,14 +890,12 @@ async def add_workspace_member(
     await check_invitation_mail_quota(
         workspace.organization_id if workspace else None, workspace_id
     )
+    grant = _grant_of(workspace.organization_id if workspace else None, workspace_id, body)
     with people_errors(_member_denied):
-        user = await people.add_existing(
-            user_id=body.user_id,
-            grants=[Grant("workspace", workspace_id, body.role, tuple(body.policy_ids))],  # type: ignore[arg-type]
-            by=current_user,
-            may_grant_owner=await _may_grant_owner(service, current_user, workspace_id),
-        )
-    member = await _added_member(service, workspace_id=workspace_id, user=user, role=body.role)
+        user = await people.add_existing(user_id=body.user_id, grant=grant, by=current_user)
+    member = await _added_member(
+        service, workspace_id=workspace_id, user=user, role=_role_shown(grant)
+    )
     # Whether the notice (or, to someone who never signed in, the invitation) went.
     return {"member": member.model_dump(mode="json"), "sign_in_email_sent": user.sign_in_email_sent}
 
@@ -863,28 +921,28 @@ async def invite_workspace_member(
     people: PeopleServicePort = Depends(get_people_service),
 ) -> dict[str, object]:
     """Create the person's platform account, or link the one their email has, and
-    give them the role (and policies) in this workspace only: no org role. The
-    answer is the same either way."""
+    put them in this workspace only (level, admin, capability groups): no org role.
+    The answer is the same either way."""
     email = invite.email.lower().strip()
     await check_rate_limit(get_rate_limit_identifier(request, current_user.id), _INVITE_LIMIT)
     await check_rate_limit(f"email:{email}", _INVITE_LIMIT)
     workspace = await service.get_workspace(workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
+    grant = _grant_of(workspace.organization_id, workspace_id, invite)
     await check_invitation_mail_quota(workspace.organization_id, workspace_id)
     with people_errors(_member_denied):
         result = await people.create_or_link(
             email=email,
             name=invite.name,
             provider=invite.provider,
-            grants=[Grant("workspace", workspace_id, invite.role, tuple(invite.policy_ids))],  # type: ignore[arg-type]
+            grant=grant,
             by=current_user,
-            may_grant_owner=await _may_grant_owner(service, current_user, workspace_id),
             profile=_profile_of(invite.profile),
             organization_id=workspace.organization_id,
         )
     member = await _added_member(
-        service, workspace_id=workspace_id, user=result.user, role=invite.role
+        service, workspace_id=workspace_id, user=result.user, role=_role_shown(grant)
     )
     return added_result(result, member)
 
@@ -963,10 +1021,51 @@ async def remove_workspace_member(
 async def update_workspace_member(
     workspace_id: str,
     user_id: str,
-    updates: dict,
+    body: WorkspaceMemberChange,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
-) -> dict[str, str]:
+    people: PeopleServicePort = Depends(get_people_service),
+) -> dict[str, object]:
+    """Change a member's level (#1589: one choice, applying in every workspace they
+    work in; this workspace's admins may change it, audited) and whether they
+    administer this workspace. ``{role}``, the body of before, is still read."""
+    if body.level is not None or body.admin is not None:
+        if user_id == current_user.id:
+            raise HTTPException(status_code=400, detail="Cannot change your own access")
+        if (
+            await _find_workspace_member(service, workspace_id=workspace_id, user_id=user_id)
+            is None
+        ):
+            raise HTTPException(status_code=404, detail="Member not found")
+        if body.level == "viewer" and body.admin:
+            raise HTTPException(
+                status_code=400,
+                detail="A workspace admin is a Member: a Viewer administers nothing",
+            )
+        container = await authz.AUTHZ.container_of(workspace_id)
+        with people_errors(_member_denied):
+            if body.admin is False:
+                await people.set_workspace_admin(
+                    user_id=user_id, workspace_id=workspace_id, admin=False, by=current_user
+                )
+            if body.level is not None:
+                await people.set_level(
+                    user_id=user_id,
+                    level=body.level,
+                    by=current_user,
+                    where=[container] if container else [],
+                )
+            if body.admin:
+                await people.set_workspace_admin(
+                    user_id=user_id, workspace_id=workspace_id, admin=True, by=current_user
+                )
+        row = await _find_workspace_member(service, workspace_id=workspace_id, user_id=user_id)
+        return {
+            "status": "updated",
+            "level": row.level if row else body.level,
+            "admin": bool(row and row.role in ("admin", "owner")),
+        }
+    updates = body.model_dump(exclude_none=True)
     if "role" in updates and user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot change your own role")
     try:

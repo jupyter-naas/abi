@@ -26,6 +26,7 @@ T = TypeVar("T")
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _WS_ROLES = frozenset({"admin", "member", "viewer"})
 _ORG_ROLES = frozenset({"owner", "admin", "member"})
+_LEVELS = frozenset({"member", "viewer"})
 
 
 def _run_async(coro: Awaitable[T]) -> T:
@@ -249,7 +250,7 @@ async def _create_or_link(
     **kwargs: Any,
 ) -> dict[str, Any]:
     """``PeopleService.create_or_link`` for the asking user: the person's account
-    made or linked, given ``grants`` on the asker's behalf (IAM decides), and
+    made or linked, given ``grant`` on the asker's behalf (IAM decides), and
     mailed. The answer never tells whether the account was made or linked. The
     invite routes' limits apply (``limits_endpoint``: whose counters)."""
     from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
@@ -346,7 +347,10 @@ def nexus_admin_tools() -> list[BaseTool]:
                 org = _organization_service(db)
                 role = await org.get_organization_role(user_id=user_id, org_id=org_id)
                 if role is None:
-                    return {"error": "Not a member of this organization", "organization_id": org_id}
+                    return {
+                        "error": "Not a member of this organization",
+                        "organization_id": org_id,
+                    }
                 rows = await org.list_workspaces(org_id=org_id, user_id=user_id)
                 return [_record_to_dict(row) for row in rows]
             rows = await _workspace_service(db).list_workspaces(user_id=user_id)
@@ -388,7 +392,9 @@ def nexus_admin_tools() -> list[BaseTool]:
             )
 
             org = _organization_service(db)
-            role = await org.get_organization_role(user_id=user_id, org_id=organization_id)
+            role = await org.get_organization_role(
+                user_id=user_id, org_id=organization_id
+            )
             if role not in ("owner", "admin"):
                 return {
                     "error": "Only organization owners/admins can create workspaces",
@@ -437,9 +443,14 @@ def nexus_admin_tools() -> list[BaseTool]:
 
             ws = _workspace_service(db)
             try:
-                await ws.require_workspace_access(user_id=user_id, workspace_id=workspace_id)
+                await ws.require_workspace_access(
+                    user_id=user_id, workspace_id=workspace_id
+                )
             except WorkspacePermissionError:
-                return {"error": "No access to this workspace", "workspace_id": workspace_id}
+                return {
+                    "error": "No access to this workspace",
+                    "workspace_id": workspace_id,
+                }
             rows = await ws.list_workspace_members(workspace_id=workspace_id)
             return [
                 {**_record_to_dict(row), "is_you": row.user_id == user_id}
@@ -457,15 +468,19 @@ def nexus_admin_tools() -> list[BaseTool]:
     def invite_workspace_member(
         email: str,
         workspace_id: str = "",
-        role: str = "member",
+        level: str = "",
+        admin: bool = False,
         name: str = "",
+        role: str = "",
     ) -> Any:
         """Add a person by email to a workspace: their platform account is made,
         or the one their email already has is linked.
 
-        Requires workspace owner/admin. role: admin, member, or viewer. Grants the
-        workspace role only (no organization role). The person is mailed: a
-        sign-in link when new, a notice when they already had an account.
+        Requires workspace owner/admin. level: member or viewer (empty: keep
+        theirs; someone new is a member); it applies in all their workspaces.
+        admin: they administer this workspace. role (admin, member, viewer) is the
+        older form of both. Nothing is given at the organization. The person is
+        mailed: a sign-in link when new, a notice when they already had an account.
         Defaults to the current chat workspace when workspace_id is omitted.
         """
         user_id = _require_user_id()
@@ -473,20 +488,25 @@ def nexus_admin_tools() -> list[BaseTool]:
             return user_id
         email = (email or "").strip().lower()
         workspace_id = (workspace_id or "").strip() or turn_workspace_id()
-        role = (role or "member").strip().lower()
+        level = (level or "").strip().lower()
+        role = (role or "").strip().lower()
         display_name = (name or "").strip() or None
         if not email or not workspace_id:
             return {"error": "email and workspace_id are required"}
-        if role not in _WS_ROLES:
+        if level and level not in _LEVELS:
+            return {"error": f"level must be one of {sorted(_LEVELS)}", "level": level}
+        if role and role not in _WS_ROLES:
             return {"error": f"role must be one of {sorted(_WS_ROLES)}", "role": role}
 
         async def _run(db: Any) -> Any:
             from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
-                Grant,
+                workspace_grant,
             )
 
             ws = _workspace_service(db)
-            caller_role = await ws.get_workspace_role(user_id=user_id, workspace_id=workspace_id)
+            caller_role = await ws.get_workspace_role(
+                user_id=user_id, workspace_id=workspace_id
+            )
             if caller_role not in ("owner", "admin"):
                 return {
                     "error": "Only workspace owners/admins can invite members",
@@ -496,7 +516,18 @@ def nexus_admin_tools() -> list[BaseTool]:
             workspace = await ws.get_workspace(workspace_id)
             if workspace is None:
                 return {"error": "Workspace not found", "workspace_id": workspace_id}
-            # The workspace role only: a workspace admin never grants an org role.
+            try:
+                grant = workspace_grant(
+                    workspace.organization_id,
+                    workspace_id,
+                    level=level or None,
+                    admin=admin or None,
+                    role=role or None,
+                    capabilities=(),
+                )
+            except ValueError as exc:
+                return {"error": str(exc)}
+            # The workspace only: a workspace admin never gives anything at the org.
             return await _create_or_link(
                 db,
                 user_id,
@@ -505,8 +536,7 @@ def nexus_admin_tools() -> list[BaseTool]:
                 email=email,
                 name=display_name,
                 provider=None,
-                grants=[Grant("workspace", workspace_id, role)],  # type: ignore[arg-type]
-                may_grant_owner=False,
+                grant=grant,
                 organization_id=workspace.organization_id,
             )
 
@@ -535,7 +565,9 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         async def _run(db: Any) -> Any:
             ws = _workspace_service(db)
-            caller_role = await ws.get_workspace_role(user_id=user_id, workspace_id=workspace_id)
+            caller_role = await ws.get_workspace_role(
+                user_id=user_id, workspace_id=workspace_id
+            )
             if caller_role not in ("owner", "admin"):
                 return {
                     "error": "Only workspace owners/admins can remove members",
@@ -547,7 +579,11 @@ def nexus_admin_tools() -> list[BaseTool]:
             )
             if not removed:
                 return {"error": "Member not found", "user_id": target}
-            return {"status": "removed", "user_id": target, "workspace_id": workspace_id}
+            return {
+                "status": "removed",
+                "user_id": target,
+                "workspace_id": workspace_id,
+            }
 
         try:
             return _run_async(_with_db(_run))
@@ -580,7 +616,9 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         async def _run(db: Any) -> Any:
             ws = _workspace_service(db)
-            caller_role = await ws.get_workspace_role(user_id=user_id, workspace_id=workspace_id)
+            caller_role = await ws.get_workspace_role(
+                user_id=user_id, workspace_id=workspace_id
+            )
             if caller_role not in ("owner", "admin"):
                 return {
                     "error": "Only workspace owners/admins can update members",
@@ -624,9 +662,14 @@ def nexus_admin_tools() -> list[BaseTool]:
 
         async def _run(db: Any) -> Any:
             org = _organization_service(db)
-            role = await org.get_organization_role(user_id=user_id, org_id=organization_id)
+            role = await org.get_organization_role(
+                user_id=user_id, org_id=organization_id
+            )
             if role is None:
-                return {"error": "Not a member of this organization", "organization_id": organization_id}
+                return {
+                    "error": "Not a member of this organization",
+                    "organization_id": organization_id,
+                }
             rows = await org.list_members(org_id=organization_id)
             return [_record_to_dict(row) for row in rows]
 
@@ -641,16 +684,23 @@ def nexus_admin_tools() -> list[BaseTool]:
     def invite_organization_member(
         organization_id: str,
         email: str,
-        role: str = "member",
+        level: str = "",
+        org_admin: bool = False,
         name: str = "",
         workspace_id: str = "",
-        workspace_role: str = "member",
+        workspace_admin: bool = False,
+        role: str = "",
+        workspace_role: str = "",
     ) -> Any:
         """Add a person by email to an organization: their platform account is
         made, or the one their email already has is linked.
 
-        Requires org owner/admin. role: owner (owners only), admin, or member.
-        Optionally also give them a role in one of its workspaces (workspace_id).
+        Requires org owner/admin. level: member or viewer (empty: keep theirs),
+        applying in all their workspaces. org_admin: they administer the
+        organization. workspace_id: one of its workspaces they join
+        (workspace_admin: they administer it); with none and no org_admin they
+        join the organization's people. role (admin, member) and workspace_role
+        (admin, member, viewer) are the older form; owner is no longer given.
         The person is mailed: a sign-in link when new, a notice otherwise.
         """
         user_id = _require_user_id()
@@ -658,23 +708,34 @@ def nexus_admin_tools() -> list[BaseTool]:
             return user_id
         organization_id = (organization_id or "").strip()
         email = (email or "").strip().lower()
-        role = (role or "member").strip().lower()
+        level = (level or "").strip().lower()
+        role = (role or "").strip().lower()
         display_name = (name or "").strip() or None
         workspace_id = (workspace_id or "").strip()
-        workspace_role = (workspace_role or "member").strip().lower()
+        workspace_role = (workspace_role or "").strip().lower()
         if not organization_id or not email:
             return {"error": "organization_id and email are required"}
-        if role not in _ORG_ROLES:
+        if level and level not in _LEVELS:
+            return {"error": f"level must be one of {sorted(_LEVELS)}", "level": level}
+        if role and role not in _ORG_ROLES:
             return {"error": f"role must be one of {sorted(_ORG_ROLES)}", "role": role}
-        if workspace_id and workspace_role not in _WS_ROLES:
+        if role == "owner":
+            return {
+                "error": "Owner is no longer given: make them an org admin",
+                "role": role,
+            }
+        if workspace_role and workspace_role not in _WS_ROLES:
             return {
                 "error": f"workspace_role must be one of {sorted(_WS_ROLES)}",
                 "workspace_role": workspace_role,
             }
+        if not level and workspace_id and workspace_role:
+            level = "viewer" if workspace_role == "viewer" else "member"
 
         async def _run(db: Any) -> Any:
             from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
                 Grant,
+                WorkspaceAccess,
             )
 
             org = _organization_service(db)
@@ -687,7 +748,6 @@ def nexus_admin_tools() -> list[BaseTool]:
                     "organization_id": organization_id,
                     "role": caller_role,
                 }
-            grants = [Grant("organization", organization_id, role)]  # type: ignore[arg-type]
             if workspace_id:
                 org_workspaces = await org.list_all_workspaces(org_id=organization_id)
                 if workspace_id not in {ws.id for ws in org_workspaces}:
@@ -696,7 +756,17 @@ def nexus_admin_tools() -> list[BaseTool]:
                         "organization_id": organization_id,
                         "workspace_id": workspace_id,
                     }
-                grants.append(Grant("workspace", workspace_id, workspace_role))  # type: ignore[arg-type]
+            admin_of_it = workspace_admin or workspace_role == "admin"
+            grant = Grant(
+                organization_id,
+                level=(level or None),  # type: ignore[arg-type]
+                org_admin=org_admin or role == "admin",
+                workspaces=(
+                    (WorkspaceAccess(workspace_id, admin_of_it),)
+                    if workspace_id
+                    else ()
+                ),
+            )
             out = await _create_or_link(
                 db,
                 user_id,
@@ -705,8 +775,7 @@ def nexus_admin_tools() -> list[BaseTool]:
                 email=email,
                 name=display_name,
                 provider=None,
-                grants=grants,
-                may_grant_owner=caller_role == "owner",
+                grant=grant,
                 organization_id=organization_id,
             )
             if "error" not in out:
@@ -841,7 +910,9 @@ def nexus_admin_tools() -> list[BaseTool]:
             "bio": bio.strip() or None,
         }
         if not any(payload.values()):
-            return {"error": "Provide at least one of: name, organization, job_title, bio"}
+            return {
+                "error": "Provide at least one of: name, organization, job_title, bio"
+            }
 
         async def _run(db: Any) -> Any:
             from naas_abi.apps.nexus.apps.api.app.services.auth.service import (

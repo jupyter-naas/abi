@@ -26,7 +26,7 @@ class PeopleAdapter(PeopleGateway):
             email=email,
             name=name,
             provider=provider,
-            grants=(),
+            grant=None,
             by=SimpleNamespace(id=by, name=inviter_name or ""),
         )
         return Created(

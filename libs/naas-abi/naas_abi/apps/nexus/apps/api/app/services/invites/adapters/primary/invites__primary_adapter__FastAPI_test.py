@@ -246,24 +246,14 @@ def _held(team, user: str) -> set[tuple[str, str | None]]:
 
 
 @pytest.mark.asyncio
-async def test_adding_an_account_checks_its_policies_before_the_membership(api, team):
-    """Someone who has an account is linked: the policies the invite carries are
-    checked first, so a refused one leaves no membership behind."""
-    from naas_abi.apps.nexus.apps.api.app.services.iam import role_features
-
-    with as_service_account("engine"):
-        features = team.iam.create_policy(
-            "Features of member", role_features.policy_document(["chat"]), scope=WS1
-        )
-    body = {"email": "carl@example.com", "role": "viewer", "policy_ids": [features.id]}
-    async with api.as_("inviter") as client:
-        refused = await client.post("/api/workspaces/ws-1/members/invite", json=body)
-    assert refused.status_code == 403, refused.text
-    assert _held(team, "carl") == set()
+async def test_policies_are_no_longer_given_to_an_account(api, team):
+    """Someone who has an account is linked. Customer policies are no longer
+    attached to a person (#1589): an invite naming some is a 400 that leaves
+    nothing behind; capability groups take their place."""
+    body = {"email": "carl@example.com", "role": "viewer"}
     async with api.as_("admin") as client:
         wrong = await client.post(
-            "/api/workspaces/ws-1/members/invite",
-            json={**body, "policy_ids": ["builtin.owner"]},
+            "/api/workspaces/ws-1/members/invite", json={**body, "policy_ids": ["pol_x"]}
         )
         assert wrong.status_code == 400, wrong.text
         assert _held(team, "carl") == set()
@@ -277,4 +267,4 @@ async def test_adding_an_account_checks_its_policies_before_the_membership(api, 
         "status": "active",
     }
     assert api.idp.asked == []
-    assert {("builtin.viewer", WS1), (features.id, WS1)} <= _held(team, "carl")
+    assert ("builtin.viewer", WS1) in _held(team, "carl")

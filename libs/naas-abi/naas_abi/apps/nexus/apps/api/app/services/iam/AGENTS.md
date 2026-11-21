@@ -334,6 +334,13 @@ there is a level. Nothing is attached to a person.
   people" and "<O> admins" (level unchanged). A level is one choice: giving one anywhere changes it everywhere. The
   roles of before held at the scope (and their mirror below O) are detached; nothing else of before is converted
   (#1587). `revoke` leaves the container's groups and keeps the level.
+- **Seats** (#1589, the people contract): `Seat(container, kind, group_id)` names one group, `MEMBERSHIP` ("<W>
+  workspace", "<O> people"), `ADMINS` ("<W> admins", "<O> admins") or `CAPABILITY` (a group of
+  `capability_groups(org)`: the organization's or the platform's, none of the model's own). `check_seats` (as the
+  caller, changing nothing), `take_seat`, `leave_seat`, `check_leaving`, `held_seats`, `set_level`, `clear_level`
+  and `access_of` (what Platform › Users shows) are what `services/people` uses; in a container recorded before
+  #1585 a seat is the role it stands for. Every join and leave made for someone is a `GroupChange` handed to
+  `audit_sinks` (the app logs it). `seed_capabilities` joins the configuration's (`core/users_import`).
 - **Who may.** Checked as the caller first (`_require_plan`: `iam:AddGroupMember` / `iam:RemoveGroupMember` on each
   group as its container names it; a level group on its platform name or as named in the container, IAM's level rule;
   `iam:DetachPolicy` on each role of before), then written as `api` for no user: the membership group first (the

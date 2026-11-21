@@ -254,11 +254,14 @@ def test_membership_tools_pass_the_asking_user_and_report_iams_refusals(
             return SimpleNamespace(id=workspace_id, organization_id="org-1")
 
     class _People:
-        async def create_or_link(self, *, by, grants, **_kwargs):
+        async def create_or_link(self, *, by, grant, **_kwargs):
             _record("invite", by.id)
-            assert [(g.scope, g.role) for g in grants] == [("workspace", "member")]
+            assert [w.admin for w in grant.workspaces] == [False]
+            assert grant.level is None  # theirs, or Member for someone new
             return CreateOrLinkResult(
-                user=PlatformUser("user-9", "a@b.co", None, UserStatus.INVITED, "builtin"),
+                user=PlatformUser(
+                    "user-9", "a@b.co", None, UserStatus.INVITED, "builtin"
+                ),
                 created=True,
                 provisioned=True,
                 sign_in_email_sent=True,

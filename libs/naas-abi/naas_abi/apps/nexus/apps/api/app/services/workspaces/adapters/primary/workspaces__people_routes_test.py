@@ -36,9 +36,11 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.primary im
 from naas_abi.apps.nexus.apps.api.app.services.people.port import (
     AlreadyMemberError,
     EmailTakenError,
+    Grant,
     NoProviderError,
     ProvisioningFailedError,
     RetiredIdentityError,
+    WorkspaceAccess,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary import (
     workspaces__primary_adapter__FastAPI as workspaces_module,
@@ -189,11 +191,10 @@ async def test_only_who_may_invite_searches(api) -> None:
 
 
 @pytest.mark.asyncio
-async def test_adding_a_candidate_grants_the_workspace_role_only(api) -> None:
+async def test_adding_a_candidate_puts_them_in_the_workspace_only(api) -> None:
     async with api.as_("wsadmin") as http:
         added = await http.post(
-            "/api/workspaces/ws-1/members",
-            json={"user_id": "flora", "role": "viewer", "policy_ids": ["pol_x"]},
+            "/api/workspaces/ws-1/members", json={"user_id": "flora", "level": "viewer"}
         )
     assert added.status_code == 201, added.text
     body = added.json()
@@ -203,10 +204,10 @@ async def test_adding_a_candidate_grants_the_workspace_role_only(api) -> None:
     assert await role("flora", WS1) == "viewer"
     assert await role("flora", ORG) == "member"  # as before: nothing granted at the org
     (asked,) = api.people.named("add_existing")
-    assert [(g.scope, g.scope_id, g.role, g.policy_ids) for g in asked["grants"]] == [
-        ("workspace", "ws-1", "viewer", ("pol_x",))
-    ]
-    assert asked["by"] == "wsadmin" and asked["may_grant_owner"] is False
+    assert asked["grant"] == Grant(
+        "org-1", level="viewer", workspaces=(WorkspaceAccess("ws-1", False),)
+    )
+    assert asked["by"] == "wsadmin"
 
 
 @pytest.mark.asyncio
@@ -256,20 +257,20 @@ async def test_adding_a_member_again_is_a_conflict(api) -> None:
 
 
 @pytest.mark.asyncio
-async def test_only_an_owner_adds_an_owner(api) -> None:
-    async with api.as_("wsadmin") as http:
-        refused = await http.post(
-            "/api/workspaces/ws-1/members", json={"user_id": "flora", "role": "owner"}
-        )
-    assert refused.status_code == 403
-    assert "owners" in refused.json()["detail"]
+async def test_owner_is_no_longer_given_an_admin_is(api) -> None:
+    for user in ("wsadmin", "owner"):
+        async with api.as_(user) as http:
+            refused = await http.post(
+                "/api/workspaces/ws-1/members", json={"user_id": "flora", "role": "owner"}
+            )
+        assert refused.status_code == 400, refused.text
     assert await role("flora", WS1) is None
-    async with api.as_("owner") as http:
+    async with api.as_("wsadmin") as http:
         made = await http.post(
-            "/api/workspaces/ws-1/members", json={"user_id": "flora", "role": "owner"}
+            "/api/workspaces/ws-1/members", json={"user_id": "flora", "admin": True}
         )
     assert made.status_code == 201, made.text
-    assert await role("flora", WS1) == "owner"
+    assert await role("flora", WS1) == "admin"
 
 
 # -- create or link -------------------------------------------------------------------------
@@ -283,7 +284,7 @@ async def test_creating_and_linking_answer_alike(api) -> None:
     async with api.as_("admin") as http:
         created = await http.post(
             "/api/workspaces/ws-1/members/invite",
-            json={"email": "New@Example.org", "role": "viewer", "profile": {"job_title": "CTO"}},
+            json={"email": "New@Example.org", "level": "viewer", "profile": {"job_title": "CTO"}},
         )
         linked = await http.post(
             "/api/workspaces/ws-1/members/invite",
@@ -311,7 +312,9 @@ async def test_creating_and_linking_answer_alike(api) -> None:
     assert first["email"] == "new@example.org"
     assert first["profile"] == {"job_title": "CTO"}
     assert first["organization_id"] == "org-1"
-    assert [(g.scope, g.role) for g in first["grants"]] == [("workspace", "viewer")]
+    assert first["grant"] == Grant(
+        "org-1", level="viewer", workspaces=(WorkspaceAccess("ws-1", False),)
+    )
 
 
 @pytest.mark.asyncio
@@ -349,14 +352,14 @@ async def test_the_people_services_refusals_are_http_answers(api, monkeypatch) -
 
 
 @pytest.mark.asyncio
-async def test_an_org_invite_names_workspaces_and_may_give_no_org_role(api) -> None:
+async def test_an_org_invite_names_workspaces_each_with_admin(api) -> None:
     async with api.as_("admin") as http:
         invited = await http.post(
             "/api/organizations/org-1/members/invite",
             json={
                 "email": "outsider@example.com",
-                "role": None,
-                "workspaces": [{"id": "ws-1", "role": "viewer"}, {"id": "ws-2", "role": "member"}],
+                "level": "member",
+                "workspaces": [{"id": "ws-1", "admin": True}, {"id": "ws-2"}],
                 "job_title": "Analyst",
             },
         )
@@ -365,7 +368,7 @@ async def test_an_org_invite_names_workspaces_and_may_give_no_org_role(api) -> N
     assert set(body) == _SHAPE
     assert (body["member"]["role"], body["member"]["source"]) == (None, "workspace")
     assert await role("outsider", ORG) is None
-    assert (await role("outsider", WS1), await role("outsider", WS2)) == ("viewer", "member")
+    assert (await role("outsider", WS1), await role("outsider", WS2)) == ("admin", "member")
     (asked,) = api.people.named("create_or_link")
     assert asked["profile"] == {"job_title": "Analyst"}
 
@@ -380,26 +383,35 @@ async def test_the_legacy_single_workspace_body_still_works(api) -> None:
                 "role": "member",
                 "workspace_id": "ws-2",
                 "workspace_role": "viewer",
-                "policy_ids": ["pol_y"],
             },
         )
     assert invited.status_code == 200, invited.text
-    assert (invited.json()["member"]["role"], invited.json()["member"]["source"]) == (
-        "member",
-        "organization",
-    )
+    assert await role("outsider", WS2) == "viewer"
     (asked,) = api.people.named("create_or_link")
-    assert [(g.scope, g.scope_id, g.role, g.policy_ids) for g in asked["grants"]] == [
-        ("organization", "org-1", "member", ()),
-        ("workspace", "ws-2", "viewer", ("pol_y",)),
-    ]
+    assert asked["grant"] == Grant(
+        "org-1", level="viewer", workspaces=(WorkspaceAccess("ws-2", False),)
+    )
+
+
+@pytest.mark.asyncio
+async def test_an_org_only_person_joins_the_orgs_people(api) -> None:
+    async with api.as_("admin") as http:
+        invited = await http.post(
+            "/api/organizations/org-1/members/invite", json={"email": "outsider@example.com"}
+        )
+    assert invited.status_code == 200, invited.text
+    assert invited.json()["member"]["source"] == "organization"
+    assert await role("outsider", ORG) is not None
+    (asked,) = api.people.named("create_or_link")
+    assert asked["grant"] == Grant("org-1")
 
 
 @pytest.mark.asyncio
 async def test_an_org_invite_is_refused_what_it_cannot_give(api) -> None:
     async with api.as_("admin") as http:
-        nothing = await http.post(
-            "/api/organizations/org-1/members/invite", json={"email": "a@x.org", "role": None}
+        policies = await http.post(
+            "/api/organizations/org-1/members/invite",
+            json={"email": "a@x.org", "policy_ids": ["pol_y"]},
         )
         elsewhere = await http.post(
             "/api/organizations/org-1/members/invite",
@@ -408,10 +420,66 @@ async def test_an_org_invite_is_refused_what_it_cannot_give(api) -> None:
         owner = await http.post(
             "/api/organizations/org-1/members/invite", json={"email": "a@x.org", "role": "owner"}
         )
-    assert nothing.status_code == 422
-    assert elsewhere.status_code == 400
-    assert owner.status_code == 403
-    assert api.people.named("create_or_link")[-1]["may_grant_owner"] is False
+    assert policies.status_code == elsewhere.status_code == owner.status_code == 400
+    assert api.people.named("create_or_link") == []
+
+
+# -- organization access (#1589) ------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_org_admin_is_made_and_unmade_by_patch(api) -> None:
+    async with api.as_("owner") as http:
+        unmade = await http.patch(
+            "/api/organizations/org-1/members/admin", json={"org_admin": False}
+        )
+        assert unmade.status_code == 200, unmade.text
+        assert unmade.json()["org_admin"] is False
+        assert await role("admin", ORG) == "member"
+        made = await http.patch("/api/organizations/org-1/members/flora", json={"org_admin": True})
+        assert made.status_code == 200, made.text
+        assert made.json()["org_admin"] is True
+    assert await role("flora", ORG) == "admin"
+
+
+@pytest.mark.asyncio
+async def test_the_last_org_admin_is_a_409(api, monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import LastOrgAdminError
+
+    async def refuse(**_kwargs):
+        raise LastOrgAdminError(ORG)
+
+    monkeypatch.setattr(api.people, "change_access", refuse)
+    async with api.as_("owner") as http:
+        got = await http.patch("/api/organizations/org-1/members/admin", json={"org_admin": False})
+    assert got.status_code == 409
+    assert got.json()["detail"] == "An organization keeps at least one admin"
+
+
+@pytest.mark.asyncio
+async def test_removing_from_the_org_leaves_every_group_and_keeps_the_account(api) -> None:
+    async with api.as_("admin") as http:
+        gone = await http.delete("/api/organizations/org-1/members/member/access")
+        again = await http.delete("/api/organizations/org-1/members/member/access")
+        owner = await http.delete("/api/organizations/org-1/members/owner/access")
+    assert gone.status_code == 200, gone.text
+    assert gone.json() == {"message": "Removed from the organization", "workspace_ids": ["ws-1"]}
+    assert await role("member", WS1) is None and await role("member", ORG) is None
+    assert again.status_code == 404
+    assert owner.status_code == 400  # an owner of before
+    assert await role("owner", ORG) == "owner"
+
+
+@pytest.mark.asyncio
+async def test_capability_groups_are_listed_to_those_who_invite(api) -> None:
+    async with api.as_("admin") as http:
+        listed = await http.get("/api/organizations/org-1/capability-groups")
+        in_ws = await http.get("/api/workspaces/ws-1/capability-groups")
+    async with api.as_("viewer") as http:
+        refused = await http.get("/api/organizations/org-1/capability-groups")
+    assert listed.status_code == in_ws.status_code == 200, (listed.text, in_ws.text)
+    assert isinstance(listed.json()["items"], list)
+    assert refused.status_code == 403
 
 
 # -- resend ---------------------------------------------------------------------------------
@@ -486,11 +554,16 @@ async def test_an_invalid_request_the_service_refuses_is_a_400(api, monkeypatch)
     monkeypatch.setattr(api.people, "add_existing", refuse)
     async with api.as_("admin") as http:
         got = await http.post(
+            "/api/workspaces/ws-1/members", json={"user_id": "flora", "level": "member"}
+        )
+        policies = await http.post(
             "/api/workspaces/ws-1/members",
             json={"user_id": "flora", "policy_ids": ["builtin.owner"]},
         )
     assert got.status_code == 400
     assert "is a role" in got.json()["detail"]
+    assert policies.status_code == 400
+    assert "capability groups" in policies.json()["detail"]
 
 
 @pytest.mark.asyncio

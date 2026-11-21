@@ -15,7 +15,7 @@ from .nexus_client import (
     print_json,
     print_table,
 )
-from .org import invite_body
+from .org import access_options, invite_body, legacy_access, workspace_access_body
 
 _NEXUS_OIDC = "naas_abi.apps.nexus.apps.api.app.services.oidc"
 _NEXUS_INVITES_RUNTIME = "naas_abi.apps.nexus.apps.api.app.services.invites.runtime"
@@ -39,34 +39,19 @@ def user() -> None:
 @click.option(
     "--org", "organization_id", default=None, help="Organization id (org-...)."
 )
-@click.option(
-    "--role",
-    default="member",
-    show_default=True,
-    type=click.Choice(["owner", "admin", "member", "viewer"], case_sensitive=False),
-    help="Org role when --org is set; workspace role when only --workspace is set.",
-)
-@click.option(
-    "--workspace-role",
-    default="member",
-    show_default=True,
-    type=click.Choice(["admin", "member", "viewer"], case_sensitive=False),
-    help="Workspace role when inviting via --org --workspace together.",
-)
-@click.option(
-    "--no-org-role",
-    is_flag=True,
-    default=False,
-    help="With --org --workspace: workspace access only, no role in the organization.",
-)
+@access_options
 @common_api_options
 def user_invite(
     member_email: str,
     member_name: str | None,
     workspace_id: str | None,
     organization_id: str | None,
-    role: str,
-    workspace_role: str,
+    level: str | None,
+    org_admin: bool,
+    workspace_admin: bool,
+    capabilities: tuple[str, ...],
+    role: str | None,
+    workspace_role: str | None,
     no_org_role: bool,
     api_url: str,
     token: str | None,
@@ -77,55 +62,48 @@ def user_invite(
     Their platform account is created (the identity provider makes the person
     exist and Nexus emails them a link to sign in), or the account their email
     already has is linked: never a second one. Prefer --org (optionally with
-    --workspace). A workspace-only invite grants no organization role.
+    --workspace). A workspace-only invite gives nothing at the organization.
     """
     if not organization_id and not workspace_id:
         raise click.ClickException("Provide --org and/or --workspace.")
-
-    results: list[dict[str, Any]] = []
-
     if organization_id:
         path = f"/api/organizations/{organization_id}/members/invite"
-        org_role = role.lower()
-        if org_role not in {"owner", "admin", "member"}:
-            raise click.ClickException(
-                "--role for --org must be owner, admin, or member."
-            )
+        level, org_admin, workspace_admin = legacy_access(
+            level, org_admin, workspace_admin, role=role, workspace_role=workspace_role
+        )
         body: dict[str, Any] = invite_body(
             member_email,
             member_name,
-            role=None if no_org_role else org_role,
+            level=level,
+            org_admin=org_admin,
             workspace_id=workspace_id,
-            workspace_role=workspace_role,
+            workspace_admin=workspace_admin,
+            capabilities=capabilities,
         )
-        if dry_run:
-            results.append({"method": "POST", "path": path, "body": body})
-        else:
-            client = build_client(api_url=api_url, token=token)
-            try:
-                results.append(client.post(path, body))
-            except NexusApiError as exc:
-                raise click.ClickException(str(exc)) from exc
-    elif workspace_id:
+    else:
+        if org_admin:
+            raise click.ClickException("--org-admin needs --org.")
+        # Without --org, --role is the workspace role of before.
+        level, _, workspace_admin = legacy_access(
+            level,
+            False,
+            workspace_admin,
+            role=None,
+            workspace_role=workspace_role or role,
+        )
         path = f"/api/workspaces/{workspace_id}/members/invite"
-        ws_role = role.lower()
-        if ws_role not in {"admin", "member", "viewer"}:
-            raise click.ClickException(
-                "--role for workspace-only invite must be admin, member, or viewer."
-            )
-        body = {"email": member_email, "role": ws_role}
+        body = workspace_access_body(level, workspace_admin, capabilities)
+        body["email"] = member_email
         if member_name:
             body["name"] = member_name
-        if dry_run:
-            results.append({"method": "POST", "path": path, "body": body})
-        else:
-            client = build_client(api_url=api_url, token=token)
-            try:
-                results.append(client.post(path, body))
-            except NexusApiError as exc:
-                raise click.ClickException(str(exc)) from exc
-
-    print_json(results[0] if len(results) == 1 else {"invites": results})
+    if dry_run:
+        print_json({"method": "POST", "path": path, "body": body})
+        return
+    client = build_client(api_url=api_url, token=token)
+    try:
+        print_json(client.post(path, body))
+    except NexusApiError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 @user.command("list")
