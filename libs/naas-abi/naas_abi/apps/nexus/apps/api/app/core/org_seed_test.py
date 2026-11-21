@@ -710,3 +710,16 @@ def test_start_keeps_a_warning_for_a_superadmin_that_receives_no_mail(caplog) ->
     assert "admin@example.com" in caplog.text
     assert "ops@company.dev" not in caplog.text
     assert "dev@example.org" not in caplog.text  # not a superadmin
+
+
+def test_config_members_take_the_access_model_keys() -> None:
+    """#1589: the deprecated ``members`` lists (ignored) take the new keys too, so a
+    configuration written for the access model still loads."""
+    from naas_abi.apps.nexus.apps.api.app.core.config import (
+        OrganizationMemberSeedConfig,
+        WorkspaceMemberSeedConfig,
+    )
+
+    org = OrganizationMemberSeedConfig(email="a@example.com", org_admin=True, level="viewer")
+    ws = WorkspaceMemberSeedConfig(email="a@example.com", admin=True)
+    assert (org.org_admin, org.level, ws.admin, ws.level) == (True, "viewer", True, None)

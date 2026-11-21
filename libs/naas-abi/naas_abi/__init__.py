@@ -294,7 +294,10 @@ class OrganizationMemberSeedConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     email: EmailStr
+    # Deprecated (#1589): ``org_admin`` and ``level``.
     role: Literal["owner", "admin", "member"] = "member"
+    org_admin: bool = False
+    level: Literal["viewer", "member"] | None = None
 
 
 class WorkspaceMemberSeedConfig(BaseModel):
@@ -303,7 +306,10 @@ class WorkspaceMemberSeedConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     email: EmailStr
+    # Deprecated (#1589): ``admin`` and ``level``.
     role: Literal["owner", "admin", "member", "viewer"] = "member"
+    admin: bool = False
+    level: Literal["viewer", "member"] | None = None
 
 
 class WorkspaceSeedConfig(BaseModel):

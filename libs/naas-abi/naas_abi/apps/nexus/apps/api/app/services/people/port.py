@@ -15,14 +15,24 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal, Protocol
 
-from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import UnknownUserError
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
+    ADMINS,
+    CAPABILITY,
+    MEMBERSHIP,
+    LastOrgAdminError,
+    Seat,
+    UnknownUserError,
+)
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     InvalidPolicyError,
     NoProviderError,
-    OwnerGrantRefusedError,
 )
 
 __all__ = [
+    "ADMINS",
+    "CAPABILITY",
+    "LEVELS",
+    "MEMBERSHIP",
     "AccessGateway",
     "Actor",
     "AddedUser",
@@ -34,9 +44,10 @@ __all__ = [
     "GrantNotHeldError",
     "IdentityGateway",
     "InvalidPolicyError",
+    "LastOrgAdminError",
+    "Level",
     "NewUser",
     "NoProviderError",
-    "OwnerGrantRefusedError",
     "PeopleMailer",
     "PeopleStorePort",
     "PlatformUser",
@@ -46,16 +57,17 @@ __all__ = [
     "ProvisioningFailedError",
     "ProvisioningRefused",
     "RetiredIdentityError",
-    "Role",
+    "Seat",
     "UnknownUserError",
     "UserStatus",
-    "Warrant",
+    "WorkspaceAccess",
     "people_status",
     "status_of_row",
 ]
 
-Role = Literal["owner", "admin", "member", "viewer"]
-ROLES: tuple[Role, ...] = ("owner", "admin", "member", "viewer")
+# A person's level (#1583): one choice, everywhere they work.
+Level = Literal["viewer", "member"]
+LEVELS: tuple[Level, ...] = ("member", "viewer")
 # What an organization admin may set about a person in their organization.
 PROFILE_FIELDS = ("organization", "job_title", "bio", "service_line", "country", "interest")
 # A search needs this many characters, and returns at most ``MAX_SEARCH`` people.
@@ -69,14 +81,34 @@ class UserStatus(StrEnum):
 
 
 @dataclass(frozen=True)
-class Grant:
-    """One role, and/or customer policies (``pol_…``), to attach at an organization
-    or a workspace."""
+class WorkspaceAccess:
+    """A workspace the person works in, and whether they administer it."""
 
-    scope: Literal["organization", "workspace"]
-    scope_id: str
-    role: Role | None = None
-    policy_ids: tuple[str, ...] = ()
+    id: str
+    admin: bool = False
+
+
+@dataclass(frozen=True)
+class Grant:
+    """Where a person works and what they do there (#1589; ADR
+    ``20261120_access_levels_and_groups.md``), in one organization:
+
+    - ``level``: their level, one choice applying in every workspace they work in
+      (None: keep theirs; someone with none who joins a workspace is a Member);
+    - ``org_admin``: they administer the organization ("<O> admins");
+    - ``workspaces``: the workspaces they join ("<W> workspace"), each with whether
+      they administer it ("<W> admins"; a workspace admin is a Member);
+    - ``capabilities``: the capability groups (ids) they join beside their level.
+
+    With no workspace and no org admin they join "<O> people", the organization's
+    own people (Viewer access at its level). ``organization_id`` None: a workspace in
+    no organization. Nothing is attached to the person, and Owner is not assigned."""
+
+    organization_id: str | None = None
+    level: Level | None = None
+    org_admin: bool = False
+    workspaces: tuple[WorkspaceAccess, ...] = ()
+    capabilities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -198,16 +230,6 @@ class Provisioned:
 
 
 @dataclass(frozen=True)
-class Warrant:
-    """The pending grants IAM accepted on the inviting person's behalf before
-    anything was made: the authorization of the invitation. ``made`` are those this
-    call created (the others belong to an older invitation)."""
-
-    grant_ids: tuple[str, ...] = ()
-    made: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class NewUser:
     id: str
     email: str
@@ -306,26 +328,76 @@ class IdentityGateway(ABC):
 
 
 class AccessGateway(ABC):
-    """IAM. What gives access is written as ``api`` on behalf of ``by`` (IAM checks
-    that they may attach it and hold what it grants: ``GrantNotHeldError``); reads,
-    principals and take-backs are Nexus's own."""
+    """IAM, as the people flows change it (#1589): a person joins and leaves groups
+    ("<W> workspace", "<W> admins", "<O> people", "<O> admins", capability groups,
+    named by ``Seat``) and has one level. Every change is checked as the caller
+    (``by``: IAM's member change on each group, its level-group rule for the level),
+    then written as ``api``, and recorded with who asked (the Nexus audit log): IAM's
+    own audit names ``api``. Reads, principals and take-backs are Nexus's own. The
+    single path of the routes, the CLI (through the routes) and the agent's tools."""
 
     @abstractmethod
-    async def scope(self, grant: Grant) -> str:
-        """The container name of a grant's organization or workspace
-        (``UnknownUserError`` is not this: ``LookupError`` for an unknown one)."""
+    async def container(self, kind: Literal["organization", "workspace"], id: str) -> str:
+        """The container name of an organization or a workspace (``LookupError`` for
+        an unknown workspace)."""
 
     @abstractmethod
-    async def warrant(
-        self, provider: str, email: str, grants: Sequence[tuple[str, str]], *, by: str
-    ) -> Warrant:
-        """Pending grants ``(policy, scope)`` for the email at the provider, on
-        behalf of ``by``: the check, before anything is made, that they may give
-        them. A refusal takes back what the call made and raises."""
+    async def check(
+        self,
+        user_id: str | None,
+        seats: Sequence[Seat],
+        *,
+        level: Level | None,
+        by: str,
+        organization_id: str | None,
+    ) -> None:
+        """That ``by`` may put the person (``None``: someone not made yet) in ``seats``
+        and at ``level``, changing nothing: ``GrantNotHeldError`` otherwise, and
+        ``ValueError`` for a capability group that is not one of the organization's
+        (or the platform's). The warrant of an invitation: checked before anything
+        exists (ADR ``20261118_invitation_provisions_the_account.md``)."""
 
     @abstractmethod
-    async def withdraw(self, grant_ids: Sequence[str]) -> None:
-        """Revoke pending grants (as Nexus)."""
+    async def held(self, user_id: str, seats: Sequence[Seat]) -> set[Seat]:
+        """Which of ``seats`` the person holds now."""
+
+    @abstractmethod
+    async def level_of(self, user_id: str) -> Level | None: ...
+
+    @abstractmethod
+    async def join(self, user_id: str, seat: Seat, *, by: str | None, level: Level | None) -> bool:
+        """Put the person in ``seat`` (checked first), as ``api``; a capability group on
+        ``by``'s behalf. ``level``: the person's, for a container recorded before
+        #1585 (the role the seat stands for). True when this call did."""
+
+    @abstractmethod
+    async def leave(self, user_id: str, seat: Seat, *, by: str | None) -> bool:
+        """Take the person out of ``seat``: checked as ``by`` (None: Nexus, a
+        take-back), as ``api``. ``LastOrgAdminError`` for an organization's last
+        admin. True when this call did."""
+
+    @abstractmethod
+    async def check_leaving(self, user_id: str, seats: Sequence[Seat], *, by: str) -> None:
+        """That ``by`` may take the person out of each of ``seats`` they hold
+        (``GrantNotHeldError``; ``LastOrgAdminError``), changing nothing."""
+
+    @abstractmethod
+    async def set_level(
+        self, user_id: str, level: Level, *, by: str | None, where: Sequence[str] = ()
+    ) -> Level | None:
+        """Make ``level`` the person's everywhere. Checked as ``by`` (None: Nexus) by
+        IAM's level-group rule: the platform admin, an org admin, or an admin of any
+        of the person's containers (or of ``where``). Audited. Returns the level
+        they had."""
+
+    @abstractmethod
+    async def clear_level(self, user_id: str) -> None:
+        """Leave every level group, as Nexus (the take-back for someone who had none)."""
+
+    @abstractmethod
+    async def capability_groups(self, organization_id: str | None) -> list[tuple[str, str]]:
+        """``(group id, name)`` of the capability groups a person may join in the
+        organization: its own, then the platform's."""
 
     @abstractmethod
     async def ensure_principal(
@@ -339,27 +411,8 @@ class AccessGateway(ABC):
 
     @abstractmethod
     async def roles_of(self, user_id: str) -> dict[str, str]:
-        """``{scope: role}`` the user holds directly."""
-
-    @abstractmethod
-    async def grant_role(self, user_id: str, role: str, scope: str, *, by: str) -> None:
-        """Give ``role`` at ``scope``. Where the container keeps its people in groups
-        (#1585) the role is mapped onto them (``Memberships.grant``): viewer or member
-        at a workspace W, the level group plus "<W> workspace"; admin (owner, which is
-        no longer assigned), Member plus "<W> admins" plus "<W> workspace"; at an
-        organization O, "<O> people" and the level, or "<O> admins". S6 (#1589)
-        replaces this role-based contract with levels and groups."""
-
-    @abstractmethod
-    async def revoke_role(self, user_id: str, scope: str) -> None:
-        """Take back a role ``grant_role`` gave (as Nexus)."""
-
-    @abstractmethod
-    async def attach(self, user_id: str, policy_id: str, scope: str, *, by: str) -> bool:
-        """True when this call attached it."""
-
-    @abstractmethod
-    async def detach(self, user_id: str, policy_id: str, scope: str) -> None: ...
+        """``{container: role}`` the person holds (``admin``, or their level), for
+        the mail."""
 
 
 @dataclass(frozen=True)

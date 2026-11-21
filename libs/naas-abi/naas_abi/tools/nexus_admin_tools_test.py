@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from naas_abi_core.services.agent.context import agent_container, agent_user_id
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
+from naas_abi.apps.nexus.apps.api.app.services.people.port import Grant, WorkspaceAccess
 from naas_abi.tools import nexus_admin_tools as mod
 
 
@@ -148,7 +149,9 @@ class _People:
         if self.error is not None:
             raise self.error
         return CreateOrLinkResult(
-            user=PlatformUser("usr-9", kwargs["email"], None, UserStatus.ACTIVE, "builtin"),
+            user=PlatformUser(
+                "usr-9", kwargs["email"], None, UserStatus.ACTIVE, "builtin"
+            ),
             created=False,
             provisioned=False,
             sign_in_email_sent=True,
@@ -157,7 +160,12 @@ class _People:
 
 
 def _invoke_with(
-    people: Any, tool: str, args: dict[str, Any], *, limited: Any = None, **services: Any
+    people: Any,
+    tool: str,
+    args: dict[str, Any],
+    *,
+    limited: Any = None,
+    **services: Any,
 ) -> Any:
     async def fake_with_db(fn):  # type: ignore[no-untyped-def]
         return await fn(MagicMock())
@@ -169,7 +177,9 @@ def _invoke_with(
     token = agent_user_id.set("user-admin")
     try:
         with ExitStack() as stack:
-            stack.enter_context(patch.object(mod, "_people_service", return_value=people))
+            stack.enter_context(
+                patch.object(mod, "_people_service", return_value=people)
+            )
             stack.enter_context(patch.object(mod, "_auth_service", return_value=auth))
             stack.enter_context(patch.object(mod, "_with_db", side_effect=fake_with_db))
             stack.enter_context(patch.object(mod, "_invite_limits", limits))
@@ -183,11 +193,15 @@ def _invoke_with(
 def _workspaces(role: str = "admin") -> MagicMock:
     ws = MagicMock()
     ws.get_workspace_role = AsyncMock(return_value=role)
-    ws.get_workspace = AsyncMock(return_value=MagicMock(id="ws-1", organization_id="org-1"))
+    ws.get_workspace = AsyncMock(
+        return_value=MagicMock(id="ws-1", organization_id="org-1")
+    )
     return ws
 
 
-def test_invite_workspace_member_links_or_creates_with_the_workspace_role_only() -> None:
+def test_invite_workspace_member_links_or_creates_with_the_workspace_role_only() -> (
+    None
+):
     people = _People()
 
     out = _invoke_with(
@@ -198,17 +212,22 @@ def test_invite_workspace_member_links_or_creates_with_the_workspace_role_only()
     )
 
     assert out["status"] == "added"
-    assert out["user"] == {"id": "usr-9", "email": "flo@naas.ai", "name": None, "status": "active"}
+    assert out["user"] == {
+        "id": "usr-9",
+        "email": "flo@naas.ai",
+        "name": None,
+        "status": "active",
+    }
     assert "user_created" not in out and "created" not in out
     (asked,) = people.asked
-    assert [(g.scope, g.scope_id, g.role) for g in asked["grants"]] == [
-        ("workspace", "ws-1", "viewer")
-    ]
+    assert asked["grant"] == Grant(
+        "org-1", level="viewer", workspaces=(WorkspaceAccess("ws-1", False),)
+    )
     assert asked["by"].id == "user-admin"
     assert asked["organization_id"] == "org-1"
 
 
-def test_invite_organization_member_gives_the_org_and_workspace_roles() -> None:
+def test_invite_organization_member_gives_the_level_and_workspace() -> None:
     people = _People()
     org = MagicMock()
     org.get_organization_role = AsyncMock(return_value="admin")
@@ -229,11 +248,35 @@ def test_invite_organization_member_gives_the_org_and_workspace_roles() -> None:
 
     assert out["status"] == "added", out
     (asked,) = people.asked
-    assert [(g.scope, g.scope_id, g.role) for g in asked["grants"]] == [
-        ("organization", "org-1", "member"),
-        ("workspace", "ws-1", "viewer"),
-    ]
-    assert asked["may_grant_owner"] is False
+    assert asked["grant"] == Grant(
+        "org-1", level="viewer", workspaces=(WorkspaceAccess("ws-1", False),)
+    )
+
+
+def test_invite_organization_member_makes_an_org_admin_never_an_owner() -> None:
+    people = _People()
+    org = MagicMock()
+    org.get_organization_role = AsyncMock(return_value="admin")
+    org.list_all_workspaces = AsyncMock(return_value=[])
+    org.get_organization_member = AsyncMock(return_value=None)
+
+    admin = _invoke_with(
+        people,
+        "invite_organization_member",
+        {"organization_id": "org-1", "email": "alice@example.com", "org_admin": True},
+        _organization_service=org,
+    )
+    owner = _invoke_with(
+        people,
+        "invite_organization_member",
+        {"organization_id": "org-1", "email": "bob@example.com", "role": "owner"},
+        _organization_service=org,
+    )
+
+    assert admin["status"] == "added", admin
+    (asked,) = people.asked
+    assert asked["grant"] == Grant("org-1", org_admin=True)
+    assert "no longer" in owner["error"]
 
 
 def test_a_refusal_of_the_people_service_is_reported_not_raised() -> None:

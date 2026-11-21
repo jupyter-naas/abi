@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   CANDIDATE_LIMIT,
+  LEVELS,
+  LEVEL_EVERYWHERE_NOTE,
+  LEVEL_LABELS,
   addMemberBody,
+  capabilityGroupsUrl,
+  levelConflict,
+  offeredCapabilityGroups,
+  readLevel,
   addedNotice,
   candidateLabel,
   candidateQuery,
@@ -78,13 +85,32 @@ describe('the status', () => {
 });
 
 describe('the request bodies', () => {
-  it('adds a suggestion by its user id, with the role and the policies picked', () => {
-    expect(addMemberBody({ userId: 'usr_flo', role: 'viewer' })).toEqual({ user_id: 'usr_flo', role: 'viewer' });
-    expect(addMemberBody({ userId: 'usr_flo', role: 'admin', policyIds: ['pol_graph'] })).toEqual({
+  it('adds a suggestion by its user id, with the level, the admin toggle and the groups picked', () => {
+    expect(addMemberBody({ userId: 'usr_flo' })).toEqual({ user_id: 'usr_flo', admin: false });
+    expect(addMemberBody({ userId: 'usr_flo', level: 'viewer', admin: false, capabilities: [] })).toEqual({
       user_id: 'usr_flo',
-      role: 'admin',
-      policy_ids: ['pol_graph'],
+      admin: false,
+      level: 'viewer',
     });
+    expect(addMemberBody({ userId: 'usr_flo', level: 'member', admin: true, capabilities: ['grp_runners'] })).toEqual({
+      user_id: 'usr_flo',
+      admin: true,
+      level: 'member',
+      capabilities: ['grp_runners'],
+    });
+  });
+
+  it('never sends a role, policies or an owner', () => {
+    const bodies = [
+      addMemberBody({ userId: 'usr_flo', level: 'member', admin: true }),
+      workspaceCreateBody({ email: 'bob@example.com', level: 'member', admin: true }),
+      organizationCreateBody({ email: 'bob@example.com', orgAdmin: true, workspaces: [{ id: 'ws-1', admin: true }] }),
+    ];
+    for (const body of bodies) {
+      expect(body).not.toHaveProperty('role');
+      expect(body).not.toHaveProperty('policy_ids');
+      expect(JSON.stringify(body)).not.toContain('owner');
+    }
   });
 
   it('keeps only the profile fields filled in', () => {
@@ -92,58 +118,115 @@ describe('the request bodies', () => {
     expect(filledProfile({ job_title: '' })).toBeUndefined();
   });
 
-  it('creates into a workspace with the profile nested, and no org role', () => {
+  it('creates into a workspace with the profile nested, the level kept when none is picked', () => {
     const body = workspaceCreateBody({
       email: ' bob@example.com ',
       name: 'Bob',
-      role: 'member',
-      policyIds: ['pol_1'],
+      level: 'member',
+      admin: false,
+      capabilities: ['grp_runners'],
       provider: 'okta',
       profile: { job_title: 'Analyst' },
     });
     expect(body).toEqual({
       email: 'bob@example.com',
       name: 'Bob',
-      role: 'member',
-      policy_ids: ['pol_1'],
+      level: 'member',
+      admin: false,
+      capabilities: ['grp_runners'],
       provider: 'okta',
       profile: { job_title: 'Analyst' },
     });
-    expect(workspaceCreateBody({ email: 'bob@example.com', role: 'viewer' })).toEqual({
+    expect(workspaceCreateBody({ email: 'bob@example.com', level: null })).toEqual({
       email: 'bob@example.com',
-      role: 'viewer',
+      admin: false,
     });
   });
 
-  it('creates into an organization in one request with every workspace, the profile flat', () => {
+  it('creates into an organization in one request with every workspace and its admin flag, the profile flat', () => {
     expect(
       organizationCreateBody({
         email: 'bob@example.com',
-        role: 'member',
+        level: 'member',
+        orgAdmin: false,
         workspaces: [
-          { id: 'ws-1', role: 'member' },
-          { id: 'ws-2', role: 'viewer' },
+          { id: 'ws-1', admin: true },
+          { id: 'ws-2', admin: false },
         ],
+        capabilities: ['grp_runners'],
         profile: { country: 'FR' },
       })
     ).toEqual({
       email: 'bob@example.com',
-      role: 'member',
+      level: 'member',
+      org_admin: false,
       workspaces: [
-        { id: 'ws-1', role: 'member' },
-        { id: 'ws-2', role: 'viewer' },
+        { id: 'ws-1', admin: true },
+        { id: 'ws-2', admin: false },
       ],
+      capabilities: ['grp_runners'],
       country: 'FR',
     });
   });
 
-  it('sends no org role (null) only with a workspace', () => {
-    expect(
-      organizationCreateBody({ email: 'bob@example.com', role: null, workspaces: [{ id: 'ws-1', role: 'member' }] })
-    ).toMatchObject({ role: null, workspaces: [{ id: 'ws-1', role: 'member' }] });
-    expect(() => organizationCreateBody({ email: 'bob@example.com', role: null, workspaces: [] })).toThrow(
-      'at least one workspace'
-    );
+  it('creates someone of the organization alone (its people), with no workspace', () => {
+    expect(organizationCreateBody({ email: 'bob@example.com', workspaces: [] })).toEqual({
+      email: 'bob@example.com',
+      org_admin: false,
+      workspaces: [],
+    });
+  });
+});
+
+describe('the level', () => {
+  it('is Member or Viewer, and a note says it applies everywhere', () => {
+    expect(LEVELS).toEqual(['member', 'viewer']);
+    expect(LEVEL_LABELS).toEqual({ member: 'Member', viewer: 'Viewer' });
+    expect(LEVEL_EVERYWHERE_NOTE).toMatch(/all of this person.s workspaces/);
+  });
+
+  it('cannot be Viewer for a workspace admin, who is a Member', () => {
+    expect(levelConflict('viewer', true)).toMatch(/workspace admin is a Member/);
+    expect(levelConflict('member', true)).toBeNull();
+    expect(levelConflict('viewer', false)).toBeNull();
+    expect(levelConflict(null, true)).toBeNull();
+  });
+
+  it('reads a level from an answer, anything else is none', () => {
+    expect(readLevel('member')).toBe('member');
+    expect(readLevel('viewer')).toBe('viewer');
+    expect(readLevel('admin')).toBeNull();
+    expect(readLevel(undefined)).toBeNull();
+  });
+});
+
+describe('the capability groups offered', () => {
+  const group = (over: Record<string, unknown>) => ({
+    id: 'grp_x',
+    name: 'X',
+    description: null,
+    owner_scope: 'abi:nexus:organization/acme',
+    scope: 'organization',
+    ...over,
+  });
+
+  it("are the groups that add one thing to a level, never the model's own", () => {
+    const items = [
+      group({ id: 'grp_runners', name: 'Workflow runners' }),
+      group({ id: 'grp_pilot', name: 'Pilot seat' }),
+      group({ id: 'grp_models', name: 'Models · all', owner_scope: 'abi:', scope: 'platform' }),
+      group({ id: 'grp_admins', name: 'Acme admins' }),
+      group({ id: 'grp_people', name: 'Acme people' }),
+      group({ id: 'grp_members', name: 'Members', owner_scope: 'abi:', scope: 'platform' }),
+      group({ id: 'grp_platform', name: 'Platform admins', owner_scope: 'abi', scope: 'platform' }),
+      group({ id: 'grp_ws', name: 'Alpha workspace', owner_scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' }),
+    ];
+    expect(offeredCapabilityGroups(items).map((g) => g.id)).toEqual(['grp_runners', 'grp_models', 'grp_pilot']);
+  });
+
+  it('are asked of the organization, or of the workspace', () => {
+    expect(capabilityGroupsUrl({ organizationId: 'org 1' })).toBe('/api/organizations/org%201/capability-groups');
+    expect(capabilityGroupsUrl({ workspaceId: 'ws-1' })).toBe('/api/workspaces/ws-1/capability-groups');
   });
 });
 
@@ -229,15 +312,14 @@ describe('the people API', () => {
       return answer(200, ADDED);
     });
     const api = createPeopleApi(fetcher);
-    expect(await api.addMember('ws-1', { userId: 'usr_flo', role: 'member' })).toEqual({
+    expect(await api.addMember('ws-1', { userId: 'usr_flo', level: 'member', admin: false })).toEqual({
       member: { id: 'm' },
       emailSent: true,
     });
-    await api.createInWorkspace('ws-1', { email: 'bob@example.com', role: 'member' });
+    await api.createInWorkspace('ws-1', { email: 'bob@example.com', level: 'member', admin: true });
     await api.createInOrganization('org-1', {
       email: 'bob@example.com',
-      role: null,
-      workspaces: [{ id: 'ws-1', role: 'member' }],
+      workspaces: [{ id: 'ws-1', admin: false }],
     });
     expect(await api.resendWorkspace('ws-1', 'usr_bob')).toBe(true);
     expect(await api.resendOrganization('org-1', 'usr_bob')).toBe(true);
@@ -248,13 +330,52 @@ describe('the people API', () => {
       'POST /api/workspaces/ws-1/members/usr_bob/resend',
       'POST /api/organizations/org-1/members/usr_bob/resend',
     ]);
-    expect(calls[0].body).toEqual({ user_id: 'usr_flo', role: 'member' });
-    expect(calls[2].body).toEqual({ email: 'bob@example.com', role: null, workspaces: [{ id: 'ws-1', role: 'member' }] });
+    expect(calls[0].body).toEqual({ user_id: 'usr_flo', level: 'member', admin: false });
+    expect(calls[2].body).toEqual({ email: 'bob@example.com', org_admin: false, workspaces: [{ id: 'ws-1', admin: false }] });
+  });
+
+  it('changes a level or the admin toggle from a workspace, and the access of an organization member', async () => {
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    const fetcher = vi.fn(async (url: string, options: RequestInit = {}) => {
+      calls.push({ url, method: options.method ?? 'GET', body: options.body ? JSON.parse(String(options.body)) : null });
+      if (url.startsWith('/api/workspaces/')) return answer(200, { status: 'updated', level: 'viewer', admin: false });
+      return answer(200, { user_id: 'usr_bob' });
+    });
+    const api = createPeopleApi(fetcher);
+    expect(await api.updateWorkspaceMember('ws-1', 'usr_bob', { level: 'viewer' })).toEqual({ level: 'viewer', admin: false });
+    await api.updateOrganizationAccess('org-1', 'usr_bob', { orgAdmin: true, level: 'member', capabilities: ['grp_runners'] });
+    await api.setOrganizationWorkspaces('org-1', 'usr_bob', [{ id: 'ws-1', admin: true }]);
+    expect(calls).toEqual([
+      { url: '/api/workspaces/ws-1/members/usr_bob', method: 'PATCH', body: { level: 'viewer' } },
+      {
+        url: '/api/organizations/org-1/members/usr_bob',
+        method: 'PATCH',
+        body: { org_admin: true, level: 'member', capabilities: ['grp_runners'] },
+      },
+      {
+        url: '/api/organizations/org-1/members/usr_bob/workspaces',
+        method: 'PUT',
+        body: { workspaces: [{ id: 'ws-1', admin: true }] },
+      },
+    ]);
+  });
+
+  it("lists the capability groups, leaving out the model's own", async () => {
+    const fetcher = vi.fn(async () =>
+      answer(200, {
+        items: [
+          { id: 'grp_runners', name: 'Workflow runners', description: null, owner_scope: 'abi:nexus:organization/org-1', scope: 'organization' },
+          { id: 'grp_admins', name: 'Acme admins', description: null, owner_scope: 'abi:nexus:organization/org-1', scope: 'organization' },
+        ],
+      })
+    );
+    expect((await createPeopleApi(fetcher).capabilityGroups({ workspaceId: 'ws-1' })).map((g) => g.id)).toEqual(['grp_runners']);
+    expect(fetcher).toHaveBeenCalledWith('/api/workspaces/ws-1/capability-groups', undefined);
   });
 
   it('says what the API refused', async () => {
     const fetcher = vi.fn(async () => answer(409, { detail: 'Already a member of this workspace' }));
-    await expect(createPeopleApi(fetcher).addMember('ws-1', { userId: 'usr_flo', role: 'member' })).rejects.toThrow(
+    await expect(createPeopleApi(fetcher).addMember('ws-1', { userId: 'usr_flo' })).rejects.toThrow(
       'Already a member of this workspace'
     );
   });

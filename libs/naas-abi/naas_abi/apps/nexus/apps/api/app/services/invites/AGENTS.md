@@ -58,7 +58,9 @@ IdP group bindings are the same idea for a whole group of a provider: the member
 
 - The member invite routes below are `services/people`'s now (S2, `services/workspaces`, `services/organizations`):
   they answer `{status: "added", user, member, ...}` the same way whether the person was created or linked. What
-  this bullet says of them is how they answered before.
+  this bullet says of them is how they answered before. Since #1589 they take a level and groups (`level`,
+  `org_admin`, `workspaces: [{id, admin}]`, `capabilities`; `services/people/AGENTS.md`), never `policy_ids` (400)
+  nor owner (400).
 - `POST /api/organizations/{org}/members/invite` and
   `POST /api/workspaces/{ws}/members/invite` (optional `provider`, optional `policy_ids`: at most
   20 customer policies, attached at the invite's workspace, else the organization; a `builtin.*`
@@ -112,7 +114,8 @@ IdP group bindings are the same idea for a whole group of a provider: the member
 - **Claim only a verified email.** `runtime.claimer` runs after the sign-in resolved the
   user and checks that the provider verified the address Nexus stored; IAM's own claim
   checks the same on its side.
-- **Only an owner invites an owner.** IAM refuses an owner's grant to anyone else; the route also passes
+- **Only an owner invites an owner** (this service's invitations; the member routes no longer assign owner, #1589).
+  IAM refuses an owner's grant to anyone else; the route also passes
   `may_grant_owner` (the caller is an org owner) and the service refuses `owner` otherwise
   (`OwnerGrantRefusedError`, 403) before anything is written, a system invitation (no `by`) included.
 - **Grants are shared, so they are counted.** IAM keeps one pending grant per provider, email, role

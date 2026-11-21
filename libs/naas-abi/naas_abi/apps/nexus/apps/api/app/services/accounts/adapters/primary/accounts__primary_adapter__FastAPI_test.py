@@ -385,7 +385,41 @@ async def test_nobody_else_sees_the_directory(api, user):
         assert (await http.delete("/api/admin/users/member?confirm=x")).status_code == 403
 
 
+@pytest.mark.asyncio
+async def test_a_persons_access_is_read_from_their_groups(api, team):
+    """Platform › Users › person: "Platform access (automatic)" (#1589)."""
+    team.grant("member", "member", "abi:nexus:organization/org-1/nexus:workspace/ws-1")
+    async with api.as_("root") as http:
+        access = await http.get("/api/admin/users/member/access")
+        root = await http.get("/api/admin/users/root/access")
+        unknown = await http.get("/api/admin/users/nobody/access")
+    async with api.as_("member") as http:
+        refused = await http.get("/api/admin/users/member/access")
+    assert access.status_code == 200, access.text
+    body = access.json()
+    assert body["user_id"] == "member" and body["platform_admin"] is False
+    assert {"id": "ws-1", "name": "Research", "organization_id": "org-1", "admin": False} in (
+        body["workspaces"]
+    )
+    assert root.json()["platform_admin"] is True
+    assert unknown.status_code == 404
+    assert refused.status_code == 403
+
+
 # -- invitations ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_invitation_may_make_a_platform_admin(api):
+    async with api.as_("root") as http:
+        invited = await http.post(
+            "/api/admin/users/invite",
+            json={"email": "dana@example.com", "platform_admin": True},
+        )
+        plain = await http.post("/api/admin/users/invite", json={"email": "eve@example.com"})
+    assert invited.status_code == plain.status_code == 200, (invited.text, plain.text)
+    assert invited.json()["user"]["is_superadmin"] is True
+    assert plain.json()["user"]["is_superadmin"] is False
 
 
 @pytest.mark.asyncio

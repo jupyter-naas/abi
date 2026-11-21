@@ -362,19 +362,19 @@ async def test_a_workspace_without_an_organization_is_the_callers_own(
 @pytest.mark.asyncio
 async def test_an_admin_cannot_grant_demote_or_remove_a_workspace_owner(api) -> None:
     async with api("admin") as http:
+        # Owner is no longer assigned (#1589).
         grant = await http.post(
             "/api/workspaces/ws-1/members/invite",
             json={"email": "bob@example.com", "role": "owner"},
         )
-        assert grant.status_code == 403
-        assert "owners" in grant.json()["detail"]
+        assert grant.status_code == 400
         assert await role("bob", WS) is None
         demote = await http.patch("/api/workspaces/ws-1/members/owner", json={"role": "member"})
         assert demote.status_code == 403
         remove = await http.delete("/api/workspaces/ws-1/members/owner")
         assert remove.status_code == 403
         promote = await http.patch("/api/workspaces/ws-1/members/member", json={"role": "owner"})
-        assert promote.status_code == 403
+        assert promote.status_code in (400, 403)
     assert await role("owner", WS) == "owner"
     assert await role("member", WS) == "member"
     # An admin still runs the roles below owner.
@@ -518,14 +518,15 @@ async def test_the_org_directory_is_for_owners_and_admins(api) -> None:
 @pytest.mark.asyncio
 async def test_an_org_admin_cannot_make_demote_or_remove_an_org_owner(api) -> None:
     async with api("admin") as http:
+        # Owner is no longer assigned (#1589); an owner of before stays one.
         invited = await http.post(
             "/api/organizations/org-1/members/invite",
             json={"email": "bob@example.com", "role": "owner"},
         )
-        assert invited.status_code == 403
+        assert invited.status_code == 400
         assert await role("bob", ORG) is None
         assert (
-            await http.patch("/api/organizations/org-1/members/owner", json={"role": "member"})
+            await http.patch("/api/organizations/org-1/members/owner", json={"org_admin": False})
         ).status_code == 403
         assert (await http.delete("/api/organizations/org-1/members/owner")).status_code == 400
         # Members below owner are the admin's to manage.
@@ -542,8 +543,8 @@ async def test_an_org_admin_cannot_make_demote_or_remove_an_org_owner(api) -> No
     async with api("owner") as http:
         assert (
             await http.patch("/api/organizations/org-1/members/admin", json={"role": "owner"})
-        ).status_code == 200
-        assert await role("admin", ORG) == "owner"
+        ).status_code == 400
+        assert await role("admin", ORG) == "admin"
 
 
 @pytest.mark.asyncio
@@ -686,7 +687,7 @@ async def test_assigning_workspaces_is_checked_at_each_workspace(api, team, nexu
         assert refused.status_code == 403, refused.text
         detail = refused.json()["detail"]
         assert detail.startswith("You cannot grant what you do not hold"), detail
-        assert "builtin.admin" in detail, detail
+        assert "builtin." in detail, detail
     assert await role("member", ws2) is None
     # An org admin assigns through the org-wide role.
     async with api("admin") as http:

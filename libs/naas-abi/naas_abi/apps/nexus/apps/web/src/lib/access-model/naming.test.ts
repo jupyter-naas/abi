@@ -7,8 +7,6 @@ import { describe, expect, it } from 'vitest';
 
 const SRC = path.resolve(__dirname, '..', '..');
 
-// Platform › Users is the people pages' (S6, #1589), which rename its column and badge.
-const LATER = ['app/settings/users/'];
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -47,7 +45,6 @@ describe('the platform admin’s name', () => {
 
   it('is never "superadmin" where people read it', () => {
     const offenders = sources(SRC)
-      .filter((file) => !LATER.some((dir) => path.relative(SRC, file).split(path.sep).join('/').startsWith(dir)))
       .flatMap((file) => userFacing(withoutComments(readFileSync(file, 'utf8'))).map((line) => `${path.relative(SRC, file)}: ${line}`));
     expect(offenders).toEqual([]);
   });

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { AlertCircle, Mail, UserPlus } from 'lucide-react';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '@/app/organizations/[orgId]/settings/components/org-settings-section-card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { inviteUser, listProviders, type Fetcher } from './users-api';
 import { inviteSummary, PLATFORM_USERS_PATH, type InvitationProvider } from './users-model';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
@@ -16,14 +17,15 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /**
  * Platform Settings › Users › Create user: someone added to the platform. Their
  * account is made at the identity provider when it does not exist yet, and they sign
- * in with what it sends them. Roles come from Roles & permissions, organizations from
- * each organization's Users.
+ * in with what it sends them. "Platform admin" makes them one; their organizations and
+ * workspaces come from each organization's Users.
  */
 export function NewUser({ fetcher }: { fetcher?: Fetcher }) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [providers, setProviders] = useState<InvitationProvider[]>([]);
   const [provider, setProvider] = useState('');
+  const [platformAdmin, setPlatformAdmin] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [said, setSaid] = useState<string[]>([]);
@@ -53,6 +55,7 @@ export function NewUser({ fetcher }: { fetcher?: Fetcher }) {
         email: address,
         ...(name.trim() ? { name: name.trim() } : {}),
         ...(providers.length > 1 && provider ? { provider } : {}),
+        ...(platformAdmin ? { platform_admin: true } : {}),
       },
       fetcher
     );
@@ -64,6 +67,7 @@ export function NewUser({ fetcher }: { fetcher?: Fetcher }) {
     setSaid(inviteSummary(answer.data));
     setEmail('');
     setName('');
+    setPlatformAdmin(false);
   };
 
   const managed = providers.find((p) => p.name === provider)?.managed_in_provider;
@@ -153,6 +157,18 @@ export function NewUser({ fetcher }: { fetcher?: Fetcher }) {
               <p className="org-settings-field-hint">Used for a new account; an existing account keeps its name</p>
             </div>
           </div>
+          <div className="org-settings-field">
+            <Checkbox
+              label="Platform admin"
+              data-field="invite-platform-admin"
+              checked={platformAdmin}
+              onCheckedChange={setPlatformAdmin}
+              disabled={creating}
+            />
+            <p className="org-settings-field-hint">
+              They manage the whole platform: every organization, workspace and user.
+            </p>
+          </div>
           {providers.length > 1 && (
             <div className="org-settings-field">
               <label className="org-settings-field-label" htmlFor="new-user-provider">
@@ -182,8 +198,7 @@ export function NewUser({ fetcher }: { fetcher?: Fetcher }) {
       </OrgSettingsSectionCard>
 
       <p className="org-settings-footnote">
-        Their roles are given in Roles &amp; permissions, and their organizations from each organization&apos;s
-        Users page.
+        Their organizations, workspaces and level are given on each organization&apos;s Users page.
       </p>
     </form>
   );

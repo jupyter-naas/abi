@@ -17,9 +17,12 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.levels import (
     level_document,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
+    ADMINS,
+    MEMBERSHIP,
     MEMBERSHIPS,
     LastOrgAdminError,
     MembershipDenied,
+    Seat,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_below, org_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
@@ -255,18 +258,24 @@ async def test_the_member_lists_show_workspace_and_level(world):
 
 
 @pytest.mark.asyncio
-async def test_a_role_based_gateway_call_is_mapped_onto_the_groups(world):
-    """The people service's ``AccessGateway`` keeps its shape (S6 rewrites it): a
-    role it grants lands in the groups, checked as the inviting person."""
+async def test_the_people_gateway_joins_and_leaves_the_groups(world):
+    """The people service's ``AccessGateway`` (#1589): seats in the groups, checked
+    as the inviting person, and the level."""
     await _team(world)
     gateway = EngineAccessGateway(lambda: world.iam)
-    await gateway.grant_role("bob", "admin", world.W, by=SimpleUser("oadmin"))
+    seats = [Seat(world.W, MEMBERSHIP), Seat(world.W, ADMINS)]
+    await gateway.check("bob", seats, level="member", by="oadmin", organization_id="org-1")
+    for seat in seats:
+        assert await gateway.join("bob", seat, by="oadmin", level="member")
+    await gateway.set_level("bob", "member", by="oadmin")
     record, levels = world.record, LEVELS.get(world.iam)
     assert "bob" in _members(world, record.admins_group_id)
     assert "bob" in _members(world, record.members_group_id)
     assert "bob" in _members(world, levels.members)
     assert (await gateway.roles_of("bob")) == {world.W: "admin"}
-    await gateway.revoke_role("bob", world.W)
+    assert await gateway.held("bob", seats) == set(seats)
+    for seat in reversed(seats):
+        assert await gateway.leave("bob", seat, by="oadmin")
     assert "bob" not in _members(world, record.members_group_id)
 
 

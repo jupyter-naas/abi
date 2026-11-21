@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Shield, Crown, UserCircle, Trash2, AlertCircle, Mail } from 'lucide-react';
+import { Plus, Shield, UserCircle, Trash2, AlertCircle, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
 import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
-import { InvitePolicyPicker } from '@/components/invitations/invite-policy-picker';
+import { CapabilityGroupPicker } from '@/components/invitations/invite-policy-picker';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useInviteProviders } from '@/components/invitations/use-invite-providers';
-import { organizationAccessScope } from '@/components/access/access-scope';
 import { inviteSuccessMessage, providerHint } from '@/lib/invitations';
 
 export default function OrgUsersPage() {
@@ -19,7 +19,7 @@ export default function OrgUsersPage() {
     fetchOrganizations,
     fetchMembers,
     inviteToOrganization,
-    removeMember,
+    removeFromOrganization,
     membersCache,
     membersLoading,
   } = useOrganizationStore();
@@ -27,14 +27,13 @@ export default function OrgUsersPage() {
   const org = organizations[0];
   const members = org ? membersCache[org.id] || [] : [];
   const myMembership = members.find((m) => m.userId === authUser?.id);
-  const canManage =
-    myMembership?.role === 'owner' || myMembership?.role === 'admin';
+  const canManage = myMembership?.orgAdmin === true;
 
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
-  // Policies attached at the organization with the role (features come from policies).
-  const [invitePolicyIds, setInvitePolicyIds] = useState<string[]>([]);
+  const [inviteOrgAdmin, setInviteOrgAdmin] = useState(false);
+  // Capability groups beside their level (#1589): no policy is given to a person.
+  const [inviteCapabilities, setInviteCapabilities] = useState<string[]>([]);
   const [inviteError, setInviteError] = useState('');
   const [inviteNotice, setInviteNotice] = useState('');
   const [invitationsKey, setInvitationsKey] = useState(0);
@@ -60,9 +59,9 @@ export default function OrgUsersPage() {
     try {
       const { answer } = await inviteToOrganization(org.id, {
         email: inviteEmail.trim(),
-        role: inviteRole,
+        orgAdmin: inviteOrgAdmin,
         provider: providers.providerToSend(),
-        policyIds: invitePolicyIds,
+        capabilities: inviteCapabilities,
       });
       if (answer.kind === 'invited') {
         setInviteNotice(inviteSuccessMessage(answer));
@@ -72,8 +71,8 @@ export default function OrgUsersPage() {
       }
       setShowInviteModal(false);
       setInviteEmail('');
-      setInviteRole('member');
-      setInvitePolicyIds([]);
+      setInviteOrgAdmin(false);
+      setInviteCapabilities([]);
     } catch (error: unknown) {
       setInviteError(
         error instanceof Error ? error.message : 'Failed to invite member'
@@ -85,10 +84,10 @@ export default function OrgUsersPage() {
 
   const handleRemove = async (userId: string) => {
     if (!org || !canManage) return;
-    if (!confirm('Are you sure you want to remove this member?')) return;
+    if (!confirm('Remove them from the organization? They leave all its workspaces; their account is kept.')) return;
 
     try {
-      await removeMember(org.id, userId);
+      await removeFromOrganization(org.id, userId);
     } catch (error: unknown) {
       alert(
         error instanceof Error ? error.message : 'Failed to remove member'
@@ -173,31 +172,23 @@ export default function OrgUsersPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {member.role === 'owner' && (
-                    <span className="flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-500">
-                      <Crown size={12} />
-                      Owner
-                    </span>
-                  )}
-                  {member.role === 'admin' && (
+                  {member.orgAdmin && (
                     <span className="flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-500">
                       <Shield size={12} />
                       Admin
                     </span>
                   )}
-                  {member.role === 'member' && (
+                  {!member.orgAdmin && member.role !== null && (
                     <span className="flex items-center gap-1 rounded-full bg-gray-500/10 px-2 py-0.5 text-xs font-medium text-gray-500">
                       <UserCircle size={12} />
-                      Member
+                      {member.level === 'viewer' || member.role === 'viewer' ? 'Viewer' : 'Member'}
                     </span>
                   )}
-                  {canManage &&
-                    member.role !== 'owner' &&
-                    member.userId !== authUser?.id && (
+                  {canManage && member.userId !== authUser?.id && (
                       <button
                         onClick={() => void handleRemove(member.userId)}
                         className="text-red-500 hover:text-red-600 transition-colors"
-                        title="Remove member"
+                        title="Remove from organization"
                       >
                         <Trash2 size={16} />
                       </button>
@@ -224,7 +215,7 @@ export default function OrgUsersPage() {
             <h3 className="text-lg font-semibold mb-2">Add User</h3>
             <p className="mb-4 text-xs text-muted-foreground">
               {providers.known.enabled
-                ? 'The identity provider creates the account if needed; the role applies when they first sign in with this email. Same API as'
+                ? 'The identity provider creates the account if needed; their access applies when they first sign in with this email. Same API as'
                 : 'Creates the account if needed and emails a sign-in code. Same API as'}{' '}
               <code>POST /api/organizations/{'{id}'}/members/invite</code>.
             </p>
@@ -268,24 +259,17 @@ export default function OrgUsersPage() {
                 <p className="text-xs text-muted-foreground">{providerHint(providers.chosen)}</p>
               )}
 
-              <div>
-                <label className="block text-sm font-medium mb-2">Role</label>
-                <select
-                  value={inviteRole}
-                  onChange={(e) =>
-                    setInviteRole(e.target.value as 'admin' | 'member')
-                  }
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
-                >
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
+              <Checkbox
+                label="Org admin"
+                checked={inviteOrgAdmin}
+                onCheckedChange={setInviteOrgAdmin}
+                disabled={inviteLoading}
+              />
 
-              <InvitePolicyPicker
-                scope={organizationAccessScope(org.id).value}
-                value={invitePolicyIds}
-                onChange={setInvitePolicyIds}
+              <CapabilityGroupPicker
+                at={{ organizationId: org.id }}
+                value={inviteCapabilities}
+                onChange={setInviteCapabilities}
                 disabled={inviteLoading}
               />
             </div>
@@ -296,7 +280,7 @@ export default function OrgUsersPage() {
                   setShowInviteModal(false);
                   setInviteEmail('');
                   setInviteError('');
-                  setInvitePolicyIds([]);
+                  setInviteCapabilities([]);
                 }}
                 className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-accent transition-colors"
               >
