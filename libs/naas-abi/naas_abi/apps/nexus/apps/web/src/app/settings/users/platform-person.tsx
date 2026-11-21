@@ -9,6 +9,7 @@ import { PersonPage } from '@/components/access/people/person-page';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 import { PLATFORM_USERS_PATH } from './users-model';
+import { PlatformAccess } from './platform-access';
 
 const groupHref = (id: string) => platformAccessPath('groups', id);
 
@@ -41,6 +42,7 @@ export default function PlatformPersonPage() {
           </button>
         }
       />
+      <PlatformAccess personId={personId} nonce={nonce} />
       <PersonPage
         scope={PLATFORM_ACCESS_SCOPE}
         personId={personId}

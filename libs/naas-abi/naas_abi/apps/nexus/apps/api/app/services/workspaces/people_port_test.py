@@ -50,7 +50,7 @@ def test_the_routes_and_the_tools_get_the_service_installed() -> None:
         (ProviderUnavailableError("unreachable"), 502),
         (ProvisioningError("refused"), 502),
         (people.GrantNotHeldError("You cannot grant what you do not hold"), 403),
-        (people.OwnerGrantRefusedError("owner"), 403),
+        (people.LastOrgAdminError("abi:nexus:organization/org-1"), 409),
         (ValueError("Enter a valid email address"), 400),
     ],
     ids=lambda v: type(v).__name__ if isinstance(v, BaseException) else str(v),
@@ -67,10 +67,10 @@ def test_the_answers_name_nobody_they_should_not() -> None:
     assert active is not None and active.detail == "This member has already signed in"
     unknown = people_port.people_http_error(UnknownUserError("usr-secret"))
     taken = people_port.people_http_error(people.EmailTakenError("bob@example.com"))
-    owner = people_port.people_http_error(people.OwnerGrantRefusedError("x"))
+    last = people_port.people_http_error(people.LastOrgAdminError("abi:nexus:organization/x"))
     assert unknown is not None and unknown.detail == "User not found"
     assert taken is not None and "bob@example.com" not in str(taken.detail)
-    assert owner is not None and owner.detail == "Only owners can grant, change or remove an owner"
+    assert last is not None and last.detail == "An organization keeps at least one admin"
 
 
 def test_anything_else_is_not_the_people_services_to_answer() -> None:
@@ -87,3 +87,20 @@ def test_the_provider_is_answered_as_the_invitation_routes_did() -> None:
         "managed_in_provider": True,
     }
     assert people_port.provider_view(None) is None
+
+
+def test_a_workspace_body_maps_to_a_grant_and_the_role_of_before_too() -> None:
+    grant = people_port.workspace_grant("org-1", "ws-1", level="viewer", capabilities=["grp_x"])
+    assert grant == people.Grant(
+        "org-1",
+        level="viewer",
+        workspaces=(people.WorkspaceAccess("ws-1"),),
+        capabilities=("grp_x",),
+    )
+    assert people_port.level_and_admin(None, None, "admin") == (None, True)
+    assert people_port.level_and_admin(None, None, "viewer") == ("viewer", False)
+    assert people_port.level_and_admin("member", True, "viewer") == ("member", True)
+    assert people_port.level_and_admin(None, None, None) == (None, False)
+    for bad in ((None, None, "owner"), ("viewer", True, None), ("guest", None, None)):
+        with pytest.raises(ValueError):
+            people_port.level_and_admin(*bad)

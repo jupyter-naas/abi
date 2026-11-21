@@ -209,8 +209,7 @@ def _directory_adapter(**extra):
     return SimpleNamespace(
         get_users_by_ids=AsyncMock(
             side_effect=lambda ids: {
-                i: UserRecord(id=i, email=f"{i}@x.io", name=i.title(), status="active")
-                for i in ids
+                i: UserRecord(id=i, email=f"{i}@x.io", name=i.title(), status="active") for i in ids
             }
         ),
         list_organization_member_profiles=AsyncMock(return_value={}),

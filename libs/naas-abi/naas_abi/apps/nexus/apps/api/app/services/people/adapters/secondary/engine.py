@@ -1,10 +1,11 @@
 """The engine's identity service and IAM, as the people service calls them.
 
-What gives access (a pending grant, a role, a policy) is written as ``api`` on
-behalf of the inviting person, so IAM checks that they may attach it and hold what
-it grants; the provider's admin API, the principals and the take-backs are Nexus's
-own (``api`` for nobody), made only under the warrant the service checked first.
-IAM's refusals become ``GrantNotHeldError``; the provider's failures
+What gives access (a group membership, the level) is checked as the inviting
+person, by IAM's member change on each group and its level-group rule, then
+written as ``api`` (``Memberships``: the seats, #1589), which records who asked;
+the provider's admin API, the principals and the take-backs are Nexus's own
+(``api`` for nobody), made only under the check the service ran first. IAM's
+refusals become ``GrantNotHeldError``; the provider's failures
 ``ProvisioningFailedError``. The services are blocking: each call runs in a worker
 thread.
 """
@@ -12,7 +13,7 @@ thread.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
@@ -22,15 +23,15 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
 from naas_abi.apps.nexus.apps.api.app.services.people.port import (
     AccessGateway,
-    Grant,
     GrantNotHeldError,
     IdentityGateway,
+    Level,
     ProviderInfo,
     Provisioned,
     ProvisioningFailedError,
     ProvisioningRefused,
     RetiredIdentityError,
-    Warrant,
+    Seat,
 )
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account, use_call_context
@@ -62,6 +63,9 @@ async def _as_api(fn: Callable[[], _T], *, by: str | None = None) -> _T:
             return fn()
 
     return await run_in_threadpool(call)
+
+
+_DENIED = (MembershipDenied, PermissionDeniedError, ResourceNotFoundError, IAMNotFoundError)
 
 
 def _refused(exc: Exception) -> GrantNotHeldError:
@@ -137,54 +141,71 @@ class EngineAccessGateway(AccessGateway):
             raise ProvisioningFailedError("The engine's IAM service is not loaded")
         return service
 
-    async def scope(self, grant: Grant) -> str:
-        if grant.scope == "organization":
-            return org_container(grant.scope_id)
-        container = await AUTHZ.container_of(grant.scope_id)
+    async def container(self, kind: Literal["organization", "workspace"], id: str) -> str:
+        if kind == "organization":
+            return org_container(id)
+        container = await AUTHZ.container_of(id)
         if container is None:
-            raise LookupError(grant.scope_id)
+            raise LookupError(id)
         return container
 
-    async def warrant(
-        self, provider: str, email: str, grants: Sequence[tuple[str, str]], *, by: str
-    ) -> Warrant:
-        iam = self._service()
-        ids: list[str] = []
-        made: list[str] = []
+    async def check(
+        self,
+        user_id: str | None,
+        seats: Sequence[Seat],
+        *,
+        level: Level | None,
+        by: str,
+        organization_id: str | None,
+    ) -> None:
         try:
-            for policy_id, scope in grants:
-                # The whole truth (as Nexus): a grant an older invitation holds is
-                # not this call's to withdraw.
-                held = await _as_api(
-                    lambda p=policy_id, s=scope: any(  # type: ignore[misc]
-                        g.scope == s
-                        for g in iam.list_pending_grants(
-                            provider=provider, email=email, policy_id=p
-                        )
-                    )
-                )
-                grant = await _as_api(
-                    lambda p=policy_id, s=scope: iam.create_pending_grant(provider, email, p, s),  # type: ignore[misc]
-                    by=by,
-                )
-                ids.append(str(grant.id))
-                if not held:
-                    made.append(str(grant.id))
-        except (PermissionDeniedError, IAMNotFoundError, ResourceNotFoundError) as exc:
-            await self.withdraw(made)
+            await MEMBERSHIPS.check_seats(
+                user_id, seats, level=level, by=by, org_id=organization_id
+            )
+        except _DENIED as exc:
             raise _refused(exc) from exc
-        except Exception:
-            await self.withdraw(made)
-            raise
-        return Warrant(grant_ids=tuple(ids), made=tuple(made))
 
-    async def withdraw(self, grant_ids: Sequence[str]) -> None:
-        iam = self._service()
-        for grant_id in grant_ids:
-            try:
-                await _as_api(lambda g=grant_id: iam.revoke_pending_grant(g))  # type: ignore[misc]
-            except Exception as exc:  # noqa: BLE001 - a grant already gone is gone
-                logger.warning(f"Could not revoke pending grant {grant_id}: {exc}")
+    async def held(self, user_id: str, seats: Sequence[Seat]) -> set[Seat]:
+        return await MEMBERSHIPS.held_seats(user_id, seats)
+
+    async def level_of(self, user_id: str) -> Level | None:
+        level = await MEMBERSHIPS.level_of(user_id)
+        return level if level in ("viewer", "member") else None  # type: ignore[return-value]
+
+    async def join(self, user_id: str, seat: Seat, *, by: str | None, level: Level | None) -> bool:
+        try:
+            return await MEMBERSHIPS.take_seat(user_id, seat, by=by, level=level)
+        except _DENIED as exc:
+            raise _refused(exc) from exc
+
+    async def leave(self, user_id: str, seat: Seat, *, by: str | None) -> bool:
+        try:
+            return await MEMBERSHIPS.leave_seat(user_id, seat, by=by)
+        except _DENIED as exc:
+            raise _refused(exc) from exc
+
+    async def check_leaving(self, user_id: str, seats: Sequence[Seat], *, by: str) -> None:
+        try:
+            await MEMBERSHIPS.check_leaving(user_id, seats, by=by)
+        except _DENIED as exc:
+            raise _refused(exc) from exc
+
+    async def set_level(
+        self, user_id: str, level: Level, *, by: str | None, where: Sequence[str] = ()
+    ) -> Level | None:
+        try:
+            before = await MEMBERSHIPS.set_level(user_id, level, by=by, where=where)
+        except _DENIED as exc:
+            raise _refused(exc) from exc
+        return before if before in ("viewer", "member") else None  # type: ignore[return-value]
+
+    async def clear_level(self, user_id: str) -> None:
+        await MEMBERSHIPS.clear_level(user_id)
+
+    async def capability_groups(self, organization_id: str | None) -> list[tuple[str, str]]:
+        return [
+            (str(g.id), str(g.name)) for g in await MEMBERSHIPS.capability_groups(organization_id)
+        ]
 
     async def ensure_principal(
         self, issuer: str, subject: str, *, provider: str, email: str, name: str | None
@@ -214,32 +235,3 @@ class EngineAccessGateway(AccessGateway):
 
     async def roles_of(self, user_id: str) -> dict[str, str]:
         return await MEMBERSHIPS.roles_of(user_id)
-
-    async def grant_role(self, user_id: str, role: str, scope: str, *, by: str) -> None:
-        try:
-            await MEMBERSHIPS.grant(user_id, role, scope, by=by)
-        except (MembershipDenied, PermissionDeniedError, ResourceNotFoundError) as exc:
-            raise _refused(exc) from exc
-
-    async def revoke_role(self, user_id: str, scope: str) -> None:
-        await MEMBERSHIPS.revoke(user_id, scope)
-
-    async def attach(self, user_id: str, policy_id: str, scope: str, *, by: str) -> bool:
-        iam = self._service()
-        principal_id = await MEMBERSHIPS.principal_id(user_id)
-        held = await _as_api(
-            lambda: any(
-                a.scope == scope
-                for a in iam.list_attachments(principal_id=principal_id, policy_id=policy_id)
-            )
-        )
-        try:
-            await _as_api(lambda: iam.attach_policy(policy_id, principal_id, scope), by=by)
-        except (PermissionDeniedError, IAMNotFoundError, ResourceNotFoundError) as exc:
-            raise _refused(exc) from exc
-        return not held
-
-    async def detach(self, user_id: str, policy_id: str, scope: str) -> None:
-        iam = self._service()
-        principal_id = await MEMBERSHIPS.principal_id(user_id)
-        await _as_api(lambda: iam.detach_policy(policy_id, principal_id, scope))

@@ -384,6 +384,10 @@ async def _prepare_iam() -> None:
 
     log = logging.getLogger(__name__)
     MEMBERSHIPS.known_user = bootstrap.nexus_user_exists
+    from naas_abi.apps.nexus.apps.api.app.services.audit import audit_group_change
+
+    if audit_group_change not in MEMBERSHIPS.audit_sinks:
+        MEMBERSHIPS.audit_sinks.append(audit_group_change)
     # A role changed in another process's organization or workspace: its default
     # groups are read from the database.
     container_defaults.CONTAINER_DEFAULTS.session_factory = AsyncSessionLocal

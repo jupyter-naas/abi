@@ -19,15 +19,16 @@ describe('an invitation to an organization', () => {
     authFetch.mockResolvedValue(answer(200, { id: 'm1', organization_id: 'acme', user_id: 'usr_bob', role: 'member' }));
   });
 
-  it('carries the picked policies as policy_ids, and every workspace in one request', async () => {
+  it('carries the level, the org admin toggle, every workspace with "admin" and the groups, in one request', async () => {
     await useOrganizationStore.getState().inviteToOrganization('acme', {
       email: 'bob@example.com',
-      role: 'member',
+      level: 'member',
+      orgAdmin: false,
       workspaces: [
-        { id: 'ws-1', role: 'member' },
-        { id: 'ws-2', role: 'viewer' },
+        { id: 'ws-1', admin: true },
+        { id: 'ws-2', admin: false },
       ],
-      policyIds: ['pol_features', 'pol_graph'],
+      capabilities: ['grp_runners'],
       profile: { name: 'Bob', country: 'FR' },
     });
     expect(authFetch).toHaveBeenCalledTimes(1);
@@ -35,12 +36,13 @@ describe('an invitation to an organization', () => {
     expect(sent()).toEqual({
       email: 'bob@example.com',
       name: 'Bob',
-      role: 'member',
+      level: 'member',
+      org_admin: false,
       workspaces: [
-        { id: 'ws-1', role: 'member' },
-        { id: 'ws-2', role: 'viewer' },
+        { id: 'ws-1', admin: true },
+        { id: 'ws-2', admin: false },
       ],
-      policy_ids: ['pol_features', 'pol_graph'],
+      capabilities: ['grp_runners'],
       country: 'FR',
     });
   });
@@ -58,12 +60,11 @@ describe('an invitation to an organization', () => {
     );
     const { member } = await useOrganizationStore.getState().inviteToOrganization('acme', {
       email: 'bob@example.com',
-      role: 'member',
     });
-    expect(member).toMatchObject({ userId: 'usr_bob', role: 'member', source: 'organization', status: 'invited' });
+    expect(member).toMatchObject({ userId: 'usr_bob', role: 'member', orgAdmin: false, source: 'organization', status: 'invited' });
   });
 
-  it('has no org member for workspace access only', async () => {
+  it('has no member of the organization itself for someone joining workspaces only', async () => {
     authFetch.mockResolvedValue(
       answer(200, {
         status: 'added',
@@ -76,22 +77,23 @@ describe('an invitation to an organization', () => {
     );
     const { member } = await useOrganizationStore.getState().inviteToOrganization('acme', {
       email: 'bob@example.com',
-      role: null,
-      workspaces: [{ id: 'ws-1', role: 'member' }],
+      workspaces: [{ id: 'ws-1', admin: false }],
     });
     expect(member).toBeNull();
-    expect(sent()).toMatchObject({ role: null, workspaces: [{ id: 'ws-1', role: 'member' }] });
+    expect(sent()).toMatchObject({ org_admin: false, workspaces: [{ id: 'ws-1', admin: false }] });
   });
 
-  it('names no policy when none is picked', async () => {
-    await useOrganizationStore.getState().inviteToOrganization('acme', { email: 'bob@example.com', role: 'member', policyIds: [] });
+  it('names no role, no policy and no capability group when none is picked', async () => {
+    await useOrganizationStore.getState().inviteToOrganization('acme', { email: 'bob@example.com', capabilities: [] });
+    expect(sent()).not.toHaveProperty('role');
     expect(sent()).not.toHaveProperty('policy_ids');
+    expect(sent()).not.toHaveProperty('capabilities');
   });
 
   it('says what IAM refused', async () => {
     authFetch.mockResolvedValue(answer(403, { detail: 'You cannot grant what you do not hold: nexus:UseFeature on graph' }));
     await expect(
-      useOrganizationStore.getState().inviteToOrganization('acme', { email: 'bob@example.com', role: 'member', policyIds: ['pol_graph'] }),
+      useOrganizationStore.getState().inviteToOrganization('acme', { email: 'bob@example.com', capabilities: ['grp_runners'] }),
     ).rejects.toThrow('You cannot grant what you do not hold');
   });
 });
@@ -99,20 +101,22 @@ describe('an invitation to an organization', () => {
 describe('the organization directory', () => {
   beforeEach(() => authFetch.mockReset());
 
-  it('lists people with workspace access only (no role) and invited people', async () => {
+  it('lists org admins, people of its workspaces only and invited people, with their level', async () => {
     authFetch.mockResolvedValue(
       answer(200, [
-        { id: 'm1', organization_id: 'acme', user_id: 'usr_ann', role: 'admin', source: 'organization', status: 'active' },
-        { id: 'm2', organization_id: 'acme', user_id: 'usr_bob', role: null, source: 'workspace', status: 'invited' },
-        // An older row: no source nor status.
+        { id: 'm1', organization_id: 'acme', user_id: 'usr_ann', role: 'admin', org_admin: true, level: 'member', source: 'organization', status: 'active' },
+        { id: 'm2', organization_id: 'acme', user_id: 'usr_bob', role: null, level: 'viewer', source: 'workspace', status: 'invited' },
+        // An older row: no source, status, level nor org_admin; an owner of before is an admin.
         { id: 'm3', organization_id: 'acme', user_id: 'usr_cat', role: 'member' },
+        { id: 'm4', organization_id: 'acme', user_id: 'usr_dan', role: 'owner' },
       ])
     );
     const members = await useOrganizationStore.getState().fetchMembers('acme');
-    expect(members.map((m) => [m.userId, m.role, m.source, m.status])).toEqual([
-      ['usr_ann', 'admin', 'organization', 'active'],
-      ['usr_bob', null, 'workspace', 'invited'],
-      ['usr_cat', 'member', 'organization', 'active'],
+    expect(members.map((m) => [m.userId, m.role, m.orgAdmin, m.level, m.source, m.status])).toEqual([
+      ['usr_ann', 'admin', true, 'member', 'organization', 'active'],
+      ['usr_bob', null, false, 'viewer', 'workspace', 'invited'],
+      ['usr_cat', 'member', false, null, 'organization', 'active'],
+      ['usr_dan', 'admin', true, null, 'organization', 'active'],
     ]);
   });
 });

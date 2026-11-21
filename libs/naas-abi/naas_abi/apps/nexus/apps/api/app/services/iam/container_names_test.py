@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -39,6 +39,7 @@ from naas_abi_core.engine.call_context import (
     service_account,
     use_call_context,
 )
+from naas_abi_core.services.iam.adapters.secondary import iam_sql
 from naas_abi_core.services.iam.adapters.secondary.IAMStoreSQLite import IAMStoreSQLite
 from naas_abi_core.services.iam.catalog import (
     ActionCatalog,
@@ -529,7 +530,17 @@ async def test_a_role_held_in_both_grammars_does_not_stop_the_move(nexus_db, tmp
     assert not {scope for _u, _p, scope in held if scope and scope.startswith("abi:org-1:")}
 
 
+@pytest.fixture
+def ticking_store_clock(monkeypatch):
+    """The store's dates strictly increase: which twin was made first is what these
+    tests are about, and the wall clock can step back during a long run."""
+    start = datetime.now(UTC)
+    ticks = iter(range(1, 10**9))
+    monkeypatch.setattr(iam_sql, "_now", lambda: start + timedelta(milliseconds=next(ticks)))
+
+
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("ticking_store_clock")
 async def test_twin_invitations_keep_their_grant_after_the_move(nexus_db, tmp_path):
     """Two pending invitations of one person to org-1's admin role: one made
     before the upgrade (its grant in the old grammar), one while the move of the
@@ -594,6 +605,7 @@ async def test_twin_invitations_keep_their_grant_after_the_move(nexus_db, tmp_pa
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("ticking_store_clock")
 async def test_a_lost_merge_is_found_again_at_the_next_start(nexus_db, tmp_path, monkeypatch):
     """The start that merged twin invitations' grants stops before its commit (the
     invitations not moved, the move not recorded): IAM's merge is done and its map

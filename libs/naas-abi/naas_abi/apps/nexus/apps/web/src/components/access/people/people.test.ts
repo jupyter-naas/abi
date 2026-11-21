@@ -129,7 +129,7 @@ describe('PeopleView', () => {
     const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [recruiters, roleRow, companion] }) });
     mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), changeRole: vi.fn() });
     await mounted.flush();
-    expect(row('usr_bob')?.querySelector('[data-with-role]')?.textContent).toContain('Platform member');
+    expect(row('usr_bob')?.querySelector('[data-with-role]')?.textContent).toContain('Platform access (automatic)');
     expect(document.querySelector('[data-held="builtin.platform.member"]')).toBeNull();
     expect(field('Detach Platform member from Bob')).toBeNull();
     expect(field('Detach Recruiters from Bob')).not.toBeNull();
