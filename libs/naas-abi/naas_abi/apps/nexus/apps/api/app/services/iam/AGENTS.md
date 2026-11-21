@@ -32,6 +32,8 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `model_sets.py` | "Models · member", "Models · all", "Models · embeddings" (platform policies kept in step with `nexus_config.models.member_set` at start, `ensure_configured`); `level_model_policy_ids(iam, level)` for the level groups |
 | `capabilities.py` | Capability groups made on demand (`ensure_capability`): an organization's "Workflow runners", the platform's "Models · all" |
 | `container_defaults.py` | Each organization's and workspace's access policy and groups ("Access policies and default groups"): "<O> access", "<O> admins", "<O> people"; "<W> access" (W's bound), "<W> workspace", "<W> admins"; made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), forgotten with it (`dropped`); `grouped` / `grouped_record` (whether its people are groups, #1585); a container recorded before #1585 keeps its "<X> members" and admins in step with the roles (`sync_scope`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
+| `access_model.py` | Startup, once, after `container_defaults_v1`: per-person attachments become groups, with the report of every access change ("The access move"; `migrate_access`, `iam_migrations` `access_model_v1`; `abi iam migrate-access --dry-run`, `migrate_from_cli`) |
+| `shadow_iam.py` | A copy of an IAM in memory (`shadow_of`): the access move tries its plan there first, and reads its report from the copy's decisions |
 | `../invites/migration.py` | Startup, once (background, after the moves): each pending Nexus invitation becomes an invited `users` row holding what its pending grants held, attached as `api` for no user (they were authorized at invitation), the grants withdrawn (`iam_migrations` `invitations_to_people_v1`, `abi user migrate-invitations`; `services/invites/AGENTS.md`) |
 | `module_moves.py` | Startup, once, after `container_names_v1`: a module scope a remote module serves now (`MOVES`: the X app, `app/naas_abi_marketplace.applications.x/x_proxy` to `app/applications.x/x_proxy`) renamed in policy documents and keys' narrowing (`iam.rewrite_names(MovedScopes)`, `iam_migrations` `module_moves_v1`): a pattern naming the old item names the new one, a wildcard over the old module gets the new item beside it, one already reaching it is left. Nexus's rows of the app id: migration `0072_remote_x_app.sql` |
 | `runtime.py` | Where Nexus gets IAM (the engine's); tests install their own with `configure` |
@@ -253,7 +255,8 @@ policy tree of issue #1413's journeys, the groups of #1585 ("Levels as groups"):
 | "<O> admins" | O | | its admins | "<O> access" below O, `builtin.admin` at O and below it |
 
 A container recorded before #1585 has "<X> members" (every user holding a role at X itself) in place of its
-membership group, and its "<X> admins" holds the access policy: its groups follow its roles (below) until #1587.
+membership group, and its "<X> admins" holds the access policy: its groups follow its roles (below) until the access
+move (#1587, "The access move") converts it.
 
 - **"<O> access" is what an organization may use**: the platform admin widens it (agents of chosen modules, apps,
   features). Its admins and owners hold it in every workspace of the organization and derive from it. A widening is
@@ -399,6 +402,53 @@ and the names' moves, is the same before and after, and again changes nothing):
   owns is attached only at a scope there, which never reaches a platform model).
 - **`builtin.self`** (catalog 16): no `CreateOrganization`, no personal `CreateWorkspace`;
   `nexus_config.personal_workspaces: true` gives the latter back (`bootstrap.apply_access_settings`).
+
+## The access move (`access_model_v1`, #1587)
+
+`access_model.migrate_access`, at start in `_prepare_iam`, after `container_defaults.migrate` and under the moves'
+lock; it waits for `container_defaults_v1`. Built from what IAM holds now with S2's builders (`group_attachments`,
+`levels.LEVELS`, the records), never through the people service:
+
+| Held directly (or through a container's groups) | Groups after |
+|---|---|
+| `builtin.platform_admin` | "Platform admins", and no other attachment of their own |
+| owner or admin at O (or below O) | "<O> people", "<O> admins", "Workspace admins" |
+| owner or admin at W | "Members", "<W> workspace", "<W> admins", "Workspace admins" |
+| member / viewer at W | "Members" / "Viewers", "<W> workspace" |
+| member or viewer at O, no workspace of O, or invited to O (`invitations`) | "<O> people", that level |
+| member or viewer at O, a workspace of O, never invited to O | nothing at O: the org Member role goes |
+
+- **A level is global**: the highest held anywhere (a viewer here and a member there is a Member), reported.
+- **Records** of before #1585 are converted (`convert_record`): their membership group found by name or made, the
+  "<W> admins" a membership group of W, `group_attachments` with the access policy (W's bound), the access policy no
+  longer held by "<W> admins" at W; the emptied "<X> members" is deleted.
+- **Ceilings to offers** (`ceiling_offer`, `convert_ceiling`): what "<W> access" allowed (a wildcard of every module
+  expanded over the deployment's items, `engine_universe` and what policies name) minus what it denied, checked with
+  `in_offer_form`. A statement of no offer section that only names a module's declared actions is dropped, listed;
+  any other shape stops the move. The features each "Features of <role>" gave at W become W's offer features, those
+  given at O (or org-wide) and at O's workspaces "<O> access"'s (its Allows bound its workspaces' offers).
+- **Detached**: the built-in roles at organizations and workspaces, "Features of <role>", "<W> modules (...)", every
+  attachment of a platform admin. Kept and listed: a customer policy attached to one person, Nexus's per-person
+  Denies ("Agents turned off in <W>"); core's companions (`builtin.platform.*`) follow the roles. Shared graph grants
+  stay per person and are re-synced: read for W's people, write for its admins.
+- **Retired** once nothing holds them: "Features of <role>", "<W> modules (...)", "Feature · <X>", the old groups.
+  One a group or an invitation still holds stays, listed (`kept_policies`).
+- **No admin**: `nexus_config.migration.default_workspace_admin` (an email Nexus knows) joins "<W> admins" and "<W>
+  workspace" of each workspace left with none (and "Members"); unset or unknown, they are listed (`no_admin`).
+- **The report** (`Report`, logged and kept as the `iam_migrations` row's `report`) is IAM's own decisions: the plan
+  is applied to a copy (`shadow_iam`) first, every person's decisions (Nexus's actions, features, module items,
+  declared actions, shared graphs, models) compared, each change a `Change` with a reason (`REASONS`, intended ones
+  flagged: members lose workflows and pipelines, members gain datasets, model sets, owners lose delete, org Member
+  roles go). Also: empty workspaces, workspaces with no admin, org-only people, retired and kept policies, the drive
+  flags (`platform_files.convert_legacy_drive_flags`, #1590, called behind a guarded import: a note when it is not
+  there; a dry run never calls it).
+- **Safety.** A shape it does not know, or a plan the copy refuses (`AccessModelStop`), stops it: nothing written,
+  nothing recorded. The report is kept (`access_model_v1_planned`) before the real IAM changes; a start interrupted
+  half way is finished by the next, which reports the whole move. Every step is idempotent; a forced second run
+  changes nothing. Afterwards the real IAM's decisions are compared with the copy's (`unverified`).
+- **Dry run**: `abi iam migrate-access --dry-run [--json]` (the CLI's IAM, the project's `nexus_config`) prints the
+  report and writes nothing. Tests: `access_model_test.py` (decision matrices on `policy_tree_test`'s world and on
+  `role_features_test`'s taken back to before #1585), `shadow_iam_test.py`.
 
 ## The upgrade: sets and toggles become policies
 
@@ -706,6 +756,13 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   per workspace by its offer; workspace admins hold theirs at `${my workspaces}` from W's own group, so W alone; an
   org admin uses the organization's offer; members and viewers lose shared-graph writes in grouped workspaces;
   containers recorded before keep attachments until #1587.
+- **The access move reports IAM's own decisions** (#1587). *Decision:* the move is applied to a copy of IAM first
+  (`shadow_iam`) and its report is the diff of every person's decisions on the copy, classified by reason; the real
+  IAM is changed only after the copy accepted the plan and the report was kept, then compared with the copy.
+  "Features of <role>" choices become offer features (of the workspace, and of its organization, whose access bounds
+  it). *Consequences:* a dry run writes nothing; an unexpected shape stops the move before any write; the start
+  after an interrupted move finishes it with the whole report; a Viewer whose role's features went beyond the Viewer
+  level's loses them (`viewer_features`, reported); a group holding a role (a customer group) keeps it.
 - **Organization Files is decided at the organization.** *Decision* (#1511): `naas_abi/organization-drive/<org>`
   is the organization's: its object storage is placed in the organization's container (`Placement.organization`,
   `files/placement.py`), and the files API decides on `<org>/nexus:file/organization/<path>` with its own actions,
