@@ -396,6 +396,40 @@ async def test_the_flags_kept_by_0073_become_the_setting_once(team, legacy_db):
 
 
 @pytest.mark.asyncio
+async def test_a_converted_workspaces_people_use_platform_files_through_the_files_routes(
+    team, legacy_db, storage
+):
+    """The Nexus files routes over the object storage, which decides its own half: a
+    member of the flagged workspace lists, reads, writes and deletes; a member of a
+    workspace whose flag was System Files alone is refused."""
+    from naas_abi.apps.nexus.apps.api.app.services.files import placement
+    from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__iam_test import (  # noqa: E501
+        _client_factory,
+    )
+
+    placement._PLACED.clear()
+    async with legacy_db() as db:
+        await convert_legacy_drive_flags(team.iam, db)
+    client = _client_factory(storage)
+    platform = {"scope": "platform_drive"}
+    body = {"path": "shared/new.md", "content": "x", "scope": "platform_drive"}
+
+    async with client("member") as http:
+        listing = await http.get("/api/files/", params={**platform, "path": "shared"})
+        assert listing.status_code == 200
+        assert "notes.md" in {f["name"] for f in listing.json()["files"]}
+        read = await http.get("/api/files/shared/notes.md", params=platform)
+        assert read.json()["content"] == "# shared"
+        assert (await http.post("/api/files/", json=body)).status_code == 200
+        assert (await http.delete("/api/files/shared/new.md", params=platform)).status_code == 200
+
+    async with client("beta") as http:
+        assert (await http.get("/api/files/", params=platform)).status_code == 403
+        assert (await http.get("/api/files/shared/notes.md", params=platform)).status_code == 403
+        assert (await http.post("/api/files/", json=body)).status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_a_dry_run_reports_and_changes_nothing(team, legacy_db):
     async with legacy_db() as db:
         report = await convert_legacy_drive_flags(team.iam, db, apply=False)

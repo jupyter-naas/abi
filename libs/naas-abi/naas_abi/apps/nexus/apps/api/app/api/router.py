@@ -44,6 +44,9 @@ from naas_abi.apps.nexus.apps.api.app.services.feature_access.handlers import (
     router as feature_access_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
+from naas_abi.apps.nexus.apps.api.app.services.iam.platform_files_routes import (
+    router as platform_files_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.handlers import (
     router as iam_admin_router,
 )
@@ -114,6 +117,8 @@ api_router.include_router(
 api_router.include_router(workspaces_router, prefix="/workspaces", tags=["workspaces"])
 # Workspace settings > General › Features: the managed per-feature policies.
 api_router.include_router(feature_access_router, prefix="/workspaces", tags=["workspaces"])
+# Workspace settings > General › Platform Files: given with the workspace (#1590).
+api_router.include_router(platform_files_router, prefix="/workspaces", tags=["workspaces"])
 # Invitations through the engine's identity providers, and IdP groups bound to roles.
 api_router.include_router(invitations_router, prefix="/invitations", tags=["invitations"])
 api_router.include_router(idp_groups_router, prefix="/idp-groups", tags=["invitations"])

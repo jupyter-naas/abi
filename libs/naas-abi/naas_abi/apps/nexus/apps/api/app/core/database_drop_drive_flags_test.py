@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import re
 import sqlite3
+import uuid
 from pathlib import Path
 
 import pytest
@@ -25,8 +26,8 @@ FLAGS = ("platform_drive_enabled", "system_drive_enabled")
 HOLDING = "workspace_drive_flags_legacy"
 DROPS = [f"ALTER TABLE workspaces DROP COLUMN IF EXISTS {flag};" for flag in FLAGS]
 
-# PostgreSQL, when given: postgresql+asyncpg://user:pass@host:5432/db (a scratch database:
-# the test creates and drops ``workspaces`` and the holding table).
+# PostgreSQL, when given: postgresql+asyncpg://user:pass@host:5432/db (each test works in a
+# schema of its own, dropped after).
 POSTGRES_DSN = os.environ.get("NEXUS_TEST_POSTGRES_DSN")
 
 _SQLITE_DROPS_COLUMNS = tuple(int(p) for p in re.findall(r"\d+", sqlite3.sqlite_version)[:2]) >= (
@@ -139,16 +140,23 @@ async def test_sqlite_drops_the_columns_once_then_skips_and_keeps_nothing(tmp_pa
 
 @pytest_asyncio.fixture
 async def postgres():
+    """An engine whose ``search_path`` is a schema of its own, dropped after."""
     if not POSTGRES_DSN:
         pytest.skip("Set NEXUS_TEST_POSTGRES_DSN to run 0073 on PostgreSQL")
-    engine = create_async_engine(POSTGRES_DSN)
+    schema = f"nexus_0073_{uuid.uuid4().hex[:8]}"
+    admin = create_async_engine(POSTGRES_DSN)
+    async with admin.begin() as conn:
+        await conn.execute(text(f"CREATE SCHEMA {schema}"))
+    engine = create_async_engine(
+        POSTGRES_DSN, connect_args={"server_settings": {"search_path": schema}}
+    )
     try:
         yield engine
-        async with engine.begin() as conn:
-            await conn.execute(text(f"DROP TABLE IF EXISTS {HOLDING}"))
-            await conn.execute(text("DROP TABLE IF EXISTS workspaces"))
     finally:
         await engine.dispose()
+        async with admin.begin() as conn:
+            await conn.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+        await admin.dispose()
 
 
 @pytest.mark.asyncio
