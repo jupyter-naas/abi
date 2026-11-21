@@ -24,7 +24,7 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
-from naas_abi.apps.nexus.access_config import NexusModelsConfig
+from naas_abi.apps.nexus.access_config import NexusMigrationConfig, NexusModelsConfig
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
 from naas_abi.apps.nexus.user_seed_config import UserSeedConfig
@@ -540,6 +540,8 @@ class NexusConfig(BaseModel):
     personal_workspaces: bool = False
     # The model sets of the levels (``NexusModelsConfig``).
     models: NexusModelsConfig = Field(default_factory=NexusModelsConfig)
+    # The access move's choices (``NexusMigrationConfig``).
+    migration: NexusMigrationConfig = Field(default_factory=NexusMigrationConfig)
 
 
 # Settings the Nexus ``Settings`` also reads from the environment. Passing

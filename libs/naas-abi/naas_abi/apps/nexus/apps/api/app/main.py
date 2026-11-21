@@ -373,6 +373,7 @@ async def _prepare_iam() -> None:
     are refused (``authz.upgrading``)."""
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, async_engine
     from naas_abi.apps.nexus.apps.api.app.services.iam import (
+        access_model,
         bootstrap,
         container_defaults,
         container_names,
@@ -434,6 +435,15 @@ async def _prepare_iam() -> None:
                 # Each organization and workspace has its access policy and its
                 # members and admins groups (made once for those that predate them).
                 await container_defaults.migrate(db)
+                # Once, after those: per-person attachments become groups (#1587),
+                # with the report of every access change (logged, and kept in
+                # ``iam_migrations``). It stops with nothing recorded on a shape it
+                # does not know; one interrupted half way is finished next start.
+                try:
+                    await access_model.migrate_access(db)
+                except Exception:  # noqa: BLE001 - retried at the next start
+                    await db.rollback()
+                    log.exception("The access move did not run: the next start retries it")
                 # The agents a workspace had turned off, of modules loaded since.
                 try:
                     await policy_tree.deny_deferred_agents(db)

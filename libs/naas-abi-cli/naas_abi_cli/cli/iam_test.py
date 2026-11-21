@@ -575,3 +575,69 @@ def test_a_dev_module_key_tells_the_broker_of_the_dev_run(monkeypatch) -> None:
 
     assert key.startswith("abi_sk_")
     assert told == ["nats://engine:pw@127.0.0.1:13136"]
+
+
+# -- abi iam migrate-access ---------------------------------------------------------------
+
+
+@pytest.fixture
+def access_move(monkeypatch, service):
+    """The Nexus side of the move, stubbed: what the command was asked, and the
+    report it prints (the move itself is tested in Nexus, ``access_model_test``)."""
+    from types import SimpleNamespace
+
+    module = importlib.import_module(
+        "naas_abi.apps.nexus.apps.api.app.services.iam.access_model"
+    )
+    user_cli = importlib.import_module("naas_abi_cli.cli.user")
+    calls: list[tuple[str, object, object]] = []
+    state = {"report": module.Report(dry_run=True, people=2, no_admin=["abi:w"])}
+
+    async def migrate_from_cli(url, services, *, settings=None, universe=None):
+        calls.append((url, services, settings))
+        return state["report"]
+
+    monkeypatch.setattr(module, "migrate_from_cli", migrate_from_cli)
+    monkeypatch.setattr(user_cli, "_configured_nexus_settings", lambda: "the settings")
+    opened = SimpleNamespace(iam=service)
+
+    def invoke(*args):
+        return CliRunner().invoke(
+            iam,
+            ["migrate-access", "--database-url", "sqlite+aiosqlite:///n.db", *args],
+            obj={"services_opener": lambda: (opened, lambda: None)},
+        )
+
+    return SimpleNamespace(invoke=invoke, calls=calls, state=state, opened=opened)
+
+
+def test_migrate_access_dry_run_prints_the_report(access_move):
+    result = access_move.invoke("--dry-run")
+    assert result.exit_code == 0, result.output
+    assert "Access move (dry run): 2 people" in result.output
+    assert "Workspaces with no admin" in result.output and "abi:w" in result.output
+    assert "Dry run: nothing changed" in result.output
+    assert access_move.calls == [
+        ("sqlite+aiosqlite:///n.db", access_move.opened, "the settings")
+    ]
+
+
+def test_migrate_access_prints_json(access_move):
+    result = access_move.invoke("--dry-run", "--json")
+    assert result.exit_code == 0, result.output
+    printed = json.loads(result.output.splitlines()[0])
+    assert printed["dry_run"] is True and printed["no_admin"] == ["abi:w"]
+
+
+def test_migrate_access_only_reports(access_move):
+    result = access_move.invoke()
+    assert result.exit_code != 0
+    assert "--dry-run" in result.output
+    assert access_move.calls == []
+
+
+def test_migrate_access_that_cannot_run_says_so(access_move):
+    access_move.state["report"] = None
+    result = access_move.invoke("--dry-run")
+    assert result.exit_code != 0
+    assert "cannot run" in result.output

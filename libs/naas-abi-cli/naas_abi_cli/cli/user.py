@@ -291,8 +291,8 @@ def user_migrate_invitations(
         )
 
 
-def _configured_database_url() -> str:
-    """``nexus_config.database_url`` of the project's configuration."""
+def _configured_nexus_config() -> dict[str, Any]:
+    """``nexus_config`` of the project's configuration, as written there."""
     from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
         EngineConfiguration,
     )
@@ -305,10 +305,32 @@ def _configured_database_url() -> str:
         ) from exc
     for module in configuration.modules:
         if module.module == "naas_abi" or (module.path or "").endswith("naas_abi"):
-            found = (module.config.get("nexus_config") or {}).get("database_url")
-            if found:
-                return str(found)
+            return dict(module.config.get("nexus_config") or {})
+    return {}
+
+
+def _configured_database_url() -> str:
+    """``nexus_config.database_url`` of the project's configuration."""
+    found = _configured_nexus_config().get("database_url")
+    if found:
+        return str(found)
     return str(importlib.import_module("naas_abi").NexusConfig().database_url)
+
+
+def _configured_nexus_settings() -> Any:
+    """The project's ``nexus_config`` (``naas_abi.NexusConfig``): its defaults when
+    the configuration names none."""
+    config = importlib.import_module("naas_abi").NexusConfig
+    try:
+        return config(**_configured_nexus_config())
+    except click.ClickException as exc:
+        click.echo(f"{exc.message}: nexus_config's defaults are used", err=True)
+        return config()
+    except Exception as exc:  # noqa: BLE001 - named; the defaults are a usable report
+        click.echo(
+            f"nexus_config could not be read ({exc}): its defaults are used", err=True
+        )
+        return config()
 
 
 async def _legacy_users(database_url: str) -> list[Any]:

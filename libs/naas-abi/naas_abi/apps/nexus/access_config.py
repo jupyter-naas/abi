@@ -20,3 +20,16 @@ class NexusModelsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     member_set: list[str] = Field(default_factory=list)
+
+
+class NexusMigrationConfig(BaseModel):
+    """Choices of the access move (``nexus_config.migration``, ``iam/access_model``).
+
+    ``default_workspace_admin``: the email of a person Nexus knows, made admin of
+    every workspace the move leaves with no admin. None by default: those
+    workspaces are listed in the move's report instead.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    default_workspace_admin: str | None = None
