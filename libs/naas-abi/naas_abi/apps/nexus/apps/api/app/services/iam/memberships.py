@@ -816,6 +816,7 @@ class Memberships:
             for policy, where in [*plan.detach, *plan.mirrored]:
                 iam.detach_policy(policy, plan.principal_id, where)
             self._sync_admin_models(iam, plan.principal_id)
+            self._follow_platform_files(iam, plan.principal_id)
         if plan.level_join or plan.level_leave:
             logger.info(
                 f"Level of {plan.principal_id}: joined {plan.level_join}, left "
@@ -847,6 +848,18 @@ class Memberships:
             iam.add_group_member(levels.workspace_admins, principal_id)
         elif member and not admin:
             iam.remove_group_member(levels.workspace_admins, principal_id)
+
+    @staticmethod
+    def _follow_platform_files(iam: Any, principal_id: str) -> None:
+        """Keep the person in the Platform Files group of each workspace they belong
+        to, and in no other (``platform_files``, #1590). As ``api``. A failure is
+        logged: the next start puts every group back in step."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam import platform_files
+
+        try:
+            platform_files.follow(iam, principal_id)
+        except Exception:  # noqa: BLE001 - the membership change stands
+            logger.exception(f"Platform Files could not follow {principal_id}")
 
     async def level_of(self, user_id: str) -> str | None:
         """The person's level ("member", "viewer"), or None."""
@@ -1045,6 +1058,17 @@ class Memberships:
         self._authz.forget_workspace(workspace_id)
         return container
 
+    @staticmethod
+    def _forget_platform_files(iam: Any, workspace_id: str) -> None:
+        """A deleted workspace's Platform Files group goes with it (#1590); a failure
+        is logged, the next start deletes it."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam import platform_files
+
+        try:
+            platform_files.forget_workspace(iam, workspace_id)
+        except Exception:  # noqa: BLE001 - the workspace is gone either way
+            logger.exception(f"The Platform Files group of {workspace_id} could not be deleted")
+
     async def register_org(self, org_id: str) -> str:
         """Register an organization with IAM as a container; returns its name."""
         return await self._run(
@@ -1068,6 +1092,7 @@ class Memberships:
         if workspace_id:
             scope = workspace_container(org_id, workspace_id)
             await self._run(lambda iam: iam.delete_container(SERVICE, WORKSPACE, workspace_id))
+            await self._run(lambda iam: self._forget_platform_files(iam, workspace_id))
             self._authz.forget_workspace(workspace_id)
             await self._notify(scope, dropped=True)
             return
