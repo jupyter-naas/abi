@@ -50,8 +50,8 @@ describe('the levels of Settings', () => {
     const organization = settingsLevels(all).find((level) => level.id === 'organization');
     expect(organization?.groups.map((group) => group.label)).toEqual([null, 'Access']);
     expect(organization?.groups[1].links.map((link) => [link.label, link.href])).toEqual([
-      ['Policies', '/organizations/acme/settings/policies'],
       ['Groups', '/organizations/acme/settings/groups'],
+      ['Policies', '/organizations/acme/settings/policies'],
     ]);
   });
 

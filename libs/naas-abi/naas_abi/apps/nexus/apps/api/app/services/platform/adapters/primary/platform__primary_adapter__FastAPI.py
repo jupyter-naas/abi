@@ -87,7 +87,7 @@ async def _scope_base(current_user: User, root: bool, action: str, rel: str = ""
         await authz.require(
             _ROOT_ACTIONS[action],
             user=current_user,
-            denied="Platform superadmin role required for root (unscoped) access.",
+            denied="Platform admin role required for root (unscoped) access.",
         )
         return ""
     await authz.require(

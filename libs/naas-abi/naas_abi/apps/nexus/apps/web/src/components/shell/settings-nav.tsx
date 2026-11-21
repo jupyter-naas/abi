@@ -64,8 +64,8 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
     label: 'Access',
     items: [
-      { href: '/settings/policies', label: 'Policies', icon: KeyRound, needs: 'policies' },
       { href: '/settings/groups', label: 'Groups', icon: UsersRound, needs: 'groups' },
+      { href: '/settings/policies', label: 'Policies', icon: KeyRound, needs: 'policies' },
     ],
   },
   {

@@ -147,6 +147,14 @@ def apply_access_settings(iam: Any) -> None:
         LEVELS.get(iam)
     except Exception:  # noqa: BLE001 - made on first need otherwise
         logger.exception("The level groups and policies could not be made")
+    # Platform Files given with the workspace (#1590): its two policies, and each
+    # workspace's group in step with the workspace's people.
+    from naas_abi.apps.nexus.apps.api.app.services.iam import platform_files
+
+    try:
+        platform_files.ensure_configured(iam)
+    except Exception:  # noqa: BLE001 - kept in step at each membership change otherwise
+        logger.exception("Platform Files could not be put in step with the workspaces")
 
 
 async def register_catalog() -> None:

@@ -10,6 +10,8 @@ import type {
   AttachmentCreate,
   AttachmentView,
   AuditEntry,
+  CapabilitiesView,
+  CapabilityView,
   CatalogsView,
   CreatedKey,
   GroupView,
@@ -149,6 +151,24 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
             limit: input.limit,
           }),
         'Could not list the resources.',
+      ),
+
+    // capability groups
+    /** The capability groups of `scope`'s level (the platform's without one). */
+    capabilities: (scope?: string | null) =>
+      read<CapabilitiesView>(
+        fetcher,
+        path('capabilities') + query({ scope }),
+        'Could not read the capability groups.',
+      ),
+    /** Make a capability group on demand (idempotent). */
+    ensureCapability: (capability: CapabilityView['capability'], scope?: string | null) =>
+      send<CapabilityView>(
+        fetcher,
+        path('capabilities'),
+        'POST',
+        { capability, scope: scope ?? null },
+        'Could not create the group.',
       ),
 
     // policies

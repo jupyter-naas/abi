@@ -137,7 +137,7 @@ const ALL_PLATFORM = ['nexus:ReadSystem', 'nexus:ListUsers', 'nexus:ListDrives',
 // At an organization or a workspace IAM answers its platform-only actions false.
 const IAM_CONTAINER = ['iam:ListPolicies', 'iam:CreatePolicy', 'iam:ListGroups', 'iam:ListAttachments'];
 const PLATFORM_GROUPS = ['Administration', 'Access', 'System', 'Activity', 'Resources', 'Data'];
-const PLATFORM_ACCESS = ['Policies', 'Groups', 'Service accounts', 'Module approvals', 'Simulator', 'Audit'];
+const PLATFORM_ACCESS = ['Groups', 'Policies', 'Service accounts', 'Module approvals', 'Simulator', 'Audit', 'Models'];
 
 describe('who sees what in Settings', () => {
   it('a platform admin: the four tabs, Settings opening on the workspace, the Platform tab with every group', async () => {
@@ -153,7 +153,7 @@ describe('who sees what in Settings', () => {
     expect(seen.level).toBe('Workspace');
     expect(Object.keys(seen.column)).toEqual(['Workspace', 'Access', 'Features']);
     expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users']));
-    expect(seen.column.Access).toEqual(['Policies', 'Groups']);
+    expect(seen.column.Access).toEqual(['Groups', 'Policies']);
 
     const platform = await seenBy(root, seen.opens.Platform);
     expect(seen.opens.Platform).toBe('/settings/general');
@@ -170,7 +170,7 @@ describe('who sees what in Settings', () => {
     const organization = await seenBy(root, seen.opens.Organization);
     expect(organization.column).toEqual({
       Organization: ['General', 'Branding', 'Workspaces', 'Users'],
-      Access: ['Policies', 'Groups'],
+      Access: ['Groups', 'Policies'],
     });
   });
 

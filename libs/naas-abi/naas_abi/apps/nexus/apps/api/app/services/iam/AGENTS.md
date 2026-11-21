@@ -31,6 +31,8 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `workspace_offer.py` | "<W> access" as an allow-list ("Ceilings as allow-lists"): `Offer`, `offer_document`, `offer_of`, `with_offer`, `in_offer_form`, `offer_from_seed`, `seeded_offer` |
 | `model_sets.py` | "Models · member", "Models · all", "Models · embeddings" (platform policies kept in step with `nexus_config.models.member_set` at start, `ensure_configured`); `level_model_policy_ids(iam, level)` for the level groups |
 | `capabilities.py` | Capability groups made on demand (`ensure_capability`): an organization's "Workflow runners", the platform's "Models · all" |
+| `platform_files.py` | Platform Files given with the workspace (#1590): "Platform Files · read" / "· write", a platform group per workspace kept in step with its people (`set_workspace_platform_files`, `follow`, `sync_platform_files`, `ensure_configured`), the legacy flags (`convert_legacy_drive_flags`, `DriveFlagChange`) |
+| `platform_files_routes.py` | `GET`/`PUT /api/workspaces/{id}/platform-files`: `{workspace_id, mode, can_change}`; read as the configuration, changed by the platform admin alone |
 | `container_defaults.py` | Each organization's and workspace's access policy and groups ("Access policies and default groups"): "<O> access", "<O> admins", "<O> people"; "<W> access" (W's bound), "<W> workspace", "<W> admins"; made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), forgotten with it (`dropped`); `grouped` / `grouped_record` (whether its people are groups, #1585); a container recorded before #1585 keeps its "<X> members" and admins in step with the roles (`sync_scope`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
 | `access_model.py` | Startup, once, after `container_defaults_v1`: per-person attachments become groups, with the report of every access change ("The access move"; `migrate_access`, `iam_migrations` `access_model_v1`; `abi iam migrate-access --dry-run`, `migrate_from_cli`) |
 | `shadow_iam.py` | A copy of an IAM in memory (`shadow_of`): the access move tries its plan there first, and reads its report from the copy's decisions |
@@ -399,7 +401,8 @@ and the names' moves, is the same before and after, and again changes nothing):
   holding a policy (a sub-policy of "<O> access") running every workflow and pipeline, attached at
   `${my workspaces}` (the workspaces of the organization its member belongs to, through their "<W>
   workspace" membership groups); "Models · all", the platform's (a group an organization
-  owns is attached only at a scope there, which never reaches a platform model).
+  owns is attached only at a scope there, which never reaches a platform model). The Access pages make
+  them on demand through `GET`/`POST /api/iam/admin/capabilities` (`../iam_admin/AGENTS.md`).
 - **`builtin.self`** (catalog 16): no `CreateOrganization`, no personal `CreateWorkspace`;
   `nexus_config.personal_workspaces: true` gives the latter back (`bootstrap.apply_access_settings`).
 
@@ -440,8 +443,8 @@ lock; it waits for `container_defaults_v1`. Built from what IAM holds now with S
   declared actions, shared graphs, models) compared, each change a `Change` with a reason (`REASONS`, intended ones
   flagged: members lose workflows and pipelines, members gain datasets, model sets, owners lose delete, org Member
   roles go). Also: empty workspaces, workspaces with no admin, org-only people, retired and kept policies, the drive
-  flags (`platform_files.convert_legacy_drive_flags`, #1590, called behind a guarded import: a note when it is not
-  there; a dry run never calls it).
+  flags (`platform_files.convert_legacy_drive_flags`, #1590: once the people are in their groups, after
+  `sync_platform_files`; it drops its holding table; a dry run asks it with `apply=False` on the copy).
 - **Safety.** A shape it does not know, or a plan the copy refuses (`AccessModelStop`), stops it: nothing written,
   nothing recorded. The report is kept (`access_model_v1_planned`) before the real IAM changes; a start interrupted
   half way is finished by the next, which reports the whole move. Every step is idempotent; a forced second run
@@ -449,6 +452,32 @@ lock; it waits for `container_defaults_v1`. Built from what IAM holds now with S
 - **Dry run**: `abi iam migrate-access --dry-run [--json]` (the CLI's IAM, the project's `nexus_config`) prints the
   report and writes nothing. Tests: `access_model_test.py` (decision matrices on `policy_tree_test`'s world and on
   `role_features_test`'s taken back to before #1585), `shadow_iam_test.py`.
+
+## Platform Files given with the workspace (#1590)
+
+- **Two platform policies, written once** (`platform_files.ensure_policies`, at start): "Platform Files · read"
+  (`ListPlatformFiles`, `GetPlatformFile` on `abi:nexus:platform_file/*`; `object_storage` list and get on
+  `naas_abi/platform-drive` and `/*`) and "Platform Files · write" (read, plus `PutPlatformFile`,
+  `DeletePlatformFile`, `object_storage:PutObject`, `PutObjectStream`, `DeleteObject`). An edit is replaced at the
+  next start.
+- **A platform group per workspace that has it**, "Platform Files · <W> (<workspace id>)", holds one of them,
+  unscoped; the setting (`off`, `read`, `write`) is which one, so IAM is its only store
+  (`workspace_platform_files`). Not "<W> workspace": what it holds at W is W's bound, and IAM refuses an unscoped
+  attachment to a group a workspace owns.
+- **Its members are W's people** (the members of W's membership groups, `list_container_members`), kept in step as
+  `api`: `MEMBERSHIPS` calls `follow(iam, principal)` after each membership change, where "Workspace admins" is kept;
+  `iam_admin` does after `add_member`/`remove_member` (`follow_member`); `set_workspace_platform_files` after a change;
+  `ensure_configured` at start (`bootstrap.apply_access_settings`), which also deletes the group of a deleted
+  workspace (and `MEMBERSHIPS.drop_scope` deletes it at once). A migration moving memberships without `MEMBERSHIPS`
+  calls `sync_platform_files(iam)` after.
+- **Who changes it:** `set_workspace_platform_files(iam, workspace_id, mode)` runs the group and attachment writes in
+  the ambient call context: only unscoped grants reach a platform group and attaching is held-checked, so the
+  platform admin (`may_set`: `iam:CreateGroup` at the platform). A workspace or org admin gets
+  `PermissionDeniedError`.
+- **The legacy flags:** `convert_legacy_drive_flags(iam, db) -> list[DriveFlagChange]` (`workspace_id`, `flag`
+  `"platform"|"system"`, `action` `"converted"|"reported"|"none"`, `detail`) reads `workspace_drive_flags_legacy`
+  (kept by `0073_drop_drive_flags.sql` on PostgreSQL), sets `write` for each `platform_drive_enabled`, reports
+  `system_drive_enabled`, then drops the table; idempotent (no table, `[]`); `apply=False` is a dry run.
 
 ## The upgrade: sets and toggles become policies
 
@@ -784,8 +813,10 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   `GetObject`, `GetObjectMetadata`, `GetObjectStream` (and `PutObject`, `PutObjectStream`, `DeleteObject` to write)
   on `abi:object_storage:object/naas_abi/platform-drive` and `.../platform-drive/*`. `GET /api/files/views` lists the
   views a caller may open (My, Workspace, Organization, Platform, System Files), IAM's `List*` on each root.
-  *Consequences:* no upgrade keeps the old access: whoever reached Platform Files through a flag loses it until
-  a platform admin grants Platform Files (the release notes say so); the catalog is version 12; ADR
+  *Consequences:* on PostgreSQL the flags are kept and converted (#1590: `platform_drive_enabled` becomes the
+  workspace's Platform Files, read and write; "Platform Files given with the workspace" above); on SQLite, or for a
+  deployment that ran 0073 before #1590, whoever reached Platform Files through a flag loses it until a platform
+  admin gives it again; the catalog is version 12; ADR
   `docs/adr/20261119_file_views_by_iam.md`.
 - **An organization with workspaces is not deleted.** *Decision:* `DELETE /api/organizations/{org}` refuses (409) one
   that still has workspaces, naming them, rather than deleting them with it. The issue left it open (UJ-P1); this is

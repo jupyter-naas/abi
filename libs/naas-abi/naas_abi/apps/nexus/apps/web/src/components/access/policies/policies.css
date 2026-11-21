@@ -398,3 +398,14 @@
   font-weight: var(--font-weight-medium);
   color: var(--foreground-hex);
 }
+
+/* A generic level policy's page: what it grants, in words, above its read-only document. */
+.access-policy-level {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--card-hex);
+}

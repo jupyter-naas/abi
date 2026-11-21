@@ -146,7 +146,7 @@ def build_user_md(user_doc: dict[str, Any], org_doc: dict[str, Any]) -> str:
             _line("Organization", shown("organization")),
             _line("Job title", shown("job_title")),
             _line("Avatar", shown("avatar")),
-            _line("Platform superadmin", "yes" if account.get("is_superadmin") else None),
+            _line("Platform admin", "yes" if account.get("is_superadmin") else None),
             _line("Account created", account.get("created_at")),
         )
         if line

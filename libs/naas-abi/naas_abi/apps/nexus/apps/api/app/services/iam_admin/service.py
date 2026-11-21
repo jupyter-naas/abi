@@ -141,6 +141,17 @@ ModuleTypes = Callable[[], Awaitable[Mapping[str, Collection[str]]]]
 # Of these policy ids, those Workspace settings > General writes (``services/feature_access``):
 # marked "managed from General" where policies are listed.
 ManagedFrom = Callable[[Collection[str]], Awaitable[Mapping[str, str]]]
+# An organization's id -> its access policy, "<O> access" (``container_defaults``): the
+# bound of its "Workflow runners".
+OrgAccessOf = Callable[[str], Awaitable[str | None]]
+
+# The capability groups (``iam/capabilities``), each owned by its level: an
+# organization's "Workflow runners", the platform's "Models · all".
+CAPABILITY_LEVELS: dict[str, str] = {"workflow_runners": "organization", "models_all": "platform"}
+
+# After a group's members changed here: what Nexus keeps in step with a person's
+# groups follows them (``platform_files.follow``, #1590). Given the principal id.
+MembershipFollower = Callable[[str], Awaitable[None]]
 
 
 async def _module_types() -> Mapping[str, Collection[str]]:
@@ -161,12 +172,26 @@ class IamAdminService:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         modules: ModuleTypes = _module_types,
         managed_from: ManagedFrom | None = None,
+        org_access_of: OrgAccessOf | None = None,
+        follow_member: MembershipFollower | None = None,
     ) -> None:
         self._gateway = gateway
+        self._org_access_of = org_access_of
         self._audit = audit
         self._clock = clock
         self._modules = modules
         self._managed_from = managed_from
+        self._follow_member = follow_member
+
+    async def _followed(self, member_id: str) -> None:
+        """Let what follows a person's groups catch up; a failure is logged, the
+        change made stands (the next start puts it back in step)."""
+        if self._follow_member is None:
+            return
+        try:
+            await self._follow_member(member_id)
+        except Exception:  # noqa: BLE001 - the membership change stands
+            logger.warning(f"Could not follow the groups of {member_id}", exc_info=True)
 
     async def _mark_managed(self, policies: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Each policy view with ``managed_from``: ``general`` for one Workspace settings >
@@ -748,6 +773,90 @@ class IamAdminService:
             lambda s: views.principal_view(s.resume_principal(principal_id)),
         )
 
+    # -- capability groups ------------------------------------------------------------
+
+    @staticmethod
+    def _capability_place(scope: str | None) -> tuple[str, str | None]:
+        """Where a page's capability groups are owned: the platform's at the platform,
+        else the organization's of the scope (a workspace's is its organization's)."""
+        owner = validate_owner_scope(_owner_of(scope)) if scope is not None else PLATFORM
+        if owner == PLATFORM:
+            return PLATFORM, None
+        from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, org_of
+
+        org = org_of(owner)
+        if org is None:
+            raise ValueError("Capability groups belong to the platform or to an organization")
+        return org_container(org), org
+
+    def _may_make(self, session: IIAMService, capability: str, container: str) -> bool:
+        """Whether the caller may make the group themselves: create a group there, and
+        the policy it holds (Workflow runners) or attach the platform's (Models · all)."""
+        if not session.authorize("iam:CreateGroup", group_resource("*", container)).allowed:
+            return False
+        if capability == "models_all":
+            return session.authorize(
+                "iam:AttachPolicy", attachment_resource("*", "*", PLATFORM)
+            ).allowed
+        return session.authorize("iam:CreatePolicy", policy_resource("*", container)).allowed
+
+    def _capability_view(
+        self, session: IIAMService, capability: str, container: str, org: str | None
+    ) -> dict[str, Any]:
+        from naas_abi.apps.nexus.apps.api.app.services.iam.capabilities import NAMES
+
+        found = self._gateway.capability(org, capability)
+        return {
+            "capability": capability,
+            "name": NAMES[capability],
+            "owner_scope": container,
+            "group_id": found.group_id if found else None,
+            "policy_id": (found.policy_id or None) if found else None,
+            "can_create": found is None and self._may_make(session, capability, container),
+        }
+
+    async def capabilities(self, user: Any, scope: str | None = None) -> dict[str, Any]:
+        """The capability groups of ``scope``'s level, for whoever may list the groups
+        there: each made or not, and whether the caller may make it."""
+        container, org = self._capability_place(scope)
+        kinds = [
+            k for k, level in CAPABILITY_LEVELS.items() if (level == "platform") == (org is None)
+        ]
+
+        def read(session: IIAMService) -> dict[str, Any]:
+            if not session.authorize("iam:ListGroups", group_resource("*", container)).allowed:
+                raise PermissionDeniedError(message="You may not list the groups here")
+            rows = [self._capability_view(session, k, container, org) for k in kinds]
+            return {"scope": container, "capabilities": rows}
+
+        return await self._read(user, read)
+
+    async def ensure_capability(
+        self, user: Any, capability: str, scope: str | None = None
+    ) -> dict[str, Any]:
+        """Make the capability group of ``scope``'s level (idempotent), for whoever may
+        make it there; written as ``api`` (``iam/capabilities``), audited first."""
+        if capability not in CAPABILITY_LEVELS:
+            raise ValueError(f"{capability!r} is not a capability group")
+        container, org = self._capability_place(scope)
+        if (CAPABILITY_LEVELS[capability] == "platform") != (org is None):
+            raise ValueError(f"{capability!r} is not a capability group of this level")
+        org_access: str | None = None
+        if org is not None:
+            org_access = await self._org_access_of(org) if self._org_access_of else None
+            if not org_access:
+                raise ValueError("This organization has no access policy to bound the group")
+        session = self._session(user)
+
+        def make() -> dict[str, Any]:
+            if not self._may_make(session, capability, container):
+                raise PermissionDeniedError(message="You may not create this capability group here")
+            self._gateway.capability(org, capability, org_access=org_access, create=True)
+            return self._capability_view(session, capability, container, org)
+
+        action = AdminAction(_actor_id(user), SERVICE, "ensure_capability", capability, container)
+        return await run_audited(self._audit, action, lambda: run_in_threadpool(make))
+
     # -- groups -----------------------------------------------------------------------
 
     async def list_groups(self, user: Any, scope: str | None = None) -> dict[str, Any]:
@@ -807,7 +916,9 @@ class IamAdminService:
             session.add_group_member(group_id, member_id)
             return self._group_view(session, group_id)
 
-        return await self._change(user, "add_group_member", f"{group_id}/{member_id}", add)
+        view = await self._change(user, "add_group_member", f"{group_id}/{member_id}", add)
+        await self._followed(member_id)
+        return view
 
     async def remove_member(self, user: Any, group_id: str, member_id: str) -> dict[str, Any]:
         def remove(session: IIAMService) -> dict[str, Any]:
@@ -815,7 +926,9 @@ class IamAdminService:
                 raise IAMNotFoundError("That principal is not a member")
             return self._group_view(session, group_id)
 
-        return await self._change(user, "remove_group_member", f"{group_id}/{member_id}", remove)
+        view = await self._change(user, "remove_group_member", f"{group_id}/{member_id}", remove)
+        await self._followed(member_id)
+        return view
 
     async def map_idp_group(
         self, user: Any, group_id: str, provider: str, claim_value: str

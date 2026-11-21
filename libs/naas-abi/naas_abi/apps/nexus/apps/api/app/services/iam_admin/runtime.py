@@ -19,6 +19,20 @@ AUDIT_PREFIX = "iam."
 Provider = Callable[[], IamAdminService]
 
 
+async def _follow_member(principal_id: str) -> None:
+    """Platform Files follows the person's workspace groups (#1590), as ``api``."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import platform_files
+    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime as iam_runtime
+    from naas_abi_core.engine.call_context import as_service_account
+    from starlette.concurrency import run_in_threadpool
+
+    def work() -> None:
+        with as_service_account("api"):
+            platform_files.follow(iam_runtime.iam(), principal_id)
+
+    await run_in_threadpool(work)
+
+
 def _default() -> IamAdminService:
     from naas_abi.apps.nexus.apps.api.app.core import database
     from naas_abi.apps.nexus.apps.api.app.services.feature_access.adapters.secondary.postgres import (  # noqa: E501
@@ -29,7 +43,20 @@ def _default() -> IamAdminService:
         EngineIamGateway(),
         SqlAdminAuditLog(lambda: database.async_engine, prefix=AUDIT_PREFIX),
         managed_from=SqlFeaturePolicyStore(lambda: database.AsyncSessionLocal()).managed_among,
+        org_access_of=_org_access_of,
+        follow_member=_follow_member,
     )
+
+
+async def _org_access_of(org_id: str) -> str | None:
+    """ "<O> access", as ``container_defaults`` recorded it for the organization."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+        CONTAINER_DEFAULTS,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
+
+    record = await CONTAINER_DEFAULTS.record_of(org_container(org_id))
+    return record.access_policy_id if record is not None else None
 
 
 _provider: Provider = _default
