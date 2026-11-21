@@ -94,6 +94,14 @@ Administrators reason about people in two axes: **where** someone works (a works
      - leftover org Member roles go.
    - Members gain the datasets feature.
 
+10. **Platform Files comes with the workspace** (#1590).
+    - Workspace settings › General › Platform Files is Off, Read, or Read and write, for everyone in the workspace. Only the platform admin changes it.
+    - Two platform policies, written once: "Platform Files · read" and "Platform Files · write", each naming both halves (the Nexus actions on `abi:nexus:platform_file/*` and the object storage's on `naas_abi/platform-drive`).
+    - "<W> workspace" cannot hold them: what it holds at W is W's bound, and IAM refuses an unscoped attachment to a group a workspace owns. Option (b), a core rule, was rejected as a second exception to the bound rule.
+    - As built (option (a)): a **platform group per workspace that has it**, "Platform Files · <W> (<workspace id>)", holds one of the two policies, unscoped. Nexus keeps its members equal to the people of W (the members of W's membership groups): at each membership change, where "Workspace admins" follows "<W> admins"; after a member is added or removed on the IAM admin pages; when the setting changes; and at each start, which also deletes the group of a deleted workspace. The setting is which policy the group holds, so IAM is its only store.
+    - Why a group per workspace and not one per mode ("readers", "editors"): with one group per mode, leaving W would have to recompute the person's mode from all their other workspaces, and the setting would need a store of its own. With a group per workspace, a membership change is decided for W alone.
+    - The legacy flags: `0073_drop_drive_flags.sql` copies the flagged workspaces into `workspace_drive_flags_legacy` (PostgreSQL only) before it drops the columns. `access_model_v1` converts `platform_drive_enabled` into Read and write and reports `system_drive_enabled` without converting it (System Files stays the platform admin's).
+
 ## Consequences
 
 - **A person is a few group memberships and nothing attached to them directly.** On the audited deployment this means 491–651 memberships instead of 3,764 attachments, and 407 policies instead of 1,210. The higher figure counts a default admin assigned to the workspaces left empty.
@@ -102,4 +110,5 @@ Administrators reason about people in two axes: **where** someone works (a works
 - **New modules reach no workspace until added to its allow-list,** where today they are offered everywhere unless denied.
 - **The catalog changes.** `DeleteWorkspace` moves to the Org Admin and `DeleteOrganization` to the Platform Admin. The Owner role stays declared, for the policies that name it, but nothing assigns it.
 - **People flows change in one place.** Since #1580, creating, adding and removing people goes through the people service's access gateway. Its grant changes from role and policies to level and groups, and the platform, organization and workspace user pages follow (S6).
+- **Nexus keeps the Platform Files groups in step,** like a grant meant for every person of W: a platform group per workspace that has it. A membership changed straight in IAM, around Nexus, is followed at the next start. A SQLite deployment keeps no legacy drive flag: its platform admin sets each workspace's Platform Files again.
 - **Deployment-specific choices are configuration,** not code: the member model set, a default admin for workspaces left empty, and personal workspaces.

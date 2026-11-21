@@ -219,6 +219,22 @@ def test_the_capability_routes_declare_what_they_authorize(table) -> None:
     assert found == CAPABILITY_ROUTES
 
 
+# Workspace settings > General › Platform Files (``iam/platform_files``): read as the
+# workspace's configuration, changed by the IAM writes the caller makes at the platform.
+PLATFORM_FILES_ROUTES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("GET", "/api/workspaces/{workspace_id}/platform-files"): ("GetWorkspaceConfiguration",),
+    ("PUT", "/api/workspaces/{workspace_id}/platform-files"): (
+        "iam:CreateGroup",
+        "iam:AttachPolicy",
+    ),
+}
+
+
+def test_the_platform_files_routes_declare_what_they_authorize(table) -> None:
+    found = {key: tuple(d.action for d in _declared(table[key])) for key in PLATFORM_FILES_ROUTES}
+    assert found == PLATFORM_FILES_ROUTES
+
+
 def test_a_write_method_never_authorizes_only_a_read(table) -> None:
     offenders = []
     for key, calls in table.items():
