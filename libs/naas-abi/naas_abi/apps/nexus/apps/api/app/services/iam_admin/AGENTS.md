@@ -70,7 +70,9 @@ Nexus adds no role check of its own.
   `iam:GetGroup`, at every level; empty, not a 403, for a principal they see nothing of),
   `POST /principals/{id}/suspend|resume`
 - `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, which names that organization's container, is the owner), `GET|DELETE /groups/{id}`, `PATCH /groups/{id}` (`{name}`: a rename, IAM's `update_group`, `iam:UpdateGroup`), `PUT|DELETE /groups/{id}/members/{member}`,
-  `PUT|DELETE /groups/{id}/idp-mappings`. A group's view carries its markers (core #1584): `membership_of`
+  `PUT|DELETE /groups/{id}/idp-mappings`. After a member is added or removed, `follow_member` (`runtime.py`:
+  `iam/platform_files.follow`, as `api`) puts the person's Platform Files groups back in step with their
+  workspaces (#1590); a failure is logged, the change stands. A group's view carries its markers (core #1584): `membership_of`
   (the container its members are members of, "<W> workspace") and `level_group` ("Viewers", "Members").
 - `GET /capabilities?scope=` (`iam:ListGroups` at the level) and `POST /capabilities` (`{capability, scope}`,
   `iam:CreateGroup`): the capability groups (`../iam/capabilities.py`) of a level, an organization's "Workflow

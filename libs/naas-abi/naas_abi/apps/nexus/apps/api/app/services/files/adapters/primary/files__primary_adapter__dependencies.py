@@ -28,3 +28,14 @@ def get_files_service(
     storage: ObjectStorageService = Depends(get_object_storage),
 ) -> FilesService:
     return FilesService(storage=storage)
+
+
+async def may_use_platform_files(user_id: str) -> bool:
+    """Whether ``user_id`` may open Platform Files: IAM's ``nexus:ListPlatformFiles``
+    at the platform, decided as ``GET /api/files/views`` decides it. A workspace gives
+    it to its people (Workspace settings > General › Platform Files, #1590). The
+    supported check for a module that lets a user reach the platform drive with their
+    own token; it replaces ``workspace_setting(..., "platform_drive_enabled")``."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+
+    return await authz.allowed("ListPlatformFiles", user=user_id, id=("platform",))

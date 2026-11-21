@@ -149,6 +149,10 @@ OrgAccessOf = Callable[[str], Awaitable[str | None]]
 # organization's "Workflow runners", the platform's "Models · all".
 CAPABILITY_LEVELS: dict[str, str] = {"workflow_runners": "organization", "models_all": "platform"}
 
+# After a group's members changed here: what Nexus keeps in step with a person's
+# groups follows them (``platform_files.follow``, #1590). Given the principal id.
+MembershipFollower = Callable[[str], Awaitable[None]]
+
 
 async def _module_types() -> Mapping[str, Collection[str]]:
     """What every module exposes, from Nexus's module listing (``modules/scopes.py``),
@@ -169,6 +173,7 @@ class IamAdminService:
         modules: ModuleTypes = _module_types,
         managed_from: ManagedFrom | None = None,
         org_access_of: OrgAccessOf | None = None,
+        follow_member: MembershipFollower | None = None,
     ) -> None:
         self._gateway = gateway
         self._org_access_of = org_access_of
@@ -176,6 +181,17 @@ class IamAdminService:
         self._clock = clock
         self._modules = modules
         self._managed_from = managed_from
+        self._follow_member = follow_member
+
+    async def _followed(self, member_id: str) -> None:
+        """Let what follows a person's groups catch up; a failure is logged, the
+        change made stands (the next start puts it back in step)."""
+        if self._follow_member is None:
+            return
+        try:
+            await self._follow_member(member_id)
+        except Exception:  # noqa: BLE001 - the membership change stands
+            logger.warning(f"Could not follow the groups of {member_id}", exc_info=True)
 
     async def _mark_managed(self, policies: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Each policy view with ``managed_from``: ``general`` for one Workspace settings >
@@ -900,7 +916,9 @@ class IamAdminService:
             session.add_group_member(group_id, member_id)
             return self._group_view(session, group_id)
 
-        return await self._change(user, "add_group_member", f"{group_id}/{member_id}", add)
+        view = await self._change(user, "add_group_member", f"{group_id}/{member_id}", add)
+        await self._followed(member_id)
+        return view
 
     async def remove_member(self, user: Any, group_id: str, member_id: str) -> dict[str, Any]:
         def remove(session: IIAMService) -> dict[str, Any]:
@@ -908,7 +926,9 @@ class IamAdminService:
                 raise IAMNotFoundError("That principal is not a member")
             return self._group_view(session, group_id)
 
-        return await self._change(user, "remove_group_member", f"{group_id}/{member_id}", remove)
+        view = await self._change(user, "remove_group_member", f"{group_id}/{member_id}", remove)
+        await self._followed(member_id)
+        return view
 
     async def map_idp_group(
         self, user: Any, group_id: str, provider: str, claim_value: str

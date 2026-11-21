@@ -32,6 +32,7 @@ import {
 } from '@/stores/workspace';
 import { BackgroundImageEditor } from '../../home/components/background-image-editor';
 import { resolveDeskImageUrl } from '../../home/home-desk';
+import { PlatformFiles } from './platform-files';
 import { WorkspaceConfiguration } from './workspace-configuration';
 import { WorkspaceGroupSelect } from '@/app/organizations/[orgId]/settings/workspaces/workspace-group-select';
 import '@/app/account/profile/profile.css';
@@ -521,6 +522,8 @@ export default function GeneralSettingsPage() {
 
         </div>
       </SettingsSection>
+
+      <PlatformFiles workspaceId={workspace.id} />
 
       {canEdit && workspace && <WorkspaceConfiguration workspaceId={workspace.id} />}
     </div>
