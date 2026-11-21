@@ -3,50 +3,58 @@ import {
   WORKSPACE_ACCESS_ONLY,
   orgUserRoleLabel,
   orgUserRoleRank,
-  organizationRemoval,
   removableFromOrganization,
   removalConfirmation,
+  workspacesBody,
 } from './users-model';
 
-describe('the role column of Organization settings › Users', () => {
-  it('names the org role, else "Workspace access only"', () => {
-    expect(orgUserRoleLabel({ role: 'admin' })).toBe('Admin');
-    expect(orgUserRoleLabel({ role: null })).toBe(WORKSPACE_ACCESS_ONLY);
+const user = (over: Partial<{ role: 'admin' | 'member' | 'viewer' | null; orgAdmin: boolean; level: 'member' | 'viewer' | null }>) => ({
+  role: null,
+  orgAdmin: false,
+  level: null,
+  ...over,
+});
+
+describe('the access column of Organization settings › Users', () => {
+  it('names an org admin, else the level, else workspace access only', () => {
+    expect(orgUserRoleLabel(user({ role: 'admin', orgAdmin: true, level: 'member' }))).toBe('Org admin');
+    expect(orgUserRoleLabel(user({ role: 'member', level: 'member' }))).toBe('Member');
+    expect(orgUserRoleLabel(user({ role: null, level: 'viewer' }))).toBe('Viewer');
+    expect(orgUserRoleLabel(user({ role: 'viewer' }))).toBe('Viewer');
+    expect(orgUserRoleLabel(user({ role: null }))).toBe(WORKSPACE_ACCESS_ONLY);
   });
 
-  it('sorts owners first and workspace access only last', () => {
-    const roles = [null, 'member', 'owner', 'admin'] as const;
-    expect([...roles].sort((a, b) => orgUserRoleRank({ role: a }) - orgUserRoleRank({ role: b }))).toEqual([
-      'owner',
-      'admin',
-      'member',
-      null,
-    ]);
+  it('sorts org admins first, then Members, Viewers, and workspace access only', () => {
+    const users = [user({}), user({ level: 'viewer' }), user({ orgAdmin: true, role: 'admin' }), user({ level: 'member' })];
+    expect(
+      [...users].sort((a, b) => orgUserRoleRank(a) - orgUserRoleRank(b)).map((u) => orgUserRoleLabel(u))
+    ).toEqual(['Org admin', 'Member', 'Viewer', WORKSPACE_ACCESS_ONLY]);
   });
 });
 
 describe('Remove from organization', () => {
-  it('applies to members and to people with workspace access only, never an owner nor oneself', () => {
-    expect(removableFromOrganization('member', 'u-1', 'me')).toBe(true);
-    expect(removableFromOrganization('admin', 'u-1', 'me')).toBe(true);
-    expect(removableFromOrganization(null, 'u-1', 'me')).toBe(true);
-    expect(removableFromOrganization('owner', 'u-1', 'me')).toBe(false);
-    expect(removableFromOrganization('member', 'me', 'me')).toBe(false);
-    expect(removableFromOrganization(null, 'me', 'me')).toBe(false);
+  it('applies to anyone but oneself: the API keeps the last org admin', () => {
+    expect(removableFromOrganization('u-1', 'me')).toBe(true);
+    expect(removableFromOrganization('me', 'me')).toBe(false);
   });
 
-  it('takes all of the access of someone with workspace access only, the org role of a member', () => {
-    expect(organizationRemoval(null)).toBe('all-access');
-    expect(organizationRemoval('member')).toBe('org-role');
-    expect(organizationRemoval('admin')).toBe('org-role');
-  });
-
-  it('says what is taken and that the account stays', () => {
-    const all = removalConfirmation('Flo', null, ['Sales', 'Ops']);
+  it('says that every group of the organization is left, and that the account and level stay', () => {
+    const all = removalConfirmation('Flo', ['Sales', 'Ops']);
     expect(all.title).toBe('Remove Flo from the organization?');
     expect(all.description).toContain('every workspace of this organization (Sales, Ops)');
-    expect(all.description).toContain('account stays');
-    const role = removalConfirmation('Bob', 'member', ['Sales']);
-    expect(role.description).toContain('workspace access stays (Sales)');
+    expect(all.description).toContain('org admin');
+    expect(all.description).toContain('account and level stay');
+  });
+});
+
+describe('the workspaces of a member', () => {
+  it('are sent with "admin" kept for those they administer', () => {
+    expect(
+      workspacesBody(['ws-1', 'ws-2'], [
+        { user_id: 'u', workspace_id: 'ws-1', role: 'admin' },
+        { user_id: 'u', workspace_id: 'ws-3', role: 'member' },
+        { user_id: 'v', workspace_id: 'ws-2', role: 'admin' },
+      ], 'u')
+    ).toEqual({ workspaces: [{ id: 'ws-1', admin: true }, { id: 'ws-2', admin: false }] });
   });
 });

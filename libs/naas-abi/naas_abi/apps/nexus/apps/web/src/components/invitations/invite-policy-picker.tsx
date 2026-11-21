@@ -1,103 +1,91 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { createIamAdminApi, type IamAdminApi } from '@/lib/iam-admin/api';
-import type { AttachablePolicy } from '@/lib/iam-admin/types';
-import { invitablePolicies } from '@/lib/invitations';
+import { createPeopleApi, type CapabilityGroup } from '@/lib/people';
 import { cn } from '@/lib/utils';
-import { parseScope } from '@/components/access/access-scope';
+
+/** Where the groups are offered: an organization, or a workspace (its organization's). */
+export type CapabilityGroupsAt = { organizationId: string } | { workspaceId: string };
+
+const defaultLoad = (at: CapabilityGroupsAt) => createPeopleApi().capabilityGroups(at);
 
 /**
- * The policies an invitation attaches beside the role, at the invite's scope (a workspace's
- * container, or the organization's `abi:nexus:organization/<org>`): the customer policies IAM
- * lets the inviter attach there (`attachable`, as Roles & permissions' attach form, those of the
- * levels above included). Features come from such policies (`nexus:UseFeature`), not from the role.
- * Optional: nothing is shown when there is none to offer or the inviter may not list them.
+ * The capability groups a person is put in beside their level (#1589): "Workflow runners",
+ * "Models · all", and the groups made for a per-person exception (a seat licence, a pilot),
+ * as `GET …/capability-groups` lists them where the person is added. No policy is given to a
+ * person any more, so no built-in, service-account or customer policy is offered here. Optional:
+ * nothing is shown when there is none to offer or the caller may not list them.
  */
-export function InvitePolicyPicker({
-  scope,
+export function CapabilityGroupPicker({
+  at,
   value,
   onChange,
   disabled,
   className,
-  api,
+  load = defaultLoad,
 }: {
-  /** null while the scope is not known: nothing is asked. */
-  scope: string | null;
+  /** null while it is not known: nothing is asked. */
+  at: CapabilityGroupsAt | null;
   value: string[];
   onChange: (ids: string[]) => void;
   disabled?: boolean;
   className?: string;
   /** Tests pass a fake. */
-  api?: Pick<IamAdminApi, 'attachable'>;
+  load?: (at: CapabilityGroupsAt) => Promise<CapabilityGroup[]>;
 }) {
-  const client = useMemo(() => api ?? createIamAdminApi(), [api]);
-  const [policies, setPolicies] = useState<AttachablePolicy[]>([]);
+  const [groups, setGroups] = useState<CapabilityGroup[]>([]);
+  const key = at ? ('organizationId' in at ? `org:${at.organizationId}` : `ws:${at.workspaceId}`) : null;
 
   useEffect(() => {
-    setPolicies([]);
-    if (!scope) return;
+    setGroups([]);
+    if (!at) return;
     let cancelled = false;
-    client
-      .attachable(scope)
+    load(at)
       .then((found) => {
-        if (!cancelled) setPolicies(invitablePolicies(found.items));
+        if (!cancelled) setGroups(found);
       })
       .catch(() => {
-        // No access to the policies here: the invitation carries the role alone.
+        // Not listable here: the person gets their level and workspaces alone.
       });
     return () => {
       cancelled = true;
     };
-  }, [client, scope]);
+    // `at` is read through its key: a new object for the same place asks nothing again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, load]);
 
-  if (!policies.length) return null;
+  if (!groups.length) return null;
   const picked = new Set(value);
 
   return (
-    <fieldset className={cn('space-y-1.5', className)} data-invite-policies>
+    <fieldset className={cn('space-y-1.5', className)} data-capability-groups>
       <legend className="text-sm font-medium">
-        Policies <span className="font-normal text-muted-foreground">(optional)</span>
+        Capability groups <span className="font-normal text-muted-foreground">(optional)</span>
       </legend>
       <p className="text-xs text-muted-foreground">
-        Attached here with the role (features come from policies): right away for someone with an
-        account, at their first sign-in otherwise.
+        Each adds one thing to their level, in their workspaces: running workflows, every model, a seat.
       </p>
-      {atOrganization(scope) ? (
-        <p className="text-xs text-muted-foreground" data-invite-policies-org>
-          These attach to the organization itself: they reach none of its workspaces&apos;
-          features. Invite to a workspace to give someone its &quot;Features of …&quot;.
-        </p>
-      ) : null}
       <div className="max-h-36 space-y-1.5 overflow-y-auto border border-border p-2">
-        {policies.map((policy) => (
+        {groups.map((group) => (
           <Checkbox
-            key={policy.id}
+            key={group.id}
             className="flex"
             label={
-              <span className="truncate" title={policy.description || policy.id}>
-                {policy.name}
+              <span className="truncate" title={group.description || group.name}>
+                {group.name}
               </span>
             }
-            aria-label={`Attach ${policy.name}`}
-            data-policy={policy.id}
-            checked={picked.has(policy.id)}
+            aria-label={`Add to ${group.name}`}
+            data-capability={group.id}
+            checked={picked.has(group.id)}
             disabled={disabled}
             onCheckedChange={(on) =>
-              onChange(on ? [...value.filter((id) => id !== policy.id), policy.id] : value.filter((id) => id !== policy.id))
+              onChange(on ? [...value.filter((id) => id !== group.id), group.id] : value.filter((id) => id !== group.id))
             }
           />
         ))}
       </div>
     </fieldset>
   );
-}
-
-/** An organization's own scope (`abi:nexus:organization/<org>`): what attaches there reaches
- *  no workspace. */
-export function atOrganization(scope: string | null): boolean {
-  const parsed = parseScope(scope);
-  const last = parsed?.containers[parsed.containers.length - 1];
-  return Boolean(parsed && !parsed.below && last?.service === 'nexus' && last.type === 'organization');
 }

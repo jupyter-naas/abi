@@ -15,6 +15,7 @@ import {
   type BuiltInRole,
   type RoleTarget,
 } from '../roles/role-change';
+import { PLATFORM_ACCESS_LABEL } from '../builtins';
 import { principalLabel } from '../attachments/attachments-model';
 import { groupHolders, peopleAt, type PersonRow } from './people-model';
 import './people.css';
@@ -248,7 +249,7 @@ export function PeopleView({
                         data-with-role=""
                         title="IAM attaches these with the role and removes them with it."
                       >
-                        With the role: {person.withRole.map((a) => a.policy_name ?? a.policy_id).join(', ')}
+                        With the role: {PLATFORM_ACCESS_LABEL}
                       </p>
                     )}
                   </td>

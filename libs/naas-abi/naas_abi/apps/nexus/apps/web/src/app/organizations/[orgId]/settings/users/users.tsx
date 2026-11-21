@@ -7,7 +7,6 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   Plus,
   Shield,
-  Crown,
   UserCircle,
   AlertCircle,
   Trash2,
@@ -28,9 +27,9 @@ import { createPeopleApi } from '@/lib/people';
 import {
   orgUserRoleLabel,
   orgUserRoleRank,
-  organizationRemoval,
   removableFromOrganization,
   removalConfirmation,
+  workspacesBody,
   WORKSPACE_ACCESS_ONLY,
 } from './users-model';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
@@ -87,42 +86,38 @@ function summarizeWorkspaces(names: string[], visible = 2) {
   };
 }
 
-function roleBadge(user: Pick<OrganizationMember, 'role' | 'source'>) {
-  const role = user.role;
-  if (!role) {
-    // Linked through a workspace role only: no org role, no org permission.
+function roleBadge(user: Pick<OrganizationMember, 'role' | 'source' | 'orgAdmin' | 'level'>) {
+  const label = orgUserRoleLabel(user);
+  if (label === WORKSPACE_ACCESS_ONLY) {
+    // Linked through a workspace only, with no level known (a role of before).
     return (
       <span className="org-settings-users-role-none" data-role="none">
         <span aria-hidden>—</span>
         <span
           className="org-settings-users-badge org-settings-users-badge-member"
-          title="No organization role: they only reach the workspaces they were added to."
+          title="They only reach the workspaces they were added to."
         >
           {WORKSPACE_ACCESS_ONLY}
         </span>
       </span>
     );
   }
-  if (role === 'owner') {
+  if (label === 'Org admin') {
     return (
-      <span className="org-settings-users-badge org-settings-users-badge-owner">
-        <Crown size={12} />
-        Owner
-      </span>
-    );
-  }
-  if (role === 'admin') {
-    return (
-      <span className="org-settings-users-badge org-settings-users-badge-admin">
+      <span className="org-settings-users-badge org-settings-users-badge-admin" data-role="org-admin">
         <Shield size={12} />
-        Admin
+        Org admin
       </span>
     );
   }
   return (
-    <span className="org-settings-users-badge org-settings-users-badge-member">
+    <span
+      className="org-settings-users-badge org-settings-users-badge-member"
+      data-role={label.toLowerCase()}
+      title="Their level, in all their workspaces"
+    >
       <UserCircle size={12} />
-      Member
+      {label}
     </span>
   );
 }
@@ -149,7 +144,6 @@ export default function OrgUsersPage() {
   const authUser = useAuthStore((s) => s.user);
   const {
     fetchMembers,
-    removeMember,
     removeFromOrganization,
     membersCache,
     membersLoading,
@@ -157,8 +151,7 @@ export default function OrgUsersPage() {
 
   const members = membersCache[orgId] || [];
   const myMembership = members.find((m) => m.userId === authUser?.id);
-  const canManage =
-    myMembership?.role === 'owner' || myMembership?.role === 'admin';
+  const canManage = !!myMembership?.orgAdmin;
 
   const [actionError, setActionError] = useState('');
   const [actionNotice, setActionNotice] = useState('');
@@ -328,7 +321,8 @@ export default function OrgUsersPage() {
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspace_ids: workspaceIds }),
+        // Each workspace keeps "admin" where they have it; one added joins at their level.
+        body: JSON.stringify(workspacesBody(workspaceIds, memberships, userId)),
       }
     );
     if (!response.ok) {
@@ -348,11 +342,7 @@ export default function OrgUsersPage() {
     if (!orgId || !canManage) return;
     if (
       !(await confirmAction(
-        removalConfirmation(
-          user.name || user.email || 'this user',
-          user.role,
-          assignedNamesByUser[user.userId] || []
-        )
+        removalConfirmation(user.name || user.email || 'this user', assignedNamesByUser[user.userId] || [])
       ))
     ) {
       return;
@@ -360,12 +350,8 @@ export default function OrgUsersPage() {
     setActionError('');
     setActionNotice('');
     try {
-      if (organizationRemoval(user.role) === 'all-access') {
-        await removeFromOrganization(orgId, user.userId);
-      } else {
-        await removeMember(orgId, user.userId);
-      }
-      // Someone whose org role was taken stays listed while a workspace links them.
+      // Every group of the organization; 409 for its last org admin, said as the API words it.
+      await removeFromOrganization(orgId, user.userId);
       await Promise.all([fetchMembers(orgId), loadMemberWorkspaces()]);
     } catch (error: unknown) {
       const message =
@@ -507,7 +493,7 @@ export default function OrgUsersPage() {
   const columns: { id: ColumnId; label: string }[] = [
     { id: 'user', label: 'User' },
     { id: 'workspaces', label: 'Workspaces' },
-    { id: 'role', label: 'Role' },
+    { id: 'role', label: 'Access' },
   ];
 
   const hasActiveFilters = columns.some((column) => !isBlank(columnFilters[column.id]));
@@ -579,7 +565,7 @@ export default function OrgUsersPage() {
                   type="button"
                   className="org-settings-primary-button"
                   disabled
-                  title="Only organization owners and admins can create users"
+                  title="Only organization admins can create users"
                 >
                   <Plus size={16} />
                   Create user
@@ -639,7 +625,7 @@ export default function OrgUsersPage() {
               <p className="org-settings-empty-body">
                 {canManage
                   ? 'Add an existing account by email to grant organization access.'
-                  : 'Ask an organization owner or admin to add users.'}
+                  : 'Ask an organization admin to add users.'}
               </p>
             </div>
           ) : (
@@ -715,7 +701,7 @@ export default function OrgUsersPage() {
                   const summary = summarizeWorkspaces(assignedNames);
                   const isPickerOpen = openPickerUserId === user.userId;
                   const canRemove =
-                    canManage && removableFromOrganization(user.role, user.userId, authUser?.id);
+                    canManage && removableFromOrganization(user.userId, authUser?.id);
                   const summaryLabel =
                     workspacesLoading && assignedNames.length === 0
                       ? 'Loading...'
@@ -856,8 +842,8 @@ export default function OrgUsersPage() {
         <p className="org-settings-footnote">
           Click a user to open their organization profile. Create user adds the
           person at once, invited until they first sign in; their account is made
-          at the identity provider if it does not exist yet. People added to a
-          workspace show as {WORKSPACE_ACCESS_ONLY}: they hold no organization role.
+          at the identity provider if it does not exist yet. Each person has one level (Member or Viewer) in all their
+          workspaces; org admins reach every workspace of the organization.
         </p>
 
         {/* Invitations made before people were created at once: listed until they are migrated. */}
