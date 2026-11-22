@@ -30,6 +30,10 @@ class TenantService:
             show_terms_footer=settings.tenant.show_terms_footer,
             show_powered_by=settings.tenant.show_powered_by,
             login_footer_text=settings.tenant.login_footer_text,
+            login_heading=settings.tenant.login_heading,
+            logo_height=settings.tenant.logo_height,
+            login_footer_link_label=settings.tenant.login_footer_link_label,
+            login_footer_link_url=settings.tenant.login_footer_link_url,
             apps=[
                 TenantResponse.ExternalAppResponse(
                     name=app.name,

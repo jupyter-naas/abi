@@ -32,4 +32,8 @@ class TenantResponse(BaseModel):
     show_terms_footer: bool
     show_powered_by: bool
     login_footer_text: str | None = None
+    login_heading: str | None = None
+    logo_height: int = 48
+    login_footer_link_label: str | None = None
+    login_footer_link_url: str | None = None
     apps: list[ExternalAppResponse] = Field(default_factory=list)

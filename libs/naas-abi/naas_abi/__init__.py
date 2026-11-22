@@ -171,6 +171,12 @@ class TenantConfig(BaseModel):
     show_terms_footer: bool = False
     show_powered_by: bool = True
     login_footer_text: str | None = None
+    # Static login heading. Unset keeps the Welcome typewriter.
+    login_heading: str | None = None
+    # Logo image height in pixels. 48 matches the login page h-12 default.
+    logo_height: int = 48
+    login_footer_link_label: str | None = None
+    login_footer_link_url: str | None = None
     apps: list["ExternalAppConfig"] = Field(default_factory=list)
 
 

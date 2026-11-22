@@ -119,6 +119,16 @@ export default function LoginForm() {
   const inputRadius = `${borderRadius}px`;
   const buttonRadius = `${borderRadius}px`;
   const focusRingColor = `${accentColor}33`;
+  const logoHeight = tenant.logo_height ?? 48;
+  const defaultLogoHeight = logoHeight === 48;
+  const logoHeightStyle: React.CSSProperties | undefined = defaultLogoHeight
+    ? undefined
+    : { height: logoHeight };
+  const footerLinkLabel = tenant.login_footer_link_label?.trim() ?? '';
+  const footerLinkUrl = tenant.login_footer_link_url?.trim() ?? '';
+  const footerLink = footerLinkLabel && footerLinkUrl
+    ? { label: footerLinkLabel, url: footerLinkUrl }
+    : null;
 
   const inputStyle: React.CSSProperties = {
     borderRadius: inputRadius,
@@ -161,15 +171,16 @@ export default function LoginForm() {
               <img
                 src={tenant.logo_rectangle_url}
                 alt={tenant.tab_title}
-                className="h-12 max-w-full object-contain"
+                className={defaultLogoHeight ? 'h-12 max-w-full object-contain' : 'max-w-full object-contain'}
+                style={logoHeightStyle}
               />
             ) : tenant.logo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={tenant.logo_url}
                 alt={tenant.tab_title}
-                className="h-12 w-12 object-contain"
-                style={{ borderRadius: cardRadius }}
+                className={defaultLogoHeight ? 'h-12 w-12 object-contain' : 'max-w-full object-contain'}
+                style={defaultLogoHeight ? { borderRadius: cardRadius } : { ...logoHeightStyle, borderRadius: cardRadius }}
               />
             ) : (
               <div
@@ -182,7 +193,18 @@ export default function LoginForm() {
           </div>
         )}
         <div className="mb-6 text-center">
-          <TypingWelcome textColor={textColor} mutedColor={mutedTextColor} />
+          {tenant.login_heading ? (
+            <>
+              <h1 className="text-2xl font-bold leading-none" style={{ color: textColor }}>
+                {tenant.login_heading}
+              </h1>
+              <p className="mt-2 text-sm" style={{ color: mutedTextColor }}>
+                Sign in to continue
+              </p>
+            </>
+          ) : (
+            <TypingWelcome textColor={textColor} mutedColor={mutedTextColor} />
+          )}
         </div>
 
         {ssoError && !error && (
@@ -325,9 +347,21 @@ export default function LoginForm() {
           Powered by NEXUS
         </p>
       )}
-      {tenant.login_footer_text && (
+      {(tenant.login_footer_text || footerLink) && (
         <p className="mt-4 text-center text-caption" style={{ color: subtitleColor }}>
           {tenant.login_footer_text}
+          {footerLink && (
+            <>
+              {tenant.login_footer_text ? <br /> : null}
+              <a
+                href={footerLink.url}
+                className="hover:underline"
+                style={{ color: subtitleColor, whiteSpace: 'nowrap' }}
+              >
+                {footerLink.label}
+              </a>
+            </>
+          )}
         </p>
       )}
     </div>
