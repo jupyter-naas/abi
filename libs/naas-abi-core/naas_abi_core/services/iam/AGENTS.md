@@ -1794,7 +1794,7 @@ iam.require("triple_store:Query", name, not_found=lambda: GraphNotFound(iri))
 allowed = iam.filter("triple_store:ListGraphs", names).allowed
 iam.authorize(action, resource)  # Decision
 iam.allows_every(action, "triple_store", "graph")  # a safe shortcut: False when unsure
-iam.explain(action, resource, principal_id=...)  # needs iam:Explain on the principal
+iam.explain(action, resource, principal_id=...)  # needs iam:Explain on the principal; IAM's id, or a user by Nexus's (user-...)
 iam.grantable(scope)  # what the caller may grant there (needs no permission)
 iam.grantable(scope, parent=policy_id)  # ... in a sub-policy of policy_id
 iam.grantable(
