@@ -2,7 +2,8 @@
 
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import { authFetch, useAuthStore } from '@/stores/auth';
+import { authFetch } from '@/stores/auth';
+import { usePermissionRevision, usePermissionSessionKey } from '@/lib/permission-cache';
 import { opensAccess } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
 import type { AccessView } from '@/lib/iam-admin/types';
@@ -10,7 +11,7 @@ import { viewFlagActive } from '@/lib/view-flag';
 
 export type OrganizationSettingsAccessStatus = 'checking' | 'ready' | 'error';
 
-type Fetcher = (url: string) => Promise<Response>;
+type Fetcher = (url: string, options?: RequestInit) => Promise<Response>;
 
 /** What decides, for one organization the caller lists: their role there (an IAM role
  *  attachment) and, when it is no admin's, what `GET /access` answers at its container. */
@@ -37,7 +38,8 @@ export function opensOrganizationSettings(orgs: OrganizationAccess[]): boolean {
 }
 
 async function json<T>(fetcher: Fetcher, url: string): Promise<T | null> {
-  const response = await fetcher(url);
+  const response = await (fetcher === authFetch && url === '/api/organizations'
+    ? fetcher(url, { cache: 'force-cache' }) : fetcher(url));
   // 401, 403, 404: nothing there for the caller.
   if (response.status === 401 || response.status === 403 || response.status === 404) return null;
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -125,9 +127,9 @@ export function createOrganizationSettingsAccessStore(fetcher: Fetcher = authFet
       call.promise = (async () => {
         try {
           const opens = await fetchOrganizationSettingsAccess(fetcher);
-          if (get().userId === userId) set({ status: 'ready', opens });
+          if (get().pending === call && get().userId === userId) set({ status: 'ready', opens });
         } catch {
-          if (get().userId === userId) {
+          if (get().pending === call && get().userId === userId) {
             const kept = get().opens;
             set({ status: kept === null ? 'error' : 'ready', opens: kept });
           }
@@ -146,15 +148,15 @@ const useOrganizationSettingsAccessStore = createOrganizationSettingsAccessStore
 /** Whether Organization settings open for the caller somewhere: false while checking. Asked
  *  again when the user changes or the last read failed. */
 export function useOrganizationSettingsAccess(): boolean {
-  const userId = useAuthStore((s) => s.user?.id ?? 'session');
+  const userId = usePermissionSessionKey();
+  const revision = usePermissionRevision();
   const opens = useOrganizationSettingsAccessStore((s) => s.opens);
   const knownUser = useOrganizationSettingsAccessStore((s) => s.userId);
   const load = useOrganizationSettingsAccessStore((s) => s.load);
 
   useEffect(() => {
-    const state = useOrganizationSettingsAccessStore.getState();
-    if (state.userId !== userId || state.status === 'error') void load(userId);
-  }, [userId, load]);
+    void load(userId);
+  }, [userId, load, revision]);
 
   return knownUser === userId && opens === true;
 }

@@ -439,16 +439,18 @@ class OrganizationService:
     async def list_workspace_memberships(
         self, org_id: str
     ) -> list[OrganizationWorkspaceMembershipRecord]:
-        found: list[OrganizationWorkspaceMembershipRecord] = []
-        for workspace in await self.adapter.list_workspaces_for_org(org_id=org_id):
-            members = await self.memberships.members(workspace_container(org_id, workspace.id))
-            found += [
-                OrganizationWorkspaceMembershipRecord(
-                    user_id=member.user_id, workspace_id=workspace.id, role=member.role
-                )
-                for member in members
-            ]
-        return found
+        """Who holds a role in each of the org's workspaces, workspace by workspace: read
+        in one pass over IAM's role attachments (``members_of``), not one per workspace."""
+        workspaces = await self.adapter.list_workspaces_for_org(org_id=org_id)
+        scopes = {ws.id: workspace_container(org_id, ws.id) for ws in workspaces}
+        held = await self.memberships.members_of(list(scopes.values())) if scopes else {}
+        return [
+            OrganizationWorkspaceMembershipRecord(
+                user_id=member.user_id, workspace_id=workspace.id, role=member.role
+            )
+            for workspace in workspaces
+            for member in held.get(scopes[workspace.id], [])
+        ]
 
     async def list_all_memberships(self) -> list[UserOrganizationMembershipRecord]:
         """Every user's organizations across the platform (Platform Settings), from
@@ -487,7 +489,19 @@ class OrganizationService:
     async def get_organization_member(
         self, org_id: str, user_id: str
     ) -> OrganizationMemberRecord | None:
-        return next((m for m in await self.list_members(org_id) if m.user_id == user_id), None)
+        """One member of the directory, as ``list_members`` shows them: their entry, then
+        their account and their profile alone, never every member's (#1608)."""
+        entry = next(
+            (e for e in await self.memberships.org_directory(org_id) if e.user_id == user_id),
+            None,
+        )
+        if entry is None:
+            return None
+        user = (await self.adapter.get_users_by_ids([user_id])).get(user_id)
+        if user is None:
+            return None
+        profile = await self.adapter.get_organization_member_profile(org_id, user_id)
+        return _member_record(org_id, entry, user, profile)
 
     async def update_member_role(
         self,

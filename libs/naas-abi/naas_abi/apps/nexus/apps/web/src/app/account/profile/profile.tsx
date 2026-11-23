@@ -1,14 +1,57 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { Camera, Save, X, RefreshCw } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
-import { useAuthStore } from '@/stores/auth';
+import { usePageDraft } from '@/hooks/use-page-state';
+import { useAuthStore, type User } from '@/stores/auth';
 import { AccountPageHeader } from '../components/account-page-header';
 import { AccountSectionCard } from '../components/account-section-card';
 import './profile.css';
 
 const BIO_MAX_LENGTH = 2000;
+
+/** What the form edits, as the server last said (`authUser`). */
+type ProfileFields = {
+  name: string;
+  organization: string;
+  job_title: string;
+  bio: string;
+  linkedin_url: string;
+  github_handle: string;
+};
+
+const FIELD_LABELS: Record<keyof ProfileFields, string> = {
+  name: 'Full Name',
+  organization: 'Organization',
+  job_title: 'Job title',
+  bio: 'Bio',
+  linkedin_url: 'LinkedIn profile',
+  github_handle: 'GitHub username',
+};
+
+const EMPTY_PROFILE: ProfileFields = {
+  name: '',
+  organization: '',
+  job_title: '',
+  bio: '',
+  linkedin_url: '',
+  github_handle: '',
+};
+
+export function profileFields(user: User): ProfileFields {
+  return {
+    name: user.name || '',
+    organization: user.organization || '',
+    job_title: user.job_title || '',
+    bio: user.bio || '',
+    linkedin_url: user.linkedin_url || '',
+    github_handle: user.github_handle || '',
+  };
+}
+
+/** The unsaved profile edits: kept for a return to the page, never overwritten by a refresh of the user. */
+const PROFILE_DRAFT = { scope: 'account', page: 'profile' };
 
 type FastApiValidationError = {
   loc?: (string | number)[];
@@ -36,30 +79,17 @@ function formatApiError(err: unknown, fallback: string): string {
 export default function ProfilePage() {
   const authUser = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [organization, setOrganization] = useState('');
-  const [jobTitle, setJobTitle] = useState('');
-  const [bio, setBio] = useState('');
-  const [linkedinUrl, setLinkedinUrl] = useState('');
-  const [githubHandle, setGithubHandle] = useState('');
+  // The server's snapshot is the user as the store holds it; the edits are a draft over it, so
+  // a background refresh of the user updates the fields not edited and never the edited ones.
+  const server = useMemo(() => (authUser ? profileFields(authUser) : null), [authUser]);
+  const draft = usePageDraft(PROFILE_DRAFT, server);
+  const { name, organization, job_title: jobTitle, bio, linkedin_url: linkedinUrl, github_handle: githubHandle } =
+    draft.values ?? EMPTY_PROFILE;
+  const email = authUser?.email || '';
+  const avatarUrl = authUser?.avatar || '';
   const [saved, setSaved] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (authUser) {
-      setName(authUser.name || '');
-      setEmail(authUser.email || '');
-      setOrganization(authUser.organization || '');
-      setJobTitle(authUser.job_title || '');
-      setBio(authUser.bio || '');
-      setLinkedinUrl(authUser.linkedin_url || '');
-      setGithubHandle(authUser.github_handle || '');
-      setAvatarUrl(authUser.avatar || '');
-    }
-  }, [authUser]);
 
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -93,8 +123,6 @@ export default function ProfilePage() {
       if (response.ok) {
         const data = await response.json();
         const fullUrl = `${getApiUrl()}${data.avatar_url}`;
-        setAvatarUrl(fullUrl);
-
         if (authUser) {
           setUser({ ...authUser, avatar: fullUrl });
         }
@@ -119,7 +147,6 @@ export default function ProfilePage() {
       const { authFetch } = await import('@/stores/auth');
       const response = await authFetch('/api/auth/avatar', { method: 'DELETE' });
       if (response.ok) {
-        setAvatarUrl('');
         if (authUser) {
           setUser({ ...authUser, avatar: undefined });
         }
@@ -173,6 +200,7 @@ export default function ProfilePage() {
           github_handle: updated.github_handle ?? undefined,
         });
       }
+      draft.discard();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
@@ -200,6 +228,19 @@ export default function ProfilePage() {
           </button>
         }
       />
+
+      {draft.dirty.length > 0 ? (
+        <div className="account-profile-draft" role="status">
+          <p className="account-profile-draft-text">
+            {draft.conflicts.length > 0
+              ? `Changed elsewhere since you began editing: ${draft.conflicts.map((f) => FIELD_LABELS[f]).join(', ')}. Saving keeps your version.`
+              : 'Unsaved changes.'}
+          </p>
+          <button type="button" onClick={draft.discard} className="account-profile-draft-discard">
+            Discard changes
+          </button>
+        </div>
+      ) : null}
 
       <div className="account-profile-avatar-section">
         <div className="account-profile-avatar-wrapper">
@@ -260,7 +301,7 @@ export default function ProfilePage() {
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => draft.set({ name: e.target.value })}
               className="account-profile-field-input"
             />
           </div>
@@ -282,7 +323,7 @@ export default function ProfilePage() {
             <input
               type="text"
               value={organization}
-              onChange={(e) => setOrganization(e.target.value)}
+              onChange={(e) => draft.set({ organization: e.target.value })}
               placeholder="Your organization"
               className="account-profile-field-input"
             />
@@ -292,7 +333,7 @@ export default function ProfilePage() {
             <input
               type="text"
               value={jobTitle}
-              onChange={(e) => setJobTitle(e.target.value)}
+              onChange={(e) => draft.set({ job_title: e.target.value })}
               placeholder="Your job title"
               className="account-profile-field-input"
             />
@@ -302,7 +343,7 @@ export default function ProfilePage() {
             <input
               type="url"
               value={linkedinUrl}
-              onChange={(e) => setLinkedinUrl(e.target.value)}
+              onChange={(e) => draft.set({ linkedin_url: e.target.value })}
               placeholder="https://www.linkedin.com/in/your-name"
               className="account-profile-field-input"
             />
@@ -312,7 +353,7 @@ export default function ProfilePage() {
             <input
               type="text"
               value={githubHandle}
-              onChange={(e) => setGithubHandle(e.target.value)}
+              onChange={(e) => draft.set({ github_handle: e.target.value })}
               placeholder="your-github-username"
               className="account-profile-field-input"
             />
@@ -333,7 +374,7 @@ export default function ProfilePage() {
           </div>
           <textarea
             value={bio}
-            onChange={(e) => setBio(e.target.value.slice(0, BIO_MAX_LENGTH))}
+            onChange={(e) => draft.set({ bio: e.target.value.slice(0, BIO_MAX_LENGTH) })}
             placeholder="Tell us about yourself..."
             rows={12}
             maxLength={BIO_MAX_LENGTH}

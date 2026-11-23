@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
 import { authFetch } from '@/stores/auth';
+import { readOrganization } from '@/lib/organization-resource';
 import { DEFAULT_THEME, PRESET_COLORS } from '@/stores/workspace';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
@@ -103,7 +104,7 @@ export default function OrgCreateWorkspacePage() {
   useEffect(() => {
     if (!orgId) return;
     let cancelled = false;
-    void authFetch(`/api/organizations/${orgId}`)
+    void readOrganization(orgId)
       .then(async (res) => {
         if (!res.ok || cancelled) return;
         const data = await res.json();

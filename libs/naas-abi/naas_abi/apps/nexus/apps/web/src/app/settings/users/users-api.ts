@@ -60,7 +60,8 @@ export function updateUser(
   return call<AdminUser>(fetcher, userUrl(id), json('PATCH', change));
 }
 
-/** Where they work and what they do, read from their groups (`GET …/{account id}/access`). */
+/** Where they work and what they do, read from their groups (`GET …/{id}/access`): `id` is
+ *  their account id or their IAM id; 404 when no account of the directory is theirs. */
 export function userAccess(id: string, fetcher: Fetcher = authFetch) {
   return call<UserAccess>(fetcher, `${userUrl(id)}/access`);
 }

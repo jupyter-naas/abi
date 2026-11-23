@@ -4,6 +4,7 @@ import './access-base.css';
 import './access.css';
 
 import { useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { AccessBadgeContext, AccessHeaderSlotContext } from './access-list';
 import { createIamAdminApi, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { InviteProviders } from '@/lib/invitations';
@@ -12,12 +13,32 @@ import { createAccessDirectory, type AccessDirectory } from './access-directory'
 import type { AccessNavigation } from './access-props';
 import type { AccessScope } from './access-scope';
 import { accessSection, opensSection, type AccessSection } from './access-sections';
-import { ApprovalsView } from './approvals/approvals';
-import { AuditView } from './audit/audit';
-import { GroupsView } from './groups/groups';
-import { PoliciesView } from './policies/policies';
-import { ServiceAccountsView } from './service-accounts/service-accounts';
-import { SimulatorView } from './simulator/simulator';
+
+function ViewLoading() {
+  return (
+    <p className="access-empty" role="status" data-access-loading="">
+      Loading…
+    </p>
+  );
+}
+
+// Each page of Access loads its own view on first open (#1609): a page never brings the
+// code of the five others (the policy builder above all).
+const PoliciesView = dynamic(() => import('./policies/policies').then((m) => m.PoliciesView), {
+  loading: ViewLoading,
+});
+const GroupsView = dynamic(() => import('./groups/groups').then((m) => m.GroupsView), { loading: ViewLoading });
+const ServiceAccountsView = dynamic(
+  () => import('./service-accounts/service-accounts').then((m) => m.ServiceAccountsView),
+  { loading: ViewLoading },
+);
+const ApprovalsView = dynamic(() => import('./approvals/approvals').then((m) => m.ApprovalsView), {
+  loading: ViewLoading,
+});
+const SimulatorView = dynamic(() => import('./simulator/simulator').then((m) => m.SimulatorView), {
+  loading: ViewLoading,
+});
+const AuditView = dynamic(() => import('./audit/audit').then((m) => m.AuditView), { loading: ViewLoading });
 
 /** Where a level's pages are: an Access page (with what it has open), and a person's page,
  *  null where the caller may open none. */

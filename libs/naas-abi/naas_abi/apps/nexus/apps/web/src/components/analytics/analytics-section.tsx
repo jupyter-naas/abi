@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SettingsEmpty } from '@/components/settings/settings-ui';
@@ -17,18 +18,23 @@ import {
   type AnalyticsFilters,
   type AnalyticsScope,
 } from './scope';
-import { ErrorBlock } from './states';
+import { ErrorBlock, LoadingBlock } from './states';
 import { analyticsTabs, shownTab, type AnalyticsTab, type AnalyticsTabProps } from './tabs';
-import { ChatsTab } from './tabs/chats-tab';
 import { EventsTab } from './tabs/events-tab';
 import { OverviewTab } from './tabs/overview-tab';
 import { PagesTab } from './tabs/pages-tab';
 import { SessionsTab } from './tabs/sessions-tab';
-import { UserDetailTab } from './tabs/user-detail';
 import { UsersTab } from './tabs/users-tab';
 import { WorkspacesTab } from './tabs/workspaces-tab';
 import { useAnalytics } from './use-analytics';
 import type { UsersResponse, WorkspacesResponse } from './types';
+
+// Chats (the conversations table, a conversation, its export) and one user's detail load on
+// first open (#1609). The other tabs are under 1 kB each once compressed: a chunk of their
+// own would cost a request on open and more than it saves.
+const loading = () => <LoadingBlock />;
+const ChatsTab = dynamic(() => import('./tabs/chats-tab').then((m) => m.ChatsTab), { loading });
+const UserDetailTab = dynamic(() => import('./tabs/user-detail').then((m) => m.UserDetailTab), { loading });
 
 /** The directories (members, workspaces) do not depend on the period: read once per scope. */
 const DIRECTORY_FILTERS: AnalyticsFilters = { period: DEFAULT_PERIOD, userId: ALL, workspaceId: ALL };

@@ -41,7 +41,11 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     User,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
-from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
+    MEMBERSHIPS,
+    AccessSummary,
+    is_user_principal_id,
+)
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     InvalidPolicyError,
     NoProviderError,
@@ -57,7 +61,7 @@ from naas_abi.apps.nexus.apps.api.app.services.people.port import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
@@ -329,6 +333,37 @@ async def invite_user(
     )
 
 
+async def _account_id(db: AsyncSession, person_id: str) -> str | None:
+    """The account (an undeleted ``users`` row) of ``person_id``: its id, or its IAM id
+    as the row records it once its person signed in through a provider."""
+    found = await db.scalar(
+        select(UserModel.id)
+        .where(
+            or_(UserModel.id == person_id, UserModel.principal_id == person_id),
+            UserModel.deleted_at.is_(None),
+        )
+        .order_by(UserModel.id != person_id)
+        .limit(1)
+    )
+    return str(found) if found is not None else None
+
+
+async def _access_of_account(db: AsyncSession, person_id: str) -> AccessSummary | None:
+    """What an account's groups give it, found by its id or its IAM id. IAM names the
+    account of an IAM id the row does not record (linked from the old login); the
+    account must still be one of the directory's. The session's reads run in turn."""
+    account = await _account_id(db, person_id)
+    if account is not None:
+        return await MEMBERSHIPS.access_of(account)
+    if not is_user_principal_id(person_id):
+        return None  # an unknown account id: nothing is asked of IAM, nothing made there
+    # IAM looks an IAM id up, and never creates it.
+    summary = await MEMBERSHIPS.access_of(person_id)
+    if summary is None or await _account_id(db, summary.user_id) != summary.user_id:
+        return None
+    return summary
+
+
 @router.get(
     "/{account_id}/access",
     response_model=AdminUserAccess,
@@ -337,9 +372,11 @@ async def invite_user(
 async def user_access(account_id: str, db: AsyncSession = Depends(get_db)) -> AdminUserAccess:
     """Their level, the organizations they administer or belong to, their workspaces
     (and which they administer), their capability groups, and whether they are a
-    platform admin: what their groups give them, nothing to edit here."""
-    known = await db.scalar(select(UserModel.id).where(UserModel.id == account_id))
-    summary = await MEMBERSHIPS.access_of(account_id) if known else None
+    platform admin: what their groups give them, nothing to edit here.
+
+    ``account_id`` is their account's id or their IAM id (the person's page is opened by
+    it, #1608): an account of the directory, never a deleted one, else 404."""
+    summary = await _access_of_account(db, account_id)
     if summary is None:
         raise HTTPException(status_code=404, detail="User not found")
     org_ids = [o for o, _ in summary.organizations]

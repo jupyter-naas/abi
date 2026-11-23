@@ -15,6 +15,8 @@ import type {
   CatalogsView,
   CreatedKey,
   GroupView,
+  GroupsPage,
+  GroupsPageQuery,
   KeyCreate,
   KeyView,
   ManifestApprove,
@@ -38,6 +40,9 @@ import type {
 } from './types';
 
 export const IAM_ADMIN_API = '/api/iam/admin';
+const sessionClients = new WeakSet<object>();
+/** Default clients already share authFetch's canonical permission cache. */
+export const isSessionIamApi = (api: object): boolean => sessionClients.has(api);
 
 export type Fetcher = (url: string, options?: RequestInit) => Promise<Response>;
 
@@ -86,17 +91,19 @@ function path(...parts: string[]): string {
   return [IAM_ADMIN_API, ...parts.map(encodeURIComponent)].join('/');
 }
 
-function query(params: Record<string, string | number | null | undefined>): string {
+function query(params: Record<string, string | number | readonly string[] | null | undefined>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== null && value !== undefined && value !== '') search.set(key, String(value));
+    // A list repeats its key (`principal_id=a&principal_id=b`), as the API reads it.
+    if (Array.isArray(value)) for (const item of value) search.append(key, String(item));
+    else if (value !== null && value !== undefined && value !== '') search.set(key, String(value));
   }
   const text = search.toString();
   return text ? `?${text}` : '';
 }
 
-async function read<T>(fetcher: Fetcher, url: string, fallback: string): Promise<T> {
-  const response = await fetcher(url);
+async function read<T>(fetcher: Fetcher, url: string, fallback: string, options?: RequestInit): Promise<T> {
+  const response = await (options ? fetcher(url, options) : fetcher(url));
   if (!response.ok) throw await failure(response, fallback);
   return (await response.json()) as T;
 }
@@ -119,11 +126,11 @@ async function send<T>(
 
 /** Every call of the admin API, bound to one fetcher (tests pass a fake). */
 export function createIamAdminApi(fetcher: Fetcher = authFetch) {
-  return {
+  const api = {
     /** What the caller may do on the platform, or on the attachments of `scope`
      *  (an organization's or a workspace's container) when one is given. */
-    access: (scope?: string) =>
-      read<AccessView>(fetcher, path('access') + query({ scope }), 'Could not read your access.'),
+    access: (scope?: string, { refresh = false }: { refresh?: boolean } = {}) =>
+      read<AccessView>(fetcher, path('access') + query({ scope }), 'Could not read your access.', refresh ? { cache: 'reload' } : undefined),
     /** The actions the caller may grant at `scope` (within `parent`, for a sub-policy of it). */
     catalogs: (scope?: string, parent?: string | null) =>
       read<CatalogsView>(fetcher, path('catalogs') + query({ scope, parent }), 'Could not load the action catalogs.'),
@@ -194,7 +201,11 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
       send<void>(fetcher, path('policies', id), 'DELETE', undefined, 'Could not delete the policy.'),
 
     // attachments (any scope the caller may list: the platform's or an org's)
-    listAttachments: (filter: { principal_id?: string; policy_id?: string; scope?: string } = {}) =>
+    /** `principal_id` may name several principals (at most `MAX_PRINCIPALS_PER_READ`): each
+     *  one's attachments in one request, as one request each would answer them. */
+    listAttachments: (
+      filter: { principal_id?: string | readonly string[]; policy_id?: string; scope?: string } = {},
+    ) =>
       read<{ items: AttachmentView[] }>(
         fetcher,
         path('attachments') + query(filter),
@@ -239,8 +250,18 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
     // groups
     /** Every group the caller may list; with `scope`, that level's own (and, at a workspace,
      *  its org's the caller attaches to there). */
-    listGroups: (scope?: string) =>
-      read<{ items: PrincipalView[] }>(fetcher, path('groups') + query({ scope }), 'Could not load the groups.'),
+    listGroups: (scope?: string, page: GroupsPageQuery = {}) =>
+      read<GroupsPage>(
+        fetcher,
+        path('groups') +
+          query({
+            scope,
+            after: page.after,
+            limit: page.limit,
+            member_counts: page.memberCounts ? 'true' : null,
+          }),
+        'Could not load the groups.',
+      ),
     getGroup: (id: string) => read<GroupView>(fetcher, path('groups', id), 'Could not load the group.'),
     /** `scope`: the owner (an organization's or a workspace's container); none: the platform. */
     createGroup: (input: { name: string; org?: string | null; scope?: string | null }) =>
@@ -345,6 +366,8 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
     audit: (filter: { operation?: string; resource_id?: string; limit?: number } = {}) =>
       read<{ items: AuditEntry[] }>(fetcher, path('audit') + query(filter), 'Could not load the audit log.'),
   };
+  if (fetcher === authFetch) sessionClients.add(api);
+  return api;
 }
 
 export type IamAdminApi = ReturnType<typeof createIamAdminApi>;

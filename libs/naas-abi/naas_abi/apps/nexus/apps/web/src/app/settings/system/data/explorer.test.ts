@@ -4,6 +4,7 @@ import { mount, type Mounted } from '../system-render';
 import type { DataApi, Result } from './data-api';
 import type { AuditEntry, ResourceDetail, ResourceEntry, ResourceServiceInfo } from './data-types';
 import { DataExplorer } from './explorer';
+import { loadedServiceView } from './services/registry';
 
 const replace = vi.fn();
 const push = vi.fn();
@@ -115,6 +116,11 @@ const rows = () => [...document.querySelectorAll('[data-entry]')].map((r) => r.g
 async function open(api: DataApi, service = 'object_storage') {
   await mounted?.unmount();
   mounted = await mount(DataExplorer, { api, service });
+  // The service's view loads on first open (#1609).
+  await vi.waitFor(async () => {
+    await mounted!.flush();
+    expect(loadedServiceView(service)).not.toBeNull();
+  });
   await mounted.flush();
   await mounted.flush();
 }
@@ -342,5 +348,21 @@ describe('expiring entries', () => {
     await open(api, 'secret');
     await mounted!.click(button('New secret'));
     expect(q('[aria-label="Expires after"]')).toBeNull();
+  });
+});
+
+describe('DataExplorer loads its service view on first open (#1609)', () => {
+  it('shows Loading until the view is ready, then the page; the other views stay unloaded', async () => {
+    const { api } = fakeApi();
+    mounted = await mount(DataExplorer, { api, service: 'dataset' });
+    expect(loadedServiceView('dataset')).toBeNull();
+    expect(text()).toContain('Loading…');
+    await vi.waitFor(async () => {
+      await mounted!.flush();
+      expect(loadedServiceView('dataset')).not.toBeNull();
+    });
+    await mounted.flush();
+    expect(text()).not.toContain('Loading…');
+    expect(loadedServiceView('email')).toBeNull();
   });
 });

@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { opensAccess } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
+import { readOrganization } from '@/lib/organization-resource';
 import { useAnalyticsAccess } from '@/hooks/use-analytics-access';
 import { SettingsLevelsNav } from '@/components/settings/settings-levels-nav';
 import { SettingsLayoutRoot, useWorkspaceReturnPath } from '@/components/settings/settings-shell';
@@ -89,7 +90,6 @@ export default function OrganizationSettingsLayout({
     primary: null,
     accent: null,
   });
-  const [layoutKey, setLayoutKey] = useState(0);
 
   // Reopened only once its section opens: not while the role or the access is read, not
   // refused, not the index, nor a section that sends the caller to Access.
@@ -100,11 +100,9 @@ export default function OrganizationSettingsLayout({
   useRememberSettingsPath(sectionOpens ? pathname : null);
 
   useEffect(() => {
-    const fetchOrg = async () => {
+    const fetchOrg = async (force = false) => {
       try {
-        const { authFetch } = await import('@/stores/auth');
-
-        const response = await authFetch(`/api/organizations/${orgId}`);
+        const response = await readOrganization(orgId, { force });
         if (response.ok) {
           const data = await response.json();
           setViewer({ orgId, role: data.current_user_role ?? null });
@@ -128,9 +126,10 @@ export default function OrganizationSettingsLayout({
       fetchOrg();
     }
 
+    // New colours and corners: read again and restyle in place. The page under it is not
+    // remounted, so what it shows (filters, unsaved edits, scroll) stays.
     const handleBrandingUpdate = () => {
-      fetchOrg();
-      setLayoutKey((prev) => prev + 1);
+      void fetchOrg(true);
     };
 
     window.addEventListener('org-branding-updated', handleBrandingUpdate);
@@ -168,7 +167,7 @@ export default function OrganizationSettingsLayout({
   const showMain = !showMobileList || settingsAccess === 'none';
 
   return (
-    <SettingsLayoutRoot key={layoutKey} brand={orgColors} borderRadius={borderRadius}>
+    <SettingsLayoutRoot brand={orgColors} borderRadius={borderRadius}>
       <div className="org-settings-layout-left">
       <SettingsShellHeader
         detailTitle={showMobileDetail ? sectionLabel : null}
