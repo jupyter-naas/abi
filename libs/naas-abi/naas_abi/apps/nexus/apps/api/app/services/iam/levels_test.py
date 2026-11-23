@@ -8,6 +8,7 @@ made as Nexus makes them (``container_defaults``), and every membership given th
 from __future__ import annotations
 
 import pytest
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import widen_offer
 from naas_abi.apps.nexus.apps.api.app.services.iam.levels import (
     LEVELS,
@@ -120,6 +121,41 @@ def test_the_level_policies_are_generic_and_written_once(world):
     for name in (VIEWER_ACCESS, MEMBER_ACCESS, WORKSPACE_ADMIN_ACCESS):
         assert named.count(name) == 1
     assert LEVELS.get(world.iam) == levels
+
+
+# -- what a workspace's lists show ------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_lists_of_a_workspace_show_what_it_offers_and_nothing_beyond(world):
+    """An org admin uses the organization's offer in each of its workspaces ("<O>
+    access" below O: wf2 runs in ws-1, which does not offer it), and the platform
+    admin everything. What a workspace's lists show (``filter_scopes``: agents,
+    apps, workflows, the chat's agents) is within its offer, for everyone. An item
+    with no module scope is another check's. Widening the offer shows the item."""
+    await _team(world)
+    assert _can(world, "oadmin", "module:RunWorkflow", _scope(world, "workflow", "wf2"))
+    wf, wf2 = ModuleScope("workflow", "people", "wf"), ModuleScope("workflow", "people", "wf2")
+    a, b = ModuleScope("agent", "people", "a"), ModuleScope("agent", "people", "b")
+    items: list[ModuleScope | str] = [wf, wf2, a, b, "built in the workspace"]
+
+    async def listed(user: str) -> list[ModuleScope | str]:
+        return await world.authz.filter_scopes(
+            items,
+            user=SimpleUser(user),
+            workspace="ws-1",
+            scope_of=lambda item: item if isinstance(item, ModuleScope) else None,
+        )
+
+    assert await listed("oadmin") == [wf, a, "built in the workspace"]
+    assert await listed("root") == [wf, a, "built in the workspace"]
+    assert await listed("wadmin") == [wf, a, "built in the workspace"]
+    assert await listed("member") == [a, "built in the workspace"]
+    with as_service_account("api"):
+        widen_offer(
+            world.iam, world.record.access_policy_id, Offer.of(workflows=[("people", "wf2")])
+        )
+    assert await listed("oadmin") == [wf, wf2, a, "built in the workspace"]
 
 
 # -- the matrix by level, inside IAM -----------------------------------------------------

@@ -32,6 +32,7 @@ from naas_abi.apps.nexus.apps.api.app.services.feature_access.port import (
     FeatureChange,
     FeaturePolicyStore,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource
 from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     SECTIONS,
@@ -469,6 +470,7 @@ class FeatureAccessService:
             )
 
         await self._change(user, operation, resource_id, write)
+        AUTHZ.forget_offers()  # what the workspace's lists show (``filter_scopes``)
 
     # -- agents, apps, workflows and pipelines ----------------------------------------
 

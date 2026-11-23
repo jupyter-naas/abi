@@ -355,6 +355,9 @@ def widen_offer(iam: Any, policy_id: str | None, offer: Offer) -> bool:
         expected_revision=policy.revision,
         document=with_offer(policy.document, wanted),
     )
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+    AUTHZ.forget_offers()  # what the lists show (``filter_scopes``)
     return True
 
 
