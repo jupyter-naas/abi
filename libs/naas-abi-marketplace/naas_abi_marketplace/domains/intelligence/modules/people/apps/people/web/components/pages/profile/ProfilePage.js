@@ -7,6 +7,7 @@ import {
   highlight,
   ICONS,
   orgLogoHtml,
+  safeHref,
 } from "../../../lib/dom.js";
 import { mountGraphView } from "../../../lib/graph-view.js";
 import { profileHref, searchHref } from "../../../lib/routes.js";
@@ -60,9 +61,9 @@ function resolveKnowledgeGraph(knowledgeGraph, fallback) {
  */
 function sourceItemHtml(item) {
   const label = escapeHtml(item.label || item.url || "");
-  const url = item.url || "";
-  if (!/^https?:\/\//i.test(url)) {
-    return `<li><span class="source-name">${label}</span> <span class="source-ref">${escapeHtml(url)}</span></li>`;
+  const url = safeHref(item.url);
+  if (!url) {
+    return `<li><span class="source-name">${label}</span> <span class="source-ref">${escapeHtml(item.url || "")}</span></li>`;
   }
   return `<li><a href="${escapeHtml(url)}" rel="noopener noreferrer" target="_blank">${label}</a></li>`;
 }
@@ -241,8 +242,12 @@ function contactHtml(contact) {
     .map((item) => {
       const external = item.field === "linkedin_url";
       const text = external ? item.label : item.value;
+      const href = safeHref(item.href, { contact: true });
+      if (!href) {
+        return `<li class="contact-item"><span>${escapeHtml(text)}</span></li>`;
+      }
       return `<li class="contact-item">
-        <a class="contact-link" href="${escapeHtml(item.href)}"
+        <a class="contact-link" href="${escapeHtml(href)}"
            ${external ? 'target="_blank" rel="noopener noreferrer"' : ""}
            aria-label="${escapeHtml(`${item.label}: ${item.value}`)}">
           ${ICONS[item.field] || ICONS.link}<span>${escapeHtml(text)}</span>

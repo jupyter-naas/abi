@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import json
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from itertools import islice
@@ -24,6 +25,7 @@ from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account, current_call_context
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.event import EventCodec, EventFilter
+from naas_abi_core.services.event.context import event_author_id
 from naas_abi_core.services.event.EventPort import (
     EventNotFoundError,
     EventTypeSummary,
@@ -48,6 +50,16 @@ def class_iri_to_topic(class_iri: str) -> str:
     return "evt." + hashlib.sha256(class_iri.encode("utf-8")).hexdigest()[:32]
 
 
+def live_event_class(payload: bytes) -> str | None:
+    """The class IRI a live event's payload declares (``_class_uri``), or None."""
+    try:
+        data = json.loads(payload)
+    except (TypeError, ValueError):
+        return None
+    value = data.get("_class_uri") if isinstance(data, dict) else None
+    return value if isinstance(value, str) else None
+
+
 def _build_subclass_index(root: type = LogProcess) -> dict[str, type]:
     """Walk all LogProcess subclasses and index them by `_class_uri`."""
     index: dict[str, type] = {}
@@ -67,8 +79,9 @@ def _stamp(event: Any) -> None:
     """Who and where from the call's context, unless the event says otherwise."""
     context = current_call_context()
     served = context.user
+    actor = served.id if served is not None else event_author_id.get()
     for field_name, value in (
-        ("actor_user_id", served.id if served is not None else None),
+        ("actor_user_id", actor),
         ("actor_container", context.container),
         ("triggered_via", context.triggered_via),
     ):
@@ -152,24 +165,30 @@ class EventService(ServiceBase, IEventService):
 
         self._require("Append", event_type)
         stored = self._adapter.append(event_id, event_type, timestamp, payload)
-
-        if self._bus is not None:
-            try:
-                # Publish on the event-class topic. EventService events use
-                # the bus's pub/sub semantics so every registered subscriber
-                # receives the event (no competing-consumer races). The
-                # event_id is the routing key — subscribers default to "#"
-                # so they receive every event of this class.
-                self._bus.publish(
-                    topic=class_iri_to_topic(event_type),
-                    routing_key=event_id,
-                    payload=payload,
-                )
-            except Exception as exc:  # noqa: BLE001
-                # Durability is the contract; bus failure must not lose the event.
-                logger.warning(f"EventService: bus broadcast failed for {event_id}: {exc}")
-
+        self._broadcast(event_type, event_id, payload)
         return stored
+
+    def _broadcast(self, event_type: str, event_id: str, payload: bytes) -> None:
+        """The live copy of an appended event, on its class's topic.
+
+        The engine is the only publisher there (a module appends through this
+        service, never on the topic). EventService events use the bus's
+        pub/sub semantics so every registered subscriber receives the event
+        (no competing-consumer races). The event_id is the routing key:
+        subscribers default to "#" so they receive every event of this class.
+        """
+        if self._bus is None or getattr(self._adapter, "owner_broadcasts", False):
+            # Appended through the owner's service, which broadcasts it.
+            return
+        try:
+            self._bus.publish(
+                topic=class_iri_to_topic(event_type),
+                routing_key=event_id,
+                payload=payload,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Durability is the contract; bus failure must not lose the event.
+            logger.warning(f"EventService: bus broadcast failed for {event_id}: {exc}")
 
     def emit(self, event: Any) -> StoredEvent | None:
         """A kernel service's own audit event, for the operation it just served.
@@ -345,12 +364,14 @@ class EventService(ServiceBase, IEventService):
         self, event_id: str, event_type: str, timestamp: str, payload: bytes
     ) -> StoredEvent:
         self._require("Append", event_type)
-        return self._adapter.append(
+        stored = self._adapter.append(
             event_id=event_id,
             event_type=event_type,
             timestamp=timestamp,
             payload=payload,
         )
+        self._broadcast(event_type, event_id, payload)
+        return stored
 
     def max_seq(self, event_type: str | None = None) -> int:
         """The newest ``seq`` of a type; with no type, the newest of the types
@@ -673,15 +694,18 @@ class EventService(ServiceBase, IEventService):
         # Checked once, for the subscriber: live events are not checked one by one.
         self._require("Query", str(event_class._class_uri))
 
-        topic = class_iri_to_topic(str(event_class._class_uri))
+        class_iri = str(event_class._class_uri)
+        topic = class_iri_to_topic(class_iri)
 
         def _on_message(payload: bytes) -> None:
             try:
+                if live_event_class(payload) != class_iri:
+                    # Not of the subscribed type: whoever put it on this
+                    # topic, it is not one of the events subscribed to.
+                    return
                 if filter:
                     # Fast path: evaluate filter against the raw JSON dict
                     # before the (more expensive) Pydantic reconstruction.
-                    import json
-
                     if not EventFilter.matches(json.loads(payload), filter):
                         return
                 row = StoredEvent(

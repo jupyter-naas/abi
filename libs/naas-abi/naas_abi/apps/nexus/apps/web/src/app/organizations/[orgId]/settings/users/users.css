@@ -320,6 +320,7 @@
   height: 36px;
   padding: 0 var(--space-4);
   border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
   background-color: var(--background-hex);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);

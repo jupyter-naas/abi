@@ -6,9 +6,10 @@ import type { AuditEntry, ResourceDetail, ResourceEntry, ResourceServiceInfo } f
 import { DataExplorer } from './explorer';
 
 const replace = vi.fn();
+const push = vi.fn();
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace }),
-  usePathname: () => '/settings/system/data',
+  useRouter: () => ({ replace, push }),
+  usePathname: () => '/settings/data/object-storage',
   useSearchParams: () => new URLSearchParams(''),
 }));
 
@@ -96,7 +97,10 @@ function fakeApi() {
 }
 
 let mounted: Mounted | null = null;
-beforeEach(() => replace.mockClear());
+beforeEach(() => {
+  replace.mockClear();
+  push.mockClear();
+});
 afterEach(async () => {
   await mounted?.unmount();
   mounted = null;
@@ -108,8 +112,9 @@ const button = (label: string, root: ParentNode = document) =>
   ([...root.querySelectorAll('button')].find((b) => b.textContent?.trim() === label) as HTMLButtonElement | undefined) ?? null;
 const rows = () => [...document.querySelectorAll('[data-entry]')].map((r) => r.getAttribute('data-entry'));
 
-async function open(api: DataApi) {
-  mounted = await mount(DataExplorer, { api });
+async function open(api: DataApi, service = 'object_storage') {
+  await mounted?.unmount();
+  mounted = await mount(DataExplorer, { api, service });
   await mounted.flush();
   await mounted.flush();
 }
@@ -120,14 +125,45 @@ async function key(k: string, init: KeyboardEventInit = {}) {
 }
 
 describe('DataExplorer', () => {
-  it('groups services, says why one is off and opens the first available', async () => {
+  it('opens its service under the page title, with no list of the other services', async () => {
     const { api } = fakeApi();
     await open(api);
 
-    expect(q('[data-data-service="object_storage"]')?.getAttribute('aria-current')).toBe('page');
-    expect(q('[data-data-service="vector_store"]')?.getAttribute('aria-disabled')).toBe('true');
-    expect(text()).toContain('Storage');
+    expect(q('.org-settings-page-header-title')?.textContent).toBe('Object storage');
+    expect(q('.data-main')?.getAttribute('data-service')).toBe('object_storage');
+    expect(q('.data-rail')).toBeNull();
     expect(rows()).toEqual(['docs', 'top.txt']);
+  });
+
+  it('says why its service is off, or that the deployment has none', async () => {
+    const { api } = fakeApi();
+    await open(api, 'vector_store');
+    expect(text()).toContain('Vector store is off in this deployment');
+    expect(text()).toContain('not configured');
+    expect(api.list).not.toHaveBeenCalled();
+
+    await open(api, 'cache');
+    expect(text()).toContain('This deployment has no cache service');
+  });
+
+  it("opens a recent change of another service on that service's page", async () => {
+    const { api } = fakeApi();
+    api.recent = vi.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        data: {
+          entries: [
+            { at: '2026-10-02T10:01:00Z', actor_id: 'u1', actor: 'Ada', service: 'secret', operation: 'reveal', resource_id: 'PUBLIC_HOST', phase: 'succeeded', error: '' },
+          ],
+        },
+      }),
+    );
+    await open(api);
+    await mounted!.click(button('Recent changes'));
+    await mounted!.flush();
+    await mounted!.click(button('PUBLIC_HOST', q('[role="dialog"]') ?? document));
+
+    expect(push).toHaveBeenCalledWith('/settings/resources/secrets?item=PUBLIC_HOST');
   });
 
   it('browses into containers, names the path and goes back up', async () => {
@@ -160,9 +196,7 @@ describe('DataExplorer', () => {
 
   it('keeps secrets hidden until revealed, then hides them again', async () => {
     const { api } = fakeApi();
-    await open(api);
-    await mounted!.click(q('[data-data-service="secret"]'));
-    await mounted!.flush();
+    await open(api, 'secret');
     await mounted!.click(q('[data-entry="OPENAI_API_KEY"]'));
     await mounted!.flush();
 
@@ -202,9 +236,7 @@ describe('DataExplorer', () => {
 
   it('creates a secret, and asks for the id before replacing an existing one', async () => {
     const { api, data } = fakeApi();
-    await open(api);
-    await mounted!.click(q('[data-data-service="secret"]'));
-    await mounted!.flush();
+    await open(api, 'secret');
 
     await mounted!.click(button('New secret'));
     await mounted!.type(q('[aria-label="Name"]'), 'NEW_KEY');
@@ -248,9 +280,7 @@ describe('DataExplorer', () => {
 
   it('shows the history of an entry and the recent changes', async () => {
     const { api } = fakeApi();
-    await open(api);
-    await mounted!.click(q('[data-data-service="secret"]'));
-    await mounted!.flush();
+    await open(api, 'secret');
     await mounted!.click(q('[data-entry="PUBLIC_HOST"]'));
     await mounted!.flush();
     await mounted!.click(button('Reveal', q('.data-preview') ?? document));
@@ -272,9 +302,7 @@ describe('expiring entries', () => {
     data.keyvalue = {};
     const kv: ResourceServiceInfo = { name: 'keyvalue', available: true, reason: '', capabilities: caps({ expiry: true }) };
     api.services = vi.fn(() => Promise.resolve({ ok: true as const, data: { services: [...SERVICES, kv] } }));
-    await open(api);
-    await mounted!.click(q('[data-data-service="keyvalue"]'));
-    await mounted!.flush();
+    await open(api, 'keyvalue');
     return { api, data };
   }
 
@@ -311,8 +339,7 @@ describe('expiring entries', () => {
     await mounted!.flush();
     expect(api.write).toHaveBeenLastCalledWith('keyvalue', 'plain', '', undefined, {});
 
-    await mounted!.click(q('[data-data-service="secret"]'));
-    await mounted!.flush();
+    await open(api, 'secret');
     await mounted!.click(button('New secret'));
     expect(q('[aria-label="Expires after"]')).toBeNull();
   });

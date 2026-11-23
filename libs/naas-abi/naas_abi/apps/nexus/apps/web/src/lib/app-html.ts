@@ -143,6 +143,25 @@ export function pagesSsoAudience(url: string): string | null {
   }
 }
 
+/** The body of `POST /api/apps/sso-token` for an app framed from `url`. */
+export type PortalSsoTokenRequest = { workspace_id: string; audience: string; app_id: string };
+
+/**
+ * What to ask for the app framed from `url` (after any dev rewrite), or null when it
+ * needs no portal sign-in: a bundled or remote app (`/app-html/…`, opened with a link
+ * or a grant) or a URL that is no web origin. The audience is the host framed.
+ */
+export function portalSsoTokenRequest(
+  appId: string,
+  url: string,
+  workspaceId: string,
+): PortalSsoTokenRequest | null {
+  if (isBundledAppHtmlUrl(url)) return null;
+  const audience = pagesSsoAudience(url);
+  if (!audience) return null;
+  return { workspace_id: workspaceId, audience, app_id: appId };
+}
+
 /** `id=url` pairs, comma-separated. The first `=` separates the catalog id from the URL. */
 export function parseDevAppUrls(raw: string | undefined | null): Record<string, string> {
   const out: Record<string, string> = {};

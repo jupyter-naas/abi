@@ -14,7 +14,10 @@ for the page). An actor is the principal id of the call that recorded it: a
 Nexus user id (``user-…``), an IAM user id (``usr_…``) or a service account's
 name. Logs written before IAM name users ``user:<id>`` and anonymous requests
 ``anonymous``; both still read. An HTTP request is named by its path and carries method,
-status, duration and client as attributes.
+status, duration and client as attributes. Its attributes are read back as the
+request log records them now (``redact_recorded``): what an older version kept of a
+credential route's body, a plain-text or form body, or a key naming a credential
+is not shown.
 """
 
 from __future__ import annotations
@@ -27,6 +30,9 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 from urllib.parse import quote, unquote
 
+from naas_abi.apps.nexus.apps.api.app.services.activity_log.HttpActivityLogMiddleware import (
+    redact_recorded,
+)
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
     Action,
     InvalidResource,
@@ -76,6 +82,13 @@ def actor_kind(actor: str) -> str:
     if sep:
         return head or "other"
     return "service"
+
+
+def _attributes(event: Any) -> dict[str, Any]:
+    attributes = dict(event.attributes or {})
+    if event.event_type == "http.request":
+        return redact_recorded(attributes)
+    return attributes
 
 
 def _request_summary(attributes: Mapping[str, Any]) -> str:
@@ -140,7 +153,7 @@ class ActivityLogResources:
 
     @staticmethod
     def _event_entry(event: Any) -> ResourceEntry:
-        attrs = event.attributes or {}
+        attrs = _attributes(event)
         attributes = {"event_type": event.event_type, "seq": str(event.seq)}
         if event.correlation_id:
             attributes["correlation_id"] = event.correlation_id
@@ -233,7 +246,7 @@ class ActivityLogResources:
             "event_type": event.event_type,
             "timestamp": event.timestamp.isoformat(),
             "correlation_id": event.correlation_id,
-            "attributes": event.attributes,
+            "attributes": _attributes(event),
         }
         return json.dumps(body, indent=2, ensure_ascii=False, default=str).encode()
 

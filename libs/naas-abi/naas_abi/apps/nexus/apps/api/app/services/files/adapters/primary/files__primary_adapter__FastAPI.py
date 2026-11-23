@@ -10,7 +10,9 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.core.bounded_work import BoundedWork
 from naas_abi.apps.nexus.apps.api.app.core.content_disposition import content_disposition
+from naas_abi.apps.nexus.apps.api.app.core.request_body import read_upload
 from naas_abi.apps.nexus.apps.api.app.core.user_content import user_content_headers
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__dependencies import (  # noqa: E501
     get_files_service,
@@ -30,12 +32,14 @@ from naas_abi.apps.nexus.apps.api.app.services.files.drives.scripts.legacy_stora
 from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots import (
     PLATFORM_DRIVE_ROOT,
     SCOPE_MY_DRIVE,
+    SCOPE_ORGANIZATION_DRIVE,
     SCOPE_PATTERN,
     SCOPE_PLATFORM_DRIVE,
     SCOPE_SYSTEM_DRIVE,
     SYSTEM_DRIVE_ROOT,
     WORKSPACE_DRIVE_ROOT,
     my_drive_root,
+    organization_drive_root,
     workspace_drive_root,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
@@ -44,11 +48,13 @@ from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
     FileListResponseData,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.placement import (
+    ensure_organization_drive_placed,
     ensure_workspace_drive_placed,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_of
 from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from naas_abi_core.engine.call_context import as_service_account
 
@@ -61,13 +67,21 @@ class FilesFastAPIPrimaryAdapter:
 
 
 # What a request does to a file, and the IAM action it needs on each kind of drive:
-# the workspace and platform drives, the system drive (admins), My drive.
-_ACTIONS: dict[str, tuple[str, str, str]] = {
-    "list": ("ListFiles", "ListSystemFiles", "ListMyFiles"),
-    "read": ("GetFile", "GetSystemFile", "GetMyFile"),
-    "write": ("PutFile", "PutSystemFile", "PutMyFile"),
-    "delete": ("DeleteFile", "DeleteSystemFile", "DeleteMyFile"),
+# the workspace and platform drives, the system drive (admins), My drive, the
+# organization drive (decided at the organization).
+_ACTIONS: dict[str, tuple[str, str, str, str]] = {
+    "list": ("ListFiles", "ListSystemFiles", "ListMyFiles", "ListOrgFiles"),
+    "read": ("GetFile", "GetSystemFile", "GetMyFile", "GetOrgFile"),
+    "write": ("PutFile", "PutSystemFile", "PutMyFile", "PutOrgFile"),
+    "delete": ("DeleteFile", "DeleteSystemFile", "DeleteMyFile", "DeleteOrgFile"),
 }
+
+
+# Office previews run a converter process; extraction decompresses and writes
+# every member. Both run off the event loop, a few at a time for the process,
+# and a caller starts a bounded number a minute.
+_OFFICE_PREVIEW = BoundedWork("office previews", concurrent=2, per_user=20)
+_ARCHIVE_EXTRACT = BoundedWork("archive extractions", concurrent=2, per_user=10)
 
 
 def _declares(op: str) -> list:
@@ -220,6 +234,12 @@ def _resolve_my_drive_scoped_path(path: str, user_id: str) -> str:
     return _scope_to_path(my_drive_root(normalized_user), path)
 
 
+def _resolve_organization_drive_scoped_path(path: str, organization_id: str) -> str:
+    """The storage key of ``path`` in the organization's drive. A storage path of
+    another organization's drive lands inside this one (re-anchored), never there."""
+    return _scope_to_path(organization_drive_root(organization_id), path)
+
+
 def _resolve_platform_drive_scoped_path(path: str) -> str:
     return _scope_to_path(PLATFORM_DRIVE_ROOT, path)
 
@@ -282,6 +302,52 @@ async def _authorize_my_drive_path(
     if files_service is not None:
         _migrate_legacy_layout(files_service, user_id=current_user.id)
     return resolved
+
+
+async def _authorize_organization_drive_path(
+    current_user: User,
+    path: str,
+    workspace_id: str | None,
+    op: str,
+) -> str:
+    """The organization drive of the workspace the request comes from.
+
+    The organization is the one IAM registered the workspace in, never a request
+    field: a workspace reaches its own organization's drive alone, and one in no
+    organization has none. The workspace's ``files`` feature is checked there; who
+    may list, read or change the drive is decided at the organization's container
+    (``ListOrgFiles``, ``GetOrgFile``, ``PutOrgFile``, ``DeleteOrgFile``): its roles
+    by level, then the policies attached there.
+    """
+    if not workspace_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="workspace_id is required for organization drive access",
+        )
+    normalized_workspace = _normalize_workspace_id(workspace_id)
+    container = await authz.AUTHZ.container_of(normalized_workspace)
+    if container is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this workspace",
+        )
+    await authz.require("UseFeature", user=current_user, workspace=normalized_workspace, id="files")
+    organization_id = org_of(container)
+    if organization_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This workspace belongs to no organization: it has no organization drive",
+        )
+    scoped = _resolve_organization_drive_scoped_path(path, organization_id)
+    await authz.require(
+        _ACTIONS[op][3],
+        user=current_user,
+        org=organization_id,
+        id=("organization", *_below(scoped, organization_drive_root(organization_id))),
+    )
+    if not viewing():  # placing a drive is a write
+        await ensure_organization_drive_placed(organization_id)
+    return scoped
 
 
 async def _authorize_platform_drive_path(
@@ -361,6 +427,13 @@ async def _authorize_path(
             path=path,
             op=op,
             files_service=files_service,
+        )
+    if scope == SCOPE_ORGANIZATION_DRIVE:
+        return await _authorize_organization_drive_path(
+            current_user=current_user,
+            path=path,
+            workspace_id=workspace_id,
+            op=op,
         )
     if scope == SCOPE_PLATFORM_DRIVE:
         return await _authorize_platform_drive_path(
@@ -539,7 +612,7 @@ async def upload_file(
     scoped_path = await _authorize_path(
         current_user, path, workspace_id, scope, "write", files_service=files_service
     )
-    content = await file.read()
+    content = await read_upload(file, files_service.max_upload_size)
     return _to_file_info_schema(
         files_service.upload_file(
             filename=file.filename or "untitled",
@@ -561,7 +634,9 @@ async def preview_file_as_pdf(
     scoped_path = await _authorize_path(
         current_user, path, workspace_id, scope, "read", files_service=files_service
     )
-    preview = files_service.preview_file_as_pdf(path=scoped_path)
+    preview = await _OFFICE_PREVIEW.run(
+        current_user.id, files_service.preview_file_as_pdf, path=scoped_path
+    )
 
     return Response(
         content=preview.content,
@@ -601,7 +676,10 @@ async def extract_archive(
     scoped_path = await _authorize_path(
         current_user, path, workspace_id, scope, "write", files_service=files_service
     )
-    return _to_file_info_schema(files_service.extract_archive(path=scoped_path))
+    extracted = await _ARCHIVE_EXTRACT.run(
+        current_user.id, files_service.extract_archive, path=scoped_path
+    )
+    return _to_file_info_schema(extracted)
 
 
 @router.get("/raw/{path:path}", dependencies=_declares("read"))

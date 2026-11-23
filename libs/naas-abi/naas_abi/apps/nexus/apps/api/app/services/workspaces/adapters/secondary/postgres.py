@@ -61,7 +61,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
     async def list_all_workspaces(self) -> list[WorkspaceRecord]:
         result = await self.db.execute(select(WorkspaceModel).order_by(WorkspaceModel.name))
         rows = [self._to_workspace_record(row) for row in result.scalars().all()]
-        return await self._apply_org_logos(rows)
+        return await self._apply_organizations(rows)
 
     async def get_users_by_ids(self, user_ids: list[str]) -> dict[str, UserRecord]:
         if not user_ids:
@@ -114,7 +114,8 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             updated_at=model.updated_at,
         )
 
-    async def _apply_org_logos(self, rows: list[WorkspaceRecord]) -> list[WorkspaceRecord]:
+    async def _apply_organizations(self, rows: list[WorkspaceRecord]) -> list[WorkspaceRecord]:
+        """Each workspace's organization: its name, slug and logos."""
         org_ids = {row.organization_id for row in rows if row.organization_id}
         if not org_ids:
             return rows
@@ -122,22 +123,24 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         org_res = await self.db.execute(
             select(
                 OrganizationModel.id,
+                OrganizationModel.name,
+                OrganizationModel.slug,
                 OrganizationModel.logo_url,
                 OrganizationModel.logo_rectangle_url,
             ).where(OrganizationModel.id.in_(org_ids))
         )
-        org_logo_map: dict[str, tuple[str | None, str | None]] = {}
-        for org_id, logo_url, logo_rectangle_url in org_res.all():
-            org_logo_map[org_id] = (logo_url, logo_rectangle_url)
+        organizations = {org_id: rest for org_id, *rest in org_res.all()}
 
-        hydrated: list[WorkspaceRecord] = []
         for row in rows:
-            if row.organization_id and row.organization_id in org_logo_map:
-                logos = org_logo_map[row.organization_id]
-                row.organization_logo_url = logos[0]
-                row.organization_logo_rectangle_url = logos[1]
-            hydrated.append(row)
-        return hydrated
+            found = organizations.get(row.organization_id) if row.organization_id else None
+            if found is not None:
+                (
+                    row.organization_name,
+                    row.organization_slug,
+                    row.organization_logo_url,
+                    row.organization_logo_rectangle_url,
+                ) = found
+        return rows
 
     async def get_workspace_by_id(self, workspace_id: str) -> WorkspaceRecord | None:
         result = await self.db.execute(
@@ -146,7 +149,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         workspace = result.scalar_one_or_none()
         if workspace is None:
             return None
-        rows = await self._apply_org_logos([self._to_workspace_record(workspace)])
+        rows = await self._apply_organizations([self._to_workspace_record(workspace)])
         return rows[0]
 
     async def get_workspace_by_slug(self, slug: str) -> WorkspaceRecord | None:
@@ -154,7 +157,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         workspace = result.scalar_one_or_none()
         if workspace is None:
             return None
-        rows = await self._apply_org_logos([self._to_workspace_record(workspace)])
+        rows = await self._apply_organizations([self._to_workspace_record(workspace)])
         return rows[0]
 
     async def workspace_slug_exists(self, slug: str) -> bool:

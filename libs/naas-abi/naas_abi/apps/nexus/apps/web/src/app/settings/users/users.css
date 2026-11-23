@@ -185,3 +185,34 @@
     width: 100%;
   }
 }
+
+/* The Create user page */
+
+.platform-users-new-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.platform-users-new-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.platform-users-new-cancel {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 var(--space-4);
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--background-hex);
+  color: var(--foreground-hex);
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+}
+
+.platform-users-new-cancel:hover {
+  background-color: var(--muted-bg-hex);
+}

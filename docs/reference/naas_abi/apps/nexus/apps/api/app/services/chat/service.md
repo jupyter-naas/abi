@@ -69,7 +69,8 @@ Chat completion:
 Provider/agent utilities:
 - `resolve_provider(context, provider, has_images, agent_id=None, workspace_id=None) -> ResolvedProvider | None`
   - Resolution order:
-    - Enabled explicit `request.provider` (except `type="remote"` is ignored from client payload).
+    - A request's `provider` names a type and a model only. Its `ollama` choice resolves to the platform's Ollama (`resolve_endpoint()`) when that model is installed there; every other type is resolved from the agent row below. Endpoints, keys and accounts never come from a request, and the platform's own keys are never used for a provider a request names. A named provider (other than Ollama) that the workspace does not configure raises `ProviderNotConfiguredError` ("This provider is not configured for the workspace."): the turn answers with that message, never with a substitute model.
+      - `cloudflare` resolves from the workspace secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, `perplexity` from `PERPLEXITY_API_KEY`. `custom` has no workspace source (its endpoint only ever came from the request) and is not configured.
     - Agent row provider configuration:
       - `remote`: routes via remote agent proxy using `agent.class_name`.
       - `abi`: uses workspace ABI server if configured, else in-process ABI.

@@ -32,6 +32,8 @@ def _knowledge_graph(config: dict[str, Any]) -> dict[str, str]:
 
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+# A link a contact may carry besides mailto: and tel:, which are built here.
+_WEB_URL = re.compile(r"^https?://[^\s\x00-\x1f\x7f]+$", re.IGNORECASE)
 CHILD_TABLES = (
     "experience",
     "education",
@@ -215,12 +217,14 @@ def _facts(person: dict[str, Any], facts: list[dict[str, Any]]) -> list[dict[str
 
 
 def _contact_href(field: str, value: str) -> str:
+    """The link of a contact: ``mailto:`` and ``tel:`` built here, any other
+    field only as an ``http(s)`` URL ("" otherwise: shown, not linked)."""
     if field == "email":
         return f"mailto:{value}"
     if field == "phone":
         # tel: takes the digits and a leading +; spaces and dots are for people.
         return "tel:" + re.sub(r"[^\d+]", "", value)
-    return value
+    return value if _WEB_URL.match(value) else ""
 
 
 def _contact(

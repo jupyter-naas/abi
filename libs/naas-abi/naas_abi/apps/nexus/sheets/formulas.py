@@ -11,6 +11,7 @@ import ast
 import math
 import operator
 import re
+import time
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal, localcontext
@@ -28,13 +29,13 @@ _SHEET_RANGE_RE = re.compile(
 _LOCAL_RANGE_RE = re.compile(r"([A-Za-z]+\d+):([A-Za-z]+\d+)")
 _LOCAL_CELL_RE = re.compile(r"(?<![A-Za-z0-9_'!])([A-Za-z]+\d+)\b")
 _STRING_RE = re.compile(r'"([^"]*)"')
-_COMPARE_RE = re.compile(
-    r"(.+?)\s*(<=|>=|<>|!=|=|<|>)\s*(.+)$",
-)
+_COMPARE_OPERATORS = ("<=", ">=", "<>", "!=", "=", "<", ">")
 
 
 MAX_EVALUATION_WORK = 1_000_000
 MAX_REFERENCE_DEPTH = 64
+# Wall-clock bound of one calculation, whatever the work budget allows.
+MAX_EVALUATION_SECONDS = 10.0
 
 
 @dataclass
@@ -42,11 +43,14 @@ class _Evaluation:
     remaining: int = MAX_EVALUATION_WORK
     cache: dict[tuple[str, int, int], Any] = field(default_factory=dict)
     sheets: dict[str, list[list[Any]]] = field(default_factory=dict)
+    deadline: float = field(default_factory=lambda: time.monotonic() + MAX_EVALUATION_SECONDS)
 
     def charge(self, amount: int = 1) -> None:
         self.remaining -= amount
         if self.remaining < 0:
             raise ValueError("Workbook calculation limit exceeded")
+        if time.monotonic() > self.deadline:
+            raise ValueError("Workbook calculation time limit exceeded")
 
 
 _evaluation: ContextVar[_Evaluation | None] = ContextVar(
@@ -251,6 +255,35 @@ def _split_args(arg_str: str) -> list[str]:
     return [a for a in args if a != ""]
 
 
+def _split_comparison(condition: str) -> tuple[str, str, str] | None:
+    """``(left, operator, right)`` at the first comparison operator outside
+    string literals and parentheses, in one pass over ``condition``; None when
+    there is none (or a side is empty)."""
+    _charge(len(condition))
+    depth = 0
+    in_str = False
+    i, n = 0, len(condition)
+    while i < n:
+        ch = condition[i]
+        if ch == '"' and (i == 0 or condition[i - 1] != "\\"):
+            in_str = not in_str
+        elif not in_str:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            elif depth == 0 and i > 0 and ch in "<>=!":
+                for op in _COMPARE_OPERATORS:
+                    if condition.startswith(op, i):
+                        left = condition[:i].strip()
+                        right = condition[i + len(op) :].strip()
+                        if not left or not right:
+                            return None
+                        return left, op, right
+        i += 1
+    return None
+
+
 def _eval_compare(left: Any, op: str, right: Any) -> bool:
     if op in {"=", "=="}:
         if isinstance(left, str) or isinstance(right, str):
@@ -348,11 +381,12 @@ def _rewrite_functions(
             if len(args) != 3:
                 raise ValueError(f"IF expects 3 args, got {len(args)}")
             cond_raw = args[0].strip()
-            cm = _COMPARE_RE.match(cond_raw)
-            if cm:
-                left = _eval_expr(cm.group(1), workbook, sheet_name, visiting)
-                right = _eval_expr(cm.group(3), workbook, sheet_name, visiting)
-                ok = _eval_compare(left, cm.group(2), right)
+            comparison = _split_comparison(cond_raw)
+            if comparison:
+                left_raw, op, right_raw = comparison
+                left = _eval_expr(left_raw, workbook, sheet_name, visiting)
+                right = _eval_expr(right_raw, workbook, sheet_name, visiting)
+                ok = _eval_compare(left, op, right)
             else:
                 ok = bool(
                     _to_number(_eval_expr(cond_raw, workbook, sheet_name, visiting))

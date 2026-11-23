@@ -7,6 +7,8 @@ import {
   CornerLeftUp,
   FileText,
   Folder,
+  History,
+  Keyboard,
   Plus,
   RefreshCw,
   Search,
@@ -16,13 +18,14 @@ import {
 import type { Failure } from './data-api';
 import { childId, plural, type Crumb } from './data-model';
 import type { ResourceEntry, ResourceServiceInfo } from './data-types';
-import { Badge, CopyButton, EmptyState, Hint, IconTile, Kbd, Notice, SkeletonRows } from './data-ui';
+import { Badge, CopyButton, EmptyState, Hint, Kbd, Notice, SkeletonRows } from './data-ui';
 import type { Column, Level, ServiceView } from './services/types';
 
 function entryIcon(view: ServiceView, entry: ResourceEntry) {
   return view.entryIcon?.(entry) ?? (entry.kind === 'container' ? Folder : FileText);
 }
 
+/** The service's state and actions, under the page's title (which names the service). */
 export function ServiceHeader({
   view,
   info,
@@ -32,6 +35,8 @@ export function ServiceHeader({
   onCreate,
   createBlocked,
   onRefresh,
+  onRecent,
+  onShortcuts,
 }: {
   view: ServiceView;
   info: ResourceServiceInfo;
@@ -41,26 +46,31 @@ export function ServiceHeader({
   onCreate?: () => void;
   createBlocked?: string | null;
   onRefresh: () => void;
+  onRecent: () => void;
+  onShortcuts: () => void;
 }) {
   const caps = info.capabilities;
   return (
     <header className="data-service-header">
-      <IconTile icon={view.icon} size="lg" />
       <div className="data-service-heading">
-        <div className="data-service-title-row">
-          <h2 className="data-service-title">{view.label}</h2>
-          {view.readOnly && <Badge>Read-only</Badge>}
-          {caps.reveal && <Badge tone="warn">Masked values</Badge>}
-        </div>
-        <p className="data-service-description">{view.description}</p>
-      </div>
-      <div className="data-service-actions">
+        {view.readOnly && <Badge>Read-only</Badge>}
+        {caps.reveal && <Badge tone="warn">Masked values</Badge>}
         {count !== null && (
           <span className="data-muted data-service-count">
             {plural(count, noun.one, noun.many)}
             {more ? '+' : ''}
           </span>
         )}
+      </div>
+      <div className="data-service-actions">
+        <button type="button" className="data-button" onClick={onRecent}>
+          <History size={14} aria-hidden="true" /> Recent changes
+        </button>
+        <Hint label="Keyboard shortcuts" shortcut="?">
+          <button type="button" className="data-icon-button data-icon-button-bordered" aria-label="Keyboard shortcuts" onClick={onShortcuts}>
+            <Keyboard size={14} aria-hidden="true" />
+          </button>
+        </Hint>
         <Hint label="Refresh" shortcut="R">
           <button type="button" className="data-icon-button data-icon-button-bordered" aria-label="Refresh" onClick={onRefresh}>
             <RefreshCw size={14} aria-hidden="true" />

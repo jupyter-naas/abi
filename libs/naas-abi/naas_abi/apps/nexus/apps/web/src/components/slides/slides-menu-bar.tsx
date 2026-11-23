@@ -244,6 +244,8 @@ function modKey(): string {
 export interface SlidesMenuBarProps {
   /** File → New Presentation */
   onNewPresentation: () => void;
+  /** Block a second File → New while create is already in flight. */
+  newDisabled?: boolean;
   /** File → Save (git commit under the hood). Omit on index/new pages. */
   onCommit?: () => void;
   commitDisabled?: boolean;
@@ -287,6 +289,7 @@ export interface SlidesMenuBarProps {
  */
 export function SlidesMenuBar({
   onNewPresentation,
+  newDisabled,
   onCommit,
   commitDisabled,
   onSaveToMyDrive,
@@ -328,6 +331,7 @@ export function SlidesMenuBar({
     {
       id: 'new',
       label: 'New Presentation',
+      disabled: newDisabled,
       onSelect: onNewPresentation,
     },
   ];
@@ -431,7 +435,12 @@ export function SlidesMenuBar({
   ];
 
   return (
-    <div ref={rootRef} className="flex min-w-0 items-center gap-1" data-testid="slides-menu-bar">
+    <div
+      ref={rootRef}
+      className="flex min-w-0 items-center gap-1"
+      data-testid="slides-menu-bar"
+      data-new-disabled={newDisabled ? 'true' : undefined}
+    >
       <span className="mr-1 hidden text-xs font-semibold text-foreground sm:inline">Slides</span>
       <MenuDropdown
         label="File"

@@ -14,13 +14,14 @@ export interface RunFilters {
 }
 
 export interface JobsApi {
-  overview(): Promise<Result<JobsOverview>>;
-  runs(filters?: RunFilters): Promise<Result<RunsPage>>;
-  run(moduleId: string, runId: string): Promise<Result<RunDetail>>;
+  /** Reads take an optional ``signal``: a poll aborts the request it no longer needs. */
+  overview(signal?: AbortSignal): Promise<Result<JobsOverview>>;
+  runs(filters?: RunFilters, signal?: AbortSignal): Promise<Result<RunsPage>>;
+  run(moduleId: string, runId: string, signal?: AbortSignal): Promise<Result<RunDetail>>;
   trigger(moduleId: string, job: string, payload: Record<string, unknown>): Promise<Result<{ run_id: string; key: string }>>;
   cancel(moduleId: string, runId: string): Promise<Result<{ ok: boolean }>>;
   /** Runs that failed since ``since`` (ISO); the last day without one. */
-  failures(since?: string | null): Promise<Result<JobFailures>>;
+  failures(since?: string | null, signal?: AbortSignal): Promise<Result<JobFailures>>;
 }
 
 async function call<T>(fetcher: Fetch, path: string, init?: RequestInit): Promise<Result<T>> {
@@ -61,8 +62,8 @@ const seg = (value: string) => encodeURIComponent(value);
 
 export function createJobsApi(fetcher: Fetch = authFetch): JobsApi {
   return {
-    overview: () => call(fetcher, ''),
-    runs: (f = {}) =>
+    overview: (signal) => call(fetcher, '', { signal }),
+    runs: (f = {}, signal) =>
       call(
         fetcher,
         `/runs${query({
@@ -73,8 +74,9 @@ export function createJobsApi(fetcher: Fetch = authFetch): JobsApi {
           before: f.before,
           limit: f.limit,
         })}`,
+        { signal },
       ),
-    run: (moduleId, runId) => call(fetcher, `/runs/${seg(moduleId)}/${seg(runId)}`),
+    run: (moduleId, runId, signal) => call(fetcher, `/runs/${seg(moduleId)}/${seg(runId)}`, { signal }),
     trigger: (moduleId, job, payload) =>
       call(fetcher, `/${seg(moduleId)}/${seg(job)}/trigger`, {
         method: 'POST',
@@ -82,6 +84,6 @@ export function createJobsApi(fetcher: Fetch = authFetch): JobsApi {
         body: JSON.stringify({ payload }),
       }),
     cancel: (moduleId, runId) => call(fetcher, `/runs/${seg(moduleId)}/${seg(runId)}/cancel`, { method: 'POST' }),
-    failures: (since) => call(fetcher, `/failures${query({ since })}`),
+    failures: (since, signal) => call(fetcher, `/failures${query({ since })}`, { signal }),
   };
 }

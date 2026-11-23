@@ -13,8 +13,9 @@ export interface AgentRunFilters {
 }
 
 export interface AgentsApi {
-  runs(filters?: AgentRunFilters): Promise<Result<AgentRunsPage>>;
-  run(moduleId: string, runId: string): Promise<Result<AgentRunDetail>>;
+  /** Reads take an optional ``signal``: a poll aborts the request it no longer needs. */
+  runs(filters?: AgentRunFilters, signal?: AbortSignal): Promise<Result<AgentRunsPage>>;
+  run(moduleId: string, runId: string, signal?: AbortSignal): Promise<Result<AgentRunDetail>>;
   cancel(moduleId: string, runId: string): Promise<Result<{ ok: boolean }>>;
 }
 
@@ -47,7 +48,7 @@ const seg = (value: string) => encodeURIComponent(value);
 
 export function createAgentsApi(fetcher: Fetch = authFetch): AgentsApi {
   return {
-    runs: (f = {}) =>
+    runs: (f = {}, signal) =>
       call(
         fetcher,
         `/runs${query({
@@ -57,8 +58,9 @@ export function createAgentsApi(fetcher: Fetch = authFetch): AgentsApi {
           before: f.before,
           limit: f.limit,
         })}`,
+        { signal },
       ),
-    run: (moduleId, runId) => call(fetcher, `/runs/${seg(moduleId)}/${seg(runId)}`),
+    run: (moduleId, runId, signal) => call(fetcher, `/runs/${seg(moduleId)}/${seg(runId)}`, { signal }),
     cancel: (moduleId, runId) => call(fetcher, `/runs/${seg(moduleId)}/${seg(runId)}/cancel`, { method: 'POST' }),
   };
 }

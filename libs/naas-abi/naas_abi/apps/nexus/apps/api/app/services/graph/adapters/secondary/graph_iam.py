@@ -16,6 +16,7 @@ from urllib.parse import unquote
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_of, workspace_of
+from naas_abi.apps.nexus.graph_policy_config import SCHEMA_GRAPH, is_nexus_system_graph
 from naas_abi_core.engine.call_context import as_service_account, use_call_context
 from naas_abi_core.services.iam.names import PLATFORM, encode_id, resource_name
 from naas_abi_core.services.triple_store.iam_catalog import GRAPH, SERVICE
@@ -76,10 +77,12 @@ def within(
 ) -> set[str]:
     """The graphs among ``iris`` a ``read_all`` of the workspace ``container`` may
     reach: the ones IAM placed in the workspace itself or in another workspace of
-    its own organization, and the platform's (placed nowhere: nobody's data). A
-    graph of another organization, or of a workspace in none (a personal
-    workspace: someone else's), is never swept in; naming it is a right over it
-    (see ``_graph_catalog``).
+    its own organization, and the store's schema graph (definitions, nobody's
+    data). The platform's other graphs (placed nowhere) are shared by naming them,
+    never swept in, and Nexus's own graphs never are. A graph of
+    another organization, or of a workspace in none (a personal workspace: someone
+    else's), is never swept in; naming it is a right over it (see
+    ``_graph_catalog``).
 
     ``recorded`` is ``{graph: container}`` for graphs the application graph
     records as a workspace's before IAM placed them (the boot pass places them
@@ -92,9 +95,12 @@ def within(
     kept = set()
     for iri in iris:
         where = placed.get(iri)
-        if where is None or where == PLATFORM:
+        if iri == SCHEMA_GRAPH and where in (None, PLATFORM):
             kept.add(iri)
-        elif where == container or (org is not None and org_of(where) == org):
+            continue
+        if where is None or where == PLATFORM or is_nexus_system_graph(iri):
+            continue
+        if where == container or (org is not None and org_of(where) == org):
             kept.add(iri)
     return kept
 

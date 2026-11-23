@@ -75,6 +75,10 @@ Which sections are **process-shaped** (ActOfWorking / ActOfStudying / ActOfCerti
 
 ## Rules
 
+- **A link is a web URL.** A link built from graph or dataset values goes through `safeHref` (`web/lib/dom.js`):
+  only `http(s):` URLs become an `href`; `mailto:` and `tel:` only for the contacts
+  `scripts/profile_payload.py` builds (`_contact_href`, which also keeps other
+  contact links to web URLs). Anything else is shown as text.
 - **An empty section is an answer.** A person with no recommendations renders
   the configured `empty_text`. Never hide the section, and never fill it with a
   placeholder: "nothing recorded" and "we failed to load it" must not look alike.

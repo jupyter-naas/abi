@@ -349,16 +349,17 @@ def test_iter_query_for_consumer_drains_across_batches(tmp_path):
         service.publish(UserAuthenticated(user_id=f"u{i}"))
 
     streamed = list(
-        service.iter_query_for_consumer(
-            "worker-1", UserAuthenticated, batch_size=3
-        )
+        service.iter_query_for_consumer("worker-1", UserAuthenticated, batch_size=3)
     )
     assert [e.user_id for e in streamed] == [f"u{i}" for i in range(10)]
 
     # Cursor is fully advanced — second call yields nothing.
-    assert list(
-        service.iter_query_for_consumer("worker-1", UserAuthenticated, batch_size=3)
-    ) == []
+    assert (
+        list(
+            service.iter_query_for_consumer("worker-1", UserAuthenticated, batch_size=3)
+        )
+        == []
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -461,9 +462,12 @@ def test_query_for_consumer_pushes_down_filter(tmp_path):
 
     # Cursor advanced past the last matching seq (alice-2 @ seq 3), so the
     # non-matching "bob" below it is skipped permanently for this consumer.
-    assert service.query_for_consumer(
-        "c1", UserAuthenticated, filter={"user_id": {"prefix": "alice"}}
-    ) == []
+    assert (
+        service.query_for_consumer(
+            "c1", UserAuthenticated, filter={"user_id": {"prefix": "alice"}}
+        )
+        == []
+    )
     assert service.query_for_consumer("c1", UserAuthenticated) == []
 
 
@@ -473,7 +477,7 @@ def test_query_for_consumer_filter_trailing_nonmatch_stays_pending(tmp_path):
     # last matching seq, so a later drain still delivers it.
     service, adapter, _ = _make_service(tmp_path)
     service.publish(UserAuthenticated(user_id="alice-1"))  # seq 1, matches
-    service.publish(UserAuthenticated(user_id="bob"))      # seq 2, trailing non-match
+    service.publish(UserAuthenticated(user_id="bob"))  # seq 2, trailing non-match
 
     rows = service.query_for_consumer(
         "c1", UserAuthenticated, filter={"user_id": {"prefix": "alice"}}
@@ -492,7 +496,7 @@ def test_iter_query_for_consumer_pushes_down_filter(tmp_path):
     # Interleave matching/non-matching events across more than one batch.
     for i in range(6):
         service.publish(UserAuthenticated(user_id=f"alice-{i}"))  # matches
-        service.publish(UserAuthenticated(user_id=f"bob-{i}"))    # non-match
+        service.publish(UserAuthenticated(user_id=f"bob-{i}"))  # non-match
 
     streamed = list(
         service.iter_query_for_consumer(
@@ -510,11 +514,14 @@ def test_iter_query_for_consumer_pushes_down_filter(tmp_path):
     assert adapter.get_cursor("c1", UserAuthenticated._class_uri) == 11
 
     # A second filtered drain is empty (no matching events remain).
-    assert list(
-        service.iter_query_for_consumer(
-            "c1", UserAuthenticated, filter={"user_id": {"prefix": "alice"}}
+    assert (
+        list(
+            service.iter_query_for_consumer(
+                "c1", UserAuthenticated, filter={"user_id": {"prefix": "alice"}}
+            )
         )
-    ) == []
+        == []
+    )
 
 
 def test_query_filter_multiple_keys_anded(tmp_path):
@@ -680,7 +687,10 @@ def test_event_types_and_raw_queries_by_type_iri(tmp_path):
         UserAuthenticated._class_uri, until_seq=newest[0].seq - 1, newest_first=True
     )
 
-    assert (types[UserAuthenticated._class_uri].count, types[_Other._class_uri].count) == (2, 1)
+    assert (
+        types[UserAuthenticated._class_uri].count,
+        types[_Other._class_uri].count,
+    ) == (2, 1)
     assert [e.seq for e in newest] == [3]
     assert [e.seq for e in older] == [1]
     assert b"bob" in newest[0].payload
@@ -737,3 +747,43 @@ def test_query_stored_stream_reads_raw_records_by_type_iri(tmp_path):
     assert streamed == service.query_stored(
         event_type=UserAuthenticated._class_uri, since_seq=1, limit=3
     )
+
+
+# ---------------------------------------------------------------------------
+# Live events keep to their type
+# ---------------------------------------------------------------------------
+
+
+def test_subscribe_keeps_to_events_of_the_subscribed_type(tmp_path):
+    """Whoever put it on the type's topic, an event declaring another class
+    never reaches a subscriber of this one."""
+    import json
+
+    service, _, _ = _make_service(tmp_path)
+    received: list[str] = []
+    service.subscribe(UserAuthenticated, lambda e: received.append(e.user_id))
+    topic = class_iri_to_topic(UserAuthenticated._class_uri)
+    for payload in (
+        {"_uri": "urn:x", "_class_uri": "http://example.org/EmailSent", "user_id": "x"},
+        {"_uri": "urn:y", "user_id": "y"},
+        "not json",
+    ):
+        body = payload if isinstance(payload, str) else json.dumps(payload)
+        service._bus.publish(topic, "other", body.encode())
+    service.publish(UserAuthenticated(user_id="alice"))
+    assert received == ["alice"]
+
+
+def test_append_stored_keeps_the_broadcast_with_the_owner(tmp_path):
+    """What a caller appends over NATS is broadcast by the owner's service, once."""
+    import json
+
+    service, _, _ = _make_service(tmp_path)
+    received: list[str] = []
+    service.subscribe(UserAuthenticated, lambda e: received.append(e.user_id))
+
+    payload = json.dumps(
+        {"_uri": "urn:e1", "_class_uri": UserAuthenticated._class_uri, "user_id": "b"}
+    ).encode()
+    service.append_stored("urn:e1", UserAuthenticated._class_uri, "2026-01-01", payload)
+    assert received == ["b"]

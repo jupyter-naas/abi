@@ -1,3 +1,4 @@
+from typing import ClassVar
 
 from langchain_core.tools import tool
 from naas_abi_core.services.agent.Agent import (
@@ -8,6 +9,14 @@ from naas_abi_core.services.agent.Agent import (
 
 
 class PullRequestDescriptionAgent(Agent):
+    """Describes the engine working directory's branch against ``origin/main``.
+
+    Like the Git agent, a module agent with its tools only when the git
+    module's configuration sets ``single_user_development``.
+    """
+
+    enabled_by: ClassVar[str] = "single_user_development"
+
     name: str = "Pull Request Description Agent"
     description: str = "A agent to generate a description for a pull request"
     system_prompt: str = """
@@ -39,13 +48,13 @@ Where <branch_name_number> is the number at the beginning of the branch name.
         agent_shared_state: AgentSharedState | None = None,
         agent_configuration: AgentConfiguration | None = None,
     ) -> "PullRequestDescriptionAgent":
-        from naas_abi_marketplace.applications.git import ABIModule
+        from naas_abi_marketplace.applications.git import (
+            ABIModule,
+            acts_on_this_checkout,
+        )
 
         module = ABIModule.get_instance()
         object_storage = module.engine.services.object_storage
-
-        from naas_abi_marketplace.applications.git import ABIModule
-
 
         abi_module = ABIModule.get_instance()
 
@@ -117,7 +126,9 @@ Where <branch_name_number> is the number at the beginning of the branch name.
             name=cls.name,
             description=cls.description,
             chat_model=model,
-            tools=[git_diff, store_pull_request_description],
+            tools=[git_diff, store_pull_request_description]
+            if acts_on_this_checkout()
+            else [],
             agents=[],
             state=agent_shared_state,
             configuration=agent_configuration,

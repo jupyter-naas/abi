@@ -37,7 +37,9 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalKind,
     PrincipalRecord,
     RevisionConflictError,
+    ScopedRow,
     SigningKeyRecord,
+    plan_scope_rewrite,
 )
 from naas_abi_core.services.iam.names import (
     PLATFORM_SCOPE,
@@ -394,6 +396,45 @@ def _placed_in(row: Row) -> str:
 
 def _container(row: Row) -> ContainerRecord:
     return ContainerRecord(row.service, row.type, row.id, row.parent)
+
+
+def _rewrite_scopes(
+    conn: Connection,
+    table: Table,
+    key: Sequence[str],
+    rewriter: NameRewriter,
+    kind: str,
+) -> tuple[int, int]:
+    """Rewrite the scope of each row of ``table`` (attachments, pending grants),
+    unique with the ``key`` columns, merging twins (``plan_scope_rewrite``). How
+    many were rewritten, and how many merged."""
+    plan = plan_scope_rewrite(
+        (
+            ScopedRow(
+                row.id,
+                tuple(row._mapping[k] for k in key),
+                row.scope or None,
+                row.created_at,
+            )
+            for row in conn.execute(
+                select(
+                    table.c.id,
+                    table.c.scope,
+                    table.c.created_at,
+                    *(table.c[k] for k in key),
+                )
+            )
+        ),
+        rewriter.scope,
+    )
+    for dropped, kept in plan.merged.items():
+        conn.execute(delete(table).where(table.c.id == dropped))
+        rewriter.merged(kind, dropped, kept)
+    for row_id, scope in plan.scopes.items():
+        conn.execute(
+            update(table).where(table.c.id == row_id).values(scope=scope or "")
+        )
+    return len(plan.scopes), len(plan.merged)
 
 
 def _rewrite_manifest(
@@ -1431,6 +1472,29 @@ class IAMStoreSQL(IAMStore):
                 )
             )
 
+    def claim_placement(self, placement: Placement) -> Placement:
+        key = (placements.c.service == placement.service) & (
+            placements.c.id_key == placement.id_key
+        )
+        # Under the state row's lock, as every change: two claims of one key
+        # are serialized, and the second finds the first.
+        with self._write() as conn:
+            conn.execute(select(state.c.id).with_for_update())
+            row = conn.execute(select(placements).where(key)).first()
+            if row is not None:
+                return Placement(row.service, row.id_key, _placed_in(row))
+            conn.execute(
+                insert(placements).values(
+                    service=placement.service,
+                    id_key=placement.id_key,
+                    org="-",
+                    workspace="-",
+                    container=placement.container,
+                )
+            )
+            conn.execute(update(state).values(revision=state.c.revision + 1))
+        return placement
+
     def delete_placement(self, service: str, id_key: str) -> bool:
         return self._delete(
             delete(placements).where(
@@ -1538,7 +1602,9 @@ class IAMStoreSQL(IAMStore):
                 "policies",
                 "groups",
                 "attachments",
+                "attachments_merged",
                 "pending_grants",
+                "pending_grants_merged",
                 "placements",
                 "keys",
                 "manifests",
@@ -1599,19 +1665,23 @@ class IAMStoreSQL(IAMStore):
                         .values(owner_scope=owner)
                     )
                     counts["groups"] += 1
-            for table, name in (
-                (attachments, "attachments"),
-                (pending_grants, "pending_grants"),
+            for table, name, kind, key in (
+                (
+                    attachments,
+                    "attachments",
+                    "attachment",
+                    ("policy_id", "principal_id"),
+                ),
+                (
+                    pending_grants,
+                    "pending_grants",
+                    "pending_grant",
+                    ("provider", "email", "policy_id"),
+                ),
             ):
-                for row in conn.execute(select(table.c.id, table.c.scope)).all():
-                    scope = rewriter.scope(row.scope or None) or ""
-                    if scope != (row.scope or ""):
-                        conn.execute(
-                            update(table)
-                            .where(table.c.id == row.id)
-                            .values(scope=scope)
-                        )
-                        counts[name] += 1
+                moved, merged = _rewrite_scopes(conn, table, key, rewriter, kind)
+                counts[name] += moved
+                counts[f"{name}_merged"] += merged
             for row in conn.execute(select(placements)).all():
                 if row.container is not None:
                     continue  # a placement of today

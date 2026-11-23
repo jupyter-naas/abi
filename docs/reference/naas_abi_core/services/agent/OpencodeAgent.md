@@ -40,7 +40,7 @@
 ### Class: `OpencodeAgent`
 Core methods/operators:
 - `start() -> None`
-  - Ensures auth bootstrap file (best-effort), selects/validates port, starts `opencode serve`, waits for `/global/health`.
+  - Ensures auth bootstrap file (best-effort), selects/validates port, starts `opencode serve` (no shell; an allow-listed environment from `naas_abi_core.utils.process_environment`, never the process's own), waits for `/global/health`.
 - `stop() -> None`
   - Terminates/kill the spawned server process (if started by this instance).
 - `duplicate(queue=None, agent_shared_state=None)`
@@ -51,9 +51,9 @@ Core methods/operators:
   - Synchronous wrapper over `ainvoke(...)`.
 - `ainvoke(message: str, thread_id: Optional[str]=None) -> str`
   - Sends a message to an opencode session and returns extracted text from returned parts.
-  - Watches `/event` in the background to emit tool usage/response callbacks and auto-approve permissions.
+  - Watches `/event` in the background to emit tool usage/response callbacks; permission requests are refused.
 - `astream(message: str, thread_id: Optional[str]=None) -> AsyncIterator[str]`
-  - Streams raw SSE `data:` JSON lines (as strings) while prompt runs; auto-approves permissions and emits callbacks.
+  - Streams raw SSE `data:` JSON lines (as strings) while prompt runs; refuses permission requests and emits callbacks.
 - `stream(message: str, thread_id: Optional[str]=None) -> AsyncIterator[str]`
   - Alias of `astream`.
 - `as_tools() -> list[BaseTool]`
@@ -155,4 +155,4 @@ app.include_router(router)
   - the spawned server exits during startup.
 - Default async HTTP timeout has `read=None` (no read timeout). If you set `request_timeout`, it becomes a single `httpx.Timeout(value)` applied to all phases.
 - Streaming yields raw JSON strings from SSE `data:` lines; consumers must parse and interpret them.
-- Permission auto-approval is attempted when event payloads contain strings starting with `per_` (walks the entire event object).
+- No permission is granted on the user's behalf: every permission id found in an event (a string starting with `per_`, anywhere in the payload) is answered `reject`, and a tool response says so.

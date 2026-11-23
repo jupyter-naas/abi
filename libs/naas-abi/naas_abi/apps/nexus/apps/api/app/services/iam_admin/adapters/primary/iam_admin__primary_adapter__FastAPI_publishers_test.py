@@ -149,7 +149,11 @@ def test_a_user_holding_only_agent_a_gets_only_a(listed):
             "actions": ["module:UseAgent"],
             "resources": ["${scope}/module:agent/p/a"],
         },
-        {"effect": "Allow", "actions": ["iam:CreatePolicy"], "resources": ["${scope}/iam:policy/*"]},
+        {
+            "effect": "Allow",
+            "actions": ["iam:CreatePolicy"],
+            "resources": ["${scope}/iam:policy/*"],
+        },
     )
     publishers = get(listed, f"/publishers?scope={quote(WS1, safe='')}", "builder")
     assert publishers.status_code == 200, publishers.text
@@ -164,9 +168,7 @@ def test_a_user_holding_only_agent_a_gets_only_a(listed):
 
     catalogs = get(listed, f"/catalogs?scope={quote(WS1, safe='')}", "builder")
     assert catalogs.status_code == 200, catalogs.text
-    actions = {
-        a["qualified"] for c in catalogs.json()["catalogs"] for a in c["actions"]
-    }
+    actions = {a["qualified"] for c in catalogs.json()["catalogs"] for a in c["actions"]}
     assert actions == {"module:UseAgent", "iam:CreatePolicy"}
     module = next(c for c in catalogs.json()["catalogs"] if c["service"] == "module")
     assert [t["name"] for t in module["resource_types"]] == ["agent"]
@@ -181,14 +183,13 @@ def test_publishers_come_in_order_with_what_each_type_lets_the_caller_grant(list
     assert naas_abi["kind"] == "naas_abi"
     types = {t["type"]: t for t in naas_abi["types"]}
     assert types["workspace"]["listed"] and types["workspace"]["container"]
-    graphs = next(
-        t for t in publishers["publishers"][0]["types"] if t["service"] == "triple_store"
-    )
+    graphs = next(t for t in publishers["publishers"][0]["types"] if t["service"] == "triple_store")
     assert graphs["listed"] is True
     assert all(r.startswith("${scope}") for a in graphs["actions"] for r in a["resources"])
-    assert get(listed, f"/publishers?scope={quote(WS1, safe='')}", "stranger").json()[
-        "publishers"
-    ] == []
+    assert (
+        get(listed, f"/publishers?scope={quote(WS1, safe='')}", "stranger").json()["publishers"]
+        == []
+    )
 
 
 def test_the_nexus_feature_lister_lists_only_enabled_features():
@@ -207,7 +208,9 @@ def test_grantable_names_each_catalog_s_publisher_and_types(listed):
     by_service = {c["service"]: c for c in found["catalogs"]}
     assert by_service["nexus"]["publisher"] == "naas_abi"
     assert by_service["triple_store"]["publisher"] == "engine"
-    query = next(a for a in by_service["triple_store"]["actions"] if a["action"] == "triple_store:Query")
+    query = next(
+        a for a in by_service["triple_store"]["actions"] if a["action"] == "triple_store:Query"
+    )
     assert query["resource_types"] == ["graph"]
 
 

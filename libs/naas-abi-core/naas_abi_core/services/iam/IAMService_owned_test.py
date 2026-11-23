@@ -469,7 +469,9 @@ def test_a_group_of_a_container_holds_the_users_of_its_top_container(h):
         group = h.iam.create_group("ws-1 analysts", scope=WS1)
         for user in (t.colleague, in_project, below_org):
             h.iam.add_group_member(group.id, user.id)
-        with pytest.raises(ValueError, match=re.escape(f"nothing in {ORG_SCOPE}")):
+        # Answered as an unknown one: a group's admin learns nothing of
+        # principals outside its container.
+        with pytest.raises(IAMNotFoundError, match="not found"):
             h.iam.add_group_member(group.id, t.outsider.id)
     # A workspace at the platform is its own top container: its group takes its
     # own users only, not those of another workspace at the platform.
@@ -480,7 +482,7 @@ def test_a_group_of_a_container_holds_the_users_of_its_top_container(h):
     with as_service_account("engine"):
         solo_group = h.iam.create_group("solo team", scope=solo)
         h.iam.add_group_member(solo_group.id, there.id)
-        with pytest.raises(ValueError):
+        with pytest.raises(IAMNotFoundError):
             h.iam.add_group_member(solo_group.id, elsewhere.id)
 
 

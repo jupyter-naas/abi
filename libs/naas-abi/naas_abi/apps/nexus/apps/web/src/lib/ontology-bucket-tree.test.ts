@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { GraphNode, GraphEdge } from '../stores/knowledge-graph';
 import { buildBucketTree, filterBucketTree, type BucketTreeNode } from './ontology-bucket-tree';

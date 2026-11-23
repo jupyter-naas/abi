@@ -26,7 +26,8 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import lru_cache
 from typing import Literal
 
 from naas_abi_core.engine.call_context import CallContext
@@ -86,12 +87,16 @@ class Evaluator:
     def explain(self, ctx: CallContext, action: str, resource: str) -> Explanation:
         actor = self._source.subject(ctx, "actor")
         user = self._source.subject(ctx, "user")
-        return self._decide(ctx, actor, user, action, resource)
+        return self._decide(
+            ctx, _narrowed(actor, action), _narrowed(user, action), action, resource
+        )
 
     def check(self, ctx: CallContext, action: str, resource: str) -> Decision:
         actor = self._source.subject(ctx, "actor")
         user = self._source.subject(ctx, "user")
-        explanation = self._decide(ctx, actor, user, action, resource)
+        explanation = self._decide(
+            ctx, _narrowed(actor, action), _narrowed(user, action), action, resource
+        )
         if explanation.allowed:
             return Decision(True, True, explanation.reason)
         return Decision(
@@ -105,10 +110,16 @@ class Evaluator:
     ) -> FilterResult:
         actor = self._source.subject(ctx, "actor")
         user = self._source.subject(ctx, "user")
+        # Once for the call, not once per resource: on a principal with grants in
+        # many workspaces, most statements name other actions.
+        narrowed_actor = _narrowed(actor, action)
+        narrowed_user = _narrowed(user, action)
         allowed = [
             resource
             for resource in resources
-            if self._decide(ctx, actor, user, action, resource).allowed
+            if self._decide(
+                ctx, narrowed_actor, narrowed_user, action, resource
+            ).allowed
         ]
         return FilterResult(allowed, self._prefix_hints(ctx, actor, user, action))
 
@@ -149,6 +160,9 @@ class Evaluator:
         action: str,
         resource: str,
     ) -> Explanation:
+        """The decision for ``action``. ``actor`` and ``user`` may be ``_narrowed``
+        to it: that changes the statements walked, never the decision."""
+
         def denied(reason: Reason, deciding: DecidingStatement | None = None):
             return Explanation(False, reason, action, resource, deciding)
 
@@ -205,7 +219,9 @@ class Evaluator:
         except ValueError:
             return False
         return any(
-            self._decide(ctx, actor, user, action, resource).allowed
+            self._decide(
+                ctx, _narrowed(actor, action), _narrowed(user, action), action, resource
+            ).allowed
             for action in self._source.catalogs.actions_on(name.service, name.type)
         )
 
@@ -259,6 +275,25 @@ class Evaluator:
 # -- helpers --------------------------------------------------------------------
 
 
+def _narrowed(subject: Subject | None, action: str) -> Subject | None:
+    """``subject`` with only its statements whose actions match ``action``, in order.
+
+    The others can neither allow nor deny it: ``_matches`` refuses a statement
+    whose actions do not match before anything else, at every scope. A sub-policy's
+    ``bounds`` are kept whole: they are read only for a statement that matched.
+    """
+    if subject is None:
+        return None
+    kept = tuple(
+        effective
+        for effective in subject.statements
+        if any(matches(pattern, action) for pattern in effective.statement.actions)
+    )
+    if len(kept) == len(subject.statements):
+        return subject
+    return replace(subject, statements=kept)
+
+
 def _owns(seal: Seal, ctx: CallContext) -> bool:
     """Whether the actor is the owner of ``seal``: the service account it names,
     or the module account of the module it names."""
@@ -288,9 +323,14 @@ def _values(
 ) -> dict[str, str | None]:
     return {
         "scope": scope,
-        "principal.id": encode_segment(principal_id),
-        "user.id": encode_segment(user_id) if user_id is not None else None,
+        "principal.id": _encoded(principal_id),
+        "user.id": _encoded(user_id) if user_id is not None else None,
     }
+
+
+# ``encode_segment`` of the same few ids, once per statement and resource of a
+# filter: half of its time. Pure, so kept.
+_encoded = lru_cache(maxsize=65536)(encode_segment)
 
 
 def _scopes(
@@ -326,10 +366,26 @@ def _matches(
     for pattern in statement.resources:
         if shielded and "${scope}" in pattern:
             continue
-        expanded = substitute(pattern, values)
+        expanded = _expanded(
+            pattern, values["scope"], values["principal.id"], values["user.id"]
+        )
         if expanded is not None and matches(expanded, resource):
             return True
     return False
+
+
+@lru_cache(maxsize=65536)
+def _expanded(
+    pattern: str, scope: str | None, principal_id: str | None, user_id: str | None
+) -> str | None:
+    """``substitute`` of ``pattern`` with the values ``_values`` builds. Pure, so
+    kept: one ``filter`` over thousands of resources (a feature flag per
+    workspace) asks the same few patterns, with the same few scopes, again and
+    again; substituting each time was a tenth of a platform admin's
+    ``/api/workspaces``."""
+    return substitute(
+        pattern, {"scope": scope, "principal.id": principal_id, "user.id": user_id}
+    )
 
 
 def _bounding(

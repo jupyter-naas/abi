@@ -266,7 +266,6 @@ export const documentView: ServiceView = {
   label: 'Documents',
   description: 'JSON documents modules store per namespace and collection.',
   icon: Braces,
-  group: 'Storage',
   noun: { one: 'document', many: 'documents' },
   entryIcon: (e) => {
     const at = documentLevel(e.id);

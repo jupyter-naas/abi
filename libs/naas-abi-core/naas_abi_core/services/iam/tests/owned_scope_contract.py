@@ -161,9 +161,12 @@ def run_workspace_admin(iam: IAMService, as_user: AsUser) -> None:
         # A ws-1 policy goes at ws-1 only.
         with pytest.raises(REFUSED):
             admin.attach_policy(policy.id, t.member.id, WS2)
-        # A user of another org, or a service account, never joins.
-        with pytest.raises(ValueError):
+        # A user of another org, or a service account, never joins; the other
+        # org's user is answered as an unknown principal.
+        with pytest.raises(IAMNotFoundError):
             admin.add_group_member(group.id, t.outsider.id)
+        with pytest.raises(IAMNotFoundError):
+            admin.add_group_member(group.id, "usr_01jabcdefghjkmnpqrstvwxyz0")
         with pytest.raises(ValueError):
             admin.add_group_member(group.id, t.account.id)
         # IdP group mappings stay the platform admin's.

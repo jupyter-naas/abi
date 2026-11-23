@@ -7,6 +7,13 @@ import type { MapsFeedResult } from '../lib/maps-feed';
 import type { MapsPinMarker } from '../lib/leaflet-map';
 import type { MapsBasemapDef } from '../lib/maps-basemaps';
 
+// The layer-params hook reads the URL through the App Router, which is not
+// mounted in a bare render.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 // Basemaps come from the workspace catalog; the tests pass the one they draw.
 const basemapDefs: MapsBasemapDef[] = [{
   id: 'openstreetmap',
@@ -124,13 +131,15 @@ it('renders one real Leaflet map and all locations during Strict Mode remount', 
     );
     searchInput.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  expect(host.querySelectorAll('.maps-record-list button')).toHaveLength(1);
+  // Substring match: Office 1 and Office 10-19.
+  expect(host.querySelectorAll('.maps-record-list button')).toHaveLength(11);
 
-  await act(async () => countryToggle.click());
-  const countryB = Array.from(host.querySelectorAll('.maps-country-filter__option')).find((el) =>
-    el.textContent?.includes('Country B'),
+  // The country picker stays open while the location search is typed into.
+  expect(host.querySelector('.maps-country-filter__panel')).toBeTruthy();
+  const countryA = Array.from(host.querySelectorAll('.maps-country-filter__option')).find((el) =>
+    el.textContent?.includes('Country A'),
   )!;
-  await act(async () => (countryB.querySelector('input') as HTMLInputElement).click());
+  await act(async () => (countryA.querySelector('input') as HTMLInputElement).click());
   expect(host.querySelectorAll('.maps-record-list button')).toHaveLength(1);
   expect(host.querySelectorAll('.leaflet-marker-icon')).toHaveLength(1);
 

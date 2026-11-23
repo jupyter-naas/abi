@@ -482,6 +482,22 @@ class JobRunStoreContract:
         assert asyncio.run(store.running("acme.other")) == []
         assert asyncio.run(store.recent("no.such.module", "nightly")) == []
 
+    def test_module_runs_per_job_and_running(self, store):
+        found = asyncio.run(store.module_runs("acme.jobs", ["nightly", "sync", "ghost"], recent=1))
+
+        assert set(found.jobs) == {"nightly", "sync", "ghost"}
+        assert self._ids(found.jobs["nightly"].recent) == ["nightly:3"]
+        assert self._ids(found.jobs["sync"].recent) == ["sync:9"]
+        assert found.jobs["ghost"].recent == ()
+        assert all(j.last_skipped is None for j in found.jobs.values())
+        assert self._ids(found.running) == ["sync:9"]
+        assert self._ids(
+            asyncio.run(store.module_runs("acme.jobs", ["nightly"])).jobs["nightly"].recent
+        ) == ["nightly:3", "nightly:2"]
+
+        nothing = asyncio.run(store.module_runs("no.such.module", ["nightly"]))
+        assert nothing.jobs["nightly"].recent == () and nothing.running == ()
+
     def test_gets_a_run_with_its_details(self, store):
         run = asyncio.run(store.get_run("acme.jobs", "nightly:3"))
 

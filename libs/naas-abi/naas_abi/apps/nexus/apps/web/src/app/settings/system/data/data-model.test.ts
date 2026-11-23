@@ -43,12 +43,12 @@ describe('data model', () => {
 
   it('round-trips the location through query parameters', () => {
     const location = {
-      service: 'document',
       path: [ROOT_CRUMB, { id: 'ns', label: 'ns' }, { id: 'ns/coll', label: 'coll' }],
       item: 'ns/coll/doc-1',
     };
-    const params = encodeLocation(location, new URLSearchParams('tab=data'));
-    expect(params.get('tab')).toBe('data');
+    const params = encodeLocation(location, new URLSearchParams('view=x&service=document'));
+    expect(params.get('view')).toBe('x');
+    expect(params.has('service')).toBe(false);
     expect(decodeLocation(params)).toEqual(location);
     expect(decodeLocation(new URLSearchParams('in=not-json')).path).toEqual([ROOT_CRUMB]);
   });

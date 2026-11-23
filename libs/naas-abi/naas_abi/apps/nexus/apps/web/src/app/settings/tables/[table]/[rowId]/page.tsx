@@ -169,7 +169,7 @@ export default function PlatformTableRowPage() {
 
         <div className="org-settings-users-table-wrap">
           {loading ? (
-            <div className="org-settings-loading">Loading row...</div>
+            <div className="org-settings-loading">Loading row…</div>
           ) : !data ? null : (
             <table className="org-settings-users-table platform-row-table">
               <tbody>

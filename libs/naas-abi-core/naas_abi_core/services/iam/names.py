@@ -34,7 +34,7 @@ PLATFORM_SCOPE = PLATFORM
 # The suffix of a scope below a container: it counts at every container under it.
 BELOW = "/*"
 # Below the platform: any container, or the platform. Never an attachment's scope:
-# how a platform policy's ``${scope}`` is read when nobody attached it yet.
+# how two documents are compared at any scope (``IAMService._widens``).
 EVERYWHERE = PREFIX + "*"
 # A container nobody registers: where an owner, a scope or a placement of the
 # grammar before container paths resolves until it is rewritten. Only grants that

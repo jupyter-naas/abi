@@ -14,6 +14,7 @@ from naas_abi_core.services.cache.adapters.secondary.CacheFSAdapter import Cache
 from naas_abi_core.services.cache.adapters.secondary.CacheKeyValueAdapter import (
     CacheKeyValueAdapter,
 )
+from naas_abi_core.services.cache.CachePort import CachedData, DataType
 from naas_abi_core.services.cache.CacheService import TIER_COLD, TIER_HOT, CacheService
 from naas_abi_core.services.keyvalue.adapters.secondary.PythonAdapter import PythonAdapter
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
@@ -89,7 +90,15 @@ def _never_called():
 
 def test_pickle_and_binary_entries_are_never_decoded_for_display(tmp_path):
     cache = _cache(tmp_path)
-    cache.set_pickle("pickled", _Explodes())
+    # An entry an older release stored as a pickle.
+    cache.cold.adapter.set(
+        "pickled",
+        CachedData(
+            key="pickled",
+            data=base64.b64encode(pickle.dumps(_Explodes())).decode(),
+            data_type=DataType.PICKLE,
+        ),
+    )
     cache.set_binary("bytes", b"\x00\x01\x02")
     resources = CacheResources(cache)
 

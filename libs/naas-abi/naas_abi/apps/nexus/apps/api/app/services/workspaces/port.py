@@ -29,6 +29,10 @@ class WorkspaceRecord:
     system_drive_enabled: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # Read from the organization (no column of the workspace): its name tells two
+    # organizations' workspaces apart in the Workspaces list.
+    organization_name: str | None = None
+    organization_slug: str | None = None
     organization_logo_url: str | None = None
     organization_logo_rectangle_url: str | None = None
 

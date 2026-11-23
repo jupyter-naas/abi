@@ -2,6 +2,65 @@
 
 <!-- version list -->
 
+## v0.7.0 (2026-11-19)
+
+### Features
+
+- **core, sdk, cli**: Module connections end on IAM changes, not every two minutes
+  ([`2f55f6b`](https://github.com/jupyter-naas/abi/commit/2f55f6b01e56bdc9c74a9c4963d9aab70e5bfca0))
+
+
+## v0.6.0 (2026-11-19)
+
+### Bug Fixes
+
+- **sdk**: Skip_if_running claims the run's input; x bodies get their own threads
+  ([`bbaffa6`](https://github.com/jupyter-naas/abi/commit/bbaffa63ff91c9ddc3e8f840b86341bed2835fab))
+
+### Features
+
+- **marketplace**: X as a remote module, in-engine x removed (#1423, #1425-#1428)
+  ([`113b1e9`](https://github.com/jupyter-naas/abi/commit/113b1e9d232e4fd35960e15c69e91278cef8ac25))
+
+### Breaking Changes
+
+- **marketplace**: Naas_abi_marketplace.applications.x is removed. Run the remote module with
+  X_CONFIG_FILE (the old config: block, without bearer_token), and run reprocess_tweet_envelopes
+  once with force: true to rebuild the dataset in the module's namespace.
+
+
+## v0.5.1 (2026-11-18)
+
+### Bug Fixes
+
+- **sdk**: Reconnects, renewals and job fetches back off with jitter
+  ([`f1752b5`](https://github.com/jupyter-naas/abi/commit/f1752b5632f90177432bedb6989277cb0d81e8d2))
+
+### Chores
+
+- Maintenance across core, nexus, marketplace and deploy templates
+  ([`232291c`](https://github.com/jupyter-naas/abi/commit/232291c110f3961bfeabc00fbcc3db6c1dc72537))
+
+
+## v0.5.0 (2026-11-16)
+
+### Features
+
+- **anthropic**: Add the Claude 5.5 generation models (Opus 5.5, Sonnet 5.5, Haiku 5.5, Fable 5.1)
+  ([`9c4b22d`](https://github.com/jupyter-naas/abi/commit/9c4b22da0f55866add94eb764b73b7588310679e))
+
+
+## v0.4.0 (2026-11-16)
+
+### Features
+
+- **discovery**: Remote agents carry display name, avatar and suggestions
+  ([`d878002`](https://github.com/jupyter-naas/abi/commit/d87800209b387589148ef547ed101c9842d54090))
+
+- **discovery**: Remote apps carry their tile image (avatar_url)
+  ([`fe0947c`](https://github.com/jupyter-naas/abi/commit/fe0947c14e46ea9ab88dd5582f0823d7267f47c8))
+
+
 ## v0.3.0 (2026-11-07)
 
 ### Bug Fixes

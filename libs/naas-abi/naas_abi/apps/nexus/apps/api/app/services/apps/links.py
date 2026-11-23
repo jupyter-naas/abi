@@ -6,6 +6,8 @@ user who opened it (``abi_gk_<id>_<secret>``), made by IAM for one audience,
 
 * ``abi:delegated:app``: an ``/app-html/`` link and an ``/app-remote/`` grant,
 * ``abi:delegated:preview``: an ``/app-preview/`` link,
+* ``abi:delegated:app`` bound to ``web-pass``: the web app's pass (``services/oidc/web_pass.py``),
+  which opens no app and only says that its user is signed in,
 
 bound to what it opens (``resource``) and narrowed to what opening it needs
 (``scope``, the token's ``abi_scope``). IAM stores only a hash of it, so it can
@@ -28,6 +30,7 @@ anywhere, which says the same things (the user, the resource, the scope).
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -57,6 +60,7 @@ MAX_MINUTES = 8 * 60
 APP_HTML_ROOT = "/app-html/"  # an /app-html/ link: a path prefix below it
 PREVIEW = "preview"  # preview/<workspace id>/<slug>
 REMOTE_APP = "app-remote"  # app-remote/<module id>/<app>/<workspace id>
+WEB_PASS = "web-pass"  # the web app's pass: opens nothing, names its user
 
 
 class LinksUnavailable(RuntimeError):
@@ -210,10 +214,10 @@ async def arevoke_view_links(user_id: str, mark: str) -> int:
     return await asyncio.to_thread(revoke_view_links, user_id, mark)
 
 
-def revoke_remote_app_links(user_id: str) -> int:
-    """End every remote app grant ``user_id`` holds now, on every device; how many.
-    Made as ``api`` for the user, who needs ``iam:ListKeys`` and ``iam:RevokeKey``
-    on their own keys (every user holds both). Their sessions and other keys stay."""
+def _revoke_app_grants(user_id: str, bound_to: Callable[[str], bool]) -> int:
+    """End every live app-audience grant of ``user_id`` whose resource ``bound_to``
+    accepts; how many. Made as ``api`` for the user, who needs ``iam:ListKeys`` and
+    ``iam:RevokeKey`` on their own keys (every user holds both)."""
     iam = _iam()
     ended = 0
     with use_call_context(
@@ -224,11 +228,26 @@ def revoke_remote_app_links(user_id: str) -> int:
                 key.kind == "grant"
                 and key.audience == APP_AUDIENCE
                 and key.revoked_at is None
-                and (key.resource or "").startswith(f"{REMOTE_APP}/")
+                and bound_to(key.resource or "")
             ):
                 iam.revoke_key(user_id, key.key_id)
                 ended += 1
     return ended
+
+
+def revoke_remote_app_links(user_id: str) -> int:
+    """End every remote app grant ``user_id`` holds now, on every device; how many.
+    Their sessions and other keys stay."""
+    return _revoke_app_grants(user_id, lambda resource: resource.startswith(f"{REMOTE_APP}/"))
+
+
+def revoke_web_passes(user_id: str) -> int:
+    """End every web pass ``user_id`` holds now, on every device; how many."""
+    return _revoke_app_grants(user_id, lambda resource: resource == WEB_PASS)
+
+
+async def arevoke_web_passes(user_id: str) -> int:
+    return await asyncio.to_thread(revoke_web_passes, user_id)
 
 
 async def arevoke_remote_app_links(user_id: str) -> int:

@@ -228,7 +228,6 @@ export const emailView: ServiceView = {
   label: 'Email',
   description: 'Send mail as the platform, and read the sent mail the email adapter keeps.',
   icon: Mail,
-  group: 'Platform',
   noun: { one: 'email', many: 'emails' },
   entryIcon: () => Mail,
   level: () => ({

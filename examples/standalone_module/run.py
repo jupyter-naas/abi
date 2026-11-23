@@ -46,7 +46,8 @@ def main():
         url = f"nats://127.0.0.1:{port}"
         from naas_abi_core.engine.nats_nkeys import KeyPair
 
-        engine_password, auth_password = (
+        engine_password, auth_password, system_password = (
+            secrets.token_urlsafe(24),
             secrets.token_urlsafe(24),
             secrets.token_urlsafe(24),
         )
@@ -79,8 +80,10 @@ def main():
             f'    {{ user: engine, password: "{engine_password}", permissions: {{ publish: {{ deny: ["$SYS.>"] }}, subscribe: {{ deny: ["$SYS.>"] }} }} }}\n'
             f'    {{ user: auth, password: "{auth_password}", permissions: {{ subscribe: "$SYS.REQ.USER.AUTH", allow_responses: true }} }}\n'
             "  ]\n"
-            f"  auth_callout {{ issuer: {callout.public_key}, auth_users: [engine, auth] }}\n"
+            f"  auth_callout {{ issuer: {callout.public_key}, auth_users: [engine, auth, sys] }}\n"
             "}\n"
+            f'accounts {{ SYS: {{ users = [ {{ user: sys, password: "{system_password}" }} ] }} }}\n'
+            "system_account: SYS\n"
         )
         clean_env = {
             k: v
@@ -113,6 +116,7 @@ def main():
                     DEMO_DATA=tmp,
                     DEMO_NATS_URL=f"nats://engine:{engine_password}@127.0.0.1:{port}",
                     DEMO_AUTH_URL=f"nats://auth:{auth_password}@127.0.0.1:{port}",
+                    DEMO_SYSTEM_URL=f"nats://sys:{system_password}@127.0.0.1:{port}",
                     DEMO_CALLOUT_SEED=callout.seed,
                     PYTHONPATH=str(HERE),
                 )

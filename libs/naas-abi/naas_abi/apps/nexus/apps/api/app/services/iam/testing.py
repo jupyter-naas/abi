@@ -166,6 +166,28 @@ class NexusIam:
             self.iam.attach_policy(policy.id, principal.id, scope)
         return policy.id
 
+    def deny(
+        self, user_id: str, actions: Sequence[str], resources: Sequence[str], scope: str
+    ) -> str:
+        """As ``allow``, with a Deny statement: what an admin writes to hide a resource."""
+        with as_service_account("engine"):
+            principal = self.iam.ensure_user(LEGACY_NEXUS_ISSUER, user_id, provider="nexus")
+            policy = self.iam.create_policy(
+                f"deny-{user_id}-{uuid.uuid4().hex[:8]}",
+                {
+                    "version": "2026-10-13",
+                    "statements": [
+                        {
+                            "effect": "Deny",
+                            "actions": list(actions),
+                            "resources": list(resources),
+                        }
+                    ],
+                },
+            )
+            self.iam.attach_policy(policy.id, principal.id, scope)
+        return policy.id
+
     def allow_scope(self, user_id: str, scope: Any, workspace_scope: str) -> str:
         """Grant a user one module scope (``authz.ModuleScope``) at a workspace."""
         resource = scope.resource(PLATFORM).removeprefix(PLATFORM)

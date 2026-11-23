@@ -71,11 +71,26 @@ def test_coding_environment_configuration_code_server_adapter():
     assert isinstance(configuration.load(), CodingEnvironmentService)
 
 
+def test_the_local_directory_adapter_keeps_to_single_user_development(tmp_path):
+    """Workspaces on the engine host are turned on explicitly, never by default."""
+    for config in (
+        {"workspaces_root": str(tmp_path / "workspaces")},
+        {"workspaces_root": str(tmp_path / "workspaces"), "single_user_development": False},
+    ):
+        with pytest.raises(ValueError, match="single-user development"):
+            CodingEnvironmentAdapterConfiguration(adapter="local_directory", config=config)
+    with pytest.raises(ValueError, match="single-user development"):
+        LocalDirectoryAdapter(workspaces_root=str(tmp_path / "workspaces"))
+
+
 def test_coding_environment_configuration_local_directory_adapter(tmp_path):
     configuration = CodingEnvironmentServiceConfiguration(
         coding_environment_adapter=CodingEnvironmentAdapterConfiguration(
             adapter="local_directory",
-            config={"workspaces_root": str(tmp_path / "workspaces")},
+            config={
+                "workspaces_root": str(tmp_path / "workspaces"),
+                "single_user_development": True,
+            },
         )
     )
 

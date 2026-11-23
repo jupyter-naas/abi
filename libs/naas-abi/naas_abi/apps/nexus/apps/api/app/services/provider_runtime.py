@@ -10,11 +10,12 @@ import pkgutil
 import threading
 from collections.abc import AsyncGenerator, Callable
 from typing import Any, Literal
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import quote, urlparse
 
 import httpx
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 from naas_abi.apps.nexus.apps.api.app.services.ollama import resolve_endpoint
+from naas_abi_core.utils import outbound
 from pydantic import BaseModel
 
 # Try importing provider SDKs
@@ -61,6 +62,68 @@ class UnsafeProviderEndpointError(ValueError):
     pass
 
 
+def provider_origin_entries(*, ollama: bool = False) -> list[str]:
+    """Origins on the deployment's own network a provider call may reach.
+
+    The origins listed in ``provider_allowed_origins`` (``host:port`` or a URL)
+    and, for Ollama calls only, the platform Ollama's origin. Every other
+    provider address must be public: :func:`provider_client` checks it when it
+    connects.
+    """
+    entries = [
+        str(entry).strip()
+        for entry in getattr(nexus_config.settings, "provider_allowed_origins", None) or ()
+        if str(entry).strip()
+    ]
+    if ollama:
+        entries.append(resolve_endpoint())
+    return entries
+
+
+def provider_client(timeout: float, *, ollama: bool = False) -> httpx.AsyncClient:
+    """The HTTP client of every provider call: the guarded outbound client.
+
+    It resolves each provider host once, refuses non-public addresses unless
+    the deployment lists the origin (host and port), connects to the address
+    it checked and ignores proxy settings from the environment. ``ollama``
+    adds the platform Ollama's origin, for the Ollama calls.
+    """
+    return outbound.async_client(
+        timeout=timeout, allowed_origins=provider_origin_entries(ollama=ollama)
+    )
+
+
+def client_error_message(exc: BaseException) -> str:
+    """What a chat client is told when a provider call fails.
+
+    The exception text (addresses, response bodies, library messages) stays in
+    the server log.
+    """
+    if isinstance(exc, PermissionError):
+        return str(exc)
+    if isinstance(exc, (UnsafeProviderEndpointError, outbound.OutboundRefused)):
+        return "The provider endpoint is not allowed."
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"The provider answered with HTTP {exc.response.status_code}."
+    return "The provider could not complete the request."
+
+
+_AGENT_NAME_MAX = 200
+
+
+def agent_path_segment(name: str | None) -> str:
+    """An agent name as one percent-encoded segment of an ABI server URL."""
+    value = (name or "").strip()
+    if (
+        not value
+        or value in {".", ".."}
+        or len(value) > _AGENT_NAME_MAX
+        or any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
+    ):
+        raise ValueError("The agent name is not valid for an ABI server")
+    return quote(value, safe="")
+
+
 _OFFICIAL_ENDPOINTS: dict[str, str] = {
     "xai": "https://api.x.ai/v1",
     "openai": "https://api.openai.com/v1",
@@ -71,9 +134,9 @@ _OFFICIAL_ENDPOINTS: dict[str, str] = {
     "perplexity": "https://api.perplexity.ai",
 }
 
-_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
-_SENSITIVE_QUERY_KEYS = {"token", "api_key", "key", "access_token", "auth", "authorization"}
-_REDACTED = "REDACTED"
+_METADATA_HOSTS = frozenset(
+    {"169.254.169.254", "fd00:ec2::254", "metadata.google.internal", "metadata.goog"}
+)
 
 _INPROCESS_AGENT_INDEX: dict[str, callable] = {}
 _INPROCESS_AGENT_HINTS: list[str] = []
@@ -82,79 +145,22 @@ _INPROCESS_AGENT_LOCK = threading.Lock()
 _INPROCESS_AGENT_INSTANCES: dict[str, object] = {}
 
 
-def redact_url_for_logs(url: str) -> str:
-    parsed = urlparse(url)
-    if not parsed.query:
-        return url
-    redacted_query = []
-    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
-        if key.lower() in _SENSITIVE_QUERY_KEYS:
-            redacted_query.append((key, _REDACTED))
-        else:
-            redacted_query.append((key, value))
-    return urlunparse(parsed._replace(query=urlencode(redacted_query, doseq=True)))
-
-
-def _is_ip_literal(host: str) -> bool:
-    import ipaddress
-
-    try:
-        ipaddress.ip_address(host)
-        return True
-    except ValueError:
-        return False
-
-
-def _is_private_or_local_ip(host: str) -> bool:
-    import ipaddress
-
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
-        return False
-    return (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_multicast
-        or ip.is_reserved
-        or ip.is_unspecified
-    )
-
-
-def _is_allowed_local_provider_ip(
-    host: str,
-    *,
-    allow_localhost: bool,
-    allow_private_lan: bool,
-) -> bool:
-    """Whether a private/local IP literal is permitted for this provider type.
-
-    ``allow_localhost`` covers loopback. ``allow_private_lan`` covers RFC1918 and
-    link-local addresses (WSL NAT gateway, LAN Ollama box). Metadata hosts are
-    rejected earlier and never reach this helper.
-    """
-    import ipaddress
-
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
-        return False
-    if host in _LOCAL_HOSTS or ip.is_loopback:
-        return allow_localhost
-    if ip.is_private or ip.is_link_local:
-        return allow_private_lan
-    return False
-
-
 def _validate_endpoint_url(
     endpoint: str,
     *,
     require_https: bool,
-    allow_localhost: bool,
-    allow_private_lan: bool = False,
+    allowed_origins: frozenset[outbound.Origin] = frozenset(),
 ) -> str:
-    parsed = urlparse(endpoint)
+    """``endpoint`` without its trailing ``/``, once it is a safe provider URL.
+
+    Local and private hosts (``outbound.host_refusal``) are refused unless the
+    endpoint's origin is in ``allowed_origins``; cloud metadata hosts always.
+    """
+    try:
+        parsed = urlparse(endpoint)
+        port = parsed.port
+    except ValueError as exc:
+        raise UnsafeProviderEndpointError("Provider endpoint is not a valid URL") from exc
     if parsed.scheme not in {"http", "https"}:
         raise UnsafeProviderEndpointError("Provider endpoint must use http or https")
     if require_https and parsed.scheme != "https":
@@ -166,38 +172,25 @@ def _validate_endpoint_url(
     if parsed.query or parsed.fragment:
         raise UnsafeProviderEndpointError("Provider endpoint cannot include query parameters")
 
-    host = parsed.hostname.lower()
-    if host in {"169.254.169.254", "metadata.google.internal"}:
+    host = outbound.normalize_host(parsed.hostname)
+    if host in _METADATA_HOSTS:
         raise UnsafeProviderEndpointError("Provider endpoint targets forbidden metadata host")
-
-    if _is_ip_literal(host) and _is_private_or_local_ip(host):
-        if not _is_allowed_local_provider_ip(
-            host,
-            allow_localhost=allow_localhost,
-            allow_private_lan=allow_private_lan,
-        ):
-            raise UnsafeProviderEndpointError(
-                "Provider endpoint cannot target local/private IP ranges"
-            )
-
-    if host.endswith(".local") and not allow_localhost and not allow_private_lan:
-        raise UnsafeProviderEndpointError("Provider endpoint cannot target local network hostnames")
-
-    if host in _LOCAL_HOSTS and not allow_localhost:
-        raise UnsafeProviderEndpointError("Provider endpoint cannot target localhost")
-
+    origin = (host, port if port is not None else (443 if parsed.scheme == "https" else 80))
+    if origin not in allowed_origins and outbound.host_refusal(host) is not None:
+        raise UnsafeProviderEndpointError("Provider endpoint cannot target local or private hosts")
     return endpoint.rstrip("/")
 
 
 def validated_provider_endpoint(config: ProviderConfig) -> str | None:
+    listed = outbound.parse_origins(provider_origin_entries())
     if config.type == "custom":
         if not config.endpoint:
             raise UnsafeProviderEndpointError("Custom endpoint URL is required")
-        return _validate_endpoint_url(config.endpoint, require_https=True, allow_localhost=False)
+        return _validate_endpoint_url(config.endpoint, require_https=True, allowed_origins=listed)
 
     if config.type in _OFFICIAL_ENDPOINTS:
         endpoint = config.endpoint or _OFFICIAL_ENDPOINTS[config.type]
-        validated = _validate_endpoint_url(endpoint, require_https=True, allow_localhost=False)
+        validated = _validate_endpoint_url(endpoint, require_https=True)
         if urlparse(validated).hostname != urlparse(_OFFICIAL_ENDPOINTS[config.type]).hostname:
             raise UnsafeProviderEndpointError(
                 f"Endpoint host is not allowed for provider type '{config.type}'"
@@ -205,23 +198,24 @@ def validated_provider_endpoint(config: ProviderConfig) -> str | None:
         return validated
 
     if config.type == "ollama":
-        # Local-only provider: loopback, host.docker.internal, and private LAN /
-        # WSL gateway IPs from resolve_endpoint() are all legitimate. Cloud
-        # providers keep the stricter deny list above.
+        # The platform's Ollama (loopback, host.docker.internal, a LAN or WSL
+        # gateway address from resolve_endpoint()) is deployment configuration:
+        # its origin is allowed, for Ollama calls only.
         endpoint = config.endpoint or resolve_endpoint()
         return _validate_endpoint_url(
             endpoint,
             require_https=False,
-            allow_localhost=True,
-            allow_private_lan=True,
+            allowed_origins=outbound.parse_origins(provider_origin_entries(ollama=True)),
         )
 
     if config.type == "abi":
         if config.endpoint and config.endpoint.startswith("inprocess://"):
             return config.endpoint
         if config.endpoint:
+            # A workspace's ABI server on the deployment's own network must be
+            # listed in provider_allowed_origins.
             return _validate_endpoint_url(
-                config.endpoint, require_https=False, allow_localhost=True
+                config.endpoint, require_https=False, allowed_origins=listed
             )
     return config.endpoint.rstrip("/") if config.endpoint else None
 
@@ -235,12 +229,10 @@ async def complete_with_anthropic(
     if not HAS_ANTHROPIC:
         raise RuntimeError("anthropic package not installed. Run: uv add anthropic")
 
-    # Use env var as fallback
-    api_key = config.api_key or settings.anthropic_api_key
+    # The key comes from the workspace's configuration, never the platform's.
+    api_key = config.api_key
     if not api_key:
-        raise ValueError(
-            "Anthropic API key is required. Set ANTHROPIC_API_KEY env var or provide in settings."
-        )
+        raise ValueError("No Anthropic API key is configured for this workspace.")
 
     client = anthropic.Anthropic(api_key=api_key)
 
@@ -261,7 +253,10 @@ async def complete_with_anthropic(
         if msg.role == "system":
             system_parts.append(msg.content)
 
-    response = client.messages.create(
+    import asyncio
+
+    response = await asyncio.to_thread(
+        client.messages.create,
         model=config.model,
         max_tokens=4096,
         system="\n\n".join(system_parts) if system_parts else None,
@@ -280,12 +275,10 @@ async def complete_with_openai(
     if not HAS_OPENAI:
         raise RuntimeError("openai package not installed. Run: uv add openai")
 
-    # Use env var as fallback
-    api_key = config.api_key or settings.openai_api_key
+    # The key comes from the workspace's configuration, never the platform's.
+    api_key = config.api_key
     if not api_key:
-        raise ValueError(
-            "OpenAI API key is required. Set OPENAI_API_KEY env var or provide in settings."
-        )
+        raise ValueError("No OpenAI API key is configured for this workspace.")
 
     client = openai.OpenAI(api_key=api_key)
 
@@ -302,7 +295,10 @@ async def complete_with_openai(
             }
         )
 
-    response = client.chat.completions.create(
+    import asyncio
+
+    response = await asyncio.to_thread(
+        client.chat.completions.create,
         model=config.model,
         messages=openai_messages,
         max_tokens=4096,
@@ -336,7 +332,7 @@ async def complete_with_ollama(
             message_dict["images"] = msg.images
         ollama_messages.append(message_dict)
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with provider_client(120.0, ollama=True) as client:
         response = await client.post(
             f"{endpoint}/api/chat",
             json={
@@ -379,7 +375,7 @@ async def stream_with_ollama(
             message_dict["images"] = msg.images
         ollama_messages.append(message_dict)
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with provider_client(120.0, ollama=True) as client:
         async with client.stream(
             "POST",
             f"{endpoint}/api/chat",
@@ -462,7 +458,7 @@ async def stream_with_openai_compatible(
 
     logger.info(f"🚀 Streaming to {endpoint}/chat/completions with model={config.model}")
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with provider_client(120.0) as client:
         async with client.stream(
             "POST",
             f"{endpoint}/chat/completions",
@@ -533,19 +529,15 @@ async def complete_with_cloudflare(
     system_prompt: str | None,
 ) -> str:
     """Complete chat using Cloudflare Workers AI API."""
-    # Use env vars as fallback
-    api_key = config.api_key or settings.cloudflare_api_token
-    account_id = config.account_id or settings.cloudflare_account_id
+    # Token and account come from the workspace's configuration.
+    api_key = config.api_key
+    account_id = config.account_id
 
     if not api_key:
-        raise ValueError(
-            "Cloudflare API token is required. Set CLOUDFLARE_API_TOKEN env var or provide in settings."
-        )
+        raise ValueError("No Cloudflare API token is configured for this workspace.")
 
     if not account_id:
-        raise ValueError(
-            "Cloudflare Account ID is required. Set CLOUDFLARE_ACCOUNT_ID env var or provide in settings."
-        )
+        raise ValueError("No Cloudflare account is configured for this workspace.")
 
     # Build messages list
     cf_messages = []
@@ -562,15 +554,18 @@ async def complete_with_cloudflare(
 
     # Cloudflare Workers AI endpoint
     # Model format: @cf/meta/llama-3.1-8b-instruct
-    model_path = config.model.lstrip("@cf/")
-    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/{model_path}"
+    model_path = config.model.removeprefix("@cf/")
+    url = (
+        "https://api.cloudflare.com/client/v4/accounts/"
+        f"{quote(account_id, safe='')}/ai/run/@cf/{quote(model_path, safe='/')}"
+    )
 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with provider_client(120.0) as client:
         response = await client.post(
             url,
             headers=headers,
@@ -595,15 +590,15 @@ async def stream_with_cloudflare(
     """Stream chat using Cloudflare Workers AI API with SSE."""
     import json
 
-    # Use env vars as fallback
-    api_key = config.api_key or settings.cloudflare_api_token
-    account_id = config.account_id or settings.cloudflare_account_id
+    # Token and account come from the workspace's configuration.
+    api_key = config.api_key
+    account_id = config.account_id
 
     if not api_key:
-        raise ValueError("Cloudflare API token is required.")
+        raise ValueError("No Cloudflare API token is configured for this workspace.")
 
     if not account_id:
-        raise ValueError("Cloudflare Account ID is required.")
+        raise ValueError("No Cloudflare account is configured for this workspace.")
 
     # Build messages list
     cf_messages = []
@@ -619,15 +614,18 @@ async def stream_with_cloudflare(
         )
 
     # Cloudflare Workers AI endpoint
-    model_path = config.model.lstrip("@cf/")
-    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/{model_path}"
+    model_path = config.model.removeprefix("@cf/")
+    url = (
+        "https://api.cloudflare.com/client/v4/accounts/"
+        f"{quote(account_id, safe='')}/ai/run/@cf/{quote(model_path, safe='/')}"
+    )
 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with provider_client(120.0) as client:
         async with client.stream(
             "POST",
             url,
@@ -681,7 +679,7 @@ async def complete_with_custom(
     if config.api_key:
         headers["Authorization"] = f"Bearer {config.api_key}"
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with provider_client(120.0) as client:
         response = await client.post(
             f"{endpoint}/v1/chat/completions",
             headers=headers,
@@ -818,17 +816,19 @@ async def complete_with_abi(
     if not endpoint:
         raise ValueError("ABI endpoint is required")
 
+    endpoint = validated_provider_endpoint(config) or endpoint
     latest_user_message = next((m.content for m in reversed(messages) if m.role == "user"), "")
     payload = {
         "prompt": latest_user_message,
         "thread_id": thread_id or str(hash(tuple(m.content for m in messages[-5:]))),
     }
-    url = f"{endpoint}/agents/{config.model}/completion?token={config.api_key or ''}"
+    url = f"{endpoint}/agents/{agent_path_segment(config.model)}/completion"
+    headers = {"Content-Type": "application/json"}
+    if config.api_key:
+        headers["Authorization"] = f"Bearer {config.api_key}"
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            url, json=payload, headers={"Content-Type": "application/json"}
-        )
+    async with provider_client(120.0) as client:
+        response = await client.post(url, json=payload, headers=headers)
         response.raise_for_status()
         data = response.json()
         if isinstance(data, dict) and isinstance(data.get("completion"), str):
@@ -965,7 +965,7 @@ async def stream_with_ollama_tools(
     if tools:
         request_body["tools"] = tools
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with provider_client(120.0, ollama=True) as client:
         full_response = ""
         tool_calls = []
 
@@ -1045,7 +1045,7 @@ async def check_ollama_status(endpoint: str | None = None) -> dict:
     """Check if Ollama is running and list available models with multimodal info."""
     endpoint = endpoint or resolve_endpoint()
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with provider_client(5.0, ollama=True) as client:
             response = await client.get(f"{endpoint}/api/tags")
             response.raise_for_status()
             data = response.json()
@@ -1080,7 +1080,7 @@ async def stream_with_abi(
 
     logger = logging.getLogger(__name__)
 
-    endpoint = config.endpoint.rstrip("/")
+    endpoint = validated_provider_endpoint(config) or ""
     agent_name = config.model  # e.g., "ForvisMazars_Corporate"
     token = config.api_key
 
@@ -1097,10 +1097,13 @@ async def stream_with_abi(
         yield "Error: No user message to send"
         return
 
-    # Build request URL with token as query param
-    url = f"{endpoint}/agents/{agent_name}/stream-completion?token={token}"
+    # The agent name is one encoded path segment; the token travels in a header.
+    url = f"{endpoint}/agents/{agent_path_segment(agent_name)}/stream-completion"
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
 
-    logger.info("🔌 Streaming from ABI: %s (agent: %s)", redact_url_for_logs(url), agent_name)
+    logger.info("🔌 Streaming from ABI: %s (agent: %s)", url, agent_name)
 
     # Use conversation ID as thread_id (or generate one from messages hash)
     thread_id = str(
@@ -1113,12 +1116,12 @@ async def stream_with_abi(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with provider_client(120.0) as client:
             async with client.stream(
                 "POST",
                 url,
                 json=request_body,
-                headers={"Content-Type": "application/json"},
+                headers=headers,
             ) as response:
                 response.raise_for_status()
 
@@ -1174,10 +1177,10 @@ async def stream_with_abi(
 
     except httpx.HTTPStatusError as e:
         logger.error("ABI API error: status=%s endpoint=%s", e.response.status_code, endpoint)
-        yield f"\n\n**Error:** ABI server returned {e.response.status_code}\n\n{e.response.text}"
+        yield f"\n\n**Error:** ABI server returned {e.response.status_code}"
     except Exception as e:
-        logger.error(f"ABI streaming error: {e}")
-        yield f"\n\n**Error:** Failed to connect to ABI server: {str(e)}"
+        logger.error("ABI streaming error: %s", e)
+        yield f"\n\n**Error:** {client_error_message(e)}"
 
 
 def _normalize_agent_key(value: str) -> str:

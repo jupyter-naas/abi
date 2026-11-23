@@ -45,7 +45,7 @@ export async function fetchTableSchema(name: string): Promise<SchemaState> {
 /** Columns of a table: type, nullable, default, primary and foreign keys, masked. */
 export function SchemaTable({ state }: { state: SchemaState | undefined }) {
   if (!state || state.status === 'loading') {
-    return <div className="org-settings-loading">Loading schema...</div>;
+    return <div className="org-settings-loading">Loading schema…</div>;
   }
   if (state.status === 'error') {
     return (

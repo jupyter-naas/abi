@@ -241,11 +241,15 @@ class OidcSessionSecondaryAdapterPostgres(OidcSessionPersistencePort):
     async def provider_for_domain(self, domain: str) -> str | None:
         return (
             await self.db.execute(
-                select(OrganizationDomainModel.provider).where(
+                select(OrganizationDomainModel.provider)
+                .where(
                     func.lower(OrganizationDomainModel.domain) == domain.lower(),
                     OrganizationDomainModel.is_verified.is_(True),
                     OrganizationDomainModel.provider.is_not(None),
                 )
+                # Rows that differ only in case (one per spelling): the first verified.
+                .order_by(OrganizationDomainModel.verified_at, OrganizationDomainModel.id)
+                .limit(1)
             )
         ).scalar_one_or_none()
 

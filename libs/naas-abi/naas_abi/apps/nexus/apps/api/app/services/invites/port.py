@@ -105,13 +105,16 @@ class InviteOutcome:
     # An invitation to the same person at the same place, made again: the roles
     # may have changed, nothing else was made twice.
     renewed: bool = False
-    # The inviting user may not create accounts at the provider (and the address is
-    # not one the organization proved): the grants wait for the person's sign-in.
+    # Nothing was made at the provider because the inviting user may not create
+    # accounts there. Only an invitation to the platform alone (no grant) can be
+    # skipped: one IAM authorized at an organization or a workspace makes the
+    # account as Nexus. Kept in the answers for compatibility; normally False.
     provisioning_skipped: bool = False
 
 
 class ProvisioningRefused(Exception):
-    """IAM does not let the inviting user create accounts at the provider."""
+    """IAM does not let the caller create accounts at the provider: the inviting
+    user, or Nexus itself (``api``) when the deployment withholds the right."""
 
 
 class OrgInvitationExistsError(Exception):
@@ -230,8 +233,8 @@ class DirectoryGateway(ABC):
         """Make the person exist at the provider; None when its people are
         managed there (``provisioning: none``). ``by``: the user asking, whose
         right to create accounts at the provider IAM checks (``ProvisioningRefused``
-        when they have none); ``None`` is Nexus's own call, for an address the
-        organization proved it controls."""
+        when they have none); ``None`` is Nexus's own call (``api``), made only for
+        an invitation IAM authorized (``InvitationService._provision``)."""
 
 
 class GrantsGateway(ABC):
@@ -305,6 +308,9 @@ class InvitationMail:
     workspace_role: str | None
     sign_in_url: str
     managed_in_provider: bool = False
+    # False when the invitation made no account at the provider (the inviting user
+    # may not: ``provisioning_skipped``): the mail then promises no sign-in code.
+    account_made: bool = True
     extra: dict[str, str] = field(default_factory=dict)
 
 

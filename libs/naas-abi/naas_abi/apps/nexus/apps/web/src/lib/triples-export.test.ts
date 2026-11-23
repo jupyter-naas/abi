@@ -50,7 +50,9 @@ describe('triplesToTurtle', () => {
   it('groups predicates under the same subject with semicolons', () => {
     const ttl = triplesToTurtle(triples);
     expect(ttl).toContain(';');
-    expect(groupTriplesBySubject(triples).size).toBe(2);
+    const groups = groupTriplesBySubject(triples);
+    expect(groups.size).toBe(1);
+    expect(groups.get('http://example.org/ind#1')).toHaveLength(2);
   });
 });
 

@@ -282,7 +282,7 @@ export default function PlatformTablePage() {
         <SearchBox
           value={search}
           onChange={setSearch}
-          placeholder="Search every column..."
+          placeholder="Search every column…"
           label={`Search ${tableName}`}
         />
 

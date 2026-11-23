@@ -39,7 +39,11 @@ Effect = Literal["Allow", "Deny"]
 # Variables a stored policy may use in its resources. The module ones resolve
 # for a module's service account, ``module/<project>/<id>``, and are bound when
 # its manifest is approved; for any other principal they match nothing.
-MODULE_VARIABLES = frozenset({"module.id", "module.project"})
+# ``module.dataset_namespace`` is the module's own dataset namespace
+# (``modules.dataset_namespace``).
+MODULE_VARIABLES = frozenset(
+    {"module.id", "module.project", "module.dataset_namespace"}
+)
 POLICY_VARIABLES = frozenset({"scope", "principal.id", "user.id"}) | MODULE_VARIABLES
 # What a policy attached at a scope writes each resource pattern as: the
 # container itself, ``${scope}``, or what it holds, ``${scope}/...``.
@@ -245,6 +249,28 @@ def bind_variables(
     )
 
 
+class _PlainLoader(yaml.SafeLoader):
+    """YAML without anchors or aliases: each node of a document is written out
+    once, so what is read is no larger than the text."""
+
+    def compose_node(self, parent: Any, index: Any) -> Any:
+        event = self.peek_event()
+        if isinstance(event, yaml.AliasEvent) or getattr(event, "anchor", None):
+            raise yaml.composer.ComposerError(
+                None,
+                None,
+                "anchors and aliases are not accepted",
+                event.start_mark,
+            )
+        return super().compose_node(parent, index)
+
+
+def load_document_text(text: str) -> Any:
+    """A policy or manifest document written as YAML or JSON text, with no
+    anchors or aliases (``yaml.YAMLError`` otherwise)."""
+    return yaml.load(text, Loader=_PlainLoader)  # nosec B506 - a SafeLoader
+
+
 def parse_policy_document(
     data: Mapping[str, Any] | str | PolicyDocument,
     catalogs: CatalogRegistry | None = None,
@@ -264,7 +290,7 @@ def parse_policy_document(
                 [f"the document exceeds {MAX_DOCUMENT_BYTES} bytes"]
             )
         try:
-            data = yaml.safe_load(data)
+            data = load_document_text(data)
         except yaml.YAMLError as exc:
             raise PolicyValidationError([f"unreadable document: {exc}"]) from exc
     if not isinstance(data, Mapping):

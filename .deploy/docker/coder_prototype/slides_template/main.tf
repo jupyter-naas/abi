@@ -11,24 +11,6 @@ terraform {
 provider "coder" {}
 provider "docker" {}
 
-locals {
-  # Caddy's local root CA, trusted inside the workspace so the agent can reach
-  # coderd over the Caddy HTTPS edge (https://coder.nexus.localhost). LOCAL TEST.
-  caddy_ca = <<-EOT
------BEGIN CERTIFICATE-----
-MIIBozCCAUmgAwIBAgIQVSBZGSjV5jfY0lWt75hloDAKBggqhkjOPQQDAjAwMS4w
-LAYDVQQDEyVDYWRkeSBMb2NhbCBBdXRob3JpdHkgLSAyMDI2IEVDQyBSb290MB4X
-DTI2MDYyNDA3MTMxM1oXDTM2MDUwMjA3MTMxM1owMDEuMCwGA1UEAxMlQ2FkZHkg
-TG9jYWwgQXV0aG9yaXR5IC0gMjAyNiBFQ0MgUm9vdDBZMBMGByqGSM49AgEGCCqG
-SM49AwEHA0IABGglg0M25kicsgEArr3UTdf742BE3/BRGp+P9MgEdKQhWNOxFZM5
-IbDGeA2VcXLRlFhpMLdtKPU9bt32B457N0mjRTBDMA4GA1UdDwEB/wQEAwIBBjAS
-BgNVHRMBAf8ECDAGAQH/AgEBMB0GA1UdDgQWBBSGVbqGLk6jLOHgQ5+NO+799uFB
-tDAKBggqhkjOPQQDAgNIADBFAiAPHpa5ITKPiExEEY1SjRiyVpdSZec+iPHkUZ+7
-8t8aGwIhAJuUGA/knZOujzAPvTvtcFFy2DR/Z8wHv8CGgUhbFBzj
------END CERTIFICATE-----
-  EOT
-}
-
 data "coder_workspace" "me" {}
 data "coder_workspace_owner" "me" {}
 
@@ -61,7 +43,7 @@ data "coder_parameter" "abi_api_base" {
   name         = "abi_api_base"
   display_name = "ABI API base"
   description  = "Nexus API base; the OpenAI-compatible shim is at <base>/api/v1"
-  default      = "http://host.docker.internal:9879"
+  default      = "http://abi:9879"
   mutable      = true
 }
 
@@ -98,9 +80,11 @@ data "coder_parameter" "git_author_email" {
 data "coder_parameter" "docker_network" {
   name         = "docker_network"
   display_name = "Docker network"
-  description  = "Attach the workspace to this docker network so it can reach Forgejo/coderd directly (set by the coding_environment service)"
+  description  = "The coding network the workspace joins to reach Forgejo, coderd and the API (set by the coding_environment service from its configuration)"
   default      = ""
-  mutable      = true
+  # Fixed when the workspace is created: an update cannot move it to another
+  # network.
+  mutable      = false
 }
 
 data "coder_parameter" "sidecar_secret" {
@@ -249,7 +233,9 @@ resource "coder_agent" "main" {
     #    user first connects. Without this, code-server reports healthy as soon as
     #    the port is open — but the extension host is still starting, so the first
     #    session renders without the Continue sidebar until a manual reload.
-    code-server --auth none --port 13337 --host 0.0.0.0 "$HOME/project" \
+    #    It listens on the container's loopback only: the Coder agent proxies
+    #    it to the owner, after Coder's own sign-in.
+    code-server --auth none --port 13337 --host 127.0.0.1 "$HOME/project" \
       >/tmp/code-server.log 2>&1 &
     for _ in $(seq 1 60); do
       curl -fsS http://localhost:13337/healthz >/dev/null 2>&1 && break
@@ -305,27 +291,11 @@ resource "docker_container" "workspace" {
   image    = docker_image.main.name
   name     = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
   hostname = data.coder_workspace.me.name
-  entrypoint = ["sh", "-c", <<-EOT
-    printf '%s\n' "${local.caddy_ca}" > /usr/local/share/ca-certificates/caddy-local.crt
-    update-ca-certificates >/dev/null 2>&1 || true
-    ${coder_agent.main.init_script}
-  EOT
-  ]
+  entrypoint = ["sh", "-c", coder_agent.main.init_script]
   env = ["CODER_AGENT_TOKEN=${coder_agent.main.token}"]
-  host {
-    host = "host.docker.internal"
-    ip   = "host-gateway"
-  }
-  # Resolve the Caddy edge so the agent can reach coderd at
-  # https://coder.nexus.localhost (CODER_ACCESS_URL).
-  host {
-    host = "coder.nexus.localhost"
-    ip   = "host-gateway"
-  }
-  # Attach to the platform network (when set) so the workspace can reach Forgejo
-  # (git clone/push) and coderd directly — the workspace can't reach the Caddy
-  # edge on :443 from inside Docker Desktop, so internal DNS (forgejo:3000,
-  # coder:7080) is the reliable path.
+  # Attach to the coding network (when set): Forgejo (git clone/push), coderd
+  # and the API by their service names, and none of the stack's data services.
+  # The workspace trusts the system's CA store only.
   dynamic "networks_advanced" {
     for_each = data.coder_parameter.docker_network.value == "" ? [] : [data.coder_parameter.docker_network.value]
     content {

@@ -4,6 +4,10 @@ api:
   description: "API for ABI"
   logo_path: "assets/logo.png"
   favicon_path: "assets/favicon.ico"
+  # Auto-reload on changes under src/ (uvicorn's WatchFiles reloader): off.
+  # It rescans src/ all the time, restarts the engine on any write there, and
+  # keeps a NATS engine running after NATS is gone. `abi dev up` turns it on.
+  reload: false
   cors_origins:
     - "http://{{ secret.PUBLIC_WEB_HOST }}"
     - "https://{{ secret.PUBLIC_WEB_HOST }}"
@@ -18,9 +22,10 @@ global_config:
   public_api_host: "{{ secret.PUBLIC_API_HOST }}"
 {% endraw %}{% if nats %}
 # NATS mode. The broker runs next to the deployment; put its URLs in
-# .env.remote, logged in as the broker users `engine` and `auth`:
+# .env.remote, logged in as the broker users `engine`, `auth` and `sys`:
 #   NATS_URL=nats://engine:<NATS_ENGINE_PASSWORD>@<host>:4222
 #   NATS_AUTH_URL=nats://auth:<NATS_AUTH_PASSWORD>@<host>:4222
+#   NATS_SYSTEM_URL=nats://sys:<NATS_SYSTEM_PASSWORD>@<host>:4222
 # and NATS_AUTH_CALLOUT_SEED, the account seed whose public key the broker's
 # nats.conf names as auth_callout issuer. Keep the broker on a private
 # network: its traffic is not encrypted.
@@ -28,6 +33,7 @@ nats:
   nats_url: "{% raw %}{{ secret.NATS_URL }}{% endraw %}"
   auth_callout:
     nats_url: "{% raw %}{{ secret.NATS_AUTH_URL }}{% endraw %}"
+    system_url: "{% raw %}{{ secret.NATS_SYSTEM_URL }}{% endraw %}"
     issuer_seed: "{% raw %}{{ secret.NATS_AUTH_CALLOUT_SEED }}{% endraw %}"
   # Exactly one engine per project hosts the module registry. Give any other
   # engine a config without this block.

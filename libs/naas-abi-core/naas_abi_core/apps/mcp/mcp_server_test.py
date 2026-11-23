@@ -1,164 +1,206 @@
-#!/usr/bin/env python3
-"""
-Test script to validate MCP server functionality
-"""
+"""The MCP server acts only with the caller's own key, which Nexus checks, and
+answers only the hosts and origins it is configured for."""
 
-import asyncio
-import os
-import sys
-from typing import Any
+from __future__ import annotations
 
-import httpx
+import importlib
+import json
+import threading
+from collections.abc import Iterator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from types import ModuleType
 
-# Test configuration
-API_BASE = os.environ.get("ABI_API_BASE", "http://localhost:9879")
-API_KEY = os.environ.get("ABI_API_KEY", "")
+import pytest
+from starlette.testclient import TestClient
 
-async def test_api_health() -> bool:
-    """Test if the API is healthy"""
-    print(f"🔍 Testing API health at {API_BASE}...")
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(f"{API_BASE}/openapi.json")
-            if response.status_code == 200:
-                print("✅ API is healthy")
-                return True
-            else:
-                print(f"❌ API returned status {response.status_code}")
-                return False
-    except Exception as e:  # noqa: BLE001
-        print(f"❌ Failed to connect to API: {e}")
-        return False
+GOOD_KEY = "abi_pk_good"
+DEPLOYMENT_KEY = "deployment-key-not-for-callers"
+ACCEPT = "application/json, text/event-stream"
 
-async def test_openapi_spec() -> dict[str, Any]:
-    """Test if OpenAPI spec is accessible and contains agents"""
-    print(f"\n🔍 Fetching OpenAPI spec from {API_BASE}/openapi.json...")
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{API_BASE}/openapi.json")
-            response.raise_for_status()
-            spec = response.json()
-            print("✅ OpenAPI spec fetched successfully")
-            return spec
-    except Exception as e:  # noqa: BLE001
-        print(f"❌ Failed to fetch OpenAPI spec: {e}")
-        return {}
 
-def analyze_agents(openapi_spec: dict[str, Any]) -> list:
-    """Extract and display agent information from OpenAPI spec"""
-    print("\n📋 Analyzing available agents...")
-    agents = []
-    paths = openapi_spec.get("paths", {})
-    
-    for path, methods in paths.items():
-        if "/agents/" in path and path.endswith("/completion"):
-            agent_name = path.split("/agents/")[1].split("/completion")[0]
-            post_method = methods.get("post", {})
-            description = post_method.get("summary", f"{agent_name} agent")
-            agents.append({
-                "name": agent_name,
-                "description": description,
-                "endpoint": path
-            })
-    
-    if agents:
-        print(f"✅ Found {len(agents)} agents:")
-        for agent in agents:
-            print(f"  • {agent['name']}: {agent['description']}")
-    else:
-        print("❌ No agents found in OpenAPI spec")
-    
-    return agents
+class Nexus(BaseHTTPRequestHandler):
+    """The gateway: lists one agent and answers chats for GOOD_KEY only."""
 
-async def test_agent_call(agent_name: str) -> bool:
-    """Test calling a specific agent"""
-    if not API_KEY:
-        print("\n⚠️  Skipping agent call test - ABI_API_KEY not set")
-        return False
-    
-    print(f"\n🔍 Testing agent call to '{agent_name}'...")
-    try:
-        headers = {
-            "Authorization": f"Bearer {API_KEY}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "prompt": "Hello, this is a test message. Please respond briefly.",
-            "thread_id": 1
-        }
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{API_BASE}/agents/{agent_name}/completion",
-                json=data,
-                headers=headers
-            )
-            
-            if response.status_code == 200:
-                print(f"✅ Successfully called {agent_name} agent")
-                print(f"   Response: {response.text[:100]}...")
-                return True
-            else:
-                print(f"❌ Agent call failed with status {response.status_code}")
-                print(f"   Error: {response.text}")
-                return False
-                
-    except Exception as e:  # noqa: BLE001
-        print(f"❌ Failed to call agent: {e}")
-        return False
+    seen: list[tuple[str, str, str | None]] = []
 
-async def test_mcp_http_server() -> bool:
-    """Test if MCP server is running in HTTP mode"""
-    print("\n🔍 Testing MCP HTTP server at http://localhost:3000...")
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get("http://localhost:3000/")
-            if response.status_code == 200:
-                print("✅ MCP HTTP server is running")
-                return True
-            else:
-                print(f"❌ MCP server returned status {response.status_code}")
-                return False
-    except Exception:  # noqa: BLE001
-        print("⚠️  MCP HTTP server not running (this is OK if testing STDIO mode)")
-        return False
+    def log_message(self, *args: object) -> None:
+        pass
 
-async def main():
-    """Run all tests"""
-    print("🚀 MCP Server Validation Tests")
-    print("=" * 50)
-    
-    # Test 1: API Health
-    api_healthy = await test_api_health()
-    if not api_healthy:
-        print("\n⚠️  API is not running. Please start it with: uv run api")
-        sys.exit(1)
-    
-    # Test 2: OpenAPI Spec
-    openapi_spec = await test_openapi_spec()
-    if not openapi_spec:
-        sys.exit(1)
-    
-    # Test 3: Analyze Agents
-    agents = analyze_agents(openapi_spec)
-    if not agents:
-        print("\n⚠️  No agents found. Check your API configuration.")
-        sys.exit(1)
-    
-    # Test 4: Test Agent Call (if API key is set)
-    if agents:
-        # Test the first available agent
-        await test_agent_call(agents[0]["name"])
-    
-    # Test 5: MCP HTTP Server (optional)
-    await test_mcp_http_server()
-    
-    print("\n" + "=" * 50)
-    print("✅ Validation complete!")
-    print("\nNext steps:")
-    print("1. Start MCP server locally: python mcp_server.py")
-    print("2. For HTTP mode: MCP_TRANSPORT=http python mcp_server.py")
-    print("3. For Claude Desktop integration, add to MCP settings")
+    def _reply(self, status: int, body: dict) -> None:
+        data = json.dumps(body).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+    def _allowed(self) -> bool:
+        return self.headers.get("Authorization") == f"Bearer {GOOD_KEY}"
+
+    def do_GET(self) -> None:
+        Nexus.seen.append(("GET", self.path, self.headers.get("Authorization")))
+        if not self._allowed():
+            return self._reply(401, {"detail": "Not authenticated"})
+        self._reply(200, {"data": [{"id": "Abi", "object": "model"}]})
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        self.rfile.read(length)
+        Nexus.seen.append(("POST", self.path, self.headers.get("Authorization")))
+        if not self._allowed():
+            return self._reply(401, {"detail": "Not authenticated"})
+        self._reply(200, {"choices": [{"message": {"content": "agent answer"}}]})
+
+
+@pytest.fixture
+def server(monkeypatch: pytest.MonkeyPatch) -> Iterator[ModuleType]:
+    nexus = ThreadingHTTPServer(("127.0.0.1", 0), Nexus)
+    threading.Thread(target=nexus.serve_forever, daemon=True).start()
+    Nexus.seen = []
+    monkeypatch.setenv("ABI_API_BASE", f"http://127.0.0.1:{nexus.server_port}")
+    monkeypatch.setenv("ABI_API_KEY", DEPLOYMENT_KEY)
+    monkeypatch.setenv("MCP_HOST", "192.0.2.10")  # beyond loopback, as in a container
+    monkeypatch.delenv("MCP_ALLOWED_HOSTS", raising=False)
+    monkeypatch.delenv("MCP_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.delenv("NEXUS_ACCESS_TOKEN", raising=False)
+    from naas_abi_core.apps.mcp import mcp_server
+
+    # A fresh server per test: the module builds it from the environment.
+    yield importlib.reload(mcp_server)
+    nexus.shutdown()
+
+
+def rpc(client: TestClient, headers: dict[str, str], method: str, params: dict) -> dict:
+    """One MCP session: initialize, then ``method``; returns the last reply."""
+    base = {"Accept": ACCEPT, "Content-Type": "application/json", **headers}
+    init = client.post(
+        "/mcp",
+        headers=base,
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "test", "version": "1"},
+            },
+        },
+    )
+    if init.status_code != 200:
+        return {"status": init.status_code}
+    session = {"mcp-session-id": init.headers["mcp-session-id"]}
+    client.post(
+        "/mcp",
+        headers={**base, **session},
+        json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+    )
+    reply = client.post(
+        "/mcp",
+        headers={**base, **session},
+        json={"jsonrpc": "2.0", "id": 2, "method": method, "params": params},
+    )
+    body = reply.text
+    data = [line[5:].strip() for line in body.splitlines() if line.startswith("data:")]
+    return {"status": reply.status_code, **(json.loads(data[-1]) if data else {})}
+
+
+def ask(server: ModuleType, headers: dict[str, str], base_url: str) -> dict:
+    with TestClient(server.mcp.streamable_http_app(), base_url=base_url) as client:
+        return rpc(
+            client,
+            headers,
+            "tools/call",
+            {"name": "ask_agent", "arguments": {"agent": "Abi", "prompt": "hi"}},
+        )
+
+
+def test_mcp_server_keeps_requests_without_a_key_out(server: ModuleType) -> None:
+    reply = ask(server, {}, "http://127.0.0.1:8000")
+
+    assert reply["status"] == 401
+    assert not [s for s in Nexus.seen if s[0] == "POST"]
+
+
+def test_mcp_server_keeps_keys_nexus_refuses_out(server: ModuleType) -> None:
+    reply = ask(server, {"Authorization": "Bearer abi_pk_bad"}, "http://127.0.0.1:8000")
+
+    assert reply["status"] == 401
+    assert not [s for s in Nexus.seen if s[0] == "POST"]
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Host": "other.example.test:8000"},
+        {"Host": "127.0.0.1:8000", "Origin": "http://other.example.test:8000"},
+    ],
+    ids=["host", "origin"],
+)
+def test_mcp_server_keeps_to_its_hosts_and_origins(
+    server: ModuleType, headers: dict[str, str]
+) -> None:
+    reply = ask(
+        server,
+        {"Authorization": f"Bearer {GOOD_KEY}", **headers},
+        f"http://{headers['Host']}",
+    )
+
+    assert reply["status"] in (403, 421)
+    assert not [s for s in Nexus.seen if s[0] == "POST"]
+
+
+def test_mcp_server_keeps_to_the_callers_key(server: ModuleType) -> None:
+    reply = ask(
+        server, {"Authorization": f"Bearer {GOOD_KEY}"}, "http://127.0.0.1:8000"
+    )
+
+    assert reply["status"] == 200
+    assert reply["result"]["content"][0]["text"] == "agent answer"
+    posts = [s for s in Nexus.seen if s[0] == "POST"]
+    assert posts == [("POST", "/api/v1/chat/completions", f"Bearer {GOOD_KEY}")]
+    assert all(DEPLOYMENT_KEY not in (s[2] or "") for s in Nexus.seen)
+
+
+def test_mcp_server_configured_hosts_are_honoured(
+    server: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MCP_ALLOWED_HOSTS", "mcp.example.test:*")
+    monkeypatch.setenv("MCP_ALLOWED_ORIGINS", "https://app.example.test")
+    module = importlib.reload(server)
+
+    reply = ask(
+        module,
+        {"Authorization": f"Bearer {GOOD_KEY}", "Host": "mcp.example.test:8000"},
+        "http://mcp.example.test:8000",
+    )
+    loopback = ask(
+        importlib.reload(module),
+        {"Authorization": f"Bearer {GOOD_KEY}"},
+        "http://127.0.0.1:8000",
+    )
+
+    assert reply["status"] == 200
+    assert loopback["status"] in (403, 421)
+
+
+def test_mcp_server_keeps_its_public_address_explicit(server: ModuleType) -> None:
+    assert server.http_transport_problem("127.0.0.1", "") is None
+    assert server.http_transport_problem("192.0.2.10", "") is not None
+    assert (
+        server.http_transport_problem("192.0.2.10", "https://mcp.example.test") is None
+    )
+
+
+def test_mcp_key_cache_keeps_only_live_entries(
+    server: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import asyncio
+
+    verifier = server.NexusKeyVerifier()
+    clock = [100.0]
+    monkeypatch.setattr(server.time, "monotonic", lambda: clock[0])
+    verifier._accepted = {"stale": 50.0}
+
+    assert asyncio.run(verifier.verify_token(GOOD_KEY)) is not None
+    assert "stale" not in verifier._accepted and len(verifier._accepted) == 1

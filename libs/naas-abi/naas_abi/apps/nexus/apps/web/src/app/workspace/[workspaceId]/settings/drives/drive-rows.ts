@@ -1,6 +1,6 @@
 export type DriveFlag = 'platform_drive_enabled' | 'system_drive_enabled';
 
-export type DriveIcon = 'drive' | 'server' | 'folder';
+export type DriveIcon = 'drive' | 'server' | 'folder' | 'organization';
 
 export type DriveRow = {
   id: string;
@@ -27,21 +27,28 @@ export function canToggleDrives(viewer: DriveViewer): boolean {
   return viewer.isSuperadmin;
 }
 
+/** The workspace's organization, when the viewer may open its drive. */
+export type OrganizationDrive = { name: string };
+
 /**
  * The drives of a workspace, the same set the Files sidebar shows. My Drive, Workspace Drive and
- * synced folders are always on. The platform and system drives follow a workspace flag that only a
- * platform superadmin can change; owners, admins and superadmins can see them while they are off.
+ * synced folders are always on. The organization drive is listed to whoever may open it (IAM, at
+ * the organization: no workspace flag). The platform and system drives follow a workspace flag that
+ * only a platform superadmin can change; owners, admins and superadmins can see them while they are
+ * off.
  */
 export function buildDriveRows({
   viewer,
   platformOn,
   systemOn,
   syncedFolders,
+  organization = null,
 }: {
   viewer: DriveViewer;
   platformOn: boolean;
   systemOn: boolean;
   syncedFolders: SyncedFolder[];
+  organization?: OrganizationDrive | null;
 }): DriveRow[] {
   const isWorkspaceAdmin = viewer.role === 'owner' || viewer.role === 'admin';
   const canSeeOffDrives = isWorkspaceAdmin || viewer.isSuperadmin;
@@ -66,6 +73,19 @@ export function buildDriveRows({
       enabled: true,
       toggleable: false,
     },
+    ...(organization
+      ? [
+          {
+            id: 'organization-drive',
+            name: organization.name,
+            icon: 'organization' as const,
+            description: `Files of ${organization.name}, shared across its workspaces. Its owners and admins write; policies at the organization can change who reads or writes what.`,
+            access: 'Organization',
+            enabled: true,
+            toggleable: false,
+          },
+        ]
+      : []),
     ...(platformOn || canSeeOffDrives
       ? [
           {

@@ -4,7 +4,9 @@ harness for the generic identity suite.
 The provider is the real one, on in-memory adapters, mounted at ``/idp`` of a
 uvicorn server on 127.0.0.1, so its issuer has the shape of a deployed one
 (``http://127.0.0.1:<port>/idp``). ``sign_in`` drives its pages as a browser
-would: ask for a code, read it from the mail the provider sent, enter it.
+would: ask for a code, read it from the mail the provider sent, enter it. With a
+``login_hint`` in the authorization URL, the provider mails the code itself and
+redirects to its code page; without one, the email page asks for the address.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import threading
 import time
 from collections.abc import Sequence
 from typing import Any, Self
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
@@ -170,16 +173,25 @@ class BuiltinIdPHarness:
         return TestUser(subject=user.id, email=user.email, login=user.email)
 
     def sign_in(self, authorization_url: str, user: TestUser) -> str:
+        hinted = "login_hint" in parse_qs(urlsplit(authorization_url).query)
+        base = f"{self.issuer}/login"
         with httpx.Client(follow_redirects=False, timeout=10) as browser:
             page = browser.get(authorization_url)
-            assert page.status_code == 200, page.text
+            if hinted:  # the code is on its way: the code page, by a redirect
+                assert page.status_code == 303, page.text
+                assert page.headers["location"] == f"{base}/code"
+                page = browser.get(page.headers["location"])
+                assert page.status_code == 200, page.text
+                assert "Check your email" in page.text, page.text
+            else:
+                assert page.status_code == 200, page.text
             csrf = re.search(r'name="csrf" value="([^"]+)"', page.text)
             assert csrf, page.text
-            base = f"{self.issuer}/login"
-            sent = browser.post(
-                f"{base}/email", data={"csrf": csrf.group(1), "email": user.login}
-            )
-            assert sent.status_code == 200, sent.text
+            if not hinted:
+                sent = browser.post(
+                    f"{base}/email", data={"csrf": csrf.group(1), "email": user.login}
+                )
+                assert sent.status_code == 200, sent.text
             self.service.flush_mail()  # the mail leaves in the background
             done = browser.post(
                 f"{base}/code",

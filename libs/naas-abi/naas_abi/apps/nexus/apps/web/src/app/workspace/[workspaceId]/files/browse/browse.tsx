@@ -42,6 +42,7 @@ import {
   type SortDirection,
 } from '@/stores/files';
 import { authFetch, useAuthStore } from '@/stores/auth';
+import { useWorkspaceStore } from '@/stores/workspace';
 import { usePrompt, useConfirm } from '@/components/ui/dialogs';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 import { CsvPreview } from '@/components/files/csv-preview';
@@ -378,6 +379,7 @@ function FilesBrowser() {
   }, [starredNavigation, setActiveSource, fetchFiles, setStarredNavigation, workspaceId]);
 
   // Session-authenticated deep link: /workspace/:id/files?source=platform-drive&path=...
+  // (or source=organization-drive, the workspace's organization's drive)
   // Storage keys are not HTTP routes; stay inside the Files UI.
   useEffect(() => {
     if (deepLinkConsumedRef.current || starredNavigation) return;
@@ -424,8 +426,21 @@ function FilesBrowser() {
   const fileQueryParams = `workspace_id=${encodeURIComponent(workspaceId)}&scope=${filesScope}`;
 
   const authUserId = useAuthStore((state) => state.user?.id);
-  const driveRoot = driveRootForSource(activeSource, workspaceId, authUserId);
-  const driveLabel = driveLabelForSource(activeSource, activeSyncedFolder, isLocalFolder);
+  const workspaceRow = useWorkspaceStore((state) =>
+    state.workspaces.find((w) => w.id === workspaceId),
+  );
+  const driveRoot = driveRootForSource(
+    activeSource,
+    workspaceId,
+    authUserId,
+    workspaceRow?.organizationId,
+  );
+  const driveLabel = driveLabelForSource(
+    activeSource,
+    activeSyncedFolder,
+    isLocalFolder,
+    workspaceRow?.organizationName,
+  );
   const relativePath = relativeDrivePath(currentPath, driveRoot, activeSource, workspaceId);
 
   useEffect(() => {

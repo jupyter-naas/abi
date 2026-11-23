@@ -1,5 +1,6 @@
 /** The Jobs notification: runs that failed since an admin last looked. */
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { usePoll } from '../use-poll';
 import type { JobsApi } from './jobs-api';
 import type { JobFailures } from './jobs-types';
 
@@ -33,23 +34,15 @@ export function useJobFailures(api: JobsApi, enabled: boolean) {
     seen.current = readSeen();
   }, []);
 
-  useEffect(() => {
-    if (!enabled) return;
-    let alive = true;
-    const load = () => {
-      void api.failures(seen.current ?? readSeen()).then((result) => {
-        if (alive && result.ok) setFailures(result.data);
-      });
-    };
-    load();
-    const timer = window.setInterval(() => {
-      if (!document.hidden) load();
-    }, POLL_MS);
-    return () => {
-      alive = false;
-      window.clearInterval(timer);
-    };
-  }, [api, enabled, reloads]);
+  usePoll(
+    (signal) =>
+      api.failures(seen.current ?? readSeen(), signal).then((result) => {
+        if (!signal.aborted && result.ok) setFailures(result.data);
+      }),
+    POLL_MS,
+    enabled,
+    [api, reloads],
+  );
 
   const markSeen = useCallback(() => {
     const now = new Date().toISOString();

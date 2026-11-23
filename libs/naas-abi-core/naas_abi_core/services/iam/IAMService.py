@@ -4,9 +4,15 @@ Domain services call ``require`` and ``filter``; both read the caller from the
 current ``CallContext`` (never from a request field). IAM authorizes its own
 operations with its own ``iam:*`` catalog, like any other service.
 
-Effective policies are cached per principal for at most ``cache_ttl_seconds``
-(60 by default) and dropped on every change made through this
-service. Change listeners (the NATS primary) hear each new store revision.
+Effective policies are cached per principal and dropped on every change made
+through this service. A change another process made applies within
+``revision_check_seconds`` (2 by default): before it reads a cached subject, the
+service compares the store's revision (every write that changes who may do
+what bumps it), at most that often, and drops its caches when it moved. An
+unchanged subject is kept up to ``subject_ttl_seconds`` (600 by default);
+placements and token floors for ``cache_ttl_seconds`` (60 by default, the bound
+the engine's configuration keeps). Change listeners (the NATS primary) hear each
+new store revision.
 """
 
 from __future__ import annotations
@@ -235,6 +241,14 @@ def _bound_group(provider: str, claim_value: str) -> str:
     return f"idp:{provider}:{claim_value}"
 
 
+def _cursor_binding(binding: Sequence[str]) -> str:
+    """The caller and listing a sealed cursor is for, as a digest."""
+    import hashlib
+    import json
+
+    return hashlib.sha256(json.dumps(list(binding)).encode()).hexdigest()[:32]
+
+
 def _grant_resource(grant: PendingGrant) -> str:
     return attachment_resource(
         grant.policy_id, _invitee(grant.provider, grant.email), grant.scope
@@ -312,6 +326,12 @@ class _TTLCache:
             self._entries.clear()
 
 
+# How long an unchanged subject (and the policies it holds) is kept, and how often
+# the store's revision is compared before a cached one is read.
+SUBJECT_TTL_SECONDS = 600
+REVISION_CHECK_SECONDS = 2
+
+
 _REVOCATION_WAIT_SECONDS = 1.0
 
 
@@ -356,6 +376,8 @@ class IAMService(IIAMService, PolicySource):
         *,
         cache_ttl_seconds: float = 60.0,
         cache_size: int = 4096,
+        subject_ttl_seconds: float = SUBJECT_TTL_SECONDS,
+        revision_check_seconds: float = REVISION_CHECK_SECONDS,
         seals: Sequence[Seal] = SEALS,
         secrets: IAMSecrets | None = None,
         access_ttl_seconds: int = 600,
@@ -367,16 +389,27 @@ class IAMService(IIAMService, PolicySource):
         self._sleep = sleep
         self._registry = CatalogRegistry()
         self._seals = tuple(seals)
-        self._subjects = _TTLCache(cache_ttl_seconds, cache_size)
-        self._policies = _TTLCache(cache_ttl_seconds, cache_size)
+        # Kept until the store's revision moves (``_check_revision``): a profile
+        # rebuilt every minute was a quarter of a platform admin's requests.
+        subject_ttl = max(subject_ttl_seconds, cache_ttl_seconds)
+        self._subjects = _TTLCache(subject_ttl, cache_size)
+        self._policies = _TTLCache(subject_ttl, cache_size)
+        # Never staler than cache_ttl_seconds, the bound the configuration keeps.
+        self._revision_check_seconds = min(revision_check_seconds, cache_ttl_seconds)
+        self._revision_checked_at = time.monotonic()
+        self._revision_check_lock = threading.Lock()
         # Every placement, their index, and the registry of containers.
         self._placements = _TTLCache(cache_ttl_seconds, 3)
-        self._platform_grants: tuple[roles.PlatformGrant, ...] = ()
         self._floors = _TTLCache(cache_ttl_seconds, 1)
         self._pending_index: tuple[int, frozenset[tuple[str, str]]] | None = None
         self._listeners: list[Callable[[int], None]] = []
-        self._seen_revision: int | None = None
+        # Nothing is cached yet: the store as it is now is what this service saw.
+        self._seen_revision: int | None = store.revision()
         self._seal_key: bytes | None = None
+        # The account holding each module id (``_module_id_holder``): an older
+        # account never appears later, so the holder only changes when it is
+        # deleted, which a point lookup sees.
+        self._module_id_holders: dict[str, str] = {}
         self._seal_lock = threading.Lock()
         self._approve_lock = threading.Lock()
         self._revoking: dict[str, threading.Lock] = {}
@@ -525,6 +558,7 @@ class IAMService(IIAMService, PolicySource):
         if principal is None:
             return None
         key = (principal.kind, principal.id, principal.name, principal.groups)
+        self._check_revision()
         subject = self._subjects.get(key, lambda: self._compute_subject(principal))
         issued_at = ctx.token_issued_at
         if (
@@ -576,6 +610,10 @@ class IAMService(IIAMService, PolicySource):
         record = self._resolve(principal)
         status = record.status if record is not None else "active"
         statements: list[EffectiveStatement] = []
+        if record is not None and self._module_id_refused(record) is not None:
+            # A module id names one module: an account of a reserved id, or of
+            # one another account holds, holds nothing.
+            return Subject(principal.id, status, ())
         for attachment, group in self._held_attachments(principal, record):
             statements += self._statements_of(
                 attachment.policy_id, attachment, group, fresh=fresh
@@ -689,6 +727,7 @@ class IAMService(IIAMService, PolicySource):
         return chain, True
 
     def _cached_policy(self, policy_id: str) -> Policy | None:
+        self._check_revision()
         return self._policies.get(policy_id, lambda: self._load_policy(policy_id))
 
     def _load_policy(self, policy_id: str) -> Policy | None:
@@ -788,6 +827,19 @@ class IAMService(IIAMService, PolicySource):
         self.store.put_placement(placement)
         self._changed()
         return placement
+
+    def claim_placement(
+        self, service: str, id_key: str, container: str = PLATFORM_SCOPE
+    ) -> Placement:
+        """Place ``id_key`` in ``container`` unless it is placed already, in one
+        store write; the placement that holds it afterwards."""
+        placement = Placement(service, id_key, container)
+        _check_placement(placement)
+        self.require("iam:PutPlacement", placement_resource(service, id_key))
+        held = self.store.claim_placement(placement)
+        if held == placement:
+            self._changed()
+        return held
 
     def delete_placement(self, service: str, id_key: str) -> bool:
         self.require("iam:DeletePlacement", placement_resource(service, id_key))
@@ -995,12 +1047,21 @@ class IAMService(IIAMService, PolicySource):
         container = listing.listing_scope(scope)
         if len(text) > listing.MAX_TEXT:
             raise ValueError(f"A search text is at most {listing.MAX_TEXT} characters")
+        # A sealed cursor is this caller's, for this listing only.
+        binding = [
+            *self._cursor_holder(),
+            service,
+            type,
+            container,
+            text,
+            module,
+        ]
         query = listing.ListingQuery(
             service=service,
             type=type,
             container=container,
             text=text,
-            after=cursor or "",
+            after=self._open_cursor(binding, cursor or ""),
             module=module,
         )
         actions = self._registry.listing_actions(service, type)
@@ -1034,7 +1095,62 @@ class IAMService(IIAMService, PolicySource):
             limit=listing.clamp_limit(limit),
             allowed=allowed,
             keep=keep,
+            seal=lambda after: self._seal_cursor(binding, after),
         )
+
+    # A listing's cursor past a name the caller was not returned: opaque,
+    # encrypted with a key of this deployment's, for one caller and listing.
+    def _cursor_holder(self) -> list[str]:
+        ctx = current_call_context()
+        return [ctx.principal.id, ctx.user.id if ctx.user is not None else ""]
+
+    def _cursor_cipher(self) -> Any:
+        import base64
+        import hashlib
+        import hmac
+
+        from cryptography.fernet import Fernet
+
+        key = hmac.new(
+            self._trigger_seal_key(), b"listing-cursor", hashlib.sha256
+        ).digest()
+        return Fernet(base64.urlsafe_b64encode(key))
+
+    def _seal_cursor(self, binding: Sequence[str], after: str) -> str:
+        import json
+
+        token = self._cursor_cipher().encrypt(
+            json.dumps([_cursor_binding(binding), after]).encode()
+        )
+        return listing.SEALED_CURSOR + token.decode()
+
+    def _open_cursor(self, binding: Sequence[str], cursor: str) -> str:
+        """The position a cursor stands for: a sealed one opened (only by the
+        caller and listing it was made for, within ``SEALED_CURSOR_TTL``), a name
+        as it is."""
+        if not cursor.startswith(listing.SEALED_CURSOR):
+            return cursor
+        import json
+
+        from cryptography.fernet import InvalidToken
+
+        try:
+            values = json.loads(
+                self._cursor_cipher().decrypt(
+                    cursor[len(listing.SEALED_CURSOR) :].encode(),
+                    ttl=listing.SEALED_CURSOR_TTL,
+                )
+            )
+        except (InvalidToken, ValueError):
+            raise ValueError("Invalid listing cursor") from None
+        if (
+            not isinstance(values, list)
+            or len(values) != 2
+            or values[0] != _cursor_binding(binding)
+            or not isinstance(values[1], str)
+        ):
+            raise ValueError("Invalid listing cursor")
+        return values[1]
 
     def _lister_of(
         self, catalog: ActionCatalog, declared: ResourceType
@@ -1535,6 +1651,10 @@ class IAMService(IIAMService, PolicySource):
         group = self._require_group("iam:DeleteGroup", group_id)
         if group.status == "deleted":
             return group
+        # Deleting it removes what is attached to it, its Denies included.
+        self._require_lift_attachments(
+            group_id, group_id, restricts_caller=lambda: self._caller_is(group_id)
+        )
         return self._delete_group(group)
 
     def _delete_group(self, group: PrincipalRecord) -> PrincipalRecord:
@@ -1550,7 +1670,10 @@ class IAMService(IIAMService, PolicySource):
         scope (``_require_held``), but for the companions IAM keeps in step with
         the group's roles (``_companions``): they follow the roles."""
         group = self._require_group("iam:AddGroupMember", group_id)
-        member = self._get_principal(member_id)
+        try:
+            member = self._get_principal(member_id)
+        except IAMNotFoundError:
+            raise IAMNotFoundError(f"Principal {member_id} not found") from None
         if member.kind == "group":
             raise ValueError("Groups cannot contain groups")
         if "deleted" in (group.status, member.status):
@@ -1563,10 +1686,9 @@ class IAMService(IIAMService, PolicySource):
                     "users only (a module's account is approved by its manifest)"
                 )
             if not self._belongs_to(member_id, top):
-                raise ValueError(
-                    f"Group {group_id} belongs to {group.owner_scope}: "
-                    f"{member_id} holds nothing in {top}"
-                )
+                # Answered as for an unknown principal: whether one exists
+                # outside the group's container is not the caller's to learn.
+                raise IAMNotFoundError(f"Principal {member_id} not found")
         if member_id in self.store.list_group_members(group_id):
             return
         attachments = self.store.list_attachments(principal_id=group_id)
@@ -1590,6 +1712,12 @@ class IAMService(IIAMService, PolicySource):
 
     def remove_group_member(self, group_id: str, member_id: str) -> bool:
         self._require_group("iam:RemoveGroupMember", group_id)
+        if member_id in self.store.list_group_members(group_id):
+            # Leaving the group drops what is attached to it for the member, its
+            # Denies included: decided like attaching them to the member.
+            self._require_lift_attachments(
+                group_id, member_id, restricts_caller=lambda: self._is_caller(member_id)
+            )
         removed = self.store.remove_group_member(group_id, member_id)
         if removed:
             self._changed()
@@ -1756,9 +1884,11 @@ class IAMService(IIAMService, PolicySource):
         if not name:
             raise ValueError("A policy needs a name")
         owner = self._owner_checked(scope) if scope is not None else PLATFORM_SCOPE
-        parsed = parse_policy_document(document, self._registry)
         policy_id = new_id("pol")
+        # Authorized before the document is read: nobody who may not write a
+        # policy there has its text parsed.
         self.require("iam:CreatePolicy", policy_resource(policy_id, owner))
+        parsed = parse_policy_document(document, self._registry)
         self._check_owner_known(owner)
         check_owned_document(parsed, owner)
         chain: list[Policy] = []
@@ -1975,6 +2105,7 @@ class IAMService(IIAMService, PolicySource):
             parent_id=parent_id,
         )
         check_owned_document(updated.document, current.owner_scope)
+        self._require_keeps_own_denies(current, updated)
         attachments = self.store.list_attachments(policy_id=policy_id)
         if not updated.document.confined_to_scope and any(
             a.scope is not None for a in attachments
@@ -2479,7 +2610,9 @@ class IAMService(IIAMService, PolicySource):
             return
         self._require_unscoped_attach(policy_id, principal_id)
 
-    def _require_unscoped_attach(self, policy_id: str, principal_id: str) -> None:
+    def _require_unscoped_attach(
+        self, policy_id: str, principal_id: str, message: str | None = None
+    ) -> None:
         """``iam:AttachPolicy`` on the unscoped attachment: what attaching, at a
         scope, a policy whose chain denies beyond ``${scope}/`` takes."""
         unscoped = attachment_resource(policy_id, principal_id, None)
@@ -2487,11 +2620,147 @@ class IAMService(IIAMService, PolicySource):
             raise PermissionDeniedError(
                 "iam:AttachPolicy",
                 unscoped,
-                message=(
+                message=message
+                or (
                     f"{policy_id} denies beyond ${{scope}}, so only whoever may "
                     "attach it unscoped (the platform admin) attaches it at a scope"
                 ),
             )
+
+    def _require_lift(
+        self,
+        policy_id: str,
+        grantee: str,
+        scope: str | None,
+        *,
+        restricts_caller: Callable[[], bool],
+    ) -> None:
+        """What removing a customer policy that holds a Deny takes: the same as
+        attaching it there (``iam:AttachPolicy``, and holding what its Allows
+        give), and, when it restricts the caller itself, what attaching it
+        unscoped takes (the platform admin). Removing it widens what its grantee
+        may do, so whoever it was imposed on cannot lift it.
+
+        ``grantee`` is the attachment's principal as its resource names it (a
+        user, a group, an invitee). A built-in or managed policy's Denies come
+        with its own Allows, which go with it: only ``iam:DetachPolicy``
+        decides those. A first-party account acting for no user is not checked.
+        """
+        policy = self._find_policy(policy_id)
+        if policy is None or policy.managed or not self._denies_carried(policy):
+            return
+        ctx = current_call_context()
+        if ctx.on_behalf_of is None and self._first_party(ctx.principal):
+            return
+        self._require_attach(policy_id, grantee, scope)
+        self._require_held(
+            policy.document, [scope], policy_id=policy_id, parents=self._parents(policy)
+        )
+        if restricts_caller():
+            self._require_unscoped_attach(
+                policy_id,
+                grantee,
+                f"{policy_id} restricts you: only whoever may attach it unscoped "
+                "(the platform admin) removes it",
+            )
+
+    def _require_lift_attachments(
+        self, holder_id: str, grantee: str, *, restricts_caller: Callable[[], bool]
+    ) -> None:
+        """``_require_lift`` for each attachment of ``holder_id`` (a group) that
+        the change removes from ``grantee`` (a member, or the group itself)."""
+        for attachment in self.store.list_attachments(principal_id=holder_id):
+            self._require_lift(
+                attachment.policy_id,
+                grantee,
+                attachment.scope,
+                restricts_caller=restricts_caller,
+            )
+
+    def _denies_carried(self, policy: Policy) -> set[Statement]:
+        """The Denies a customer policy imposes on whoever holds it: its own, and
+        those of the customer policies of its chain (a sub-policy's parents),
+        which leave with it. A built-in or managed parent's Denies come with its
+        own Allows, held through its own attachments: not counted."""
+        chain, _whole = self._chain(policy, fresh=True)
+        return {
+            statement
+            for document in (
+                policy.document,
+                *(p.document for p in chain if not p.managed),
+            )
+            for statement in document.statements
+            if statement.effect == "Deny"
+        }
+
+    def _require_keeps_own_denies(self, current: Policy, updated: Policy) -> None:
+        """An edit that drops or changes a Deny a customer policy carries (its
+        own, or its chain's: a new or no parent) is not made by a principal it
+        restricts, unless it may attach the policy unscoped: as for removing it.
+        A policy's Denies reach whoever holds it and whoever holds a policy
+        below it (a sub-policy, at any depth): attached to them, to a group
+        they are in, or waiting for them in an invitation."""
+        if current.managed:
+            return
+        if not self._denies_carried(current) - self._denies_carried(updated):
+            return
+        ctx = current_call_context()
+        if ctx.on_behalf_of is None and self._first_party(ctx.principal):
+            return
+        for held in (current, *(sub for sub, _above in self._below(current.id))):
+            for attachment in self.store.list_attachments(policy_id=held.id):
+                if self._caller_is(attachment.principal_id):
+                    self._refuse_lifting(current.id, attachment.principal_id)
+            for grant in self.store.list_pending_grants(policy_id=held.id):
+                if self._invited_caller(grant):
+                    self._refuse_lifting(
+                        current.id, _invitee(grant.provider, grant.email)
+                    )
+
+    def _refuse_lifting(self, policy_id: str, grantee: str) -> None:
+        self._require_unscoped_attach(
+            policy_id,
+            grantee,
+            f"{policy_id} restricts you: only whoever may attach it unscoped "
+            "(the platform admin) lifts its Denies",
+        )
+
+    def _invited_caller(self, grant: PendingGrant) -> bool:
+        """Whether ``grant`` invites the caller (its provider and email)."""
+        return any(
+            record.provider == grant.provider
+            and (record.email or "").strip().lower() == grant.email
+            for record in self._callers()
+        )
+
+    def _is_caller(self, principal_id: str) -> bool:
+        """Whether ``principal_id`` is the caller itself (its actor or its user)."""
+        return any(principal_id == record.id for record in self._callers())
+
+    def _callers(self) -> list[PrincipalRecord]:
+        """The stored principals the current call is made by: its actor, and the
+        user it acts for."""
+        ctx = current_call_context()
+        found: list[PrincipalRecord] = []
+        for principal in (ctx.principal, ctx.on_behalf_of):
+            if principal is None:
+                continue
+            record = self._resolve(principal)
+            if record is not None:
+                found.append(record)
+        return found
+
+    def _caller_is(self, principal_id: str) -> bool:
+        """Whether ``principal_id`` is the caller, or a group the caller is in
+        (stored, or carried in its token)."""
+        ctx = current_call_context()
+        for principal in (ctx.principal, ctx.on_behalf_of):
+            if principal is not None and principal_id in principal.groups:
+                return True
+        return any(
+            principal_id == record.id or principal_id in self.store.groups_of(record.id)
+            for record in self._callers()
+        )
 
     def _attach(
         self,
@@ -2571,6 +2840,12 @@ class IAMService(IIAMService, PolicySource):
             "iam:DetachPolicy",
             attachment_resource(policy_id, principal_id, scope),
             not_found=lambda: IAMNotFoundError("Attachment not found"),
+        )
+        self._require_lift(
+            policy_id,
+            principal_id,
+            scope,
+            restricts_caller=lambda: self._caller_is(principal_id),
         )
         detached = self.store.detach(policy_id, principal_id, scope)
         if detached:
@@ -3298,6 +3573,12 @@ class IAMService(IIAMService, PolicySource):
             _grant_resource(grant),
             not_found=lambda: IAMNotFoundError("Pending grant not found"),
         )
+        self._require_lift(
+            grant.policy_id,
+            _invitee(grant.provider, grant.email),
+            grant.scope,
+            restricts_caller=lambda: self._invited_caller(grant),
+        )
         removed = self.store.remove_pending_grant(grant_id)
         if removed:
             self._changed()
@@ -3426,6 +3707,13 @@ class IAMService(IIAMService, PolicySource):
         if scope is not None:
             validate_scope(scope)
         self._require_detach_binding(policy_id, provider, claim_value, scope)
+        bound = self._binding_groups(provider, claim_value)
+        self._require_lift(
+            policy_id,
+            _bound_group(provider, claim_value),
+            scope,
+            restricts_caller=lambda: any(self._caller_is(g) for g in bound),
+        )
         # Only the groups bindings made: the caller was authorized for these, not
         # for a hand-made group that maps the same claim.
         removed = False
@@ -4032,6 +4320,9 @@ class IAMService(IIAMService, PolicySource):
         """
         modules.check_module(project, module_id)
         account = self._calling_module_account(project, module_id)
+        refused = self._module_id_refused(account)
+        if refused is not None:
+            raise IAMConflictError(refused)
         self.require(
             "iam:SubmitManifest",
             manifest_resource(account.id),
@@ -4215,6 +4506,73 @@ class IAMService(IIAMService, PolicySource):
             )
         return record
 
+    def _module_id_refused(self, account: PrincipalRecord) -> str | None:
+        """Why the module account ``account`` may not hold its module id, or
+        None (also for an account that is not a module's).
+
+        A module id names one module of the platform, whose namespaces it
+        names: refused when the core reserves it, when an engine module has it
+        (its jobs' account ``job/<module_id>``), or when an older account of
+        another project holds it. A deleted account holds nothing."""
+        parsed = modules.parse_account(account.name)
+        if parsed is None or account.kind != "service_account":
+            return None
+        project, module_id = parsed
+        if modules.reserved_module_id(module_id):
+            return f"Module id {module_id!r} is reserved"
+        engine_module = self.store.find_service_account(
+            roles.job_account_name(module_id)
+        )
+        if engine_module is not None and engine_module.status != "deleted":
+            return f"Module id {module_id!r} is an engine module's"
+        holder = self._module_id_holder(module_id)
+        if holder is not None and holder.id != account.id:
+            return (
+                f"Module id {module_id!r} is held by {holder.name!r}: one module "
+                f"id runs in one project, not also in {project!r}"
+            )
+        return None
+
+    def _module_id_holder(self, module_id: str) -> PrincipalRecord | None:
+        """The account that holds ``module_id``: of the module accounts of that
+        id not deleted, the one created first."""
+        cached = self._module_id_holders.get(module_id)
+        if cached is not None:
+            try:
+                record = self.store.get_principal(cached)
+            except IAMNotFoundError:
+                record = None
+            if record is not None and record.status != "deleted":
+                return record
+        found: list[PrincipalRecord] = []
+        after: str | None = None
+        while True:
+            page = self.store.list_principals(
+                "service_account", limit=500, after=after, text=f"/{module_id}"
+            )
+            for record in page.items:
+                parsed = modules.parse_account(record.name)
+                if (
+                    parsed is not None
+                    and parsed[1] == module_id
+                    and record.status != "deleted"
+                ):
+                    found.append(record)
+            if page.next_after is None:
+                break
+            after = page.next_after
+        if not found:
+            return None
+        holder = min(
+            found,
+            key=lambda r: (
+                r.created_at.timestamp() if r.created_at else float("inf"),
+                r.id,
+            ),
+        )
+        self._module_id_holders[module_id] = holder.id
+        return holder
+
     def _manifest(
         self,
         principal_id: str,
@@ -4257,6 +4615,9 @@ class IAMService(IIAMService, PolicySource):
         self, record: ManifestRecord, document: PolicyDocument, *, decided_by: str
     ) -> ManifestRecord:
         account = self._get_principal(record.principal_id)
+        refused = self._module_id_refused(account)
+        if refused is not None:
+            raise IAMConflictError(refused)
         bound = modules.bind(document, record.project, record.module_id)
         _refuse_reserved_topics(bound)
         self._refuse_nested_topics(account.id, bound)
@@ -4286,7 +4647,9 @@ class IAMService(IIAMService, PolicySource):
             if other.sha256 != record.sha256:
                 self.store.put_manifest(replace(other, status="superseded"))
         placed = {(p.service, p.id_key) for p in self.store.list_placements()}
-        for service, id_key in modules.namespace_placements(record.module_id):
+        for service, id_key in modules.namespace_placements(
+            record.project, record.module_id
+        ):
             if (service, id_key) not in placed:
                 self.store.put_placement(Placement(service, id_key))
         approved = self.store.put_manifest(
@@ -4336,6 +4699,30 @@ class IAMService(IIAMService, PolicySource):
         Computed from the store, never from the cache: an approval made a
         moment ago counts at the next connection.
         """
+        return self._derive(principal, key.key_id)
+
+    def connection_permissions(
+        self, principal_id: str, key_id: str
+    ) -> broker.BrokerPermissions:
+        """What a connection the broker admitted with key ``key_id`` of
+        ``principal_id`` may use now, for the engine to check it after a
+        change without the key itself. ``KeyRefusedError`` when the key is
+        unknown, revoked, expired or not that account's, or the account is no
+        longer an active service account: the connection must end. From the
+        store, never from the cache."""
+        try:
+            key = self.store.get_key(key_id)
+            principal = self.store.get_principal(principal_id)
+        except IAMNotFoundError:
+            raise KeyRefusedError() from None
+        if (
+            key.principal_id != principal.id
+            or key.kind != "service"
+            or not key.usable(datetime.now(UTC))
+            or principal.kind != "service_account"
+            or not principal.active
+        ):
+            raise KeyRefusedError()
         return self._derive(principal, key.key_id)
 
     def broker_grants(self, principal_id: str) -> broker.BrokerPermissions:
@@ -4519,15 +4906,35 @@ class IAMService(IIAMService, PolicySource):
     def set_platform_grants(self, grants: Sequence[roles.PlatformGrant]) -> None:
         """The deployment's own platform-level resources every workspace member
         reaches by role level (``roles.PlatformGrant``: Nexus's shared repository).
-        Replaces the previous set; kept in memory and applied again whenever the
-        managed policies are regenerated. Needs ``iam:RegisterCatalog`` on ``nexus``."""
+        Replaces the previous set. The grants live in the stored platform policies
+        (``builtin.platform.viewer`` / ``member``), which every regeneration of the
+        managed policies, by any instance, reads them back from
+        (``roles.stored_platform_grants``). Needs ``iam:RegisterCatalog`` on ``nexus``."""
         self.require("iam:RegisterCatalog", catalog_resource("nexus"))
-        self._platform_grants = tuple(grants)
-        self._refresh_builtin_policies()
+        self._refresh_builtin_policies(tuple(grants))
         self._changed()
 
-    def _refresh_builtin_policies(self) -> None:
-        for policy in roles.builtin_policies(self._registry, self._platform_grants):
+    def _stored_platform_grants(self) -> tuple[roles.PlatformGrant, ...]:
+        def stored(policy_id: str) -> Policy | None:
+            try:
+                return self.store.get_policy(policy_id)
+            except IAMNotFoundError:
+                return None
+
+        return tuple(
+            roles.stored_platform_grants(
+                stored(roles.PLATFORM_VIEWER), stored(roles.PLATFORM_MEMBER)
+            )
+        )
+
+    def _refresh_builtin_policies(
+        self, grants: tuple[roles.PlatformGrant, ...] | None = None
+    ) -> None:
+        """Regenerate the managed policies. ``grants`` replaces the platform grants
+        (``set_platform_grants``); otherwise the ones already stored are kept."""
+        if grants is None:
+            grants = self._stored_platform_grants()
+        for policy in roles.builtin_policies(self._registry, grants):
             self.store.put_managed_policy(policy)
 
     # =========================================================================
@@ -4548,6 +4955,28 @@ class IAMService(IIAMService, PolicySource):
         self._policies.clear()
         self._placements.clear()
         self._floors.clear()
+
+    def _check_revision(self) -> None:
+        """Drop the caches when another process changed the store: the store's
+        revision is read at most every ``revision_check_seconds``, by one thread
+        (the others keep what is cached meanwhile). One that cannot be read
+        drops them: nothing cached is trusted then."""
+        now = time.monotonic()
+        if now - self._revision_checked_at < self._revision_check_seconds:
+            return
+        if not self._revision_check_lock.acquire(blocking=False):
+            return
+        try:
+            if now - self._revision_checked_at < self._revision_check_seconds:
+                return
+            try:
+                self.refresh_if_changed()
+            except Exception as exc:  # noqa: BLE001 - fail fresh, never stale
+                logger.warning(f"IAM store revision unreadable: {exc!r}")
+                self.invalidate()
+            self._revision_checked_at = time.monotonic()
+        finally:
+            self._revision_check_lock.release()
 
     def refresh_if_changed(self) -> bool:
         """Drop the caches when the store's revision differs from the last one
@@ -4697,10 +5126,14 @@ def _as_owner(scope: str | None) -> str:
 
 
 def _written_for(owner: str) -> list[str | None]:
-    """The scopes a policy is held at when it is written: its owner's for a
-    container's (it is attached there or below, and checked again there); for
-    the platform's, as written unscoped and at any scope."""
-    return [owner] if owner != PLATFORM_SCOPE else [None, _ANY_SCOPE]
+    """The scopes a policy is held at when it is written: its owner, a
+    container's or the platform's (``abi:``), and unscoped for the platform's,
+    which may be attached there. Never below the owner: wherever it is
+    attached, invited or bound, it is checked there, so it is held where it
+    applies, not in every container it might one day apply in (a Deny of the
+    writer in another organisation's workspace never stops an organisation's
+    access policy, #1519)."""
+    return [owner] if owner != PLATFORM_SCOPE else [None, PLATFORM_SCOPE]
 
 
 def _companion_roles(

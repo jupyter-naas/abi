@@ -32,6 +32,20 @@ export function formatQueryLabel(queryName) {
     .join(" ");
 }
 
+/**
+ * A link target that is safe to put in ``href``: an ``http(s):`` URL, or, for a
+ * contact the server built (``contact: true``), a ``mailto:`` or ``tel:`` one.
+ * Anything else (``javascript:``, ``data:``, a relative path) gives "".
+ */
+export function safeHref(value, { contact = false } = {}) {
+  const url = String(value ?? "").trim();
+  // Control characters and spaces can hide a scheme from this check.
+  if (!url || /[\u0000-\u0020\u007f]/.test(url)) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  if (contact && /^(mailto|tel):/i.test(url)) return url;
+  return "";
+}
+
 export function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char],

@@ -1,13 +1,13 @@
-import test from 'node:test';
+import { onTestFinished, test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { Network } from 'vis-network/standalone';
 import { installOrthogonalEdges, type RoutedEdge } from './orthogonal-network';
 import type { Point } from './orthogonal-route';
 
-test('canvas routing keeps edge IDs, labels, arrows, selection and dragging; teardown restores the network', (t) => {
+test('canvas routing keeps edge IDs, labels, arrows, selection and dragging; teardown restores the network', () => {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'getComputedStyle');
   Object.defineProperty(globalThis, 'getComputedStyle', {configurable: true, value: () => ({getPropertyValue: () => '#ffffff'})});
-  t.after(() => { if (descriptor) Object.defineProperty(globalThis, 'getComputedStyle', descriptor); else Reflect.deleteProperty(globalThis, 'getComputedStyle'); });
+  onTestFinished(() => { if (descriptor) Object.defineProperty(globalThis, 'getComputedStyle', descriptor); else Reflect.deleteProperty(globalThis, 'getComputedStyle'); });
   let scale = 1;
   const positions: Record<string, Point> = { a: {x: 0, y: 0}, b: {x: 420, y: 200} };
   const listeners = new Map<string, (ctx: CanvasRenderingContext2D) => void>();

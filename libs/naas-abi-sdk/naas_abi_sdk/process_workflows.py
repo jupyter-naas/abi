@@ -320,6 +320,7 @@ def declare_process_workflows(
                 max_concurrency=settings.max_concurrency,
                 timeout=settings.timeout,
                 max_attempts=settings.max_attempts,
+                skip_if_running=settings.skip_if_running,
             )
             declared.append(workflow_name)
     return declared

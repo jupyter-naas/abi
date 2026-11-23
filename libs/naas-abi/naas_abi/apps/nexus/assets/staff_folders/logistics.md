@@ -20,4 +20,4 @@ shipped or maintained, and the vendors that provide it.
 - Software engineering and IT systems themselves: `signals/`.
 
 This function is often empty at first. An empty folder simply shows a part of the organization the
-workspace does not cover yet.
+drive does not cover yet.

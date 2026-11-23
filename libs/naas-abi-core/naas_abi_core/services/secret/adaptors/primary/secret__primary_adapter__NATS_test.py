@@ -6,6 +6,7 @@ against a minimal fake ``Request`` that records whatever gets passed to
 """
 
 import asyncio
+import secrets
 import threading
 
 from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
@@ -210,6 +211,22 @@ def test_secret_authentication_error_maps_to_call_error():
     assert response.error.retryable is False
 
 
+def test_secret_backend_errors_keep_their_text_out_of_replies():
+    class _Refusing(_StubAdapter):
+        def get(self, key, default=None):
+            raise SecretAuthenticationError("refused credential backend-key-under-test")
+
+    adapter = SecretPrimaryAdapterNATS(_Refusing(), SECRET)
+    request = _FakeRequest(_get_request(), headers={AUTH_HEADER: _valid_token()})
+
+    asyncio.run(adapter._handle_get(request))
+
+    response = secret_pb2.GetResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "SECRET_AUTH_FAILED"
+    assert "backend-key-under-test" not in response.error.message
+
+
 def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
     class _BrokenAdapter(_StubAdapter):
         def get(self, key, default=None):
@@ -300,6 +317,7 @@ def _stub_with_reserved() -> _StubAdapter:
             "idp/signing-key": "idp-pem",
             "NATS_ENGINE_PASSWORD": "engine-pw",
             "NATS_AUTH_PASSWORD": "auth-pw",
+            "NATS_SYSTEM_PASSWORD": secrets.token_hex(8),
             "NATS_AUTH_CALLOUT_SEED": "SAAseed",
             "NAAS_API_KEY": "naas",
             "PLAIN": "value",
@@ -319,6 +337,7 @@ FORBIDDEN_TO_A_MODULE = (
     "idp/signing-key",
     "NATS_ENGINE_PASSWORD",
     "NATS_AUTH_PASSWORD",
+    "NATS_SYSTEM_PASSWORD",
     "NATS_AUTH_CALLOUT_SEED",
     "NAAS_API_KEY",
     "PLAIN",

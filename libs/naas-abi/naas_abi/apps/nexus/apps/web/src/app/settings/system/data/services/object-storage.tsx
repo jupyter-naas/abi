@@ -43,7 +43,6 @@ export const objectStorageView: ServiceView = {
   label: 'Object storage',
   description: 'Files and blobs written by modules, Nexus files and uploads.',
   icon: HardDrive,
-  group: 'Storage',
   noun: { one: 'file', many: 'files' },
   entryIcon: fileIcon,
   nounFor: (entry) => (entry.kind === 'container' ? { one: 'folder', many: 'folders' } : { one: 'file', many: 'files' }),

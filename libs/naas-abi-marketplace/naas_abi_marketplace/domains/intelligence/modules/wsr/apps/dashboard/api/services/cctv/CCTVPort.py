@@ -21,5 +21,7 @@ class ICCTVService:
     async def get_cameras(self) -> list[CCTVCamera]:
         raise NotImplementedError
 
-    async def proxy_snapshot(self, url: str) -> tuple[bytes, str]:
+    async def proxy_snapshot(self, camera_id: str, kind: str) -> tuple[bytes, str]:
+        """The current image (``kind="image"``) or stream (``"video"``) of one
+        camera of ``get_cameras()``, by its id."""
         raise NotImplementedError

@@ -12,16 +12,25 @@ secondary adapter at:
 ``libs/naas-abi-core/naas_abi_core/services/triple_store/adaptors/secondary/Oxigraph.py``
 
 Endpoints:
-  POST /query   — SPARQL query;  body=sparql-query, Accept controls format;
-                  default-graph-uri / named-graph-uri confine its dataset
-  POST /update  — SPARQL update; body=sparql-update
+  GET  /query?query=… or POST /query (application/sparql-query) — SPARQL
+                  query; Accept controls format; default-graph-uri /
+                  named-graph-uri confine its dataset
+  POST /update  — SPARQL update (application/sparql-update only)
   GET  /store          — dump default graph (text/turtle)
   POST /store?default  — bulk insert default graph (application/n-triples)
   DELETE /store?default — bulk delete default graph (application/n-triples)
 
+Who may call it: a request is served only when its ``Host`` names the bound
+address or loopback (a page that rebinds a name to 127.0.0.1 is refused), and,
+when the server has a token (``OXIGRAPH_TOKEN``, which ``abi dev`` sets per run
+and hands to the services it starts), only with ``Authorization: Bearer
+<token>``. Bodies are taken only with their SPARQL or RDF media type, never as a
+form or plain text, which a browser sends cross-site without asking.
+``/health`` needs no token.
+
 Run with::
 
-    python -m naas_abi_core.services.triple_store.oxigraph_server \\
+    OXIGRAPH_TOKEN=... python -m naas_abi_core.services.triple_store.oxigraph_server \\
         --location ./storage/triplestore/oxigraph \\
         --bind 127.0.0.1:7878
 """
@@ -29,11 +38,13 @@ Run with::
 from __future__ import annotations
 
 import argparse
+import hmac
 import io
 import logging
+import os
 import queue
 import threading
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -44,6 +55,32 @@ from starlette.concurrency import run_in_threadpool
 logger = logging.getLogger(__name__)
 
 _CHUNK_BYTES = 64 * 1024
+TOKEN_ENV = "OXIGRAPH_TOKEN"
+# Host names a request may carry, besides the bound address.
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+_WILDCARD_HOSTS = ("0.0.0.0", "::", "*")  # nosec B104 - names, not a bind
+_SPARQL_QUERY = "application/sparql-query"
+_SPARQL_UPDATE = "application/sparql-update"
+_RDF_TYPES = ("application/n-triples", "text/turtle", "application/n-quads")
+
+
+def _media_type(request: Request) -> str:
+    return request.headers.get("content-type", "").split(";")[0].strip().lower()
+
+
+def _require_media_type(request: Request, *accepted: str) -> None:
+    if _media_type(request) not in accepted:
+        raise HTTPException(
+            status_code=415, detail=f"content type must be one of {', '.join(accepted)}"
+        )
+
+
+def _host_name(host: str) -> str:
+    """The name of a ``Host`` header, without its port (``[::1]:7878`` → ``::1``)."""
+    host = host.strip().lower()
+    if host.startswith("["):
+        return host[1:].split("]", 1)[0]
+    return host.rsplit(":", 1)[0] if host.count(":") == 1 else host
 
 
 class _Abandoned(Exception):
@@ -164,8 +201,17 @@ def _rdf_format_for_accept(accept: str) -> tuple[RdfFormat, str]:
     return RdfFormat.TURTLE, "text/turtle"
 
 
-def create_app(store_path: str) -> FastAPI:
+def create_app(
+    store_path: str,
+    *,
+    token: str | None = None,
+    hosts: Iterable[str] = LOOPBACK_HOSTS,
+) -> FastAPI:
     """Build the FastAPI app for the given store path.
+
+    Requests are served only when their ``Host`` is one of ``hosts`` and, with
+    a ``token``, only when they carry it as a bearer credential (``/health``
+    excepted).
 
     The store is opened once at startup and shared across requests. Every blocking
     pyoxigraph call is dispatched to a worker thread (``run_in_threadpool``) so the single
@@ -176,7 +222,27 @@ def create_app(store_path: str) -> FastAPI:
     store = Store(path=store_path)
     logger.info("Opened oxigraph store at %s", store_path)
 
-    app = FastAPI(title="abi-dev oxigraph", docs_url=None, redoc_url=None)
+    app = FastAPI(
+        title="abi-dev oxigraph", docs_url=None, redoc_url=None, openapi_url=None
+    )
+    allowed_hosts = frozenset(h.lower() for h in hosts)
+    expected = f"Bearer {token}".encode() if token else None
+
+    @app.middleware("http")
+    async def callers(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        if _host_name(request.headers.get("host", "")) not in allowed_hosts:
+            return Response("host not served", status_code=421)
+        if expected is not None and request.url.path != "/health":
+            given = request.headers.get("authorization", "").encode()
+            if not hmac.compare_digest(given, expected):
+                return Response(
+                    "token required",
+                    status_code=401,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        return await call_next(request)
 
     # pyoxigraph's Store calls (query/update/dump/bulk_load) are synchronous and can take
     # a while. The handlers below are ``async`` (so they can ``await request.body()``),
@@ -244,19 +310,10 @@ def create_app(store_path: str) -> FastAPI:
 
     @app.post("/query")
     async def query_post(request: Request) -> Response:
-        """SPARQL 1.1 protocol: POST /query.
-
-        Accepts either ``application/sparql-query`` with the query in the
-        raw body, or ``application/x-www-form-urlencoded`` with
-        ``query=...``.
-        """
-        content_type = request.headers.get("content-type", "")
-        if "application/x-www-form-urlencoded" in content_type:
-            form = await request.form()
-            raw = form.get("query")
-            query_str = raw.strip() if isinstance(raw, str) else ""
-        else:
-            query_str = (await request.body()).decode("utf-8").strip()
+        """SPARQL 1.1 protocol: POST /query, ``application/sparql-query`` with
+        the query in the raw body."""
+        _require_media_type(request, _SPARQL_QUERY)
+        query_str = (await request.body()).decode("utf-8").strip()
         accept = request.headers.get("accept", "")
         return await _run_query(query_str, accept, request)
 
@@ -265,13 +322,8 @@ def create_app(store_path: str) -> FastAPI:
     # ------------------------------------------------------------------
     @app.post("/update")
     async def update(request: Request) -> Response:
-        content_type = request.headers.get("content-type", "")
-        if "application/x-www-form-urlencoded" in content_type:
-            form = await request.form()
-            raw = form.get("update")
-            body = raw.strip() if isinstance(raw, str) else ""
-        else:
-            body = (await request.body()).decode("utf-8").strip()
+        _require_media_type(request, _SPARQL_UPDATE)
+        body = (await request.body()).decode("utf-8").strip()
         if not body:
             raise HTTPException(status_code=400, detail="empty SPARQL update")
         try:
@@ -299,7 +351,8 @@ def create_app(store_path: str) -> FastAPI:
 
     @app.post("/store")
     async def store_post(request: Request) -> Response:
-        content_type = request.headers.get("content-type", "application/n-triples")
+        _require_media_type(request, *_RDF_TYPES)
+        content_type = _media_type(request)
         body = await request.body()
         fmt, _ = _rdf_format_for_accept(content_type)
         try:
@@ -316,7 +369,8 @@ def create_app(store_path: str) -> FastAPI:
         N-Triples / Turtle in, each parsed triple is removed from the default
         graph. Matches the contract the existing Oxigraph adapter expects.
         """
-        content_type = request.headers.get("content-type", "application/n-triples")
+        _require_media_type(request, *_RDF_TYPES)
+        content_type = _media_type(request)
         body = await request.body()
         if not body:
             return Response(status_code=204)
@@ -369,7 +423,15 @@ def main(argv: list[str] | None = None) -> None:
         format="%(asctime)s [oxigraph-server] %(levelname)s %(message)s",
     )
 
-    app = create_app(args.location)
+    token = os.environ.get(TOKEN_ENV) or None
+    if token is None:
+        logger.warning(
+            "%s is not set: any local process may read and write this store", TOKEN_ENV
+        )
+    hosts = [*LOOPBACK_HOSTS]
+    if host.lower() not in _WILDCARD_HOSTS:
+        hosts.append(host)
+    app = create_app(args.location, token=token, hosts=hosts)
 
     # Local import keeps pure-import-time cost low when this module is
     # touched without running the server.

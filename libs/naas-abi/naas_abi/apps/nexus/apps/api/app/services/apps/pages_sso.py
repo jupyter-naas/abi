@@ -1,15 +1,91 @@
-"""HMAC tokens that let a Nexus session open an allowlisted Pages portal."""
+"""HMAC tokens that let a Nexus session sign in to one module app's portal.
+
+A token is for one app: it names it (``app``, the ``<module_path>:<app_dir>``
+id), its ``aud`` is that app's hostname, and it is signed with that app's own
+secret (``pages_sso_secrets``), which the operator shares with that portal
+alone. An app without a secret gets no token.
+"""
 
 from __future__ import annotations
 
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
+import logging
 import time
+from collections.abc import Mapping
 from urllib.parse import urlparse
 
 PAGES_SSO_SCOPE = "pages-sso"
+
+_log = logging.getLogger(__name__)
+PORTAL_SECRETS_SHAPE = '{"<module_path>:<app_dir>": "<secret>"}'
+
+# The single secret every portal once shared, which both signed and verified.
+LEGACY_PAGES_SSO_SECRET_ENV = "PAGES_SSO_SECRET"
+MOVE_THE_SHARED_SECRET = (
+    "No portal gets a token from it any more: move the secret under the portal's "
+    'app id in pages_sso_secrets ({"<module_path>:<app_dir>": "<secret>"}, or the '
+    "PAGES_SSO_SECRETS JSON), and give each portal its own secret."
+)
+
+
+def portal_secrets(raw: Mapping[str, str] | None) -> dict[str, str]:
+    """``pages_sso_secrets`` without blank app ids or empty secrets."""
+    out: dict[str, str] = {}
+    if not isinstance(raw, Mapping):
+        return out
+    for app_id, secret in raw.items():
+        key = str(app_id or "").strip()
+        value = str(secret or "").strip()
+        if key and value:
+            out[key] = value
+    return out
+
+
+def read_portal_secrets(raw: object) -> dict[str, str]:
+    """``pages_sso_secrets`` as configured: a map, or its JSON (``PAGES_SSO_SECRETS``).
+
+    A value that is not a JSON object of strings is logged, without the value,
+    and read as no secrets: a malformed setting turns portal sign-in off, it
+    never stops Nexus from starting.
+    """
+    if raw is None:
+        return {}
+    value = raw
+    if isinstance(raw, (str, bytes)):
+        text = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
+        if not text.strip():
+            return {}
+        try:
+            value = json.loads(text)
+        except ValueError:
+            value = None
+    if not isinstance(value, Mapping) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in value.items()
+    ):
+        _log.error(
+            "pages_sso_secrets (PAGES_SSO_SECRETS) is ignored: it must be a JSON object "
+            "of an app id to its portal's secret, %s. No portal gets a token until it is.",
+            PORTAL_SECRETS_SHAPE,
+        )
+        return {}
+    return portal_secrets(value)
+
+
+def shared_secret_warning(environ: Mapping[str, str]) -> str | None:
+    """What to say at start while the old ``PAGES_SSO_SECRET`` is still set, else None.
+
+    Names are matched without case, as ``Settings`` read them.
+    """
+    if not any(
+        name.upper() == LEGACY_PAGES_SSO_SECRET_ENV and str(value or "").strip()
+        for name, value in environ.items()
+    ):
+        return None
+    return f"{LEGACY_PAGES_SSO_SECRET_ENV} is set and signs nothing. {MOVE_THE_SHARED_SECRET}"
 
 
 def _b64url(raw: bytes) -> str:
@@ -20,12 +96,20 @@ def mint_pages_sso_token(
     *,
     email: str,
     audience: str,
+    app_id: str,
     secret: str,
     expires_seconds: int = 300,
 ) -> tuple[str, int]:
-    """Return ``(token, expires_in_seconds)``. ``audience`` is the portal hostname."""
+    """Return ``(token, expires_in_seconds)``.
+
+    ``audience`` is the portal hostname, ``app_id`` the app the token is for and
+    ``secret`` that app's own secret.
+    """
     if not secret:
-        raise ValueError("pages_sso_secret is not configured")
+        raise ValueError("this app has no portal sign-in secret")
+    app = (app_id or "").strip()
+    if not app:
+        raise ValueError("a portal sign-in token names its app")
     host = audience.strip().lower()
     if not host or "/" in host or ":" in host:
         raise ValueError("audience must be a hostname")
@@ -33,6 +117,7 @@ def mint_pages_sso_token(
     exp = int(time.time()) + lifetime
     payload = json.dumps(
         {
+            "app": app,
             "aud": host,
             "email": email.strip().lower(),
             "exp": exp,
@@ -51,8 +136,14 @@ def verify_pages_sso_token(
     *,
     secret: str,
     audience: str,
+    app_id: str | None = None,
 ) -> str | None:
-    """Return the email when the token is valid for ``audience``, else None."""
+    """Return the email when the token is valid for ``audience``, else None.
+
+    With ``app_id``, the token's ``app`` claim must also be that app. Without it,
+    the claim is not read, so a portal that checks only ``aud``, ``scope``,
+    ``exp`` and ``email`` still accepts the token.
+    """
     if not token or not secret or not audience:
         return None
     parts = token.split(".")
@@ -71,9 +162,13 @@ def verify_pages_sso_token(
         payload = json.loads(base64.urlsafe_b64decode(body + pad))
     except (ValueError, json.JSONDecodeError):
         return None
+    if not isinstance(payload, dict):
+        return None
     if payload.get("scope") != PAGES_SSO_SCOPE:
         return None
     if str(payload.get("aud") or "").lower() != audience.strip().lower():
+        return None
+    if app_id is not None and payload.get("app") != app_id.strip():
         return None
     exp = payload.get("exp")
     if not isinstance(exp, int) or exp < int(time.time()):
@@ -115,3 +210,36 @@ def parse_dev_app_urls(raw: str | None) -> dict[str, str]:
         if app_id and target:
             out[app_id] = target
     return out
+
+
+def is_loopback_host(host: str | None) -> bool:
+    """``localhost``, a ``*.localhost`` name or a loopback address."""
+    name = (host or "").strip().lower().rstrip(".")
+    if name.startswith("[") and name.endswith("]"):
+        name = name[1:-1]
+    if name == "localhost" or name.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(name).is_loopback
+    except ValueError:
+        return False
+
+
+def dev_app_url(
+    app_id: str,
+    *,
+    dev_app_urls: str | None,
+    nexus_env: str | None,
+    frontend_url: str | None,
+) -> str | None:
+    """The dev origin ``NEXUS_DEV_APP_URLS`` names for ``app_id`` on a local Nexus, else None.
+
+    ``nexus_env`` is ``local`` by default on every install, deployed ones
+    included, so it is not enough alone: the Nexus web app (``frontend_url``)
+    must also be on a loopback host, which no deployed Nexus is.
+    """
+    if str(nexus_env or "").strip().lower() != "local":
+        return None
+    if not is_loopback_host(urlparse(frontend_url or "").hostname):
+        return None
+    return parse_dev_app_urls(dev_app_urls).get(app_id)

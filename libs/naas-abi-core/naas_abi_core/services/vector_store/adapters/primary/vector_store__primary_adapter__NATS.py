@@ -78,6 +78,7 @@ from naas_abi_core.services.vector_store.adapters.vector_store_stream_codec impo
 )
 from naas_abi_core.services.vector_store.IVectorStorePort import (
     CollectionNotFoundError,
+    InvalidCollectionNameError,
     IVectorStorePort,
     VectorDocument,
 )
@@ -308,6 +309,11 @@ class VectorStorePrimaryAdapterNATS(ServiceWithTransfers):
                 "COLLECTION_NOT_FOUND",
                 str(exc),
                 retryable=False,
+            )
+            return
+        except InvalidCollectionNameError as exc:
+            await self._respond_error(
+                request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
             )
             return
         except Exception:  # noqa: BLE001 - a handler must never crash the service

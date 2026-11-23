@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 
 import { middleware } from './middleware';
 import { LEGACY_WORKSPACE_SETTINGS_SLUGS } from './app/settings/lib/tables';
+import { PLATFORM_SETTINGS_SECTIONS } from './app/settings/lib/redirects';
 
 function requestFor(pathname: string, cookies: Record<string, string> = {}): NextRequest {
   const url = `https://nexus.example.com${pathname}`;
@@ -56,7 +57,8 @@ describe('middleware auth redirects', () => {
       '/settings/tables/users',
       '/settings/tables/users/user-1',
       '/settings/system',
-      '/settings/system/events',
+      '/settings/activity/events',
+      '/settings/data/documents',
       '/settings/roles',
     ]) {
       const response = middleware(requestFor(path, { 'nexus-auth-flag': 'true' }));
@@ -98,12 +100,14 @@ describe('middleware auth redirects', () => {
       requestFor('/workspace/ws-1/admin/system?tab=traces&trace=abc', cookies),
     );
     expect(traces.headers.get('location')).toBe(
-      'https://nexus.example.com/settings/system/traces?trace=abc',
+      'https://nexus.example.com/settings/activity/traces?trace=abc',
     );
     const access = middleware(requestFor('/org/acme/workspace/ws-1/admin/system?tab=access', cookies));
     expect(access.headers.get('location')).toBe('https://nexus.example.com/settings/roles');
     const events = middleware(requestFor('/workspace/ws-1/admin/events', cookies));
-    expect(events.headers.get('location')).toBe('https://nexus.example.com/settings/system/events');
+    expect(events.headers.get('location')).toBe('https://nexus.example.com/settings/activity/events');
+    const data = middleware(requestFor('/settings/system/data?service=cache', cookies));
+    expect(data.headers.get('location')).toBe('https://nexus.example.com/settings/data/cache');
   });
 
   it('keeps redirecting legacy workspace settings links', () => {
@@ -118,13 +122,44 @@ describe('middleware auth redirects', () => {
   it('redirects every legacy workspace settings link, even where a table shares the name', () => {
     process.env.NODE_ENV = 'production';
 
-    for (const slug of LEGACY_WORKSPACE_SETTINGS_SLUGS) {
+    // A slug Platform Settings now serves (General) is its page, not a legacy link.
+    for (const slug of LEGACY_WORKSPACE_SETTINGS_SLUGS.filter((s) => !PLATFORM_SETTINGS_SECTIONS.includes(s))) {
       const response = middleware(
         requestFor(`/settings/${slug}`, { 'nexus-auth-flag': 'true' }),
       );
       expect(response.headers.get('location')).toMatch(
         new RegExp(`/workspace/.+/settings/${slug}$`),
       );
+    }
+  });
+
+  it('serves Platform Settings › General at /settings/general', () => {
+    process.env.NODE_ENV = 'production';
+
+    const response = middleware(requestFor('/settings/general', { 'nexus-auth-flag': 'true' }));
+    expect(response.headers.get('location')).toBeNull();
+  });
+});
+
+describe('middleware: routes that fetch for a page', () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
+  });
+
+  it('keeps callers without a web pass out, in every mode', async () => {
+    for (const mode of ['production', 'development']) {
+      process.env.NODE_ENV = mode;
+      for (const path of ['/api/image-data', '/api/link-preview', '/api/maps/place', '/api/maps/firms']) {
+        // The page's own flag is no pass: page script sets it.
+        const response = middleware(requestFor(path, { 'nexus-auth-flag': 'true' }));
+        expect(response.status, `${mode} ${path}`).toBe(401);
+        expect(response.headers.get('cache-control')).toBe('private, no-store');
+      }
+      const withPass = middleware(requestFor('/api/image-data', { 'nexus-web-pass': 'abi_gk_a_b' }));
+      expect(withPass.status).toBe(200);
+      expect(withPass.headers.get('x-middleware-next')).toBe('1');
     }
   });
 });

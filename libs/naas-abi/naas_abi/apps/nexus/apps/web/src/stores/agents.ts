@@ -95,6 +95,30 @@ export async function ensureAgentsSynced(workspaceId: string): Promise<void> {
   await useAgentsStore.getState().fetchAgents(workspaceId, true);
 }
 
+/** The roster calls in flight, per workspace: `sync` (POST /agents/sync) and `get`. */
+const agentsInFlight = new Map<string, Promise<void>>();
+
+/**
+ * One roster call per workspace at a time. A second caller (a remount, React's
+ * StrictMode double effect, the next route while the first answer is slow) waits for
+ * the call in flight instead of sending another: a sync in flight also answers a
+ * plain read, never the other way around.
+ */
+export function joinAgentsFetch(
+  workspaceId: string,
+  force: boolean,
+  run: () => Promise<void>
+): Promise<void> {
+  const key = `${workspaceId}:${force ? 'sync' : 'get'}`;
+  const running = agentsInFlight.get(`${workspaceId}:sync`) ?? agentsInFlight.get(key);
+  if (running) return running;
+  const call = run().finally(() => {
+    if (agentsInFlight.get(key) === call) agentsInFlight.delete(key);
+  });
+  agentsInFlight.set(key, call);
+  return call;
+}
+
 // Reserved type names that always appear in the type selector.
 // "Default" is the workspace's default-chat agent (backend-backed via is_default).
 // "Custom" is the neutral fallback when no override is set.
@@ -149,7 +173,7 @@ export const useAgentsStore = create<AgentsState>()(
       customTypes: [],
       agentTypeOverrides: {},
 
-      fetchAgents: async (workspaceId: string, force = false) => {
+      fetchAgents: (workspaceId: string, force = false) => joinAgentsFetch(workspaceId, force, async () => {
         if (!workspaceId) return;
         // `agents` is one array. `lastFetchedAt` is per workspace, and both
         // are saved in the browser. Skip the fetch only when this id matches.
@@ -325,7 +349,7 @@ export const useAgentsStore = create<AgentsState>()(
         } catch (error) {
           console.error('Failed to fetch agents:', error);
         }
-      },
+      }),
 
       addAgent: async (agent) => {
         const id = generateId();
