@@ -18,6 +18,9 @@ The document is written in sections, one statement each, by ``sid``:
 | ``OfferPipelines`` | ``module:RunPipeline``, ``module:ReadPipelineRuns`` | ``${scope}/module:pipeline/...`` |
 | ``OfferFeatures`` | ``nexus:UseFeature`` | ``${scope}/nexus:feature/<key>`` |
 
+A section naming more than ``policy.MAX_PATTERNS`` items (IAM's limit for one
+statement) is written in parts: ``OfferAgents``, ``OfferAgents2``, ``OfferAgents3``...
+
 An offer of nothing is ``container_defaults.nothing_document`` (an Allow no name
 matches). ``offer_of`` reads the sections back: what the Features and Agents/Apps
 settings change, and what the access migration (S4) writes from a ceiling's old
@@ -41,7 +44,7 @@ from urllib.parse import unquote
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import scoped_resource
 from naas_abi_core.services.iam import module_scopes
 from naas_abi_core.services.iam.names import PLATFORM
-from naas_abi_core.services.iam.policy import POLICY_VERSION
+from naas_abi_core.services.iam.policy import MAX_PATTERNS, POLICY_VERSION
 
 USE_FEATURE = "nexus:UseFeature"
 WHOLE_MODULE = "*"
@@ -77,6 +80,32 @@ FEATURES_SID = "OfferFeatures"
 OFFER_SIDS = frozenset({*(sid for sid, _ in SECTIONS.values()), FEATURES_SID})
 
 Item = tuple[str, str]  # (module, name); name ``*`` is the whole module
+
+
+def offer_section(sid: Any) -> str | None:
+    """The section's sid ``sid`` is written under: the section's own, or one of its
+    parts (``OfferAgents2``...); None for a statement in no section."""
+    if not isinstance(sid, str):
+        return None
+    base = sid.rstrip("0123456789")
+    if base not in OFFER_SIDS:
+        return None
+    part = sid[len(base) :]
+    if part and (part.startswith("0") or int(part) < 2):
+        return None
+    return base
+
+
+def _parts(sid: str, actions: list[str], resources: list[str]) -> list[dict[str, Any]]:
+    return [
+        {
+            "sid": f"{sid}{start // MAX_PATTERNS + 1}" if start else sid,
+            "effect": "Allow",
+            "actions": actions,
+            "resources": resources[start : start + MAX_PATTERNS],
+        }
+        for start in range(0, len(resources), MAX_PATTERNS)
+    ]
 
 
 @dataclass(frozen=True)
@@ -166,33 +195,23 @@ def _feature_of(pattern: str) -> str | None:
 def offer_statements(offer: Offer) -> list[dict[str, Any]]:
     statements: list[dict[str, Any]] = []
     for kind, (sid, actions) in SECTIONS.items():
-        items = sorted(offer.items(kind))
-        if not items:
-            continue
-        statements.append(
-            {
-                "sid": sid,
-                "effect": "Allow",
-                "actions": [f"{module_scopes.SERVICE}:{a}" for a in actions],
-                "resources": [item_pattern(kind, m, n) for m, n in items],
-            }
+        statements += _parts(
+            sid,
+            [f"{module_scopes.SERVICE}:{a}" for a in actions],
+            [item_pattern(kind, m, n) for m, n in sorted(offer.items(kind))],
         )
-    if offer.features:
-        statements.append(
-            {
-                "sid": FEATURES_SID,
-                "effect": "Allow",
-                "actions": [USE_FEATURE],
-                "resources": [scoped_resource("feature", k) for k in sorted(offer.features)],
-            }
-        )
+    statements += _parts(
+        FEATURES_SID,
+        [USE_FEATURE],
+        [scoped_resource("feature", k) for k in sorted(offer.features)],
+    )
     return statements
 
 
 def offer_document(offer: Offer) -> dict[str, Any]:
     """ "<W> access" for ``offer``: its sections, or an Allow no name matches when
-    it offers nothing. A section holds at most ``policy.MAX_PATTERNS`` items (IAM
-    refuses more: offer a whole module instead)."""
+    it offers nothing. A section past ``policy.MAX_PATTERNS`` items is written in
+    parts; IAM refuses a document of more than ``policy.MAX_STATEMENTS`` statements."""
     from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
         nothing_document,
     )
@@ -232,12 +251,13 @@ def offer_of(document: Any) -> Offer:
     sid_kind = {sid: kind for kind, (sid, _a) in SECTIONS.items()}
     for statement in _statements_of(document):
         sid, effect, _actions, resources = _statement_parts(statement)
-        if effect != "Allow" or sid not in OFFER_SIDS:
+        section = offer_section(sid)
+        if effect != "Allow" or section is None:
             continue
-        if sid == FEATURES_SID:
+        if section == FEATURES_SID:
             features.update(f for r in resources if (f := _feature_of(r)) is not None)
             continue
-        kind = sid_kind[sid]
+        kind = sid_kind[section]
         found[kind].update(i for r in resources if (i := _item_of(kind, r)) is not None)
     return Offer(
         **{kind: frozenset(items) for kind, items in found.items()},
@@ -257,7 +277,7 @@ def with_offer(document: Any, offer: Offer) -> dict[str, Any]:
     kept: list[dict[str, Any]] = []
     for statement in _statements_of(document):
         sid, effect, actions, resources = _statement_parts(statement)
-        if sid in OFFER_SIDS or sid == NOTHING_SID:
+        if offer_section(sid) is not None or sid == NOTHING_SID:
             continue
         kept.append(
             {
@@ -346,6 +366,7 @@ __all__ = [
     "offer_document",
     "offer_from_seed",
     "offer_of",
+    "offer_section",
     "with_features",
     "with_offer",
 ]
@@ -437,8 +458,8 @@ def in_offer_form(document: Any) -> bool:
 
     statements = _statements_of(document)
     return bool(statements) and all(
-        _statement_parts(s)[0] in OFFER_SIDS | {NOTHING_SID} and _statement_parts(s)[1] == "Allow"
-        for s in statements
+        (offer_section(sid) is not None or sid == NOTHING_SID) and effect == "Allow"
+        for sid, effect, _actions, _resources in map(_statement_parts, statements)
     )
 
 

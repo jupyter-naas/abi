@@ -28,10 +28,12 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     offer_document,
     offer_from_seed,
     offer_of,
+    offer_section,
     with_offer,
 )
 from naas_abi_core.engine.call_context import as_service_account, use_call_context
 from naas_abi_core.services.iam import module_scopes
+from naas_abi_core.services.iam.policy import MAX_PATTERNS, parse_policy_document
 
 W = workspace_container("acme", "w")
 W2 = workspace_container("acme", "w2")
@@ -66,6 +68,24 @@ def test_an_offer_is_written_in_sections_and_read_back():
     assert in_offer_form(document)
     assert offer.offers("workflows", "shared.search", "nightly")
     assert not offer.offers("agents", "acme.sales", "OtherAgent")
+
+
+def test_a_section_past_the_pattern_limit_is_written_in_parts_and_read_back():
+    agents = [("acme.sales", f"Agent{i:03}") for i in range(2 * MAX_PATTERNS + 50)]
+    offer = Offer.of(agents=agents, features=["chat"])
+    document = offer_document(offer)
+    sids = [s["sid"] for s in document["statements"]]
+    assert sids == ["OfferAgents", "OfferAgents2", "OfferAgents3", "OfferFeatures"]
+    assert [len(s["resources"]) for s in document["statements"]] == [100, 100, 50, 1]
+    parse_policy_document(document)
+    assert offer_of(document) == offer
+    assert in_offer_form(document)
+    # A smaller offer replaces every part.
+    smaller = Offer.of(agents=agents[:3])
+    assert [s["sid"] for s in with_offer(document, smaller)["statements"]] == ["OfferAgents"]
+    assert offer_section("OfferAgents3") == "OfferAgents"
+    for sid in ("OfferAgents1", "OfferAgents02", "OfferAgentsX", "Older", None):
+        assert offer_section(sid) is None
 
 
 def test_nothing_offered_is_the_nothing_document_and_other_statements_are_kept():
@@ -179,6 +199,18 @@ def test_a_module_turned_on_in_w_only_is_reachable_in_w_not_in_w2(world):
         # Adding what is offered already changes nothing.
         assert not widen_offer(world.iam, records[W].access_policy_id, seeded)
     assert _uses(world, "olivia", _scope(*sales, W2))
+
+
+def test_a_workspace_offering_more_agents_than_one_statement_holds_reaches_each(world):
+    agents = [("acme.sales", f"Agent{i:03}") for i in range(MAX_PATTERNS + 50)]
+    records, report = _make(world, {"w": Offer.of(agents=agents)})
+    assert not report.failed
+    with as_service_account("api"):
+        w_access = world.iam.get_policy(records[W].access_policy_id)
+    assert [s.sid for s in w_access.document.statements] == ["OfferAgents", "OfferAgents2"]
+    for module, name in (agents[0], agents[-1]):
+        assert _uses(world, "olivia", _scope("agent", module, name, W))
+        assert not _uses(world, "olivia", _scope("agent", module, name, W2))
 
 
 def test_a_reseed_adds_the_seeds_instances_never_its_features(world):

@@ -43,8 +43,11 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     SECTIONS,
     TYPE_OF_KIND,
     in_offer_form,
+    offer_document,
+    offer_of,
 )
 from naas_abi_core.engine.call_context import as_service_account, use_call_context
+from naas_abi_core.services.iam.policy import MAX_PATTERNS, POLICY_VERSION, parse_policy_document
 from sqlalchemy import inspect, text
 
 KIND = {TYPE_OF_KIND[k]: k for k in SECTIONS}
@@ -451,6 +454,34 @@ async def test_a_shape_it_does_not_know_stops_the_move_with_nothing_recorded(nex
         assert await _recorded(nexus_db, access_model.MIGRATION_NAME) is None
         assert await _recorded(nexus_db, access_model.PLANNED_NAME) is None
         assert "stopped" in caplog.text and "denies every" in caplog.text
+
+
+def test_a_ceiling_of_more_modules_than_one_statement_holds_becomes_an_offer_in_parts():
+    modules = [f"client{i:03}" for i in range(MAX_PATTERNS + 50)]
+    universe = access_model.Universe(agents=frozenset((m, "Agent") for m in modules))
+    ceiling = {
+        "version": POLICY_VERSION,
+        "statements": [
+            {
+                "sid": "Agents",
+                "effect": "Allow",
+                "actions": ["module:UseAgent"],
+                "resources": ["${scope}/module:agent/*"],
+            },
+            {
+                "sid": "OtherWorkspaces",
+                "effect": "Deny",
+                "actions": ["module:UseAgent"],
+                "resources": [f"${{scope}}/module:agent/{modules[0]}/*"],
+            },
+        ],
+    }
+    offer, _dropped = access_model.ceiling_offer(ceiling, universe=universe, features=())
+    assert len(offer.agents) == len(modules) - 1
+    document = offer_document(offer)
+    parse_policy_document(document)
+    assert [s["sid"] for s in document["statements"]] == ["OfferAgents", "OfferAgents2"]
+    assert offer_of(document) == offer
 
 
 @pytest.mark.asyncio
