@@ -141,6 +141,31 @@ config.write_text(text.replace("\nmodules:\n", "\n" + entry, 1), encoding="utf-8
 PY
 }
 
+# Nexus lists a module's agents and apps only when the workspace offers that
+# module. A module created after the project is in no offer until named here,
+# under the Default workspace, so the roster stays empty.
+offer_modules() {
+    python3 - "$@" <<'PY'
+import sys
+from pathlib import Path
+
+config = Path("config.yaml")
+text = config.read_text(encoding="utf-8")
+marker = 'slug: "default"\n'
+at = text.find(marker)
+if at < 0:
+    sys.exit("the Default workspace is not in config.yaml")
+owner_end = text.find("\n", text.find("\n", at + len(marker)) + 1)
+if owner_end < 0:
+    sys.exit("the Default workspace has no owner line")
+names = "\n".join(f"                  - {name}" for name in sys.argv[1:])
+config.write_text(
+    text[:owner_end] + f"\n                modules:\n{names}" + text[owner_end:],
+    encoding="utf-8",
+)
+PY
+}
+
 port() {
     abi dev ports 2>/dev/null | awk -v name="$1" '$1 == name {print $2}'
 }
@@ -214,6 +239,9 @@ smoke_nats() {
         abi new integration crm integrations
     )
     write_ontology src/research/ontologies/domain/ReviewOntology.ttl
+
+    step "offer the scaffolded modules in the Default workspace"
+    offer_modules legacy "${name//-/_}.research"
 
     step "uv run pytest (the modules' scaffolded tests, the new processes' too)"
     uv run pytest -q
