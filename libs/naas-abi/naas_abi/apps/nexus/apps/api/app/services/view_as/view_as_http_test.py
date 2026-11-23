@@ -88,6 +88,10 @@ class FakeCache:
     def hot_available(self) -> bool:
         return False
 
+    @property
+    def cold(self):
+        return self
+
 
 class Clock:
     def __init__(self) -> None:
