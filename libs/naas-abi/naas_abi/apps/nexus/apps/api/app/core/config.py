@@ -293,6 +293,13 @@ class FeatureFlagsConfig(BaseModel):
             "tasks",
         ]
     )
+    # The features each level uses, within each workspace's offer
+    # (services/iam/levels.py): a level left out keeps its default
+    # (``levels.VIEWER_FEATURES``, ``levels.MEMBER_FEATURES``). A workspace admin
+    # uses every feature. Its level policy is rewritten at the next start.
+    level_features: dict[Literal["viewer", "member"], list[FeatureKey]] = Field(
+        default_factory=dict
+    )
     # Deprecated: no role brings a feature, a policy does. Read once, when Nexus
     # moves what each role had in each workspace into that workspace's policy
     # "Features of <role>" (services/iam/role_features.py); a configuration
