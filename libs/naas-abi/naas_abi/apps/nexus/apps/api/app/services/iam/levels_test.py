@@ -14,6 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.levels import (
     LEVELS,
     MEMBER_ACCESS,
     VIEWER_ACCESS,
+    VIEWER_FEATURES,
     WORKSPACE_ADMIN_ACCESS,
     level_document,
 )
@@ -156,6 +157,39 @@ async def test_the_lists_of_a_workspace_show_what_it_offers_and_nothing_beyond(w
             world.iam, world.record.access_policy_id, Offer.of(workflows=[("people", "wf2")])
         )
     assert await listed("oadmin") == [wf, wf2, a, "built in the workspace"]
+
+
+def test_a_deployment_sets_the_features_of_each_level():
+    """``feature_flags.level_features`` caps what a Viewer and a Member use (within
+    each workspace's offer); unset, the defaults. A change rewrites the level
+    policy in place at the next start: one policy each, never a second."""
+    from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
+
+    def features(nexus, name):
+        with as_service_account("api"):
+            found = [p for p in nexus.iam.list_policies(limit=500).items if p.name == name]
+        assert len(found) == 1, name
+        return sorted(
+            r.rsplit("/", 1)[1]
+            for s in found[0].document.to_dict()["statements"]
+            for r in s["resources"]
+            if "/nexus:feature/" in r
+        )
+
+    nexus = NexusIam(
+        FeatureFlagsConfig(level_features={"viewer": ["apps"], "member": ["apps", "chat"]}),
+        features_with_roles=False,
+    )
+    with nexus.installed():
+        LEVELS.get(nexus.iam)
+        assert features(nexus, VIEWER_ACCESS) == ["apps"]
+        assert features(nexus, MEMBER_ACCESS) == ["apps", "chat"]
+        nexus.flags.level_features = {"member": ["apps", "chat", "graph"]}
+        LEVELS.forget()
+        LEVELS.get(nexus.iam)
+        assert features(nexus, MEMBER_ACCESS) == ["apps", "chat", "graph"]
+        # Unset for the Viewer: the default.
+        assert features(nexus, VIEWER_ACCESS) == sorted(VIEWER_FEATURES)
 
 
 # -- the matrix by level, inside IAM -----------------------------------------------------

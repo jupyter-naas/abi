@@ -75,21 +75,61 @@ _KEPT = (
     " Nexus keeps it (#1585): it is written once for every workspace, and an edit is "
     "replaced at the next start."
 )
-DESCRIPTIONS: dict[str, str] = {
+# What each level policy's description says, around its features: the part before
+# them finds the policy again whatever the deployment sets (``_policy``).
+_DESCRIBED: dict[str, tuple[str, str]] = {
     VIEWER_ACCESS: (
         "What a Viewer uses where they are a member (with builtin.viewer), within what the "
-        "workspace offers: the apps and datasets features and its apps." + _KEPT
+        "workspace offers: ",
+        " and its apps.",
     ),
     MEMBER_ACCESS: (
         "What a Member uses where they are a member (with builtin.member), within what the "
-        "workspace offers: the apps, chat, files, datasets, graph, maps, ontology and search "
-        "features, its agents and apps." + _KEPT
+        "workspace offers: ",
+        ", its agents and apps.",
     ),
     WORKSPACE_ADMIN_ACCESS: (
         "What a workspace admin uses in their workspace (with builtin.admin), within what it "
-        "offers: every feature, its agents, apps, workflows and pipelines." + _KEPT
+        "offers: ",
+        ", its agents, apps, workflows and pipelines.",
     ),
 }
+# The level each configurable level policy is (``feature_flags.level_features``).
+_CONFIGURED: dict[str, str] = {VIEWER_ACCESS: VIEWER, MEMBER_ACCESS: MEMBER}
+_DEFAULT_FEATURES: dict[str, tuple[str, ...]] = {
+    VIEWER_ACCESS: VIEWER_FEATURES,
+    MEMBER_ACCESS: MEMBER_FEATURES,
+    WORKSPACE_ADMIN_ACCESS: ADMIN_FEATURES,
+}
+
+
+def level_features(name: str) -> tuple[str, ...]:
+    """The features the level policy ``name`` gives: the deployment's
+    (``feature_flags.level_features``), else the default; every feature for a
+    workspace admin."""
+    level = _CONFIGURED.get(name)
+    if level is not None:
+        from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+
+        flags = getattr(live_settings(), "feature_flags", None)
+        configured = getattr(flags, "level_features", None) or {}
+        if level in configured:
+            return tuple(configured[level])
+    return _DEFAULT_FEATURES[name]
+
+
+def description(name: str) -> str:
+    """The description of the level policy ``name``, its features named."""
+    before, after = _DESCRIBED[name]
+    features = level_features(name)
+    named = (
+        "every feature"
+        if name == WORKSPACE_ADMIN_ACCESS
+        else ("the " + ", ".join(features) + " features" if features else "no feature")
+    )
+    return before + named + after + _KEPT
+
+
 GROUP_DESCRIPTIONS: dict[str, str] = {
     VIEWERS: "The Viewer level: builtin.viewer and Viewer access in each of one's workspaces.",
     MEMBERS: "The Member level: builtin.member and Member access in each of one's workspaces.",
@@ -143,12 +183,10 @@ def level_document(name: str) -> PolicyDocument:
     ``WORKSPACE_ADMIN_ACCESS``): its features and the module scopes it uses, every
     one of a type (the workspace's bound names which). The actions of the level are
     the built-in role's, held beside it."""
-    features = {
-        VIEWER_ACCESS: VIEWER_FEATURES,
-        MEMBER_ACCESS: MEMBER_FEATURES,
-        WORKSPACE_ADMIN_ACCESS: ADMIN_FEATURES,
-    }[name]
-    statements = [features_statement(features), instances_statement(LEVEL_INSTANCES[name])]
+    statements = [
+        features_statement(level_features(name)),
+        instances_statement(LEVEL_INSTANCES[name]),
+    ]
     return PolicyDocument.from_dict({"version": POLICY_VERSION, "statements": statements})
 
 
@@ -187,16 +225,26 @@ def _pages(listing: Any, **kwargs: Any) -> list[Any]:
 
 
 def _policy(iam: Any, name: str, *, make: bool = True) -> str | None:
-    """The platform's level policy ``name``: found by owner, name and description,
-    else made (``make``); its document rewritten when it is not this module's."""
+    """The platform's level policy ``name``: found by owner, name and the start of
+    its description, else made (``make``); its document and description rewritten
+    when they are not this deployment's (``level_features``)."""
     wanted = level_document(name)
-    description = DESCRIPTIONS[name]
+    described = description(name)
     for policy in _pages(iam.list_policies):
-        if (policy.owner_scope, policy.name, policy.description) == (PLATFORM, name, description):
-            if make and policy.document.to_dict() != wanted.to_dict():
-                iam.update_policy(policy.id, expected_revision=policy.revision, document=wanted)
+        if (policy.owner_scope, policy.name) == (PLATFORM, name) and str(
+            policy.description or ""
+        ).startswith(_DESCRIBED[name][0]):
+            if make and (
+                policy.document.to_dict() != wanted.to_dict() or policy.description != described
+            ):
+                iam.update_policy(
+                    policy.id,
+                    expected_revision=policy.revision,
+                    document=wanted,
+                    description=described,
+                )
             return str(policy.id)
-    return str(iam.create_policy(name, wanted, description=description).id) if make else None
+    return str(iam.create_policy(name, wanted, description=described).id) if make else None
 
 
 def _group(iam: Any, name: str, *, level: bool, make: bool = True) -> str | None:
