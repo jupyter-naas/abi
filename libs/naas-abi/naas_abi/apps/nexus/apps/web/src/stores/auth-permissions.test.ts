@@ -91,6 +91,22 @@ describe('permissions over the authenticated session', () => {
     expect(usePermissionCache.getState().identity).not.toContain('session-csrf');
   });
 
+  it('keeps the reads begun before the session read of a page load confirms a restored user', async () => {
+    // A user restored from storage: the API has not answered the session read yet.
+    useAuthStore.setState({ csrfToken: null, provider: null });
+    let finish!: (response: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
+    const early = authFetch('/api/iam/admin/access');
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    // The session read answers: the same person, with their provider and CSRF token.
+    useAuthStore.setState({ csrfToken: 'session-csrf-one', provider: 'idp' });
+    finish(answer());
+    expect((await early).ok).toBe(true);
+    // Kept and shared: neither asked again nor re-read by the next reader.
+    await authFetch('/api/iam/admin/access');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects late reads after logout and an A-B-A user switch', async () => {
     let finish!: (response: Response) => void;
     vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));

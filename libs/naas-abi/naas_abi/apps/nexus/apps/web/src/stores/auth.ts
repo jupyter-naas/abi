@@ -248,10 +248,13 @@ export const useAuthStore = create<AuthState>()(
 );
 
 /** No token in a cache key. CSRF/session replacement advances the separate generation. */
+// The provider is not part of it: a restored user gains it when the session read of the page
+// load answers (same person, same session), while a session at another provider brings a new
+// CSRF token, which resets the permissions below.
 function permissionIdentity(state: AuthState): string {
   const flag = readViewFlag();
   return JSON.stringify([
-    getApiUrl(), state.user?.id ?? null, state.user?.is_superadmin ?? false, state.isAuthenticated, state.provider,
+    getApiUrl(), state.user?.id ?? null, state.user?.is_superadmin ?? false, state.isAuthenticated,
     state.viewer?.id ?? null, state.view?.person.id ?? null, state.view?.workspace.id ?? null,
     state.view?.ends_at ?? null, state.view?.groups_from ?? null, flag ? flag.workspaceId : null,
   ]);
@@ -269,9 +272,10 @@ function permissionSessionReady(state: AuthState): boolean {
 }
 
 useAuthStore.subscribe((state, previous) => {
-  usePermissionCache.getState().identify(
-    permissionIdentity(state), state.csrfToken !== previous.csrfToken, permissionSessionReady(state),
-  );
+  // A new session of the same user (another CSRF token) resets the permissions. The first token
+  // of a page load confirms the session the restored user already read with: nothing to reset.
+  const newSession = previous.csrfToken !== null && state.csrfToken !== previous.csrfToken;
+  usePermissionCache.getState().identify(permissionIdentity(state), newSession, permissionSessionReady(state));
 });
 configurePermissionContext(identifyPermissions);
 // Business answers are kept once the API has answered the session read (its CSRF token).
