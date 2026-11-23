@@ -106,6 +106,11 @@ vi.mock('@/stores/auth', () => {
   };
 });
 
+// Which heavy tab modules were evaluated (#1609): Chats and a user's detail load on open.
+const loadedTabs = vi.hoisted(() => [] as string[]);
+vi.mock('./tabs/chats-tab', async (original) => (loadedTabs.push('chats'), original()));
+vi.mock('./tabs/user-detail', async (original) => (loadedTabs.push('user-detail'), original()));
+
 import { AnalyticsSection } from './analytics-section';
 import type { AnalyticsScope } from './scope';
 
@@ -122,10 +127,32 @@ async function render(scope: AnalyticsScope): Promise<Mounted> {
   return mounted;
 }
 
+/** Flush until ``ready``: a tab other than Overview loads its code on first open. */
+async function until(m: Mounted, ready: () => boolean) {
+  await vi.waitFor(async () => {
+    await m.flush();
+    expect(ready()).toBe(true);
+  });
+}
+const chatRow = (m: Mounted) =>
+  Array.from(m.host.querySelectorAll('tr')).find((tr) => tr.textContent?.includes('Quarterly plan'));
+
 const buttons = (m: Mounted) => Array.from(m.host.querySelectorAll('button'));
 const button = (m: Mounted, label: string) => buttons(m).find((b) => b.textContent?.trim() === label) ?? null;
 
 describe('AnalyticsSection', () => {
+  // First in the file: it checks which tab modules were evaluated since the file started.
+  it('loads neither Chats nor a user detail until one is opened, then that one alone', async () => {
+    state.access['/api/organizations/org-z/analytics/access'] = { can_read: true, can_read_conversations: false };
+    const m = await render({ kind: 'organization', orgId: 'org-z' });
+    expect(m.host.textContent).toContain('Times in');
+    expect(loadedTabs).toEqual([]);
+
+    await m.click(button(m, 'Chats'));
+    await until(m, () => Boolean(chatRow(m)));
+    expect(loadedTabs).toEqual(['chats']);
+  });
+
   it('reads a workspace under its own base, with no Workspaces tab nor workspace filter', async () => {
     state.access['/api/workspaces/ws-a/analytics/access'] = {
       can_read: true,
@@ -168,7 +195,7 @@ describe('AnalyticsSection', () => {
     state.access['/api/workspaces/ws-d/analytics/access'] = { can_read: true, can_read_conversations: false };
     const m = await render({ kind: 'workspace', workspaceId: 'ws-d' });
     await m.click(button(m, 'Chats'));
-    for (let i = 0; i < 3; i += 1) await m.flush();
+    await until(m, () => Boolean(chatRow(m)));
     expect(m.host.textContent).toContain('Metadata only');
     const row = Array.from(m.host.querySelectorAll('tr')).find((tr) => tr.textContent?.includes('Quarterly plan'));
     expect(row).toBeTruthy();
@@ -182,7 +209,7 @@ describe('AnalyticsSection', () => {
     state.access['/api/workspaces/ws-e/analytics/access'] = { can_read: true, can_read_conversations: true };
     const m = await render({ kind: 'workspace', workspaceId: 'ws-e' });
     await m.click(button(m, 'Chats'));
-    for (let i = 0; i < 3; i += 1) await m.flush();
+    await until(m, () => Boolean(chatRow(m)));
     expect(m.host.textContent).not.toContain('Metadata only');
     const row = Array.from(m.host.querySelectorAll('tr')).find((tr) => tr.textContent?.includes('Quarterly plan'));
     await m.click(row as Element);
@@ -197,7 +224,7 @@ describe('AnalyticsSection', () => {
     const m = await render({ kind: 'workspace', workspaceId: 'ws-f' });
     await m.click(button(m, 'All users'));
     await m.click(buttons(m).find((b) => b.textContent?.endsWith('ann@acme.test')) ?? null);
-    for (let i = 0; i < 3; i += 1) await m.flush();
+    await until(m, () => (m.host.textContent ?? '').includes('Event history'));
     expect(state.seen).toContain('/api/workspaces/ws-f/analytics/users/u-ann?period=today&user_id=u-ann');
     // One user's view: Overview (their detail), Chats and Events only.
     expect(button(m, 'Users')).toBeNull();
