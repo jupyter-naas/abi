@@ -30,7 +30,7 @@ Web:
 - {_PAGE}/settings/tasks-settings.tsx: the settings page.
 - {_WEB}/lib/tasks.ts, {_WEB}/lib/task-events.ts, {_WEB}/stores/tasks.ts: API client, event summaries, shared store.
 - {_WEB}/components/shell/sidebar/tasks-section.tsx: the sidebar dashboard and activity feed.
-Decision record: docs/adr/20261023_workspace_tasks.md.
+Decision record: https://docs.naas.ai/developers/adr/20261023_workspace_tasks.
 Agent: naas_abi/agents/TasksAgent.py and naas_abi/tools/tasks_tools.py."""
 
 TASKS_CAPABILITIES = """- Tasks live in stages (Inbox first, Done last, custom stages between) and in weekly iterations: the Current, Last and Next iteration tabs, plus Inbox (requests to triage) and Backlog (triaged, no iteration).
