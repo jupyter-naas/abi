@@ -22,7 +22,8 @@ import { Inspector } from './inspector';
 import { RecentChanges } from './recent';
 import { ShortcutsSheet } from './shortcuts';
 import { Browser, ServiceHeader, Toolbar } from './browser';
-import { viewFor } from './services/registry';
+import { useServiceView } from './services/registry';
+import type { ServiceView } from './services/types';
 import { ToastStack, useToasts } from './toasts';
 import { useExplorer } from './use-explorer';
 
@@ -60,18 +61,35 @@ function typing(target: EventTarget | null): boolean {
   );
 }
 
-export function DataExplorer({
-  service,
-  api: injected,
-  nonce = 0,
-  save = saveBlob,
-}: {
+type DataExplorerProps = {
   /** The service's name in the data API. */
   service: string;
   api?: DataApi;
   nonce?: number;
   save?: (blob: Blob, name: string) => void;
-}) {
+};
+
+/** The service's page once its view's code is loaded (it loads on first open). */
+export function DataExplorer(props: DataExplorerProps) {
+  const { view, failed } = useServiceView(props.service);
+  if (failed) {
+    return (
+      <p className="system-empty" role="alert">
+        This page could not be loaded. Reload to try again.
+      </p>
+    );
+  }
+  if (!view) return <p className="system-empty">Loading…</p>;
+  return <ServiceExplorer {...props} view={view} />;
+}
+
+function ServiceExplorer({
+  service,
+  view,
+  api: injected,
+  nonce = 0,
+  save = saveBlob,
+}: DataExplorerProps & { view: ServiceView }) {
   const api = useMemo(() => injected ?? createDataApi(), [injected]);
   const router = useRouter();
   const pathname = usePathname();
@@ -98,7 +116,6 @@ export function DataExplorer({
     }
   }, []);
 
-  const view = viewFor(service);
   const depth = x.path.length - 1;
   const level = useMemo(
     () => (view.level ? view.level(depth, x.parent, x.entries ?? undefined) : {}),

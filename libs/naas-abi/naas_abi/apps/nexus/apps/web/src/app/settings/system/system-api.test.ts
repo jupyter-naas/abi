@@ -42,4 +42,11 @@ describe('loadSystem', () => {
     const offline = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
     expect(await loadSystem('/services', offline)).toEqual({ ok: false, status: 0, reason: 'Failed to fetch' });
   });
+
+  it('passes the abort signal of the view to the request', async () => {
+    const fetcher = vi.fn().mockResolvedValue(response(200, {}));
+    const controller = new AbortController();
+    await loadSystem('/overview', fetcher, controller.signal);
+    expect(fetcher).toHaveBeenCalledWith('/api/admin/system/overview', { signal: controller.signal });
+  });
 });

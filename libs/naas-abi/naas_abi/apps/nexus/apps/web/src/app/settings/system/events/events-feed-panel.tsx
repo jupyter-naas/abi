@@ -75,8 +75,9 @@ export function EventsFeedPanel() {
           onClick={() => clear()}
         />
         <span className="ml-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-          <span className={`inline-block h-1.5 w-1.5 rounded-full ${lastPollAt ? 'bg-green-500' : 'bg-zinc-400'}`} />
-          {lastPollAt ? `next in ${secondsToNextPoll ?? 0}s` : 'polling…'}
+          <span className={`inline-block h-1.5 w-1.5 rounded-full ${lastPollAt && !paused ? 'bg-green-500' : 'bg-zinc-400'}`} />
+          {/* Paused, the tail reads nothing: no countdown. */}
+          {paused ? 'paused' : lastPollAt ? `next in ${secondsToNextPoll ?? 0}s` : 'polling…'}
         </span>
       </SidebarToolbar>
 

@@ -95,10 +95,17 @@ export function SettingsNavItem({
   badge?: string | null;
   badgeTitle?: string;
 }) {
+  const router = useRouter();
+  // On intent only (#1609): a long column must not warm every page it lists.
+  const prefetch = () => router.prefetch(href);
   return (
     <li>
       <Link
         href={href}
+        prefetch={false}
+        onMouseEnter={prefetch}
+        onFocus={prefetch}
+        onTouchStart={prefetch}
         className={active ? 'org-settings-nav-item org-settings-nav-item-active' : 'org-settings-nav-item'}
         aria-current={active ? 'page' : undefined}
       >

@@ -507,7 +507,8 @@ function mountEventsGraph(stage: HTMLElement, canvas: HTMLCanvasElement, options
     const duration = 260;
     const token = ++recentreToken;
     const frame = (now: number) => {
-      if (token !== recentreToken) return;
+      // A newer recentre, or the graph left: no frame after dispose.
+      if (!running || token !== recentreToken) return;
       const t = Math.min(1, (now - startedAt) / duration);
       const eased = 1 - (1 - t) ** 3;
       pan.x = startX + (targetX - startX) * eased;

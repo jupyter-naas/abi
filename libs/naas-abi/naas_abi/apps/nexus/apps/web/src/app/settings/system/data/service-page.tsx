@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { notFound } from 'next/navigation';
 import { serviceForPage, type ServicePageSection } from '../../lib/service-pages';
@@ -14,6 +14,11 @@ const DataExplorer = dynamic(() => import('./explorer').then((m) => m.DataExplor
 
 /** A kernel service's page: its data browser. */
 export function ServicePage({ service }: { service: string }) {
+  // The service's own view loads beside the browser, not after it (the registry is
+  // imported here too, so it stays out of the page's first load).
+  useEffect(() => {
+    import('./services/registry').then((r) => r.loadServiceView(service)).catch(() => undefined);
+  }, [service]);
   return (
     <Suspense fallback={<Loading />}>
       <DataExplorer key={service} service={service} />
