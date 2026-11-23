@@ -30,6 +30,11 @@ const LOADERS: Record<string, () => Promise<ServiceView>> = {
 /** The services with a view of their own. */
 export const SERVICE_VIEW_NAMES: readonly string[] = Object.keys(LOADERS);
 
+/** The loader of ``name``: its own key only, so a name such as ``toString`` is unknown. */
+function loaderOf(name: string): (() => Promise<ServiceView>) | undefined {
+  return Object.prototype.hasOwnProperty.call(LOADERS, name) ? LOADERS[name] : undefined;
+}
+
 /** Views loaded so far (at most one per service, so bounded by the services). */
 const LOADED = new Map<string, ServiceView>();
 const PENDING = new Map<string, Promise<ServiceView>>();
@@ -52,7 +57,7 @@ export function genericView(name: string): ServiceView {
 
 /** The view of ``name`` if it is ready (loaded, or generic), else null until it loads. */
 export function loadedServiceView(name: string): ServiceView | null {
-  return LOADED.get(name) ?? (LOADERS[name] ? null : genericView(name));
+  return LOADED.get(name) ?? (loaderOf(name) ? null : genericView(name));
 }
 
 /** Loads the view of ``name`` once; callers at the same time share one import. */
@@ -61,7 +66,9 @@ export function loadServiceView(name: string): Promise<ServiceView> {
   if (ready) return Promise.resolve(ready);
   const pending = PENDING.get(name);
   if (pending) return pending;
-  const load = LOADERS[name]()
+  const loader = loaderOf(name);
+  if (!loader) return Promise.resolve(genericView(name));
+  const load = loader()
     .then((view) => {
       LOADED.set(name, view);
       return view;
