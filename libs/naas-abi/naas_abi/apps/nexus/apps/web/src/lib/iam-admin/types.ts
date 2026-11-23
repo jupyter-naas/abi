@@ -221,6 +221,20 @@ export type GroupView = PrincipalView & {
   idp_mappings: IdpMapping[];
 };
 
+/** A group as the list shows it; with `memberCounts`, how many members it has: null where
+ *  the caller may not read it (its detail would be refused), so no detail is read per group. */
+export type GroupSummary = PrincipalView & { member_count?: number | null };
+
+/** A page of `GET /groups`, in IAM's order; `next_after` reads the next. */
+export type GroupsPage = { items: GroupSummary[]; next_after?: string | null };
+
+export type GroupsPageQuery = {
+  after?: string | null;
+  /** 1 to `GROUPS_PAGE_MAX`; IAM's 100 when absent. */
+  limit?: number;
+  memberCounts?: boolean;
+};
+
 export type KeyStatus = 'active' | 'revoked' | 'expired';
 
 /** A key as IAM keeps it: never its secret. */

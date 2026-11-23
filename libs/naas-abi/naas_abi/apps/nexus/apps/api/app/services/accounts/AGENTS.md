@@ -51,6 +51,10 @@ Access is not shown or changed in the list: a row opens the person's page under 
 
 - `GET ""` → `[{id, kind: account|invitation, email, name, avatar, principal_id, status: signed_in|invited,
   deactivated, is_superadmin, created_at, organizations: [{id, name, role}], provider, warning}]` (`ListUsers`)
+- `GET /{id}/access` → `{user_id, principal_id, level, platform_admin, organizations, workspaces, capabilities}`
+  (`ListUsers`): what their groups give them; `id` is the account's id or its IAM id (the row's `principal_id`, else
+  the account IAM names for it, linked from the old login), so the person's page reads it alone, never the directory
+  (#1608); 404 for no account of the directory (an invitee, a deleted account)
 - `POST /invite` `{email, name?, provider?}` → `{user, user_created, sign_in_email_sent, provisioning_skipped,
   renewed, warning}` (`InviteUser`): `user` is the new account (`kind: account`, its real id, `status: invited`),
   `renewed` is always false; 409 when an account holds the address, or when a deleted account is still bound to

@@ -5,7 +5,7 @@ import { ShieldCheck } from 'lucide-react';
 import { PLATFORM_ACCESS_LABEL } from '@/components/access/builtins';
 import { LEVEL_LABELS } from '@/lib/people';
 import { OrgSettingsSectionCard } from '@/app/organizations/[orgId]/settings/components/org-settings-section-card';
-import { listUsers, userAccess, type Fetcher } from './users-api';
+import { userAccess, type Fetcher } from './users-api';
 import type { UserAccess } from './users-model';
 
 type Loaded = { state: 'loading' } | { state: 'error'; error: string } | { state: 'ready'; access: UserAccess };
@@ -22,14 +22,12 @@ export function PlatformAccess({ personId, nonce = 0, fetcher }: { personId: str
     let live = true;
     setLoaded({ state: 'loading' });
     void (async () => {
-      const users = await listUsers(fetcher);
+      // One read by their IAM id or account id (#1608): the API finds the account, so the
+      // directory is not downloaded to find it. Not found: no account (an invitee, a deleted one).
+      const answer = await userAccess(personId, fetcher);
       if (!live) return;
-      if (!users.ok) return setLoaded({ state: 'error', error: users.error });
-      const user = users.data.find((u) => u.principal_id === personId || u.id === personId);
-      if (!user) return setLoaded({ state: 'error', error: 'They have no account yet.' });
-      const answer = await userAccess(user.id, fetcher);
-      if (!live) return;
-      setLoaded(answer.ok ? { state: 'ready', access: answer.data } : { state: 'error', error: answer.error });
+      if (answer.ok) return setLoaded({ state: 'ready', access: answer.data });
+      setLoaded({ state: 'error', error: answer.status === 404 ? 'They have no account yet.' : answer.error });
     })();
     return () => {
       live = false;

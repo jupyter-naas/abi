@@ -79,6 +79,13 @@ from starlette.concurrency import run_in_threadpool
 _T = TypeVar("_T")
 _PRINCIPAL_ID = re.compile(r"^usr_[0-9a-z]{26}$")
 
+
+def is_user_principal_id(value: str) -> bool:
+    """Whether ``value`` is written as an IAM user's id (``usr_…``), which IAM looks up
+    and never creates."""
+    return bool(_PRINCIPAL_ID.match(value))
+
+
 ROLE_NAMES = ("owner", "admin", "member", "viewer")
 # Organization owners and admins reach every workspace of their organization
 # (``services/iam/AGENTS.md``, "Org owners and admins reach every workspace"): the
@@ -577,9 +584,13 @@ class Memberships:
         attachments (``members`` would make one per scope)."""
         wanted = set(scopes)
         grouped = await self._grouped_of(scopes)
+        # Scopes of one organization: only its holders are named (each name is a read),
+        # as for its directory; the answer at each scope is the same.
+        orgs = {org_of(scope) for scope in wanted}
+        org = orgs.pop() if len(orgs) == 1 else None
 
         def work(iam: Any) -> dict[str, list[Member]]:
-            found = self.members_by_scope(iam, grouped=grouped)
+            found = self.members_by_scope(iam, org=org, grouped=grouped)
             return {scope: found.get(scope, []) for scope in wanted}
 
         return await self._run(work)

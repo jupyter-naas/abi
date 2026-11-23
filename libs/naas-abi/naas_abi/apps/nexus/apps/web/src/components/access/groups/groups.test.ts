@@ -29,7 +29,7 @@ const providers: InviteProviders = {
 function setup() {
   const detail = group({ members: [principal({ id: 'usr_9', display_name: 'Bob' })] });
   return fakeApi({
-    listGroups: vi.fn(() => Promise.resolve({ items: [detail] })),
+    listGroups: vi.fn(() => Promise.resolve({ items: [{ ...detail, member_count: 1 }], next_after: null })),
     getGroup: vi.fn(() => Promise.resolve(detail)),
     listPrincipals: vi.fn(() => Promise.resolve({ items: [principal()], next_after: null })),
     addMember: vi.fn(() => Promise.resolve(detail)),
@@ -51,13 +51,28 @@ async function open(api: ReturnType<typeof setup>, can: (a: string) => boolean =
 }
 
 describe('GroupsView', () => {
-  it('lists groups with their member count', async () => {
-    mounted = await mount(GroupsView, { api: setup(), can: allowAll, ...platform, loadProviders: () => Promise.resolve(providers) });
+  it('lists groups with their member count, read with the list: no detail per group', async () => {
+    const api = setup();
+    mounted = await mount(GroupsView, { api, can: allowAll, ...platform, loadProviders: () => Promise.resolve(providers) });
     await mounted.flush();
     const row = document.querySelector('[data-group="grp_1"]');
     expect(row?.textContent).toContain('Analysts');
     expect(row?.textContent).toContain('Platform');
     expect(row?.querySelector('[data-field="members"]')?.textContent).toBe('1');
+    expect(api.listGroups).toHaveBeenCalledTimes(1);
+    expect(api.listGroups).toHaveBeenCalledWith(undefined, { after: null, limit: 500, memberCounts: true });
+    expect(api.getGroup).not.toHaveBeenCalled();
+  });
+
+  it('shows no count for a group the caller may list but not read', async () => {
+    const api = setup();
+    (api as unknown as Record<string, unknown>).listGroups = vi.fn(() =>
+      Promise.resolve({ items: [group({ member_count: null })], next_after: null }),
+    );
+    mounted = await mount(GroupsView, { api, can: allowAll, ...platform, loadProviders: () => Promise.resolve(providers) });
+    await mounted.flush();
+    expect(document.querySelector('[data-group="grp_1"] [data-field="members"]')?.textContent).toBe('–');
+    expect(api.getGroup).not.toHaveBeenCalled();
   });
 
   it('adds a member by id', async () => {
@@ -124,7 +139,11 @@ describe('GroupsView at a workspace', () => {
     const api = workspaceApi();
     mounted = await mount(GroupsView, { api, can: admin, scope: wsScope, directory: EMPTY_DIRECTORY });
     await mounted.flush();
-    expect(api.listGroups).toHaveBeenCalledWith('abi:nexus:organization/acme/nexus:workspace/ws-1');
+    expect(api.listGroups).toHaveBeenCalledWith('abi:nexus:organization/acme/nexus:workspace/ws-1', {
+      after: null,
+      limit: 500,
+      memberCounts: true,
+    });
     await mounted.click(document.querySelector('[data-action="create-group"]'));
     await mounted.type(document.querySelector('[aria-label="Group name"]'), 'Recruiters');
     await mounted.click(document.querySelector('form.access-group-create button[type="submit"]'));
