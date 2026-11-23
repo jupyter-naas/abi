@@ -24,6 +24,14 @@
 
 <!-- version list -->
 
+## v6.2.1 (2026-11-23)
+
+### Bug Fixes
+
+- **iam**: Explain finds a user by the id Nexus names them
+  ([`9cd9839`](https://github.com/jupyter-naas/abi/commit/9cd983992874266c5bbfe77a30e49ea6b1c80d27))
+
+
 ## v6.2.0 (2026-11-23)
 
 ### Bug Fixes
