@@ -16,7 +16,7 @@ import { forgetSettingsPaths } from '@/lib/settings-scope-path';
 import { dropWebPass, keepWebPass } from '@/lib/web-pass';
 import { clearViewFlag, setViewFlag, viewFlagActive, readViewFlag, onViewFlagChange } from '@/lib/view-flag';
 import { changesPermissions, configurePermissionContext, permissionReadKey, PermissionSessionChanged, usePermissionCache } from '@/lib/permission-cache';
-import { apiPath, clearResources, configureResourceSession, invalidateResourcesAfter } from '@/lib/resource-cache';
+import { apiPath, clearResources, configureResourceSession, followResourceSession, invalidateResourcesAfter } from '@/lib/resource-cache';
 import {
   announceViewRefusal,
   navigation,
@@ -276,6 +276,7 @@ useAuthStore.subscribe((state, previous) => {
   // of a page load confirms the session the restored user already read with: nothing to reset.
   const newSession = previous.csrfToken !== null && state.csrfToken !== previous.csrfToken;
   usePermissionCache.getState().identify(permissionIdentity(state), newSession, permissionSessionReady(state));
+  followResourceSession();
 });
 configurePermissionContext(identifyPermissions);
 // Business answers are kept once the API has answered the session read (its CSRF token).
