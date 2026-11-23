@@ -940,3 +940,54 @@ async def test_a_lock_taken_without_waiting_is_one_process_s_on_postgresql():
     finally:
         await first.dispose()
         await second.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_new_install_records_every_move_at_its_first_start(nexus_db):
+    """A new install has nothing of the older grammars, but its start makes the
+    level groups and policies (``bootstrap.register_catalog``: "Members" holds
+    "Member access" at ``${my workspaces}``) before the moves run. Every move, as
+    the start runs them, records itself past those: none is left waiting, so
+    module scopes and features are decided (the NATS CLI smoke lists its agents)."""
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+    from naas_abi.apps.nexus.apps.api.app.services.iam import (
+        access_model,
+        authz,
+        container_defaults,
+        feature_overrides,
+        module_moves,
+        policy_tree,
+        role_features,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.iam.levels import LEVELS
+
+    world = LegacyNexusIam()
+    async with nexus_db() as db:
+        await _iam_migrations(db)
+        await db.commit()
+        with world.installed():
+            LEVELS.get(world.iam)
+
+            async def moves() -> None:
+                flags = live_settings().feature_flags
+                await feature_overrides.migrate_feature_overrides(db, flags)
+                await role_features.migrate_role_features(db, flags)
+                await policy_tree.migrate_sets(db)
+
+            assert await container_names.before_names(db, moves) is True
+            await container_names.migrate_names(db)
+            await module_moves.migrate(db)
+            await bootstrap.migrate_role_data(db)
+            await policy_tree.migrate_sets(db)
+            await container_defaults.migrate(db)
+            await access_model.migrate_access(db)
+            for name in (
+                feature_overrides.MIGRATION_NAME,
+                role_features.MIGRATION_NAME,
+                policy_tree.MIGRATION_NAME,
+                container_names.MIGRATION_NAME,
+                container_defaults.MIGRATION_NAME,
+                access_model.MIGRATION_NAME,
+            ):
+                assert await container_names.recorded(db, name), name
+            assert not authz.upgrading()
