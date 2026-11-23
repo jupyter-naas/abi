@@ -121,6 +121,53 @@
 
 <!-- version list -->
 
+## v7.3.1 (2026-11-23)
+
+### Bug Fixes
+
+- **nexus-web**: Bind Settings resources as soon as the session is confirmed
+  ([#1606](https://github.com/jupyter-naas/abi/pull/1606),
+  [`ffc15b2`](https://github.com/jupyter-naas/abi/commit/ffc15b279580da35112093119fb69c0e9c9fe4b5))
+
+- **nexus-web**: Keep page state across the session read of a page load
+  ([#1607](https://github.com/jupyter-naas/abi/pull/1607),
+  [`aca927d`](https://github.com/jupyter-naas/abi/commit/aca927de2162e28cc5370716897465b5f7c52856))
+
+- **nexus-web**: Keep permission reads across the session read of a page load
+  ([#1605](https://github.com/jupyter-naas/abi/pull/1605),
+  [`d5f6995`](https://github.com/jupyter-naas/abi/commit/d5f699502043cc96b5d7670d4ec80eb7bf408976))
+
+- **nexus-web**: Keep Settings resources once the session is confirmed
+  ([#1606](https://github.com/jupyter-naas/abi/pull/1606),
+  [`2b49538`](https://github.com/jupyter-naas/abi/commit/2b49538c6928ae3c20ef0967d127932d2d33aea7))
+
+- **nexus-web**: Keep unknown service names on the generic data view
+  ([#1609](https://github.com/jupyter-naas/abi/pull/1609),
+  [`132919c`](https://github.com/jupyter-naas/abi/commit/132919c62bf5ec252188f989987156b40533ff10))
+
+### Performance Improvements
+
+- **nexus**: Batch Settings access summaries and bound lists
+  ([#1608](https://github.com/jupyter-naas/abi/pull/1608),
+  [`9e098dc`](https://github.com/jupyter-naas/abi/commit/9e098dca5f22fd79859faa444b2b2c0afc7df569))
+
+- **nexus-web**: Defer inactive Settings views and bound polling
+  ([#1609](https://github.com/jupyter-naas/abi/pull/1609),
+  [`2180252`](https://github.com/jupyter-naas/abi/commit/21802527b4816fd8d5843fafd83f83e15bc4709c))
+
+- **nexus-web**: Keep Settings page state across navigation
+  ([#1607](https://github.com/jupyter-naas/abi/pull/1607),
+  [`e69e64b`](https://github.com/jupyter-naas/abi/commit/e69e64b50448fd1900260d94668e1103fb87a749))
+
+- **nexus-web**: Share permission reads by session and scope
+  ([#1605](https://github.com/jupyter-naas/abi/pull/1605),
+  [`21702b8`](https://github.com/jupyter-naas/abi/commit/21702b8db3e0536e8b8deb20537c5a7d97f0de5f))
+
+- **nexus-web**: Share Settings resource reads by explicit policy
+  ([#1606](https://github.com/jupyter-naas/abi/pull/1606),
+  [`d5d6209`](https://github.com/jupyter-naas/abi/commit/d5d62098d82cf4b51f9564dbdec3fa51cb4df00c))
+
+
 ## v7.3.0 (2026-11-23)
 
 ### Bug Fixes
