@@ -51,6 +51,23 @@ describe('usePageState', () => {
     expect(searchBox()!.value).toBe('abi');
   });
 
+  it('the session read of a page load does not reset what the open page shows', async () => {
+    // A user restored from storage: the API has not answered the session read yet.
+    useAuthStore.setState({ user: person('one'), csrfToken: null, provider: null, isAuthenticated: true });
+    mounted = await mount(Filters, { pageKey: KEY });
+    await mounted.type(searchBox(), 'abi');
+    // The read confirms the session and adds its provider: the same person.
+    await act(async () => {
+      useAuthStore.setState({ csrfToken: 'csrf-one', provider: 'idp' });
+    });
+    await mounted.flush();
+    expect(searchBox()!.value).toBe('abi');
+    await mounted.unmount();
+
+    mounted = await mount(Filters, { pageKey: KEY });
+    expect(searchBox()!.value).toBe('abi');
+  });
+
   it('another scope starts afresh', async () => {
     mounted = await mount(Filters, { pageKey: KEY });
     await mounted.type(searchBox(), 'abi');

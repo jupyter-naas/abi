@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { synchronizePermissionContext, usePermissionCache } from '@/lib/permission-cache';
+import { useResourceCache } from '@/lib/resource-cache';
 import { onViewFlagChange, readViewFlag } from '@/lib/view-flag';
 
 /**
@@ -8,8 +9,10 @@ import { onViewFlagChange, readViewFlag } from '@/lib/view-flag';
  * meanwhile (a route remount, another level's layout).
  *
  * Entries belong to the session identity the permission cache names (API, user, provider,
- * View as): a new identity, sign-out, and an unknown session drop them all, and nothing is
- * kept while a view (View as) runs. Memory only: no persist middleware, no browser storage.
+ * View as), once the API has confirmed it (the resource cache's session, #1606): a new
+ * identity, sign-out, and an unknown session drop them all, and nothing is kept while a
+ * view (View as) runs. The session read of a page load confirms a restored user; it is
+ * not taken for another identity. Memory only: no persist middleware, no browser storage.
  * Never put a secret, a newly issued key, a payment input or a token here: a page keeps
  * those in its own component state, which goes when it is left.
  */
@@ -103,12 +106,14 @@ export type PageStateStore = ReturnType<typeof createPageStateRegistry>;
 
 export const usePageStateRegistry = createPageStateRegistry();
 
-/** The permission cache's identity when its session is known and no view runs; else null. */
+/** The confirmed session (the resource cache's) when no view runs; else null. */
 function followSession(): void {
-  const { identity, enabled } = usePermissionCache.getState();
-  usePageStateRegistry.getState().bind(enabled && !readViewFlag() ? identity : null);
+  const { session } = useResourceCache.getState();
+  usePageStateRegistry.getState().bind(session !== null && !readViewFlag() ? session : null);
 }
+// The resource cache follows the permission cache: listen to both, it settles first.
 usePermissionCache.subscribe(followSession);
+useResourceCache.subscribe(followSession);
 onViewFlagChange(followSession);
 followSession();
 
