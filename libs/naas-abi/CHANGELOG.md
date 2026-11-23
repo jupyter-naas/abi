@@ -121,6 +121,19 @@
 
 <!-- version list -->
 
+## v7.3.0 (2026-11-23)
+
+### Bug Fixes
+
+- **nexus**: Config.yaml's level_features reaches the Nexus settings
+  ([`5b7a2fb`](https://github.com/jupyter-naas/abi/commit/5b7a2fbfda46670705af0afccfdf0c9c9a2bb5cb))
+
+### Features
+
+- **nexus**: A deployment sets the features of the Viewer and Member levels
+  ([`413a249`](https://github.com/jupyter-naas/abi/commit/413a2491cf6bc1792b81ce54f1483cf7df942f8e))
+
+
 ## v7.2.0 (2026-11-23)
 
 ### Bug Fixes
