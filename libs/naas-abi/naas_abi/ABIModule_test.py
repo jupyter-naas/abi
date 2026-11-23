@@ -46,6 +46,32 @@ def test_a_slides_template_source_survives_the_trip_into_nexus_settings() -> Non
     assert source.path == "src/acme/templates"
 
 
+def test_the_level_features_survive_the_trip_into_nexus_settings() -> None:
+    """feature_flags.level_features in config.yaml reaches the level policies
+    (services/iam/levels.py), through NexusConfig and the Nexus Settings; left
+    unset, the Settings keep their default (every level its default features)."""
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    dumped = NexusConfig(
+        feature_flags={
+            "level_features": {"viewer": ["apps"], "member": ["apps", "chat"]}
+        }
+    ).model_dump(exclude_none=True)
+
+    settings = Settings(**dumped)
+
+    assert settings.feature_flags.level_features == {
+        "viewer": ["apps"],
+        "member": ["apps", "chat"],
+    }
+    assert (
+        Settings(
+            **NexusConfig().model_dump(exclude_none=True)
+        ).feature_flags.level_features
+        == {}
+    )
+
+
 def test_documents_picker_overrides_survive_the_trip_into_nexus_settings() -> None:
     """Default and hidden ids in config.yaml have to reach the Documents API.
 

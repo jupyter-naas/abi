@@ -244,6 +244,9 @@ class FeatureFlagsConfig(BaseModel):
     enabled_features: list[FeatureKey] = Field(
         default_factory=_default_enabled_features
     )
+    # The features each level uses, within each workspace's offer (the Nexus
+    # Settings' feature_flags.level_features): unset, every level its default.
+    level_features: dict[Literal["viewer", "member"], list[FeatureKey]] | None = None
     # Deprecated: no role brings a feature, a policy does. Nexus reads these once,
     # when it moves what each role had into each workspace's policies, then
     # warns while a configuration still sets them. Left unset (None), Nexus
