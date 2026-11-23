@@ -913,6 +913,18 @@ cd apps/web && pnpm test
 
 **Web tests run on vitest only.** `pnpm test` runs every `src/**/*.test.ts` and is a pull request check (`nexus-web-tests` in `.github/workflows/pull_request.yml`), so it must stay green. Import `test`/`describe`/`it` from `vitest`, never from `node:test`: vitest finds no suite in a `node:test` file and the file fails. `node:assert/strict` is fine. A test that describes a behaviour not built yet is `it.skip` with a comment saying what is missing, not a failing test.
 
+**Settings navigation baseline (#1603).** `apps/web/scripts/measure_settings.py` is an optional Python/Playwright browser tool, outside the product bundle. It measures Platform Groups, Organization General, Workspace Agents and Account Profile/Appearance: a fresh browser context, then a real Settings-link revisit after a detour. It observes unsaved input and scroll without clicking Save. From `apps/web`, against an already-running frontend:
+
+```bash
+python scripts/measure_settings.py --base-url http://127.0.0.1:3000 \
+  --environment development --fixture --runs 3 --output /tmp/settings-before.json
+python -m unittest discover -s scripts -p measure_settings_test.py
+```
+
+Use an existing Python environment with Playwright and Chromium installed. `--browser-executable` selects an existing Chromium when needed. The tool returns a sanitized `unavailable` report if the browser/dependency is missing; it does not install dependencies or start any service or migration. Fixture mode intercepts browser API calls with synthetic data (80 ms per call, five groups by default; both configurable) and is restricted to a loopback frontend. Intercepted browser requests never reach the real API; server-side rendering requests are outside the browser interception, so use a frontend configured for an isolated test environment. Its timings describe the frontend with a fixture, not backend/database or production performance. No response bodies, credentials, raw resource ids or query values are recorded; request equality is tracked with per-run keyed digests. Reports and authentication state stay outside git.
+
+For an authenticated **test deployment**, omit `--fixture` and supply `--organization-id`, `--workspace-id` and a private existing Playwright `--storage-state` file. This mode blocks API writes except web-pass handshakes; Workspace Agents requires explicit `--allow-agent-sync` to permit its existing navigation-triggered reconciliation. Do not use that flag to benchmark production data. Missing access, navigation links, content markers and fixture endpoints produce partial/unavailable samples, not successful timings. Mark the actual server mode with `--environment production` only for a production build. The report records the local checkout revision, dirty state, browser/driver, samples and cache conditions: a fresh context does **not** clear server/build caches, and development compilation may dominate the first run. Request interception disables the browser HTTP cache in both modes; the revisit still retains the app's router/module state. Transfer sizes/Chromium JS heap are best-effort, not total process memory. Compare repeated runs with the same fixture size, delay, viewport and server mode, without running tests/builds concurrently. For a remote deployment, record its actual deployed revision alongside the report: the local checkout revision alone does not identify its server code.
+
 ## Conventional commits
 
 NEXUS uses Conventional Commits enforced via `CONTRIBUTING.md` (`feat:`, `fix:`, `docs:`, `refactor:`, and so on). Consistent prefixes make cherry-picks and release notes tractable when syncing with upstream ABI. Match the style of recent commits when authoring messages.
