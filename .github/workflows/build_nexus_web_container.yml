@@ -8,20 +8,59 @@ permissions:
   contents: read
   packages: write
 
+# Each platform builds natively on its own runner and pushes its image by
+# digest, untagged. `merge` then joins both digests into one image index and
+# tags it. No QEMU: an emulated arm64 `pnpm build` could crash and hang until
+# GitHub cancelled the job at 6 hours. If either build fails, the other is
+# cancelled and `merge` does not run, so no tag is created or moved.
+
 jobs:
-  build:
+  prepare:
     if: startsWith(github.event.release.tag_name, 'naas-abi-v')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      version: ${{ steps.meta.outputs.version }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+
+    steps:
+      - name: Compute image name and tags
+        id: meta
+        env:
+          OWNER: ${{ github.repository_owner }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          OWNER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          {
+            echo "image=ghcr.io/${OWNER}/nexus-web"
+            echo "version=${RELEASE_TAG#naas-abi-v}"
+            echo "release_tag=${RELEASE_TAG}"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
@@ -30,45 +69,108 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check the release commit is on main
-        id: channel
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Only a release cut from main moves :latest. A release from v2 (2.x
-          # fixes, which runs its own copy of this workflow) or dev (prereleases)
-          # carries a commit main does not contain. The compare API answers
-          # "identical" or "ahead" when main contains the tagged commit.
-          STATUS=$(gh api "repos/${{ github.repository }}/compare/${{ github.sha }}...main" --jq .status)
-          echo "main compared with ${{ github.sha }}: ${STATUS}"
-          case "$STATUS" in
-            identical|ahead) echo "latest=true" >> "$GITHUB_OUTPUT" ;;
-            *) echo "latest=false" >> "$GITHUB_OUTPUT" ;;
-          esac
-
-      - name: Compute image tags
-        id: tags
-        run: |
-          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          RELEASE_TAG="${{ github.event.release.tag_name }}"
-          VERSION="${RELEASE_TAG#naas-abi-v}"
-          IMAGE="ghcr.io/${OWNER}/nexus-web"
-
-          {
-            echo "list<<EOF"
-            if [ "${{ steps.channel.outputs.latest }}" = "true" ]; then
-              echo "${IMAGE}:latest"
-            fi
-            echo "${IMAGE}:${VERSION}"
-            echo "${IMAGE}:${RELEASE_TAG}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Build and push image
+      - name: Build and push ${{ matrix.platform }} by digest
+        id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6
         with:
           context: libs/naas-abi/naas_abi/apps/nexus
           file: libs/naas-abi/naas_abi/apps/nexus/Dockerfile.release
-          push: true
-          platforms: linux/amd64, linux/arm64
-          tags: ${{ steps.tags.outputs.list }}
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/digests"
+          touch "${RUNNER_TEMP}/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout the release scripts
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Download digests
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Decide whether this release moves :latest
+        id: channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+          RELEASE_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          # :latest moves only for the highest stable naas-abi-v* release whose
+          # commit is on main (see the script). Checked here, right before
+          # tagging, so a newer release published during the build wins even
+          # when this one finishes last.
+          .github/scripts/release_is_latest.sh "$RELEASE_TAG" "$RELEASE_SHA" "$REPO"
+
+      - name: Create the multi-platform image and its tags
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+          LATEST: ${{ steps.channel.outputs.latest }}
+        run: |
+          TAGS=(-t "${IMAGE}:${VERSION}" -t "${IMAGE}:${RELEASE_TAG}")
+          if [ "$LATEST" = "true" ]; then
+            TAGS+=(-t "${IMAGE}:latest")
+          fi
+          SOURCES=()
+          for digest in *; do
+            SOURCES+=("${IMAGE}@sha256:${digest}")
+          done
+          if [ "${#SOURCES[@]}" -ne 2 ]; then
+            echo "expected 2 platform digests, got ${#SOURCES[@]}: ${SOURCES[*]}" >&2
+            exit 1
+          fi
+          docker buildx imagetools create "${TAGS[@]}" "${SOURCES[@]}"
+
+      - name: Check the image has both platforms
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          PLATFORMS=$(docker buildx imagetools inspect --raw "${IMAGE}:${VERSION}" \
+            | jq -r '.manifests[] | select(.platform.os != "unknown") | "\(.platform.os)/\(.platform.architecture)"' \
+            | sort -u)
+          echo "${IMAGE}:${VERSION} platforms:"
+          echo "$PLATFORMS"
+          for platform in linux/amd64 linux/arm64; do
+            if ! grep -qxF "$platform" <<< "$PLATFORMS"; then
+              echo "${IMAGE}:${VERSION} has no ${platform} image" >&2
+              exit 1
+            fi
+          done
