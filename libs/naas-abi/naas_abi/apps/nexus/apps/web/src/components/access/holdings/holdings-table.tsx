@@ -11,6 +11,7 @@ import {
   type BuiltInRole,
   type RoleTarget,
 } from '../roles/role-change';
+import { PLATFORM_ACCESS_LABEL } from '../builtins';
 import { ConfirmDetach } from './confirm-detach';
 import { levelLabel, roleTargetOf, type HoldingRow } from './holdings-model';
 import './holdings.css';
@@ -65,7 +66,8 @@ export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGr
         </thead>
         <tbody>
           {rows.map(({ attachment: a, via, role, companion, broughtBy }) => {
-            const name = a.policy_name ?? a.policy_id;
+            // "Platform member" and "Platform viewer" read as what they are: automatic.
+            const name = companion ? PLATFORM_ACCESS_LABEL : (a.policy_name ?? a.policy_id);
             const level = levelLabel(a.scope, names);
             const owner = a.policy_owner_scope;
             // An owner that could not be read (null) names nowhere to link to.
@@ -97,8 +99,7 @@ export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGr
                   ) : (
                     <span>{name}</span>
                   )}
-                  {companion && <span className="access-holding-badge">comes with a role</span>}
-                  {!role && <code className="access-holding-id">{a.policy_id}</code>}
+                  {!role && !companion && <code className="access-holding-id">{a.policy_id}</code>}
                 </td>
                 <td title={a.scope ?? ''}>{level}</td>
                 <td>

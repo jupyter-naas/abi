@@ -14,10 +14,14 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
     defaults_store_of,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
+    ADMINS,
+    CAPABILITY,
+    MEMBERSHIP,
     MEMBERSHIPS,
     ROLE_NAMES,
     DirectoryEntry,
     Memberships,
+    Seat,
     best,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
@@ -25,7 +29,6 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     nexus_resource,
     org_below,
     org_container,
-    org_of,
     workspace_container,
     workspace_of,
 )
@@ -172,6 +175,7 @@ def _member_record(
         name=user.name,
         created_at=member.since,
         principal_id=member.principal_id,
+        level=member.level,
         bio=profile.bio if profile.bio is not None else user.bio,
         avatar=profile.avatar,
         organization=profile.organization,
@@ -340,10 +344,11 @@ class OrganizationService:
         # failure undoes what was done (the compensation of create_workspace).
         try:
             scope = await self.memberships.register_org(record.id)
-            await self.memberships.grant(owner_id, "owner", scope)
             # Its access policy (nothing, the platform admin widens it) and its
-            # members and admins groups, the owner in both.
+            # groups first; its creator is its first admin (owner is no longer
+            # assigned, #1585).
             await self.defaults.org_created(defaults_store_of(self.adapter), record.id, name)
+            await self.memberships.grant(owner_id, "admin", scope)
         except Exception:
             await self._undo_create(record.id)
             raise
@@ -577,47 +582,56 @@ class OrganizationService:
     async def remove_from_organization(
         self, org_id: str, user_id: str, *, by: Any
     ) -> list[str] | None:
-        """Take the person out of the organization in one step: every role they hold
-        at its container, below it and at each of its workspaces' containers, on
-        behalf of ``by`` (IAM decides each). Their account, and what they hold in
-        other organizations, stay. Returns the workspaces they left; None when they
-        are not in the organization's directory.
+        """Take the person out of the organization in one step (#1589): every group
+        of it they are in ("<O> admins", "<O> people", the organization's capability
+        groups, and each of its workspaces' "<W> admins" and "<W> workspace"), on
+        behalf of ``by`` (IAM decides each). In a container recorded before #1585,
+        the role held there. Their account, their level and what they hold in other
+        organizations stay. Returns the workspaces they left; None when they are not
+        in the organization's directory.
 
-        An org owner is refused (``OrganizationOwnerRemovalError``: an owner is
-        demoted first, so the last one never leaves this way); a workspace's last
-        owner is ``LastOwnerError``. Every change is checked before the first is
-        made, so a refusal leaves everything as it was."""
-        org_scope, below = org_container(org_id), org_below(org_id)
-        held = {
-            scope: role
-            for scope, role in (await self.memberships.roles_of(user_id)).items()
-            if scope in (org_scope, below)
-            or (is_workspace_container(scope) and org_of(scope) == org_id)
-        }
-        if not held:
+        The organization's last admin is ``LastOrgAdminError`` (409); an org owner of
+        before is refused (``OrganizationOwnerRemovalError``), a workspace's last
+        owner of before is ``LastOwnerError``. Every change is checked before the
+        first is made, so a refusal leaves everything as it was."""
+        if not await self.in_directory(org_id, user_id):
             return None
-        if "owner" in (held.get(org_scope), held.get(below)):
+        org_scope, below = org_container(org_id), org_below(org_id)
+        roles = await self.memberships.roles_of(user_id)
+        if "owner" in (roles.get(org_scope), roles.get(below)):
             raise OrganizationOwnerRemovalError(org_id=org_id, user_id=user_id)
-        workspaces = sorted(scope for scope in held if scope not in (org_scope, below))
-        # The caller's rights first, so that is what a caller who lacks them hears.
-        for scope in ([org_scope] if org_scope in held else []) + workspaces:
-            await self.memberships.check(user_id, None, scope, by=by)
+        workspaces = [
+            c for c in await self.memberships.containers_in(org_id) if is_workspace_container(c)
+        ]
+        capabilities = [
+            Seat(org_scope, CAPABILITY, str(g.id))
+            for g in await self.memberships.capability_groups(org_id)
+            if g.owner_scope == org_scope
+        ]
+        # What they administer first, then the capabilities, then where they work.
+        seats = (
+            [Seat(org_scope, ADMINS), *(Seat(w, ADMINS) for w in workspaces)]
+            + capabilities
+            + [*(Seat(w, MEMBERSHIP) for w in workspaces), Seat(org_scope, MEMBERSHIP)]
+        )
+        held = await self.memberships.held_seats(user_id, seats)
+        leaving = [s for s in seats if s in held]
+        await self.memberships.check_leaving(user_id, leaving, by=by)
         for scope in workspaces:
-            if held[scope] == "owner":
+            if roles.get(scope) == "owner":
                 await self._keep_an_owner(scope, user_id)
-        left: list[str] = []
-        for scope in workspaces:
-            await self.memberships.revoke(user_id, scope, by=by)
-            left.append(workspace_of(scope) or scope)
-        if org_scope in held:
-            # Detaches the role below the organization with it (``mirror_org_wide``).
-            await self.memberships.revoke(user_id, org_scope, by=by)
-        elif below in held:
+        for seat in leaving:
+            await self.memberships.leave_seat(user_id, seat, by=by)
+        if below in roles and org_scope not in roles:
             # A role below the organization with none at it (attached by hand): taken
             # as ``api``, on the authority the route checked (RemoveOrganizationMember
             # at the organization); an org admin holds nothing below it to detach.
             await self.memberships.revoke(user_id, below)
-        return left
+        return sorted(
+            workspace_of(s.container) or s.container
+            for s in leaving
+            if s.kind == MEMBERSHIP and s.container != org_scope
+        )
 
     async def _keep_an_owner(self, scope: str, leaving: str) -> None:
         owners = [m for m in await self.memberships.members(scope) if m.role == "owner"]

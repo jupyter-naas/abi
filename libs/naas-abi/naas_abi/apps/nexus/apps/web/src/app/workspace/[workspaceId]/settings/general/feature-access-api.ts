@@ -1,11 +1,9 @@
 /**
- * The routes General › Features calls: its own (`/api/workspaces/{id}/feature-access`), and who
- * Only… may name (the workspace's members, its groups as IAM lists them to the caller).
+ * The route General › Features calls (`/api/workspaces/{id}/feature-access`): whether the
+ * workspace offers each feature. The workspace offer editor (Access › "<W> access") calls it too.
  */
-import { toMembers } from '@/components/access/access-directory';
-import { createIamAdminApi } from '@/lib/iam-admin/api';
 import { authFetch } from '@/stores/auth';
-import type { FeatureAccessState, FeatureChange, PrincipalRef } from './feature-access-model';
+import type { FeatureAccessState, FeatureChange } from './feature-access-model';
 
 type Fetcher = (url: string, options?: RequestInit) => Promise<Response>;
 
@@ -34,7 +32,6 @@ async function failure(response: Response, fallback: string): Promise<FeatureAcc
 
 export function createFeatureAccessApi(fetcher: Fetcher = authFetch) {
   const path = (workspaceId: string) => `/api/workspaces/${encodeURIComponent(workspaceId)}/feature-access`;
-  const iam = createIamAdminApi(fetcher);
   return {
     read: async (workspaceId: string): Promise<FeatureAccessState> => {
       const response = await fetcher(path(workspaceId));
@@ -50,24 +47,6 @@ export function createFeatureAccessApi(fetcher: Fetcher = authFetch) {
       });
       if (!response.ok) throw await failure(response, `Could not save (HTTP ${response.status}).`);
       return (await response.json()) as FeatureAccessState;
-    },
-    /** The members (by their IAM id) and groups of the workspace; what cannot be read is left out. */
-    candidates: async (workspaceId: string, scope: string): Promise<PrincipalRef[]> => {
-      const [members, groups] = await Promise.all([
-        fetcher(`/api/workspaces/${encodeURIComponent(workspaceId)}/members`)
-          .then(async (response) => (response.ok ? toMembers(await response.json()) : []))
-          .catch(() => []),
-        iam
-          .listGroups(scope)
-          .then((page) => page.items)
-          .catch(() => []),
-      ]);
-      return [
-        ...members.flatMap((m) =>
-          m.principalId ? [{ id: m.principalId, kind: 'user', name: m.name || m.email || m.principalId }] : [],
-        ),
-        ...groups.map((g) => ({ id: g.id, kind: 'group', name: g.name || g.id })),
-      ];
     },
   };
 }

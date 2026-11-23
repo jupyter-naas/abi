@@ -66,9 +66,9 @@ async def test_every_directory_is_read_in_one_pass(world, monkeypatch) -> None:
     calls = []
     original = MEMBERSHIPS.members_by_scope
 
-    def counting(iam, scope=None):
+    def counting(iam, scope=None, **kwargs):
         calls.append(scope)
-        return original(iam, scope)
+        return original(iam, scope, **kwargs)
 
     monkeypatch.setattr(MEMBERSHIPS, "members_by_scope", counting)
 
@@ -96,3 +96,52 @@ async def test_one_directory_resolves_only_the_organizations_people(world, monke
 
     assert {e.user_id for e in await MEMBERSHIPS.org_directory("org-2")} == {"eve"}
     assert set(named) == {world.principal("eve")}
+
+
+# -- read from the groups (#1589) ----------------------------------------------------------
+
+
+@pytest.fixture
+def grouped():
+    """org-g with ws-a and ws-b, whose people are groups (#1585), set by hand: the
+    directory reads the groups themselves, whatever the people hold beside."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
+    from naas_abi_core.engine.call_context import as_service_account
+
+    nexus = NexusIam(features_with_roles=False)
+    with nexus.installed():
+        org = nexus.grouped_org("org-g", "Acme")
+        ws_a = nexus.grouped_workspace("org-g", "ws-a", "Alpha")
+        ws_b = nexus.grouped_workspace("org-g", "ws-b", "Beta")
+        with as_service_account("api"):
+            for user, groups in {
+                "ada": [org.members_group_id, org.admins_group_id],
+                "ben": [org.members_group_id],
+                "cleo": [ws_a.members_group_id, ws_b.members_group_id, ws_b.admins_group_id],
+                # In a workspace's group and no level group: still in the directory.
+                "dan": [ws_a.members_group_id],
+            }.items():
+                principal = nexus.principal(user)
+                for group in groups:
+                    nexus.iam.add_group_member(group, principal)
+        yield nexus
+
+
+@pytest.mark.asyncio
+async def test_the_directory_is_read_from_the_organizations_groups(grouped) -> None:
+    entries = {e.user_id: e for e in await MEMBERSHIPS.org_directory("org-g")}
+
+    assert set(entries) == {"ada", "ben", "cleo", "dan"}
+    assert (entries["ada"].role, entries["ada"].source, entries["ada"].org_wide) == (
+        "admin",
+        "organization",
+        True,
+    )
+    # "<O> people": the organization's own people, Viewer access there.
+    assert (entries["ben"].role, entries["ben"].source) == ("viewer", "organization")
+    assert (entries["cleo"].role, entries["cleo"].workspace_ids) == (None, ("ws-a", "ws-b"))
+    assert (entries["dan"].source, entries["dan"].workspace_ids) == ("workspace", ("ws-a",))
+    members_b = {
+        m.user_id: m.role for m in await MEMBERSHIPS.members(grouped.workspace("org-g", "ws-b"))
+    }
+    assert members_b == {"cleo": "admin"}

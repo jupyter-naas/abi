@@ -49,7 +49,13 @@ async def may(action: str, user: str, **target) -> bool:
 async def test_roles_are_cumulative_by_the_level_of_the_action(world) -> None:
     tested = 0
     for action, level in LEVEL_OF.items():
-        if action in {"UseFeature", "DeleteWorkspace", "DeleteOrganization"}:
+        if action in {
+            "UseFeature",
+            "DeleteWorkspace",
+            "DeleteOrganization",
+            # Decided on the organization (its admins; #1585): org-level, checked below.
+            "DeleteOrganizationWorkspace",
+        }:
             continue
         spec = NEXUS_CATALOG.action(action)
         kind = next(t for t in NEXUS_CATALOG.resource_types if t.name == spec.resource_types[0])

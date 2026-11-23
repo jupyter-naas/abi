@@ -4,40 +4,57 @@
 
 One platform directory of people: the `users` table. A person is a row from the moment they are invited
 (`status: invited`) until their first sign-in makes it `active` (`services/oidc`). `PeopleService` creates or
-links them and attaches the roles and policies the inviting person chose (epic #1566, "API contract": the
-interface the organization and workspace routes code against).
+links them and puts them where the inviting person chose: a level, groups at the organization and its workspaces,
+capability groups (epic #1566, "API contract"; #1589: levels and groups, the interface the organization and
+workspace routes code against).
 
 ## Files
 
 | File | Role |
 |---|---|
-| `port.py` | The contract's records (`UserStatus`, `Grant`, `PlatformUser`, `CreateOrLinkResult`), its errors, and the ports: `PeopleStorePort` (rows), `IdentityGateway` (providers), `AccessGateway` (IAM), `PeopleMailer` |
-| `service.py` | `PeopleService`: `create_or_link`, `add_existing`, `get`, `by_email`, `search`, `resend`, `activate`, `provision` (the configuration's people) |
+| `port.py` | The contract's records (`UserStatus`, `Grant`, `WorkspaceAccess`, `Level`, `Seat`, `PlatformUser`, `CreateOrLinkResult`), its errors, and the ports: `PeopleStorePort` (rows), `IdentityGateway` (providers), `AccessGateway` (IAM: seats, join and leave, levels), `PeopleMailer` |
+| `service.py` | `PeopleService`: `create_or_link`, `add_existing`, `set_level`, `set_workspace_admin`, `change_access`, `get`, `by_email`, `search`, `resend`, `activate`, `provision` (the configuration's people) |
 | `runtime.py` | `RUNTIME`, `get_people_service` (the route dependency); tests `configure` another |
 | `adapters/secondary/postgres.py` | `users` (`migrations/0074_users_status.sql`: `status`, `activated_at`), the organization profile, `provisioned_identities` |
-| `adapters/secondary/engine.py` | The engine's identity (provisioning as `api`) and IAM (pending grants, roles and policies as `api` on behalf of the inviting person; principals and take-backs as `api`) |
+| `adapters/secondary/engine.py` | The engine's identity (provisioning as `api`) and IAM (`EngineAccessGateway`: the seats of `iam/memberships`, checked as the inviting person and written as `api`; principals and take-backs as `api`) |
 | `adapters/secondary/mailer.py` | The invitation mail and the "you were added" notice of `services/invites` |
 
 ## Rules
 
-- **Authorize before anything exists.** `create_or_link` first writes the grants as IAM pending grants for the
-  email, on behalf of the inviting person (IAM: may attach it there, holds what it grants; `owner` only with
-  `may_grant_owner`). A refusal (`GrantNotHeldError`, `OwnerGrantRefusedError`) makes nothing anywhere. That
-  accepted warrant is what lets Nexus make the account at the provider as `api`
+- **A grant is a level and groups** (#1589, ADR `docs/adr/20261120_access_levels_and_groups.md`). `Grant` names one
+  organization: `level` (`viewer` | `member`, one choice for all the person's workspaces; None keeps theirs, someone
+  with none who joins a workspace is a Member), `org_admin` ("<O> admins"), `workspaces` (`WorkspaceAccess(id,
+  admin)`: "<W> workspace", and "<W> admins" for an admin, who is a Member) and `capabilities` (capability group
+  ids of the organization or the platform, `MEMBERSHIPS.capability_groups`). With no workspace and no org admin the
+  person joins "<O> people". Nothing is attached to the person and Owner is not assigned (a `role` body of before
+  is mapped by the routes, `owner` is a 400). Customer policies are no longer given to a person (`policy_ids`: 400).
+- **Authorize before anything exists.** `create_or_link` first asks `AccessGateway.check` for every seat and the
+  level, as the inviting person (IAM decides each group's member change, the level by its level-group rule). A
+  refusal (`GrantNotHeldError`) makes nothing anywhere. In a container recorded before #1585 the seat is the role
+  attachment it stands for, and the held check is probed on a pending grant withdrawn at once
+  (`Memberships._probe_held`). That accepted check is what lets Nexus make the account at the provider as `api`
   (`docs/adr/20261118_invitation_provisions_the_account.md`). A platform invitation (no grant) provisions on the
   inviting user's own right (`provisioning_skipped` when IAM refuses it).
-- **Then**: provision → `iam.ensure_user(issuer, subject)` → the row (`invited`, id = the principal id) → the roles
-  and policies, attached on behalf of the inviting person (policies first, roles through `MEMBERSHIPS.grant`) →
-  the pending grants withdrawn → the mail (never failing the call).
-- **All or nothing.** A failure after the warrant takes back the attachments, the provider's account (only if
-  this call made it), the principal (best effort: `api` holds no `iam:DeletePrincipal`, so the principal of a
-  deleted account stays, holding nothing), and the row.
-- **No duplicate.** An email that has a row is linked: the grants are attached to it, an active person gets the
+- **Then**: provision → `iam.ensure_user(issuer, subject)` → the row (`invited`, id = the principal id) → the
+  membership groups, the level, the admins groups and the capability groups, joined as `api` after the check on
+  behalf of the inviting person → the mail (never failing the call).
+- **All or nothing.** A failure after the check leaves the groups this call joined, takes back the provider's
+  account (only if this call made it), the principal (best effort: `api` holds no `iam:DeletePrincipal`, so the
+  principal of a deleted account stays, holding nothing), and the row.
+- **No duplicate.** An email that has a row is linked: the grant is applied to it, an active person gets the
   "added" notice, an invited one the invitation again. So is a row made meanwhile (`EmailTakenError` on insert)
   and the row of the provider's identity found under another email (signed in before with an unverified or
-  changed one). `created` is internal: routes answer both the same way. A role already held at a grant's scope
-  is `AlreadyMemberError` (409). The profile is written only with a grant (never about someone the call gave
-  nothing).
+  changed one). `created` is internal: routes answer both the same way. Someone already in every membership group
+  a grant names is `AlreadyMemberError` (409). The profile is written only with a grant (never about someone the
+  call gave nothing).
+- **Levels and admins.** `set_level` changes a person's level everywhere; IAM allows it to org admins, platform
+  admins and the admins of any of the person's workspaces, and audits it. `set_workspace_admin` joins or leaves
+  "<W> admins" (a Viewer made admin becomes a Member). `change_access` changes org admin, the level, the workspaces
+  (among a set: those left out are left) and the capability groups in one call, all or nothing. The last org
+  admin of an organization is `LastOrgAdminError` (409).
+- **Audited.** Every join and leave `iam/memberships` makes for someone is a `GroupChange` naming who asked
+  (`Memberships.audit_sinks`; the app logs them, `services/audit.audit_group_change`); IAM audits level-group
+  changes itself with `on_behalf_of`.
 - **The routes keep the limits**: the per-inviter and per-address rate limits and the organization's
   `invitation_mails_per_day` are checked by the routes before they call; `resend` and `add_existing` check no
   scope, the route does (the target is in its directory).
@@ -45,7 +62,7 @@ interface the organization and workspace routes code against).
   `invited` and unbound (id `user-<hex>`, no principal, `idp_provider` the provider). Its roles are attached to
   IAM's user of that id (made on first sight, as for the old login's rows), so the person is listed as invited
   everywhere. Their first sign-in through that provider, email verified, binds the row (`iam.link_user`, which
-  keeps the roles): the trust IAM's pending grants have. ADR: `docs/adr/20261119_people_rows_from_invitation.md`.
+  keeps the groups and roles): the trust IAM's pending grants have. ADR: `docs/adr/20261119_people_rows_from_invitation.md`.
 - **The configuration's people** (`users:`, `core/org_seed.py`; `config.users.yaml`, `core/users_import.py`) are
   rows of the same shape: `invited`, unbound, naming the provider they sign in through (`users[].provider`, else
   the default, else the built-in one; none known: the old login's row, `active`, no provider). The seeds make the

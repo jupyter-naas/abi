@@ -115,14 +115,14 @@ export function AccessPage({
 
   const label = accessSection(section).label.toLowerCase();
   let body: React.ReactNode;
-  if (loading) body = <p className="access-empty">Loading…</p>;
-  else if (error) {
+  // The list starts with the permission read. A refusal replaces it once that read answers.
+  if (error) {
     body = (
       <p className="access-source-note" role="status">
         <strong>Access unavailable.</strong> {error}
       </p>
     );
-  } else if (!opensSection(access, section)) {
+  } else if (!loading && !opensSection(access, section)) {
     body = (
       <p className="access-empty" role="status" data-access-refused="">
         You cannot manage {label} here.

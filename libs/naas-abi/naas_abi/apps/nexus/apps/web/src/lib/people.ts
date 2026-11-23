@@ -2,17 +2,77 @@
 // Search an organization's people to add them to a workspace, create (or link) someone by
 // email, and resend an invited person their sign-in email. The shapes are the API's
 // (`/api/workspaces/{ws}/members/*`, `/api/organizations/{org}/members/*`).
+//
+// Access is a level and groups (#1589, ADR `20261120_access_levels_and_groups`): a person has
+// one level (Member or Viewer) in all their workspaces, works in the workspaces whose group
+// they are in (each with "admin" or not), may be an org admin, and may be in capability groups
+// that add one thing to their level. No role and no policy is given to a person, and no Owner.
 
 import type { InviteProvider } from '@/lib/invitations';
-import { policyIdsToSend, readApiError } from '@/lib/invitations';
+import { readApiError } from '@/lib/invitations';
+import { groupKind, CAPABILITY_GROUPS, type Level as AccessLevel } from '@/lib/access-model/levels';
 
 export type Fetcher = (url: string, options?: RequestInit) => Promise<Response>;
 
 /** Invited: created, not signed in yet. Active: signed in at least once. */
 export type MemberStatus = 'active' | 'invited';
 
-export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'viewer';
-export type OrganizationRole = 'owner' | 'admin' | 'member';
+/** A role as the member lists still read it (an admin, else their level there). */
+export type WorkspaceRole = 'admin' | 'member' | 'viewer';
+export type OrganizationRole = 'admin' | 'member' | 'viewer';
+
+/** A person's level: one choice, in all their workspaces. */
+export type Level = Exclude<AccessLevel, 'admin'>;
+export const LEVELS: Level[] = ['member', 'viewer'];
+export const LEVEL_LABELS: Record<Level, string> = { member: 'Member', viewer: 'Viewer' };
+/** Said beside every level field: a level is the person's, not the workspace's. */
+export const LEVEL_EVERYWHERE_NOTE = "A level applies in all of this person's workspaces.";
+
+/** A level from an answer; anything else is none. */
+export function readLevel(raw: unknown): Level | null {
+  return raw === 'member' || raw === 'viewer' ? raw : null;
+}
+
+/** Why a level cannot go with the admin toggles picked, or null: a workspace admin is a Member. */
+export function levelConflict(level: Level | null | undefined, anyAdmin: boolean): string | null {
+  return level === 'viewer' && anyAdmin
+    ? 'A workspace admin is a Member: pick Member, or untick admin.'
+    : null;
+}
+
+/** A workspace a person works in, and whether they administer it. */
+export type WorkspaceAccess = { id: string; admin: boolean };
+
+/** A group that adds one thing to a level (`GET …/capability-groups`). */
+export type CapabilityGroup = {
+  id: string;
+  name: string;
+  description: string | null;
+  owner_scope: string;
+  scope: 'organization' | 'platform';
+};
+
+/** Where the capability groups offered are asked. */
+export function capabilityGroupsUrl(at: { organizationId: string } | { workspaceId: string }): string {
+  return 'organizationId' in at
+    ? `/api/organizations/${encodeURIComponent(at.organizationId)}/capability-groups`
+    : `/api/workspaces/${encodeURIComponent(at.workspaceId)}/capability-groups`;
+}
+
+/**
+ * The capability groups a form offers: the known ones first ("Workflow runners", "Models ·
+ * all"), then the groups made for a per-person exception, by name. Never one of the model's own
+ * groups (levels, admins, a workspace's or the organization's people), which the API already
+ * leaves out.
+ */
+export function offeredCapabilityGroups<T extends CapabilityGroup>(items: T[]): T[] {
+  const known = CAPABILITY_GROUPS.map((c) => c.name);
+  const kindOf = (g: T) => groupKind({ name: g.name, owner_scope: g.owner_scope === 'abi' ? 'abi:' : g.owner_scope });
+  const rank = (g: T) => (known.includes(g.name) ? known.indexOf(g.name) : known.length);
+  return items
+    .filter((g) => ['capability', 'custom'].includes(kindOf(g)))
+    .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+}
 
 /** One suggestion of `GET /api/workspaces/{ws}/members/candidates`. */
 export type MemberCandidate = {
@@ -106,13 +166,26 @@ export function statusBadge(status: MemberStatus | undefined): { label: string; 
 
 // -- the request bodies ------------------------------------------------------------
 
-/** `POST /api/workspaces/{ws}/members`: add someone the search found. */
-export function addMemberBody(add: {
+/** What a level and groups add to a request body: the level only when one is picked (none keeps
+ *  the person's), the capability groups only when some are. */
+function accessFields(level: Level | null | undefined, capabilities: readonly string[] | undefined) {
+  return {
+    ...(level ? { level } : {}),
+    ...(capabilities && capabilities.length ? { capabilities: [...capabilities] } : {}),
+  };
+}
+
+export type WorkspaceAdd = {
   userId: string;
-  role: WorkspaceRole;
-  policyIds?: readonly string[];
-}): Record<string, unknown> {
-  return { user_id: add.userId, role: add.role, ...policyIdsToSend(add.policyIds) };
+  /** None: keep the person's level (someone with none becomes a Member). */
+  level?: Level | null;
+  admin?: boolean;
+  capabilities?: readonly string[];
+};
+
+/** `POST /api/workspaces/{ws}/members`: add someone the search found. */
+export function addMemberBody(add: WorkspaceAdd): Record<string, unknown> {
+  return { user_id: add.userId, admin: add.admin === true, ...accessFields(add.level, add.capabilities) };
 }
 
 /** Only the profile fields that were filled in, trimmed; undefined when none was. */
@@ -128,8 +201,9 @@ export function filledProfile(profile: Partial<Record<keyof PeopleProfile, strin
 export type WorkspaceCreate = {
   email: string;
   name?: string;
-  role: WorkspaceRole;
-  policyIds?: readonly string[];
+  level?: Level | null;
+  admin?: boolean;
+  capabilities?: readonly string[];
   provider?: string;
   profile?: PeopleProfile;
 };
@@ -140,8 +214,9 @@ export function workspaceCreateBody(create: WorkspaceCreate): Record<string, unk
   return {
     email: create.email.trim(),
     ...(name ? { name } : {}),
-    role: create.role,
-    ...policyIdsToSend(create.policyIds),
+    ...accessFields(create.level, undefined),
+    admin: create.admin === true,
+    ...accessFields(undefined, create.capabilities),
     ...(create.provider ? { provider: create.provider } : {}),
     ...(create.profile && Object.keys(create.profile).length ? { profile: create.profile } : {}),
   };
@@ -150,10 +225,11 @@ export function workspaceCreateBody(create: WorkspaceCreate): Record<string, unk
 export type OrganizationCreate = {
   email: string;
   name?: string;
-  /** null: no org role, workspace access only (at least one workspace then). */
-  role: OrganizationRole | null;
-  workspaces: { id: string; role: WorkspaceRole }[];
-  policyIds?: readonly string[];
+  level?: Level | null;
+  orgAdmin?: boolean;
+  /** None and no org admin: the person is one of the organization's people (Viewer access at it). */
+  workspaces: WorkspaceAccess[];
+  capabilities?: readonly string[];
   provider?: string;
   profile?: PeopleProfile;
 };
@@ -163,16 +239,14 @@ export type OrganizationCreate = {
  * The profile fields go flat, beside the email, as the route reads them.
  */
 export function organizationCreateBody(create: OrganizationCreate): Record<string, unknown> {
-  if (create.role === null && create.workspaces.length === 0) {
-    throw new Error('Pick an organization role, or at least one workspace.');
-  }
   const name = create.name?.trim();
   return {
     email: create.email.trim(),
     ...(name ? { name } : {}),
-    role: create.role,
-    workspaces: create.workspaces.map((w) => ({ id: w.id, role: w.role })),
-    ...policyIdsToSend(create.policyIds),
+    ...accessFields(create.level, undefined),
+    org_admin: create.orgAdmin === true,
+    workspaces: create.workspaces.map((w) => ({ id: w.id, admin: w.admin === true })),
+    ...accessFields(undefined, create.capabilities),
     ...(create.provider ? { provider: create.provider } : {}),
     ...(create.profile ?? {}),
   };
@@ -255,15 +329,38 @@ const post = (body?: unknown): RequestInit =>
 
 export type PeopleApi = {
   candidates: (workspaceId: string, q: string, signal?: AbortSignal) => Promise<MemberCandidate[]>;
-  addMember: (
-    workspaceId: string,
-    add: { userId: string; role: WorkspaceRole; policyIds?: readonly string[] }
-  ) => Promise<{ member: Record<string, unknown>; emailSent: boolean }>;
+  addMember: (workspaceId: string, add: WorkspaceAdd) => Promise<{ member: Record<string, unknown>; emailSent: boolean }>;
   createInWorkspace: (workspaceId: string, create: WorkspaceCreate) => Promise<CreatedPerson>;
   createInOrganization: (organizationId: string, create: OrganizationCreate) => Promise<CreatedPerson>;
   resendWorkspace: (workspaceId: string, userId: string) => Promise<boolean>;
   resendOrganization: (organizationId: string, userId: string) => Promise<boolean>;
+  /** The capability groups a form offers there (`offeredCapabilityGroups`). */
+  capabilityGroups: (at: { organizationId: string } | { workspaceId: string }) => Promise<CapabilityGroup[]>;
+  /** A level (in all the person's workspaces) or the admin toggle, from a workspace. */
+  updateWorkspaceMember: (
+    workspaceId: string,
+    userId: string,
+    change: { level?: Level; admin?: boolean }
+  ) => Promise<{ level: Level | null; admin: boolean }>;
+  /** An organization member's org admin toggle, level and capability groups (the full set). */
+  updateOrganizationAccess: (
+    organizationId: string,
+    userId: string,
+    change: { orgAdmin?: boolean; level?: Level; capabilities?: readonly string[] }
+  ) => Promise<Record<string, unknown>>;
+  /** The workspaces of the organization a member works in, each with "admin". */
+  setOrganizationWorkspaces: (
+    organizationId: string,
+    userId: string,
+    workspaces: WorkspaceAccess[]
+  ) => Promise<Record<string, unknown>>;
 };
+
+const send = (method: string, body: unknown): RequestInit => ({
+  method,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+});
 
 function created(data: unknown, fallback: string): CreatedPerson {
   const person = readCreatedPerson(data);
@@ -318,6 +415,42 @@ export function createPeopleApi(fetcher: Fetcher = defaultFetcher): PeopleApi {
         'Failed to resend the sign-in email'
       );
       return data.sign_in_email_sent === true;
+    },
+    async capabilityGroups(at) {
+      const data = await json<{ items?: CapabilityGroup[] }>(
+        await fetcher(capabilityGroupsUrl(at), undefined),
+        'Failed to list the capability groups'
+      );
+      return offeredCapabilityGroups(Array.isArray(data.items) ? data.items : []);
+    },
+    async updateWorkspaceMember(workspaceId, userId, change) {
+      const body: Record<string, unknown> = {};
+      if (change.level) body.level = change.level;
+      if (change.admin !== undefined) body.admin = change.admin;
+      const data = await json<{ level?: unknown; admin?: unknown }>(
+        await fetcher(`${ws(workspaceId)}/${encodeURIComponent(userId)}`, send('PATCH', body)),
+        'Failed to change this member'
+      );
+      return { level: readLevel(data.level), admin: data.admin === true };
+    },
+    async updateOrganizationAccess(organizationId, userId, change) {
+      const body: Record<string, unknown> = {};
+      if (change.orgAdmin !== undefined) body.org_admin = change.orgAdmin;
+      if (change.level) body.level = change.level;
+      if (change.capabilities) body.capabilities = [...change.capabilities];
+      return json<Record<string, unknown>>(
+        await fetcher(`${org(organizationId)}/${encodeURIComponent(userId)}`, send('PATCH', body)),
+        'Failed to change this member'
+      );
+    },
+    async setOrganizationWorkspaces(organizationId, userId, workspaces) {
+      return json<Record<string, unknown>>(
+        await fetcher(
+          `${org(organizationId)}/${encodeURIComponent(userId)}/workspaces`,
+          send('PUT', { workspaces: workspaces.map((w) => ({ id: w.id, admin: w.admin })) })
+        ),
+        'Failed to change their workspaces'
+      );
     },
   };
 }

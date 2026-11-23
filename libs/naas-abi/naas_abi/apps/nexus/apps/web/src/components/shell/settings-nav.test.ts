@@ -53,10 +53,33 @@ describe('workspace settings nav', () => {
     expect(shown({ 'iam:Explain': true, 'nexus:ReadSystem': true })).not.toContain('Policies');
     const access = visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { access: IAM }).find((g) => g.label === 'Access');
     expect(access?.items.map((item) => [item.label, item.href])).toEqual([
-      ['Policies', '/settings/policies'],
       ['Groups', '/settings/groups'],
+      ['Policies', '/settings/policies'],
     ]);
     expect(labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { access: IAM }))).not.toContain('Roles & permissions');
+  });
+
+  it('lists Analytics and Access for a role that opens settings until their reads answer', () => {
+    const pending = labels(
+      visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, {
+        roleOpens: true,
+        accessKnown: false,
+        analyticsKnown: false,
+      })
+    );
+    expect(pending).toEqual(expect.arrayContaining(['Analytics', 'Groups', 'Policies']));
+    const denied = labels(
+      visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, {
+        roleOpens: true,
+        access: { actions: {} },
+        readsAnalytics: false,
+        accessKnown: true,
+        analyticsKnown: true,
+      })
+    );
+    expect(denied).not.toContain('Analytics');
+    expect(denied).not.toContain('Groups');
+    expect(denied).not.toContain('Policies');
   });
 
   it('shows Analytics, in the General group, only to whoever may read the workspace analytics', () => {

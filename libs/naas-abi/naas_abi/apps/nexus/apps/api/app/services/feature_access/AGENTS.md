@@ -2,49 +2,44 @@
 
 ## Purpose
 
-Who may use each feature of a workspace, set from General: **Everyone**, **Only…** (members
-and groups chosen) or **Nobody**. It decides nothing itself: each choice is written as IAM
-policies, made as the caller, and IAM decides every call (`services/iam/AGENTS.md`, "Features:
-zero trust").
+What a workspace offers, set from General › Features (**Everyone** or **Nobody**) and from the
+offer routes (agents, apps, workflows, pipelines). It decides nothing itself: each choice is a
+section of the workspace's access policy, "<W> access" (`services/iam/workspace_offer.py`),
+written as the caller, and IAM decides every call.
 
 ## Files
 
 | File | Role |
 |---|---|
-| `port.py` | `FeatureChange`, `CHOICES`, `FeaturePolicyStore` (which policy was written for each feature of a workspace) |
-| `service.py` | `FeatureAccessService.read / save / managed_among`; the pure checks `offered`, `holds`, `as_written`, `names_feature`, `check_changes` |
-| `adapters/secondary/postgres.py` | `SqlFeaturePolicyStore`, table `workspace_feature_policies` (migration `0074_workspace_feature_policies.sql`) |
-| `adapters/primary/feature_access__primary_adapter__FastAPI.py` | `GET` / `PUT /api/workspaces/{workspace_id}/feature-access` |
+| `port.py` | `FeatureChange`, `CHOICES`, `FeaturePolicyStore` (the "Feature · X" policies an older version wrote, for the marks on Access › Policies) |
+| `service.py` | `FeatureAccessService.read / save / read_offer / save_offer / managed_among`; the pure checks `offered`, `holds`, `names_feature`, `check_changes`, `check_offer_changes` |
+| `adapters/secondary/postgres.py` | `SqlFeaturePolicyStore`, table `workspace_feature_policies` (migration `0074_workspace_feature_policies.sql`): read only now |
+| `adapters/primary/feature_access__primary_adapter__FastAPI.py` | `GET` / `PUT /api/workspaces/{workspace_id}/feature-access`, `GET` / `PUT /api/workspaces/{workspace_id}/offer` |
 | `runtime.py` | The service on the engine's IAM (`iam_admin`'s `EngineIamGateway`), `AUTHZ.container_of`, `CONTAINER_DEFAULTS.record_of`, the audit log; `configure` for tests |
 
 ## Rules
 
-- **One policy per feature**: "Feature · <name>", owned by the workspace, a sub-policy of
-  "<W> access", one Allow of `nexus:UseFeature` on `${scope}/nexus:feature/<key>`. Made on the
-  first save that is not Nobody, recorded in `workspace_feature_policies`, never found by name.
-- **The choice is where it is attached**, at the workspace: "<W> members" (Everyone: a newcomer
-  joins the group, so holds it), the chosen users and groups (Only…), nothing (Nobody). A save
-  attaches what is missing and detaches the rest; the policy stays.
-- **Every write is IAM's, as the caller, audited first** (`run_audited`, the IAM admin pages' log,
-  operations `feature-access.create|everyone|only|nobody`): grant only what you hold, derive only
-  from a policy you hold, within the chain, all apply. On top of them a row changes only for a
-  caller who holds the feature there (IAM's `grantable` at the workspace, what `/publishers`
-  answers) and whom IAM lets create, attach and detach policies there. No role is checked.
-- **The ceiling is "<W> access"**: a feature its chain does not allow (`offered`) is "not offered
-  in this workspace" and only Nobody is saved for it. The chain is read as Nexus (`gateway.policy`).
-- **Coexistence**: other policies naming the feature at the workspace (as the caller lists them,
-  managed ones aside) are listed with it, Allow or Deny, attached or not. A Deny wins as anywhere.
-- **Changed by hand** (`as_written` false: another document, owner or parent), the row is read-only
-  and links to its policy; General never rewrites it.
-- A save is a batch: a malformed one (unknown feature, a feature twice, Only… with nobody) is
-  refused whole (422); otherwise each feature is applied alone and a refused one is named in
-  `errors`, the others saved.
+- **One policy, the workspace's access.** Everyone is the feature in the `OfferFeatures` section of
+  "<W> access", Nobody out of it. No "Feature · X" policy is made; those an older version made are
+  listed with the other policies naming the feature until the access migration retires them.
+- **Only… is refused** (named in `errors`): a feature is offered to the workspace or not; a group
+  holding a policy for it gives it to some people.
+- **Every write is IAM's, as the caller, audited first** (`run_audited`, operations
+  `feature-access.everyone|nobody`, `workspace-offer.update`): one `UpdatePolicy` of "<W> access", read
+  again first (its revision checked). Grant only what you hold; a row changes only for a caller who
+  holds the feature there and whom IAM lets update the policy. No role is checked.
+- **The bound is the organization's offer** ("<O> access", the parent): a feature it does not offer is
+  refused ("not offered in this workspace's organization"); an item beyond it is refused by IAM (422).
+- **Written on the policy's page** (an Allow outside the sections, a ceiling of an older version): the
+  row is read-only and says so.
+- **Coexistence**: other policies naming the feature at the workspace are listed with it, Allow or
+  Deny. A Deny wins as anywhere.
 
 ## Tests
 
-`service_test.py` (real IAM, SQLite, the real organization and workspace creation): the three
-choices, a caller who does not hold the feature (and IAM refusing her the attachment itself), the
-ceiling, a Deny elsewhere winning and listed, a policy changed by hand, a newcomer joining the
-members, the mark on Access › Policies. The routes: `adapters/primary/*_test.py`; the store and
+`service_test.py` (real IAM, SQLite, the real organization and workspace creation): Everyone and
+Nobody as the offer, Only… refused, a caller who does not hold the feature (and IAM refusing her the
+widening itself), the organization's bound, a Deny elsewhere winning and listed, a statement written on
+the policy's page, a newcomer, the mark of older policies, agents offered and withdrawn. The routes: `adapters/primary/*_test.py`; the store and
 its migration: `adapters/secondary/postgres_test.py`; the routes' declarations:
 `services/iam/route_matrix_test.py` (`FEATURE_ACCESS_ROUTES`).

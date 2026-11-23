@@ -244,8 +244,8 @@ function UserRow({
           className="org-settings-users-edit"
           data-action="superadmin"
           disabled={busy}
-          title={user.is_superadmin ? 'Remove superadmin' : 'Make superadmin'}
-          aria-label={`${user.is_superadmin ? 'Remove superadmin from' : 'Make superadmin'} ${user.email}`}
+          title={user.is_superadmin ? 'Remove platform admin' : 'Make platform admin'}
+          aria-label={`${user.is_superadmin ? 'Remove platform admin from' : 'Make platform admin'} ${user.email}`}
           onClick={() => void run(() => updateUser(user.id, { is_superadmin: !user.is_superadmin }, fetcher))}
         >
           <Crown size={16} />
@@ -337,7 +337,7 @@ function UserRow({
         <td data-field="superadmin">
           {user.is_superadmin ? (
             <span className="platform-users-badge is-superadmin">
-              <Crown size={12} /> Superadmin
+              <Crown size={12} /> Platform admin
             </span>
           ) : (
             <span className="platform-users-muted">No</span>
@@ -447,7 +447,7 @@ function UserRow({
 
 /**
  * Every account of the platform, and the people invited who have none yet: search,
- * column filters, sort, export, and the lifecycle (invite, edit the name, superadmin,
+ * column filters, sort, export, and the lifecycle (invite, edit the name, platform admin,
  * deactivate, reactivate, delete), each button shown for the access action IAM gives.
  * A row opens the person's page in Roles & permissions; access is never shown here.
  */

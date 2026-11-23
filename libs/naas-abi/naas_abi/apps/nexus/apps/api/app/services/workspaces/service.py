@@ -173,7 +173,8 @@ class WorkspaceService:
         return await self.adapter.get_workspace_by_slug(slug=slug)
 
     async def create_workspace(self, workspace: WorkspaceCreateInput) -> WorkspaceRecord:
-        """Create a workspace and make ``owner_id`` its owner.
+        """Create a workspace and make ``owner_id`` (the row's column) its admin: in
+        "<W> admins" and "<W> workspace" (#1585; owner is no longer assigned).
 
         The caller checked the right to create it in the organization (bug d:
         never a request field's say-so). A failure after the row exists in IAM
@@ -187,12 +188,12 @@ class WorkspaceService:
         record = await self.adapter.create_workspace(workspace=workspace)
         try:
             scope = await self.memberships.register_workspace(record.organization_id, record.id)
-            await self.memberships.grant(workspace.owner_id, "owner", scope)
-            # Its access policy (nothing, a sub-policy of its organization's) and
-            # its members and admins groups, the owner in both.
+            # Its access policy (a sub-policy of its organization's) and its groups
+            # first, so that its admin joins them.
             await self.defaults.workspace_created(
                 defaults_store_of(self.adapter), record.organization_id, record.id, record.name
             )
+            await self.memberships.grant(workspace.owner_id, "admin", scope)
         except Exception:
             await self.adapter.delete_workspace(workspace_id=record.id)
             try:
@@ -226,10 +227,10 @@ class WorkspaceService:
     async def update_workspace(
         self, workspace_id: str, updates: WorkspaceUpdateInput, *, by: Any = None
     ) -> WorkspaceRecord | None:
-        """Update the workspace. A new ``owner_id`` becomes its owner in IAM and the
-        previous owner an admin: ``by`` is checked for both (``MembershipDenied``
-        when IAM refuses, owners alone make owners). A new name renames its access
-        policy and default groups (``ContainerDefaults.renamed``)."""
+        """Update the workspace. A new ``owner_id`` becomes an admin of it (owner is
+        no longer assigned, #1585): ``by`` is checked (``MembershipDenied`` when IAM
+        refuses). A new name renames its access policy and default groups
+        (``ContainerDefaults.renamed``)."""
         before = None
         if updates.owner_id is not None or updates.name is not None:
             before = await self.adapter.get_workspace_by_id(workspace_id=workspace_id)
@@ -237,12 +238,7 @@ class WorkspaceService:
             record = before
             scope = await self._scope(workspace_id)
             if record is not None and scope is not None and updates.owner_id != record.owner_id:
-                await self.memberships.grant(updates.owner_id, "owner", scope, by=by)
-                if (
-                    record.owner_id
-                    and await self.memberships.role_at(record.owner_id, scope) == "owner"
-                ):
-                    await self.memberships.grant(record.owner_id, "admin", scope, by=by)
+                await self.memberships.grant(updates.owner_id, "admin", scope, by=by)
         updated = await self.adapter.update_workspace(workspace_id=workspace_id, updates=updates)
         if updated is not None and before is not None and updated.name != before.name:
             await self.defaults.renamed(
@@ -280,6 +276,7 @@ class WorkspaceService:
                 created_at=member.since,
                 principal_id=member.principal_id,
                 status=users[member.user_id].status,
+                level=member.level,
             )
             for member in members
             if member.user_id in users
@@ -297,6 +294,7 @@ class WorkspaceService:
                     source="organization",
                     principal_id=member.principal_id,
                     status=users[member.user_id].status,
+                    level=member.level,
                 )
                 for member in inherited
                 if member.user_id in users

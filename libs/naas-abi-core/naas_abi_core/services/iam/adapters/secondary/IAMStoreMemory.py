@@ -22,6 +22,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     LegacyScopeSet,
     ManifestRecord,
     ManifestStatus,
+    Membership,
     NameRewriter,
     Page,
     PendingGrant,
@@ -215,6 +216,23 @@ class IAMStoreMemory(IAMStore):
     def groups_of(self, member_id: str) -> list[str]:
         with self._lock:
             return sorted(g for g, m in self._members if m == member_id)
+
+    def memberships_of(self, member_id: str) -> list[Membership]:
+        with self._lock:
+            found = []
+            for group_id, member in self._members:
+                group = self._principals.get(group_id)
+                if member == member_id and group is not None and group.membership_of:
+                    found.append(Membership(group_id, group.membership_of))
+            return sorted(found, key=lambda m: m.group_id)
+
+    def membership_groups(self, container: str) -> list[str]:
+        with self._lock:
+            return sorted(
+                p.id
+                for p in self._principals.values()
+                if p.kind == "group" and p.membership_of == container
+            )
 
     def map_idp_group(self, mapping: GroupMapping) -> None:
         with self._lock:

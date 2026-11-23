@@ -87,13 +87,24 @@ export const USER_ACTIONS = {
   remove: 'nexus:DeleteUser',
 } as const;
 
+/** `GET /api/admin/users/{id}/access`: what their groups give them (#1589). */
+export type UserAccess = {
+  user_id: string;
+  principal_id: string;
+  level: 'member' | 'viewer' | null;
+  platform_admin: boolean;
+  organizations: { id: string; name: string; org_admin: boolean }[];
+  workspaces: { id: string; name: string; organization_id: string | null; admin: boolean }[];
+  capabilities: { id: string; name: string; owner_scope: string }[];
+};
+
 export type ColumnId = 'user' | 'iam' | 'status' | 'superadmin' | 'organizations' | 'created';
 
 export const COLUMNS: { id: ColumnId; label: string }[] = [
   { id: 'user', label: 'User' },
   // The IAM id is not a column: it stays in the search, the export and the person's page.
   { id: 'status', label: 'Status' },
-  { id: 'superadmin', label: 'Superadmin' },
+  { id: 'superadmin', label: 'Platform admin' },
   { id: 'organizations', label: 'Organizations' },
   { id: 'created', label: 'Created' },
 ];
@@ -102,8 +113,8 @@ export const SIGNED_IN = 'Signed in';
 export const INVITED = 'Invited, not yet';
 export const DEACTIVATED = 'Deactivated';
 export const ACTIVE = 'Active';
-export const SUPERADMIN = 'Superadmin';
-export const NOT_SUPERADMIN = 'Not superadmin';
+export const PLATFORM_ADMIN = 'Platform admin';
+export const NOT_PLATFORM_ADMIN = 'Not platform admin';
 export const NO_ORGANIZATION = 'No organization';
 /** The Created column's value for an invitation with no date. */
 export const NO_DATE = 'No date';
@@ -132,7 +143,7 @@ export function cellValues(user: AdminUser, column: ColumnId): string[] {
     case 'status':
       return [statusLabel(user), user.deactivated ? DEACTIVATED : ACTIVE];
     case 'superadmin':
-      return [user.is_superadmin ? SUPERADMIN : NOT_SUPERADMIN];
+      return [user.is_superadmin ? PLATFORM_ADMIN : NOT_PLATFORM_ADMIN];
     case 'organizations':
       return user.organizations.length > 0
         ? [...new Set(user.organizations.map((o) => o.name || o.id))].sort((a, b) => a.localeCompare(b))
@@ -180,7 +191,7 @@ export const EXPORT_HEADERS = [
   'IAM ID',
   'Status',
   'Deactivated',
-  'Superadmin',
+  'Platform admin',
   'Organizations',
   'Created',
   'Identity provider',

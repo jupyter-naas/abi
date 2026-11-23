@@ -102,6 +102,8 @@ class WorkspaceMemberRecord:
     principal_id: str | None = None
     # "invited" until their first sign-in, then "active" (the users row).
     status: str = "active"
+    # Their level ("member", "viewer": ``Member.level``), shown as Workspace · Level.
+    level: str | None = None
 
 
 @dataclass

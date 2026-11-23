@@ -48,7 +48,7 @@ def test_its_admins_read_it_and_a_member_does_not(client):
     body = found.json()
     assert [row["key"] for row in body["features"]] == ["chat", "files", "marketplace"]
     assert body["access_policy"]["name"] == "Alpha access"
-    assert body["members_group"]["name"] == "Alpha members"
+    assert body["members_group"]["name"] == "Alpha workspace"
     assert client.get(PATH, headers={"x-user": "dave"}).status_code == 403
 
 
@@ -80,3 +80,19 @@ def test_a_batch_saves_as_the_caller_and_a_malformed_one_changes_nothing(client)
         headers={"x-user": "dave"},
     )
     assert refused.status_code == 200 and "chat" in refused.json()["errors"]
+
+
+def test_the_offer_reads_as_configuration_and_saves_as_the_caller(client):
+    path = "/api/workspaces/alpha/offer"
+    assert client.get(path, headers={"x-user": "dave"}).status_code == 403
+    assert client.get(path, headers={"x-user": "olivia"}).json()["offered"]["agents"] == []
+    change = {"kind": "agents", "module": "acme.sales", "name": "*", "offered": True}
+    saved = client.put(path, json={"changes": [change]}, headers={"x-user": "olivia"})
+    assert saved.status_code == 200
+    assert saved.json()["offered"]["agents"] == [{"module": "acme.sales", "name": "*"}]
+    beyond = {**change, "module": "other.module", "name": "X"}
+    assert (
+        client.put(path, json={"changes": [beyond]}, headers={"x-user": "olivia"}).status_code
+        == 422
+    )
+    assert client.put(path, json={"changes": []}, headers={"x-user": "olivia"}).status_code == 422

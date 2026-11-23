@@ -3,30 +3,29 @@ invited, created or linked by whoever adds them somewhere.
 
 ``create_or_link`` makes a person who has no row, in this order:
 
-1. **Authorize** before anything exists: the roles and policies are written as
-   IAM pending grants for the email, on behalf of the inviting person, so IAM
-   checks that they may attach each one there and hold what it grants (and only
-   an owner names an owner). That accepted invitation is the warrant to make the
-   account (ADR ``20261118_invitation_provisions_the_account.md``).
+1. **Authorize** before anything exists: IAM checks, as the inviting person, that
+   they may put someone in each group the grant names and give the level (#1589:
+   ``Grant`` is a level, the organization's and the workspaces' groups, and
+   capability groups). That accepted check is the warrant to make the account
+   (ADR ``20261118_invitation_provisions_the_account.md``).
 2. **Provision** the account at the identity provider, as Nexus.
 3. **The IAM user** of the provider's identity ``(issuer, subject)``, as Nexus.
 4. **The row**, ``invited``, whose id is that principal id.
-5. **Attach** the roles and policies to them, on behalf of the inviting person,
-   and withdraw the pending grants: the attachments are the memberships.
+5. **Join** the groups and set the level (``AccessGateway``): the memberships.
 6. **Mail** the invitation (never failing the call).
 
-A failure after step 1 takes everything back: the attachments, the row, the
-principal, and the provider's account only if this call made it.
+A failure after step 1 takes everything back: the groups joined, the level, the
+row, the principal, and the provider's account only if this call made it.
 
 A provider whose people are managed there (``provisioning: none``), or a platform
 invitation whose inviter may not create accounts at the provider, makes no
 account: the row is ``invited`` and **unbound** (a stable id of its own, no
-identity), its roles are attached to IAM's user of that id, and the first sign-in
+identity), its groups hold IAM's user of that id, and the first sign-in
 through the provider the row names, with the email verified, binds the row to that
 identity (``services/oidc``), which keeps the roles.
 
 An email that already has a row is **linked**: nothing is made, the grants are
-attached to that person. The answer never says which of the two happened.
+given to that person. The answer never says which of the two happened.
 """
 
 from __future__ import annotations
@@ -34,6 +33,7 @@ from __future__ import annotations
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
@@ -46,10 +46,13 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.domain_proof import
     is_public_mail_domain,
 )
 from naas_abi.apps.nexus.apps.api.app.services.people.port import (
+    ADMINS,
+    CAPABILITY,
+    LEVELS,
     MAX_SEARCH,
+    MEMBERSHIP,
     MIN_QUERY,
     PROFILE_FIELDS,
-    ROLES,
     AccessGateway,
     Actor,
     AddedUser,
@@ -59,10 +62,9 @@ from naas_abi.apps.nexus.apps.api.app.services.people.port import (
     EmailTakenError,
     Grant,
     IdentityGateway,
-    InvalidPolicyError,
+    Level,
     NewUser,
     NoProviderError,
-    OwnerGrantRefusedError,
     PeopleMailer,
     PeopleStorePort,
     Placement,
@@ -70,9 +72,10 @@ from naas_abi.apps.nexus.apps.api.app.services.people.port import (
     ProviderInfo,
     Provisioned,
     ProvisioningRefused,
+    Seat,
     UnknownUserError,
     UserStatus,
-    Warrant,
+    WorkspaceAccess,
 )
 from naas_abi_core import logger
 
@@ -92,17 +95,39 @@ class _Existing(Exception):  # noqa: N818 - a signal, not an error
 
 
 @dataclass(frozen=True)
-class _Step:
-    """One attachment a grant asks for: a role, or a customer policy, at a scope."""
+class _Access:
+    """What a grant asks for: the seats (groups by container), the level, and where
+    the grant puts the person (the containers they work in from now on, for
+    ``AlreadyMemberError``), with the organization and workspaces for the mail."""
 
-    scope: str
     grant: Grant
-    role: str | None = None
-    policy_id: str | None = None
+    seats: tuple[Seat, ...]
+    places: tuple[str, ...]
+    organization: str | None
+
+    def level_after(self, current: Level | None) -> Level | None:
+        """The level the person has afterwards: the one asked for; a Member for a
+        workspace admin (a workspace admin is a Member); a Member for someone with no
+        level who joins a workspace; else theirs."""
+        if self.grant.level is not None:
+            return self.grant.level
+        if any(w.admin for w in self.grant.workspaces) and current != "member":
+            return "member"
+        if current is None and self.grant.workspaces:
+            return "member"
+        return current
 
     @property
-    def policy(self) -> str:
-        return f"builtin.{self.role}" if self.role is not None else str(self.policy_id)
+    def containers(self) -> list[str]:
+        return [s.container for s in self.seats if s.kind != CAPABILITY]
+
+
+# What a change did, to take it back: ``("join", seat)``, ``("level", level before)``.
+_Done = tuple[str, Any]
+
+# The order seats are joined in: where first (the person's tie), then what they
+# administer, then capabilities (which need the tie).
+_ORDER = {MEMBERSHIP: 0, ADMINS: 1, CAPABILITY: 2}
 
 
 class PeopleService:
@@ -152,18 +177,21 @@ class PeopleService:
         email: str,
         name: str | None,
         provider: str | None,
-        grants: Sequence[Grant],
+        grant: Grant | None,
         by: Actor,
-        may_grant_owner: bool = False,
         profile: Mapping[str, str] | None = None,
         organization_id: str | None = None,
     ) -> CreateOrLinkResult:
         """Make the person (``invited``) or link the account the email has, and give
-        them ``grants`` on behalf of ``by``. ``organization_id``: the organization
-        the profile is written in and the mail names."""
+        them ``grant`` (their level and groups) on behalf of ``by``. None: an
+        account with no access (a platform invitation). ``organization_id``: the
+        organization the profile is written in and the mail names (the grant's by
+        default)."""
         email = _email(email)
         name = " ".join((name or "").split()) or None
-        steps = await self._plan(grants, may_grant_owner)
+        access = await self._plan(grant)
+        if organization_id is None and access is not None:
+            organization_id = access.organization
         kept_profile = _profile(profile)
         if provider:
             # A provider asked for is checked whether the email has an account or not:
@@ -174,32 +202,29 @@ class PeopleService:
         existing = await self.store.by_email(email)
         if existing is not None:
             return await self._link(
-                existing, steps, by, profile=kept_profile, organization_id=organization_id
+                existing, access, by, profile=kept_profile, organization_id=organization_id
             )
         choice = await self._choose(email, provider, organization_id)
-        # 1. Authorized before anything exists: IAM accepts the grants on the
-        # inviting person's behalf, or nothing is made.
-        warrant = (
-            await self.access.warrant(
-                choice.name, email, [(s.policy, s.scope) for s in steps], by=by.id
+        # 1. Authorized before anything exists: IAM accepts, as the inviting person,
+        # every group and the level, or nothing is made.
+        if access is not None:
+            await self.access.check(
+                None,
+                access.seats,
+                level=access.level_after(None),
+                by=by.id,
+                organization_id=access.organization,
             )
-            if steps
-            else Warrant()
+        provisioned, skipped = await self._provision(
+            choice, email, name, by.id, warranted=access is not None
         )
-        try:
-            provisioned, skipped = await self._provision(
-                choice, email, name, by.id, warranted=bool(steps)
-            )
-        except Exception:
-            await self._withdraw(warrant.made)
-            raise
         try:
             user = await self._make(
                 choice,
                 email,
                 name,
                 provisioned,
-                steps,
+                access,
                 by,
                 profile=kept_profile,
                 organization_id=organization_id,
@@ -210,25 +235,19 @@ class PeopleService:
             # provider's identity was known: its principal has a row). Linked as
             # any existing one; an account this call made at the provider is
             # ABI's, whoever's row it is bound to.
-            await self._withdraw(warrant.made)
             if provisioned is not None and provisioned.created and provisioned.subject:
                 await self.store.record_provisioned(
                     choice.name, provisioned.subject, email, now=self._clock()
                 )
                 await self.store.commit()
             return await self._link(
-                taken.user, steps, by, profile=kept_profile, organization_id=organization_id
+                taken.user, access, by, profile=kept_profile, organization_id=organization_id
             )
-        except Exception:
-            await self._withdraw(warrant.made)
-            raise
-        # The roles are attached: the pending grants have done their part.
-        await self._withdraw(warrant.made)
         sent = await self._invitation_mail(
             user,
             choice,
             by,
-            steps,
+            access,
             organization_id=organization_id,
             account_made=not skipped,
         )
@@ -248,7 +267,7 @@ class PeopleService:
         email: str,
         name: str | None,
         provisioned: Provisioned | None,
-        steps: Sequence[_Step],
+        access: _Access | None,
         by: Actor,
         *,
         profile: Mapping[str, str],
@@ -259,7 +278,7 @@ class PeopleService:
         made_account = bool(provisioned and provisioned.created and subject)
         principal_id: str | None = None
         user: PlatformUser | None = None
-        added: list[_Step] = []
+        done: list[_Done] = []
         try:
             if subject:
                 principal_id = await self.access.ensure_principal(
@@ -288,11 +307,12 @@ class PeopleService:
                 now=now,
             )
             # As for a link: an organization's profile only with a grant it gave.
-            if organization_id and profile and steps:
+            if organization_id and profile and access is not None:
                 await self.store.write_profile(organization_id, user.id, profile)
-            # Committed before IAM attaches: a row IAM vouches for by asking Nexus.
+            # Committed before IAM is changed: a row IAM vouches for by asking Nexus.
             await self.store.commit()
-            await self._apply(user.id, steps, by, added=added)
+            if access is not None:
+                await self._apply(user.id, access, by, done=done)
         except _Existing:
             raise
         except EmailTakenError as exc:
@@ -306,7 +326,7 @@ class PeopleService:
         except Exception:
             await self._undo(
                 user,
-                added,
+                done,
                 principal_id=principal_id,
                 provider=choice.name,
                 subject=subject if made_account else None,
@@ -317,16 +337,17 @@ class PeopleService:
     async def _undo(
         self,
         user: PlatformUser | None,
-        added: Sequence[_Step],
+        done: Sequence[_Done],
         *,
         principal_id: str | None,
         provider: str,
         subject: str | None,
     ) -> None:
-        """Take back what a failed creation made: the attachments, the provider's
-        account (only one this call made: ``subject``), the principal, the row."""
+        """Take back what a failed creation made: the groups and the level, the
+        provider's account (only one this call made: ``subject``), the principal,
+        the row."""
         if user is not None:
-            await self._take_back(user.id, added)
+            await self._take_back(user.id, done)
         try:
             await self.store.rollback()
         except Exception as exc:  # noqa: BLE001 - the rest is still taken back
@@ -358,9 +379,9 @@ class PeopleService:
         warranted: bool,
     ) -> tuple[Provisioned | None, bool]:
         """``(what the provider made, whether provisioning was withheld)``. With a
-        warrant (grants IAM accepted for the inviting person) the account is made as
-        Nexus; without one (a platform invitation, no role) only on behalf of the
-        inviting person, whose own right IAM decides: refused, nothing is made."""
+        warrant (a grant IAM accepted for the inviting person) the account is made
+        as Nexus; without one (a platform invitation, no access) only on behalf of
+        the inviting person, whose own right IAM decides: refused, nothing is made."""
         if choice.managed_in_provider:
             return None, False
         if warranted:
@@ -373,25 +394,28 @@ class PeopleService:
     async def _link(
         self,
         user: PlatformUser,
-        steps: Sequence[_Step],
+        access: _Access | None,
         by: Actor,
         *,
         profile: Mapping[str, str],
         organization_id: str | None,
     ) -> CreateOrLinkResult:
-        await self._apply(user.id, steps, by)
+        if access is not None:
+            await self._apply(user.id, access, by)
         # Someone who exists has a profile of their own in the organization: a link
-        # writes it only with an organization grant IAM accepted (who may give an
-        # organization role may edit its people), never with a workspace grant
-        # alone (a workspace admin cannot rewrite an org member's profile).
-        org_granted = any(
-            s.grant.scope == "organization" and s.grant.scope_id == organization_id
-            for s in steps
+        # writes it only with an organization grant IAM accepted (who may make an
+        # org admin or put someone in the organization's people may edit them),
+        # never with workspaces alone (a workspace admin cannot rewrite an org
+        # member's profile).
+        org_granted = (
+            access is not None
+            and access.organization == organization_id
+            and (access.grant.org_admin or not access.grant.workspaces)
         )
         if organization_id and profile and org_granted:
             await self.store.write_profile(organization_id, user.id, profile)
             await self.store.commit()
-        sent = await self._notify(user, by, steps, organization_id=organization_id)
+        sent = await self._notify(user, by, access, organization_id=organization_id)
         return CreateOrLinkResult(
             user=user,
             created=False,
@@ -402,25 +426,19 @@ class PeopleService:
         )
 
     # =========================================================================
-    # Adding someone who exists
+    # Adding someone who exists, changing a level
     # =========================================================================
 
-    async def add_existing(
-        self,
-        *,
-        user_id: str,
-        grants: Sequence[Grant],
-        by: Actor,
-        may_grant_owner: bool = False,
-    ) -> AddedUser:
-        """Give an existing person ``grants`` on behalf of ``by`` and tell them.
+    async def add_existing(self, *, user_id: str, grant: Grant, by: Actor) -> AddedUser:
+        """Give an existing person ``grant`` on behalf of ``by`` and tell them.
         The answer is the person, and whether the mail telling them was sent."""
         user = await self.store.get(user_id)
         if user is None:
             raise UnknownUserError(user_id)
-        steps = await self._plan(grants, may_grant_owner)
-        await self._apply(user.id, steps, by)
-        sent = await self._notify(user, by, steps, organization_id=None)
+        access = await self._plan(grant)
+        if access is not None:
+            await self._apply(user.id, access, by)
+        sent = await self._notify(user, by, access, organization_id=None)
         return AddedUser(
             id=user.id,
             email=user.email,
@@ -430,70 +448,229 @@ class PeopleService:
             sign_in_email_sent=sent,
         )
 
-    async def _plan(self, grants: Sequence[Grant], may_grant_owner: bool) -> list[_Step]:
-        """The attachments the grants ask for, checked before anything is asked of
-        IAM: known roles, customer policies only, and ``owner`` only from an owner."""
-        steps: list[_Step] = []
-        for grant in grants:
-            if grant.scope not in ("organization", "workspace") or not grant.scope_id:
-                raise ValueError("A grant names an organization or a workspace")
-            if grant.role is not None and grant.role not in ROLES:
-                raise ValueError(f"Unknown role {grant.role!r}")
-            if grant.role is None and not grant.policy_ids:
-                raise ValueError("A grant names a role or policies")
-            if grant.role == "owner" and not may_grant_owner:
-                raise OwnerGrantRefusedError("Only an owner can make an owner")
-            policies = _policies(grant.policy_ids)
+    async def set_level(
+        self, *, user_id: str, level: str, by: Actor, where: Sequence[str] = ()
+    ) -> Level | None:
+        """Make ``level`` the person's, in every workspace they work in, on behalf of
+        ``by``: the platform admin, an org admin, or an admin of any of the person's
+        workspaces may (IAM's level-group rule); audited with who asked. Returns the
+        level they had. ``where``: containers the change is asked from."""
+        if level not in LEVELS:
+            raise ValueError(f"Unknown level {level!r}")
+        if await self.store.get(user_id) is None:
+            raise UnknownUserError(user_id)
+        return await self.access.set_level(user_id, level, by=by.id, where=where)  # type: ignore[arg-type]
+
+    async def set_workspace_admin(
+        self, *, user_id: str, workspace_id: str, admin: bool, by: Actor
+    ) -> None:
+        """Make a person of the workspace its admin ("<W> admins"; a workspace admin
+        is a Member, so a Viewer becomes one) or take that back, on behalf of ``by``,
+        all or nothing. ``UnknownUserError`` for someone who is not in it."""
+        if await self.store.get(user_id) is None:
+            raise UnknownUserError(user_id)
+        container = await self.access.container("workspace", workspace_id)
+        seat, tie = Seat(container, ADMINS), Seat(container, MEMBERSHIP)
+        held = await self.access.held(user_id, [seat, tie])
+        if tie not in held:
+            raise UnknownUserError(user_id)
+        if not admin:
+            if seat in held:
+                await self.access.check_leaving(user_id, [seat], by=by.id)
+                await self.access.leave(user_id, seat, by=by.id)
+            return
+        if seat in held:
+            return
+        current = await self.access.level_of(user_id)
+        target: Level | None = "member" if current != "member" else None
+        await self.access.check(
+            user_id, [seat], level=target, by=by.id, organization_id=org_of(container)
+        )
+        done: list[_Done] = []
+        try:
+            if target is not None:
+                done.append(("level", await self.access.set_level(user_id, target, by=by.id)))
+            if await self.access.join(user_id, seat, by=by.id, level="member"):
+                done.append(("join", seat))
+        except Exception:
+            await self._take_back(user_id, done)
+            raise
+
+    async def change_access(
+        self,
+        *,
+        user_id: str,
+        organization_id: str,
+        by: Actor,
+        level: str | None = None,
+        org_admin: bool | None = None,
+        workspaces: Sequence[WorkspaceAccess] | None = None,
+        among: Sequence[str] = (),
+        capabilities: Sequence[str] | None = None,
+    ) -> None:
+        """Change where a person of the organization works and what they do there,
+        on behalf of ``by``, all or nothing: their org admin seat (``org_admin``),
+        their workspaces (``workspaces``, the full set wanted of ``among``, the
+        organization's workspaces: those left out are left), their capability
+        groups (the full set wanted of the organization's) and their level. None
+        leaves that part as it is. Someone with no workspace left and no org admin
+        seat stays among the organization's people ("<O> people")."""
+        if level is not None and level not in LEVELS:
+            raise ValueError(f"Unknown level {level!r}")
+        if await self.store.get(user_id) is None:
+            raise UnknownUserError(user_id)
+        org = await self.access.container("organization", organization_id)
+        joins: list[Seat] = []
+        leaves: list[Seat] = []
+
+        def want(seat: Seat, wanted: bool) -> None:
+            (joins if wanted else leaves).append(seat)
+
+        if org_admin is not None:
+            if org_admin:
+                want(Seat(org, MEMBERSHIP), True)
+            want(Seat(org, ADMINS), org_admin)
+        if workspaces is not None:
+            chosen = {w.id: w for w in workspaces}
+            unknown = sorted(set(chosen) - set(among))
+            if unknown:
+                raise ValueError(f"Not workspaces of this organization: {', '.join(unknown)}")
+            for workspace_id in among:
+                container = await self.access.container("workspace", workspace_id)
+                picked = chosen.get(workspace_id)
+                if picked is not None:
+                    want(Seat(container, MEMBERSHIP), True)
+                    want(Seat(container, ADMINS), picked.admin)
+                else:
+                    want(Seat(container, ADMINS), False)
+                    want(Seat(container, MEMBERSHIP), False)
+        if capabilities is not None:
+            listed = {gid for gid, _name in await self.access.capability_groups(organization_id)}
+            unknown = sorted(set(capabilities) - listed)
+            if unknown:
+                raise ValueError(f"Not a capability group here: {', '.join(unknown)}")
+            for group_id in sorted(listed):
+                want(Seat(org, CAPABILITY, group_id), group_id in capabilities)
+        held = await self.access.held(user_id, [*joins, *leaves])
+        joins = [s for s in joins if s not in held]
+        leaves = [s for s in leaves if s in held]
+        # Out of every workspace and not an admin: among the organization's people.
+        if workspaces is not None and not workspaces:
+            if Seat(org, MEMBERSHIP) not in held and Seat(org, MEMBERSHIP) not in joins:
+                joins.insert(0, Seat(org, MEMBERSHIP))
+        current = await self.access.level_of(user_id)
+        if level is None and any(s.kind == ADMINS and s.container != org for s in joins):
+            level = "member" if current != "member" else None  # a workspace admin is a Member
+        target = level if level is not None and level != current else None
+        if joins or target is not None:
+            await self.access.check(
+                user_id, joins, level=target, by=by.id, organization_id=organization_id
+            )  # type: ignore[arg-type]
+        if leaves:
+            await self.access.check_leaving(user_id, leaves, by=by.id)
+        done: list[_Done] = []
+        try:
+            for seat in sorted(joins, key=lambda s: _ORDER[s.kind]):
+                if await self.access.join(user_id, seat, by=by.id, level=target or current):  # type: ignore[arg-type]
+                    done.append(("join", seat))
+            if target is not None:
+                before = await self.access.set_level(user_id, target, by=by.id)  # type: ignore[arg-type]
+                done.append(("level", before))
+            for seat in sorted(leaves, key=lambda s: -_ORDER[s.kind]):
+                await self.access.leave(user_id, seat, by=by.id)
+        except Exception:
+            await self._take_back(user_id, done)
+            raise
+
+    async def _plan(self, grant: Grant | None) -> _Access | None:
+        """The seats a grant asks for, checked before anything is asked of IAM: a
+        known level, an organization or a workspace, workspaces of the organization,
+        and no workspace admin who is a Viewer. None: no grant."""
+        if grant is None:
+            return None
+        if grant.level is not None and grant.level not in LEVELS:
+            raise ValueError(f"Unknown level {grant.level!r}")
+        if not grant.organization_id and not grant.workspaces:
+            raise ValueError("A grant names an organization or a workspace")
+        if grant.org_admin and not grant.organization_id:
+            raise ValueError("An organization admin needs an organization")
+        if grant.level == "viewer" and any(w.admin for w in grant.workspaces):
+            raise ValueError("A workspace admin is a Member: a Viewer administers nothing")
+        org = (
+            await self.access.container("organization", grant.organization_id)
+            if grant.organization_id
+            else None
+        )
+        seats: list[Seat] = []
+        places: list[str] = []
+        for workspace in {w.id: w for w in grant.workspaces}.values():
             try:
-                scope = await self.access.scope(grant)
+                container = await self.access.container("workspace", workspace.id)
             except LookupError as exc:
-                raise ValueError(f"Unknown {grant.scope} {grant.scope_id}") from exc
-            steps += [_Step(scope, grant, policy_id=p) for p in policies]
-            if grant.role is not None:
-                steps.append(_Step(scope, grant, role=grant.role))
-        return steps
+                raise ValueError(f"Unknown workspace {workspace.id}") from exc
+            if org_of(container) != grant.organization_id:
+                raise ValueError(f"The workspace {workspace.id} is not one of the organization's")
+            seats.append(Seat(container, MEMBERSHIP))
+            places.append(container)
+            if workspace.admin:
+                seats.append(Seat(container, ADMINS))
+        if org is not None and (grant.org_admin or not grant.workspaces):
+            seats.append(Seat(org, MEMBERSHIP))
+            places.append(org)
+            if grant.org_admin:
+                seats.append(Seat(org, ADMINS))
+        given_in = org or places[0]
+        seats += [
+            Seat(given_in, CAPABILITY, g)
+            for g in dict.fromkeys(str(c).strip() for c in grant.capabilities)
+            if g
+        ]
+        return _Access(grant, tuple(seats), tuple(places), grant.organization_id)
 
     async def _apply(
-        self, user_id: str, steps: Sequence[_Step], by: Actor, *, added: list[_Step] | None = None
+        self, user_id: str, access: _Access, by: Actor, *, done: list[_Done] | None = None
     ) -> None:
-        """Attach the steps on behalf of ``by``: the policies first, then the roles,
-        so a refused one leaves no membership behind. All or nothing."""
-        if not steps:
-            return
-        held = await self.access.roles_of(user_id)
-        for step in steps:
-            if step.role is not None and step.scope in held:
-                raise AlreadyMemberError(user_id, step.scope)
-        made: list[_Step] = [] if added is None else added
+        """Put the person in the seats and at the level, on behalf of ``by``: all
+        checked first, then the membership groups (their tie), the level, the admins
+        groups and the capability groups. All or nothing: what this call did is
+        taken back on a failure (by the caller when it passes ``done``)."""
+        held = await self.access.held(user_id, access.seats)
+        for seat in access.seats:
+            if seat.kind == MEMBERSHIP and seat.container in access.places and seat in held:
+                raise AlreadyMemberError(user_id, seat.container)
+        current = await self.access.level_of(user_id)
+        level = access.level_after(current)
+        target = level if level != current else None
+        todo = sorted((s for s in access.seats if s not in held), key=lambda s: _ORDER[s.kind])
+        await self.access.check(
+            user_id, todo, level=target, by=by.id, organization_id=access.organization
+        )
+        made: list[_Done] = [] if done is None else done
         try:
-            for step in sorted(steps, key=lambda s: s.role is not None):
-                if step.role is not None:
-                    await self.access.grant_role(user_id, step.role, step.scope, by=by.id)
-                    made.append(step)
-                elif await self.access.attach(user_id, step.policy, step.scope, by=by.id):
-                    made.append(step)
+            for seat in (s for s in todo if s.kind == MEMBERSHIP):
+                if await self.access.join(user_id, seat, by=by.id, level=level):
+                    made.append(("join", seat))
+            if target is not None:
+                made.append(("level", await self.access.set_level(user_id, target, by=by.id)))
+            for seat in (s for s in todo if s.kind != MEMBERSHIP):
+                if await self.access.join(user_id, seat, by=by.id, level=level):
+                    made.append(("join", seat))
         except Exception:
-            if added is None:  # the caller takes back what ``added`` lists
+            if done is None:  # the caller takes back what ``done`` lists
                 await self._take_back(user_id, made)
             raise
 
-    async def _take_back(self, user_id: str, made: Sequence[_Step]) -> None:
-        for step in reversed(made):
+    async def _take_back(self, user_id: str, done: Sequence[_Done]) -> None:
+        for kind, what in reversed(done):
             try:
-                if step.role is not None:
-                    await self.access.revoke_role(user_id, step.scope)
+                if kind == "join":
+                    await self.access.leave(user_id, what, by=None)  # type: ignore[arg-type]
+                elif what is None:
+                    await self.access.clear_level(user_id)
                 else:
-                    await self.access.detach(user_id, step.policy, step.scope)
+                    await self.access.set_level(user_id, what, by=None)  # type: ignore[arg-type]
             except Exception as exc:  # noqa: BLE001 - logged, the rest goes on
-                logger.warning(f"Could not take back {step.policy} at {step.scope}: {exc}")
-
-    async def _withdraw(self, grant_ids: Sequence[str]) -> None:
-        if not grant_ids:
-            return
-        try:
-            await self.access.withdraw(grant_ids)
-        except Exception as exc:  # noqa: BLE001 - a grant already gone is gone
-            logger.warning(f"Could not withdraw pending grants {list(grant_ids)}: {exc}")
+                logger.warning(f"Could not take back {kind} {what} of {user_id}: {exc}")
 
     # =========================================================================
     # Mail, resending, activation
@@ -544,7 +721,7 @@ class PeopleService:
         self,
         user: PlatformUser,
         by: Actor,
-        steps: Sequence[_Step],
+        access: _Access | None,
         *,
         organization_id: str | None,
     ) -> bool:
@@ -559,11 +736,11 @@ class PeopleService:
                 user,
                 choice,
                 by,
-                steps,
+                access,
                 organization_id=organization_id,
                 account_made=_has_account(user),
             )
-        placement = await self._placement(steps, organization_id)
+        placement = await self._placement(access, organization_id)
         try:
             return await self.mailer.added(
                 to_email=user.email, inviter_name=_name(by), placement=placement
@@ -577,12 +754,12 @@ class PeopleService:
         user: PlatformUser,
         choice: ProviderInfo,
         by: Actor,
-        steps: Sequence[_Step],
+        access: _Access | None,
         *,
         organization_id: str | None,
         account_made: bool,
     ) -> bool:
-        placement = await self._placement(steps, organization_id)
+        placement = await self._placement(access, organization_id)
         return await self._send_invitation(user, choice, by, placement, account_made=account_made)
 
     async def _send_invitation(
@@ -606,16 +783,22 @@ class PeopleService:
             logger.warning(f"Invitation email to {user.email} failed: {exc}")
             return False
 
-    async def _placement(self, steps: Sequence[_Step], organization_id: str | None) -> Placement:
-        org = next((s.grant for s in steps if s.grant.scope == "organization"), None)
-        ws = next((s.grant for s in steps if s.grant.scope == "workspace"), None)
-        org_id = org.scope_id if org is not None else organization_id
-        org_name, ws_name = await self.store.names(org_id, ws.scope_id if ws else None)
+    async def _placement(self, access: _Access | None, organization_id: str | None) -> Placement:
+        """Where the mail says the person was put: the organization (as its admin, or
+        among its people) and the first workspace (as its admin, or at their level)."""
+        grant = access.grant if access is not None else None
+        org_id = grant.organization_id if grant and grant.organization_id else organization_id
+        workspace = grant.workspaces[0] if grant and grant.workspaces else None
+        org_name, ws_name = await self.store.names(org_id, workspace.id if workspace else None)
+        level = (grant.level if grant else None) or "member"
+        org_role = None
+        if grant is not None and grant.organization_id:
+            org_role = "admin" if grant.org_admin else (None if grant.workspaces else level)
         return Placement(
             organization_name=org_name,
-            organization_role=_role_of(steps, org),
+            organization_role=org_role,
             workspace_name=ws_name,
-            workspace_role=_role_of(steps, ws),
+            workspace_role=("admin" if workspace.admin else level) if workspace else None,
         )
 
     async def _placement_of_roles(self, roles: Mapping[str, str]) -> Placement:
@@ -708,21 +891,3 @@ def _profile(profile: Mapping[str, str] | None) -> dict[str, str]:
         for key, value in (profile or {}).items()
         if key in PROFILE_FIELDS and value is not None
     }
-
-
-def _policies(policy_ids: Sequence[str]) -> list[str]:
-    """Customer policies (``pol_…``), once each: a role is chosen as the role."""
-    found = list(dict.fromkeys(str(p).strip() for p in policy_ids if str(p).strip()))
-    managed = [p for p in found if not p.startswith("pol_")]
-    if managed:
-        raise InvalidPolicyError(
-            f"Only customer policies (pol_…) are attached this way, not {', '.join(managed)}: "
-            "the role is chosen as the role"
-        )
-    return found
-
-
-def _role_of(steps: Sequence[_Step], grant: Grant | None) -> str | None:
-    if grant is None:
-        return None
-    return next((s.role for s in steps if s.grant == grant and s.role is not None), None)

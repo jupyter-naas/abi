@@ -17,7 +17,7 @@ import {
   type AnalyticsFilters,
   type AnalyticsScope,
 } from './scope';
-import { ErrorBlock, LoadingBlock } from './states';
+import { ErrorBlock } from './states';
 import { analyticsTabs, shownTab, type AnalyticsTab, type AnalyticsTabProps } from './tabs';
 import { ChatsTab } from './tabs/chats-tab';
 import { EventsTab } from './tabs/events-tab';
@@ -42,15 +42,17 @@ const DIRECTORY_FILTERS: AnalyticsFilters = { period: DEFAULT_PERIOD, userId: AL
 export function AnalyticsSection({ scope }: { scope: AnalyticsScope }) {
   const { status: accessStatus, access } = useAnalyticsAccess(scope, { refresh: true });
   const canRead = access?.can_read === true;
+  // The charts start with the access read. A refusal replaces them once that read answers.
+  const refused = accessStatus !== 'checking' && !canRead;
   const timeZone = access?.timezone || 'UTC';
 
   const [filters, setFilters] = useState<AnalyticsFilters>(initialAnalyticsFilters);
   const [tab, setTab] = useState<AnalyticsTab>('overview');
   const hasWorkspaces = scopeHasWorkspaces(scope);
 
-  const users = useAnalytics<UsersResponse>(scope, '/users', DIRECTORY_FILTERS, { skip: !canRead });
+  const users = useAnalytics<UsersResponse>(scope, '/users', DIRECTORY_FILTERS, { skip: refused });
   const workspaces = useAnalytics<WorkspacesResponse>(scope, '/workspaces', DIRECTORY_FILTERS, {
-    skip: !canRead || !hasWorkspaces,
+    skip: refused || !hasWorkspaces,
   });
   const directory = useMemo(() => users.data?.directory ?? [], [users.data]);
   // In an organization, a picked workspace narrows the user list to its members.
@@ -71,11 +73,8 @@ export function AnalyticsSection({ scope }: { scope: AnalyticsScope }) {
     setTab('overview');
   }, []);
 
-  if (!access) {
-    if (accessStatus === 'error') return <ErrorBlock message="The analytics access could not be read." />;
-    return <LoadingBlock />;
-  }
-  if (!canRead) {
+  if (accessStatus === 'error' && !access) return <ErrorBlock message="The analytics access could not be read." />;
+  if (refused) {
     return (
       <SettingsEmpty
         icon={<BarChart3 size={40} className="opacity-40" />}
@@ -147,7 +146,7 @@ export function AnalyticsSection({ scope }: { scope: AnalyticsScope }) {
       {activeTab === 'pages' && <PagesTab {...tabProps} />}
       {activeTab === 'workspaces' && <WorkspacesTab {...tabProps} />}
       {activeTab === 'chats' && (
-        <ChatsTab {...tabProps} canReadMessages={access.can_read_conversations} directory={directory} />
+        <ChatsTab {...tabProps} canReadMessages={access?.can_read_conversations === true} directory={directory} />
       )}
       {activeTab === 'events' && <EventsTab {...tabProps} />}
     </div>

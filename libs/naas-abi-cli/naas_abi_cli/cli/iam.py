@@ -21,6 +21,7 @@ it drops its cache at once instead of within a minute.
     abi iam group bind acme "Data readers" --workspace W --org O --role viewer
     abi iam group unbind acme "Data readers" --workspace W --org O --role viewer
     abi iam group list
+    abi iam migrate-access --dry-run [--json]
 
 ``invite`` and ``group`` act through the engine's services, like
 ``abi chat``: the running engine when there is one, as its own account. They
@@ -32,7 +33,9 @@ invitation email and keeps the invitation list.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import importlib
 import json
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -676,6 +679,76 @@ def group_list(ctx: click.Context, provider: str | None) -> None:
             click.echo(
                 f"{binding.provider}\t{binding.claim_value}\t{binding.policy_id}\t{binding.scope}"
             )
+
+
+_NEXUS_ACCESS_MODEL = "naas_abi.apps.nexus.apps.api.app.services.iam.access_model"
+
+
+@iam.command("migrate-access")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Print the report of the move as it would be now. Required: Nexus applies it at start.",
+)
+@click.option(
+    "--database-url",
+    envvar="DATABASE_URL",
+    default=None,
+    help="Nexus's database (default: nexus_config.database_url of the project's configuration).",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    default=False,
+    help="Print the report as JSON.",
+)
+@click.pass_context
+def migrate_access(
+    ctx: click.Context, dry_run: bool, database_url: str | None, as_json: bool
+) -> None:
+    """Report what the access move (per-person roles to groups) would change.
+
+    Tries the move on a copy of IAM and prints, for every person, each access
+    they would gain or lose and why, the workspaces left with no admin
+    (``nexus_config.migration.default_workspace_admin`` names one), the
+    org-only people and the policies retired. Nothing is written anywhere:
+    Nexus applies the move once, at its next start, under the moves' lock.
+    """
+    from .user import _configured_database_url, _configured_nexus_settings
+
+    if not dry_run:
+        raise click.ClickException(
+            "Nexus applies the access move at its start: run with --dry-run to see its report"
+        )
+    from types import SimpleNamespace
+
+    module = importlib.import_module(_NEXUS_ACCESS_MODEL)
+    url = database_url or _configured_database_url()
+    settings = _configured_nexus_settings()
+    # The project's IAM, read from its store as the other commands do: the move is
+    # tried on a copy of everything IAM holds, which a client of the engine's IAM
+    # over NATS does not list.
+    with _iam(ctx) as project_iam:
+        report = asyncio.run(
+            module.migrate_from_cli(
+                url, SimpleNamespace(iam=project_iam), settings=settings
+            )
+        )
+    if report is None:
+        raise click.ClickException(
+            "The access move cannot run on this store: it waits for an earlier move "
+            "or stopped on a shape it does not know (see the log above)"
+        )
+    if as_json:
+        click.echo(report.to_json())
+    else:
+        for line in report.lines():
+            click.echo(line)
+    click.echo(
+        "Dry run: nothing changed. Nexus applies the move at its next start.", err=True
+    )
 
 
 # -- abi dev up ---------------------------------------------------------------------------

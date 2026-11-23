@@ -70,6 +70,12 @@ export async function fetchOrganizationSettingsAccess(fetcher: Fetcher = authFet
   return false;
 }
 
+/** The organizations the role itself opens (owner or admin), before any access is read. */
+export function organizationsOpenedByRole<T extends { id: string; currentUserRole?: string | null }>(orgs: T[]): T[] {
+  if (viewFlagActive()) return [];
+  return orgs.filter((org) => opensOrganization({ role: org.currentUserRole ?? null, access: null }));
+}
+
 /** The organizations whose settings open for the caller, in the order given: owners' and
  *  admins' from the list, the others' once their access is read (`ACCESS_BATCH` at a time). */
 export async function openableOrganizations<T extends { id: string; currentUserRole?: string | null }>(

@@ -8,7 +8,15 @@ import { getApiUrl } from '@/lib/config';
 import { invalidateOrgBranding } from '@/lib/org-branding';
 import { authFetch } from './auth';
 import { classifyInviteAnswer, type InviteAnswer } from '@/lib/invitations';
-import { memberStatus, organizationCreateBody, readCreatedPerson, type MemberStatus, type WorkspaceRole } from '@/lib/people';
+import {
+  memberStatus,
+  organizationCreateBody,
+  readCreatedPerson,
+  readLevel,
+  type Level,
+  type MemberStatus,
+  type WorkspaceAccess,
+} from '@/lib/people';
 
 const getApiBase = () => getApiUrl();
 const normalize = (url?: string | null) =>
@@ -79,9 +87,16 @@ export interface OrganizationMember {
   id: string;
   organizationId: string;
   userId: string;
-  /** Null: no org role, only access to some of its workspaces (`source: "workspace"`). */
-  role: 'owner' | 'admin' | 'member' | null;
-  /** Where they are linked to the organization from: an org role, or a workspace role only. */
+  /**
+   * "admin" for an org admin, else their level at the organization ("member", "viewer"); null:
+   * linked through some of its workspaces only (`source: "workspace"`).
+   */
+  role: 'admin' | 'member' | 'viewer' | null;
+  /** An admin of the organization ("<O> admins"): reaches every workspace of it. */
+  orgAdmin: boolean;
+  /** Their level, in all their workspaces; null for a role of before held directly. */
+  level: Level | null;
+  /** Where they are linked to the organization from: the organization itself, or a workspace only. */
   source: 'organization' | 'workspace';
   /** Invited: created, has not signed in yet. */
   status: MemberStatus;
@@ -110,7 +125,6 @@ export type OrganizationMemberCreateProfile = {
 
 /** No name: a member's full name is always their account name (users.name). */
 export type OrganizationMemberProfileUpdate = {
-  role?: 'admin' | 'member';
   organization?: string;
   job_title?: string;
   bio?: string;
@@ -124,7 +138,10 @@ function mapMember(m: any): OrganizationMember {
     id: m.id,
     organizationId: m.organization_id,
     userId: m.user_id,
-    role: m.role === 'owner' || m.role === 'admin' || m.role === 'member' ? m.role : null,
+    // An owner of before administers the organization: Owner is no longer assigned.
+    role: m.role === 'owner' || m.role === 'admin' ? 'admin' : m.role === 'member' || m.role === 'viewer' ? m.role : null,
+    orgAdmin: m.org_admin === true || m.role === 'admin' || m.role === 'owner',
+    level: readLevel(m.level),
     // An older row has no source: it holds an org role.
     source: m.source === 'workspace' ? 'workspace' : 'organization',
     status: memberStatus(m.status),
@@ -196,7 +213,7 @@ interface OrganizationState {
   inviteMember: (
     orgId: string,
     email: string,
-    role: 'admin' | 'member',
+    orgAdmin: boolean,
     profile?: OrganizationMemberCreateProfile
   ) => Promise<OrganizationMember | null>;
   inviteToOrganization: (
@@ -224,14 +241,17 @@ interface OrganizationState {
 
 export interface OrganizationInvite {
   email: string;
-  /** Null: no org role, workspace access only (at least one workspace then). */
-  role: 'owner' | 'admin' | 'member' | null;
+  /** Their level, in all their workspaces; none keeps an existing person's. */
+  level?: Level | null;
+  /** An admin of the organization. */
+  orgAdmin?: boolean;
   // The identity provider to invite through (only named when there is a choice).
   provider?: string;
-  // Workspaces of the organization to add them to, each with the role they get there.
-  workspaces?: { id: string; role: WorkspaceRole }[];
-  // Customer policies (`pol_…`) attached with the role.
-  policyIds?: string[];
+  // Workspaces of the organization they join, each with "admin"; none (and no org admin): they
+  // are one of the organization's people.
+  workspaces?: WorkspaceAccess[];
+  // Capability groups they are put in (`grp_…`).
+  capabilities?: string[];
   // The member's organization profile, set when the person is created.
   profile?: OrganizationMemberCreateProfile;
 }
@@ -462,10 +482,10 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
   inviteMember: async (
     orgId: string,
     email: string,
-    role: 'admin' | 'member',
+    orgAdmin: boolean,
     profile: OrganizationMemberCreateProfile = {}
   ): Promise<OrganizationMember | null> => {
-    const { member } = await get().inviteToOrganization(orgId, { email, role, profile });
+    const { member } = await get().inviteToOrganization(orgId, { email, orgAdmin, profile });
     return member;
   },
 
@@ -479,9 +499,10 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
           organizationCreateBody({
             email: invite.email,
             name: invite.profile?.name,
-            role: invite.role,
+            level: invite.level,
+            orgAdmin: invite.orgAdmin,
             workspaces: invite.workspaces ?? [],
-            policyIds: invite.policyIds,
+            capabilities: invite.capabilities,
             provider: invite.provider,
             profile: profileFields(invite.profile),
           })

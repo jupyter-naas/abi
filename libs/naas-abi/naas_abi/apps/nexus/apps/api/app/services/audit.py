@@ -5,6 +5,7 @@ Tracks sensitive operations for security and compliance.
 
 import json
 from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
 from fastapi import Request
@@ -71,6 +72,20 @@ async def log_audit_event(
     except Exception as e:
         # Don't fail the request if audit logging fails
         print(f"Audit log failed: {e}")
+
+
+async def audit_group_change(change: Any) -> None:
+    """A join or a leave of a group made for someone (``iam.memberships.GroupChange``,
+    #1589), in the audit log under who asked (None: the system)."""
+    await log_audit_event(
+        "group_member_added"
+        if change.action.endswith("AddGroupMember")
+        else "group_member_removed",
+        user_id=change.by,
+        resource_type="iam_group",
+        resource_id=change.group_id,
+        details={"member_id": change.member_id, "container": change.container},
+    )
 
 
 async def log_login(

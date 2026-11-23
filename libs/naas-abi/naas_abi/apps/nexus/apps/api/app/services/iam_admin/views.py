@@ -53,6 +53,10 @@ def principal_view(record: PrincipalRecord) -> dict[str, Any]:
         "org": org_of(record.owner_scope) if record.owner_scope else None,
         "owner_id": record.owner_id,
         "owner_scope": record.owner_scope,
+        # Groups: the container its members are members of ("<W> workspace"), and
+        # whether it is a level group ("Viewers", "Members"); core #1584.
+        "membership_of": getattr(record, "membership_of", None),
+        "level_group": bool(getattr(record, "level_group", False)),
         "created_at": iso(record.created_at),
     }
 

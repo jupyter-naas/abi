@@ -1,10 +1,11 @@
 """An in-memory people service for the member routes' and the tools' tests.
 
-It keeps its users in memory and grants through the real ``MEMBERSHIPS``, on
-behalf of ``by``, so IAM still decides who may grant what: only the account
-store, the provider and the mail are faked. It raises ``services/people``'s own
-errors. Installed for every caller (routes, agent tools, platform invite) the way
-the real service is, through the people runtime: ``with installed(fake): ...``.
+It keeps its users in memory and gives access through the real people service and
+its IAM gateway (``EngineAccessGateway`` over ``MEMBERSHIPS``), on behalf of ``by``,
+so IAM still decides who may give what: only the account store, the provider and
+the mail are faked. It raises ``services/people``'s own errors. Installed for every
+caller (routes, agent tools, platform invite) the way the real service is, through
+the people runtime: ``with installed(fake): ...``.
 """
 
 from __future__ import annotations
@@ -12,23 +13,31 @@ from __future__ import annotations
 from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from typing import Any
 
-from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
-from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
+from naas_abi.apps.nexus.apps.api.app.services.iam import runtime as iam_runtime
 from naas_abi.apps.nexus.apps.api.app.services.people import runtime as people_runtime
+from naas_abi.apps.nexus.apps.api.app.services.people.adapters.secondary.engine import (
+    EngineAccessGateway,
+)
 from naas_abi.apps.nexus.apps.api.app.services.people.port import (
     AddedUser,
-    AlreadyMemberError,
     CreateOrLinkResult,
     Grant,
-    OwnerGrantRefusedError,
+    IdentityGateway,
+    Level,
+    NewUser,
+    PeopleMailer,
+    PeopleStorePort,
     PlatformUser,
     ProviderInfo,
+    Provisioned,
     UnknownUserError,
     UserStatus,
+    WorkspaceAccess,
 )
+from naas_abi.apps.nexus.apps.api.app.services.people.service import PeopleService
 
 NEXUS = ProviderInfo("nexus", "Nexus", "https://nexus.test", "builtin")
 
@@ -41,6 +50,71 @@ def installed(people: Any) -> Iterator[Any]:
         yield people
     finally:
         people_runtime.configure(previous)
+
+
+class _Rows(PeopleStorePort):
+    """The fake's users, as the real service reads them (it only reads here)."""
+
+    def __init__(self, fake: FakePeopleService) -> None:
+        self.fake = fake
+
+    async def get(self, user_id):
+        return self.fake.users.get(user_id)
+
+    async def by_email(self, email):
+        return await self.fake.by_email(email)
+
+    async def search(self, q, among, limit):
+        return []
+
+    async def add(self, user: NewUser, *, now):
+        raise NotImplementedError("The fake makes its own rows")
+
+    async def remove(self, user_id):
+        self.fake.users.pop(user_id, None)
+
+    async def activate(self, user_id, *, now):
+        return False
+
+    async def write_profile(self, organization_id, user_id, profile):
+        return None
+
+    async def record_provisioned(self, provider, subject, email, *, now):
+        return None
+
+    async def forget_provisioned(self, provider, subject):
+        return None
+
+    async def provider_for_domain(self, domain, organization_id):
+        return None
+
+    async def names(self, organization_id, workspace_id):
+        return None, None
+
+    async def commit(self):
+        return None
+
+    async def rollback(self):
+        return None
+
+
+class _NoIdp(IdentityGateway):
+    async def providers(self):
+        return [NEXUS], NEXUS.name
+
+    async def provision(self, provider, email, name, *, by=None) -> Provisioned | None:
+        return None
+
+    async def delete(self, provider, subject):
+        return None
+
+
+class _Silent(PeopleMailer):
+    async def invitation(self, **_kwargs):
+        return True
+
+    async def added(self, **_kwargs):
+        return True
 
 
 @dataclass
@@ -66,26 +140,14 @@ class FakePeopleService:
     def invited(self, user_id: str) -> None:
         self.users[user_id] = replace(self.users[user_id], status=UserStatus.INVITED)
 
-    async def _scope(self, grant: Grant) -> str:
-        if grant.scope == "organization":
-            return org_container(grant.scope_id)
-        scope = await AUTHZ.container_of(grant.scope_id)
-        if scope is None:
-            raise ValueError(f"Unknown workspace {grant.scope_id}")
-        return scope
-
-    async def _attach(
-        self, user_id: str, grants: Sequence[Grant], by: Any, may_grant_owner: bool
-    ) -> None:
-        if any(g.role == "owner" for g in grants) and not may_grant_owner:
-            raise OwnerGrantRefusedError("Only an owner can make an owner")
-        scopes = [(await self._scope(g), g) for g in grants]
-        held = [await MEMBERSHIPS.role_at(user_id, s) for s, g in scopes if g.role is not None]
-        if held and all(r is not None for r in held):
-            raise AlreadyMemberError(user_id, scopes[0][0])
-        for scope, grant in scopes:
-            if grant.role is not None:
-                await MEMBERSHIPS.grant(user_id, grant.role, scope, by=by)
+    def _real(self) -> PeopleService:
+        return PeopleService(
+            _Rows(self),
+            _NoIdp(),
+            EngineAccessGateway(iam_runtime.iam),
+            _Silent(),
+            clock=lambda: datetime.now(UTC),
+        )
 
     async def create_or_link(
         self,
@@ -93,9 +155,8 @@ class FakePeopleService:
         email: str,
         name: str | None,
         provider: str | None,
-        grants: Sequence[Grant],
+        grant: Grant | None,
         by: Any,
-        may_grant_owner: bool = False,
         profile: Mapping[str, str] | None = None,
         organization_id: str | None = None,
     ) -> CreateOrLinkResult:
@@ -106,9 +167,8 @@ class FakePeopleService:
                     "email": email,
                     "name": name,
                     "provider": provider,
-                    "grants": tuple(grants),
+                    "grant": grant,
                     "by": getattr(by, "id", by),
-                    "may_grant_owner": may_grant_owner,
                     "profile": dict(profile or {}),
                     "organization_id": organization_id,
                 },
@@ -120,8 +180,14 @@ class FakePeopleService:
             user = PlatformUser(
                 f"new-{len(self.users) + 1}", email, name, UserStatus.INVITED, provider
             )
-        await self._attach(user.id, grants, by, may_grant_owner)
-        self.users[user.id] = user
+            self.users[user.id] = user
+        if grant is not None:
+            try:
+                await self._real().add_existing(user_id=user.id, grant=grant, by=by)
+            except Exception:
+                if created:
+                    self.users.pop(user.id, None)
+                raise
         return CreateOrLinkResult(
             user=user,
             created=created,
@@ -131,25 +197,60 @@ class FakePeopleService:
             provider=NEXUS,
         )
 
-    async def add_existing(
-        self, *, user_id: str, grants: Sequence[Grant], by: Any, may_grant_owner: bool = False
-    ) -> AddedUser:
+    async def add_existing(self, *, user_id: str, grant: Grant, by: Any) -> AddedUser:
         self.calls.append(
-            (
-                "add_existing",
-                {
-                    "user_id": user_id,
-                    "grants": tuple(grants),
-                    "by": getattr(by, "id", by),
-                    "may_grant_owner": may_grant_owner,
-                },
-            )
+            ("add_existing", {"user_id": user_id, "grant": grant, "by": getattr(by, "id", by)})
         )
         user = self.users.get(user_id)
         if user is None:
             raise UnknownUserError(user_id)
-        await self._attach(user_id, grants, by, may_grant_owner)
+        await self._real().add_existing(user_id=user_id, grant=grant, by=by)
         return AddedUser(**user.__dict__, sign_in_email_sent=self.sent)
+
+    async def set_level(
+        self, *, user_id: str, level: str, by: Any, where: Sequence[str] = ()
+    ) -> Level | None:
+        self.calls.append(
+            ("set_level", {"user_id": user_id, "level": level, "by": getattr(by, "id", by)})
+        )
+        return await self._real().set_level(user_id=user_id, level=level, by=by, where=where)
+
+    async def set_workspace_admin(
+        self, *, user_id: str, workspace_id: str, admin: bool, by: Any
+    ) -> None:
+        self.calls.append(
+            (
+                "set_workspace_admin",
+                {"user_id": user_id, "admin": admin, "by": getattr(by, "id", by)},
+            )
+        )
+        await self._real().set_workspace_admin(
+            user_id=user_id, workspace_id=workspace_id, admin=admin, by=by
+        )
+
+    async def change_access(
+        self,
+        *,
+        user_id: str,
+        organization_id: str,
+        by: Any,
+        level: str | None = None,
+        org_admin: bool | None = None,
+        workspaces: Sequence[WorkspaceAccess] | None = None,
+        among: Sequence[str] = (),
+        capabilities: Sequence[str] | None = None,
+    ) -> None:
+        self.calls.append(("change_access", {"user_id": user_id, "by": getattr(by, "id", by)}))
+        await self._real().change_access(
+            user_id=user_id,
+            organization_id=organization_id,
+            by=by,
+            level=level,
+            org_admin=org_admin,
+            workspaces=workspaces,
+            among=among,
+            capabilities=capabilities,
+        )
 
     async def get(self, user_id: str) -> PlatformUser | None:
         return self.users.get(user_id)

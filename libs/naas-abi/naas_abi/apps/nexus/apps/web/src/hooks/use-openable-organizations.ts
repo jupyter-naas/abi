@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import { authFetch, useAuthStore } from '@/stores/auth';
-import { openableOrganizations } from '@/hooks/use-organization-settings-access';
+import { openableOrganizations, organizationsOpenedByRole } from '@/hooks/use-organization-settings-access';
 
 type Fetcher = (url: string) => Promise<Response>;
 
@@ -16,17 +16,26 @@ export const OPENABLE_ORGANIZATIONS_TTL_MS = 60_000;
 
 type Listed = { id: string; name?: string | null; current_user_role?: string | null };
 
-/** `GET /api/organizations`, then the access of those the role does not open. */
-export async function fetchOpenableOrganizations(fetcher: Fetcher = authFetch): Promise<OpenableOrganization[]> {
+export type ListedOrganization = { id: string; name: string; currentUserRole: string | null };
+
+function asOpenable(org: ListedOrganization): OpenableOrganization {
+  return { id: org.id, name: org.name, role: org.currentUserRole };
+}
+
+/** `GET /api/organizations`, with the caller's role in each. Nothing when the list is refused. */
+export async function fetchOrganizationList(fetcher: Fetcher = authFetch): Promise<ListedOrganization[]> {
   const response = await fetcher('/api/organizations');
   if (response.status === 401 || response.status === 403 || response.status === 404) return [];
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const orgs = (await response.json()) as Listed[];
-  const open = await openableOrganizations(
-    orgs.map((o) => ({ id: o.id, name: o.name || o.id, currentUserRole: o.current_user_role ?? null })),
-    fetcher
-  );
-  return open.map((o) => ({ id: o.id, name: o.name, role: o.currentUserRole }));
+  return orgs.map((org) => ({ id: org.id, name: org.name || org.id, currentUserRole: org.current_user_role ?? null }));
+}
+
+/** `GET /api/organizations`, then the access of those the role does not open. */
+export async function fetchOpenableOrganizations(fetcher: Fetcher = authFetch): Promise<OpenableOrganization[]> {
+  const listed = await fetchOrganizationList(fetcher);
+  const open = await openableOrganizations(listed, fetcher);
+  return open.map(asOpenable);
 }
 
 export interface OpenableOrganizationsState {
@@ -58,7 +67,14 @@ export function createOpenableOrganizationsStore(fetcher: Fetcher = authFetch, n
       const call: { userId: string; promise: Promise<void> } = { userId, promise: Promise.resolve() };
       call.promise = (async () => {
         try {
-          const orgs = await fetchOpenableOrganizations(fetcher);
+          // The role opens an organization with no further read: publish those so the
+          // Settings tabs can paint, then read the access of the rest.
+          const listed = await fetchOrganizationList(fetcher);
+          const byRole = organizationsOpenedByRole(listed).map(asOpenable);
+          if (byRole.length > 0 && get().userId === userId) {
+            set({ status: 'ready', orgs: byRole, loadedAt: now() });
+          }
+          const orgs = (await openableOrganizations(listed, fetcher)).map(asOpenable);
           if (get().userId === userId) set({ status: 'ready', orgs, loadedAt: now() });
         } catch {
           if (get().userId === userId) {

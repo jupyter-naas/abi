@@ -4,36 +4,32 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, ArrowLeft, Camera, Mail, UserPlus, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { InvitePolicyPicker } from '@/components/invitations/invite-policy-picker';
+import { CapabilityGroupPicker, type CapabilityGroupsAt } from '@/components/invitations/invite-policy-picker';
 import { useInviteProviders } from '@/components/invitations/use-invite-providers';
-import { ROLE_LABELS } from '@/components/access/roles/role-change';
 import { providerHint } from '@/lib/invitations';
-import type { IamAdminApi } from '@/lib/iam-admin/api';
 import {
+  LEVELS,
+  LEVEL_EVERYWHERE_NOTE,
+  LEVEL_LABELS,
   createPeopleApi,
   looksLikeEmail,
+  type CapabilityGroup,
   type CreatedPerson,
-  type OrganizationRole,
+  type Level,
   type PeopleApi,
   type PeopleProfile,
-  type WorkspaceRole,
 } from '@/lib/people';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
 import {
-  NO_ORG_ROLE,
-  ORG_ROLE_LABELS,
   PROFILE_FIELDS,
   createUserRequest,
-  effectiveOrgRole,
   initialOrganizationId,
-  orgRoleOptions,
   organizationReadOnly,
   selectedOrganization,
   workspaceGrants,
   type CreateUserDraft,
   type CreateUserRequest,
-  type OrgRoleValue,
   type OrganizationProp,
   type WorkspaceChoice,
 } from './create-user-form-model';
@@ -62,15 +58,11 @@ async function uploadOrganizationAvatar(organizationId: string, userId: string, 
 export type CreateUserFormProps = {
   /** The organization: fixed (read-only), or picked among choices. */
   organization: OrganizationProp;
-  /** The workspace the person is added to, shown read-only (Workspace settings › Members › New). */
+  /** The workspace the person joins, shown read-only (Workspace settings › Members › New). */
   attachedWorkspace?: WorkspaceChoice;
-  /** The org roles offered; empty: no org role field, and none is granted. */
-  orgRoles: OrganizationRole[];
-  /** The workspace roles offered, at the attached workspace or each one picked. */
-  workspaceRoles: WorkspaceRole[];
+  /** The organization page: the org admin toggle and the organization's workspaces to pick. */
+  organizationRoute: boolean;
   prefill?: { email?: string; name?: string };
-  /** The IAM scope the optional policies attach at (the attached workspace's); null asks none. */
-  policyScope?: string | null;
   subtitle: string;
   back: { href: string; label: string };
   /**
@@ -85,17 +77,18 @@ export type CreateUserFormProps = {
   api?: Pick<PeopleApi, 'createInWorkspace' | 'createInOrganization'>;
   loadWorkspaces?: (organizationId: string) => Promise<WorkspaceChoice[] | 'forbidden'>;
   uploadAvatar?: (organizationId: string, userId: string, file: File) => Promise<void>;
-  policyApi?: Pick<IamAdminApi, 'attachable'>;
+  loadCapabilities?: (at: CapabilityGroupsAt) => Promise<CapabilityGroup[]>;
 };
 
 function emptyDraft(prefill?: { email?: string; name?: string }): CreateUserDraft {
   return {
     email: prefill?.email ?? '',
     name: prefill?.name ?? '',
-    orgRole: 'member',
+    level: 'member',
+    orgAdmin: false,
     workspaces: [],
-    attachedRole: 'member',
-    policyIds: [],
+    attachedAdmin: false,
+    capabilities: [],
     profile: {},
   };
 }
@@ -103,16 +96,15 @@ function emptyDraft(prefill?: { email?: string; name?: string }): CreateUserDraf
 /**
  * Create user: the form Organization settings › Users › New and Workspace settings › Members ›
  * New share. The person is created at once (invited until they first sign in), or linked when
- * the email already has an account; the answer is the same either way. One request carries the
- * org role (or none: workspace access only) and every workspace with its role.
+ * the email already has an account; the answer is the same either way. One request carries their
+ * level (in all their workspaces), the org admin toggle, every workspace with "admin", and the
+ * capability groups (#1589).
  */
 export function CreateUserForm({
   organization,
   attachedWorkspace,
-  orgRoles,
-  workspaceRoles,
+  organizationRoute,
   prefill,
-  policyScope = null,
   subtitle,
   back,
   onCreated,
@@ -121,7 +113,7 @@ export function CreateUserForm({
   api,
   loadWorkspaces = fetchOrganizationWorkspaces,
   uploadAvatar = uploadOrganizationAvatar,
-  policyApi,
+  loadCapabilities,
 }: CreateUserFormProps) {
   const client = useMemo(() => api ?? createPeopleApi(), [api]);
   const providers = useInviteProviders(true);
@@ -135,9 +127,15 @@ export function CreateUserForm({
   const [avatarPreview, setAvatarPreview] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // The org route: an org role field, the organization's workspaces to pick, an org picture.
-  const organizationRoute = orgRoles.length > 0;
+  // The org route: the org admin toggle, the organization's workspaces to pick, an org picture.
   const org = selectedOrganization(organization, organizationId);
+  const capabilitiesAt: CapabilityGroupsAt | null = organizationRoute
+    ? organizationId
+      ? { organizationId }
+      : null
+    : attachedWorkspace
+      ? { workspaceId: attachedWorkspace.id }
+      : null;
 
   useEffect(() => {
     if (!avatarFile) {
@@ -178,10 +176,8 @@ export function CreateUserForm({
     [workspaces, attachedWorkspace?.id]
   );
   const grants = workspaceGrants(draft, attachedWorkspace);
-  const roleOptions = orgRoleOptions(orgRoles, grants.length);
-  const orgRole = effectiveOrgRole(draft.orgRole, orgRoles, grants.length);
   const emailValid = looksLikeEmail(draft.email);
-  const showAvatar = organizationRoute && orgRole !== NO_ORG_ROLE;
+  const showAvatar = organizationRoute;
 
   const set =
     (field: 'email' | 'name') => (event: React.ChangeEvent<HTMLInputElement>) =>
@@ -197,12 +193,12 @@ export function CreateUserForm({
       ...current,
       workspaces: current.workspaces.some((w) => w.id === id)
         ? current.workspaces.filter((w) => w.id !== id)
-        : [...current.workspaces, { id, role: 'member' }],
+        : [...current.workspaces, { id, admin: false }],
     }));
-  const setWorkspaceRole = (id: string, role: WorkspaceRole) =>
+  const setWorkspaceAdmin = (id: string, admin: boolean) =>
     setDraft((current) => ({
       ...current,
-      workspaces: current.workspaces.map((w) => (w.id === id ? { ...w, role } : w)),
+      workspaces: current.workspaces.map((w) => (w.id === id ? { ...w, admin } : w)),
     }));
 
   const pickAvatar = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -223,8 +219,8 @@ export function CreateUserForm({
 
   const handleCreate = async () => {
     const built = createUserRequest(
-      { ...draft, orgRole, provider: providers.providerToSend() },
-      { organization, organizationId, attachedWorkspace, orgRoles }
+      { ...draft, provider: providers.providerToSend() },
+      { organization, organizationId, attachedWorkspace, organizationRoute }
     );
     if (!built.ok) {
       setError(built.error);
@@ -239,7 +235,7 @@ export function CreateUserForm({
         request.route === 'workspace'
           ? await client.createInWorkspace(request.workspaceId, request.body)
           : await client.createInOrganization(request.organizationId, request.body);
-      // The org picture needs an org member: only when an org role was given.
+      // The org picture needs someone of the organization's directory.
       if (avatarFile && request.route === 'organization' && created.member) {
         try {
           await uploadAvatar(request.organizationId, created.user.id, avatarFile);
@@ -417,46 +413,47 @@ export function CreateUserForm({
               </select>
             )}
           </div>
+          <div className="account-profile-field">
+            <label className="account-profile-field-label" htmlFor="create-user-level">
+              Level
+            </label>
+            <select
+              id="create-user-level"
+              value={draft.level}
+              onChange={(event) => setDraft((current) => ({ ...current, level: event.target.value as Level }))}
+              className="account-profile-field-input"
+              data-field="level"
+            >
+              {LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {LEVEL_LABELS[level]}
+                </option>
+              ))}
+            </select>
+            <p className="org-settings-footnote" data-level-note>
+              {LEVEL_EVERYWHERE_NOTE}
+            </p>
+          </div>
           {organizationRoute && (
-            <div className="account-profile-field">
-              <label className="account-profile-field-label" htmlFor="create-user-role">
-                Organization role
-              </label>
-              <select
-                id="create-user-role"
-                value={orgRole}
-                onChange={(event) => setDraft((current) => ({ ...current, orgRole: event.target.value as OrgRoleValue }))}
-                className="account-profile-field-input"
-                data-field="org-role"
-              >
-                {roleOptions.map((value) => (
-                  <option key={value} value={value}>
-                    {ORG_ROLE_LABELS[value]}
-                  </option>
-                ))}
-              </select>
+            <div className="account-profile-field" data-field="org-admin">
+              <span className="account-profile-field-label">Organization</span>
+              <Checkbox
+                label="Org admin: reaches every workspace of the organization"
+                checked={draft.orgAdmin}
+                onCheckedChange={(on) => setDraft((current) => ({ ...current, orgAdmin: on }))}
+                disabled={creating}
+              />
             </div>
           )}
           {attachedWorkspace && (
-            <div className="account-profile-field">
-              <label className="account-profile-field-label" htmlFor="create-user-workspace-role">
-                Role in {attachedWorkspace.name}
-              </label>
-              <select
-                id="create-user-workspace-role"
-                value={draft.attachedRole}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, attachedRole: event.target.value as WorkspaceRole }))
-                }
-                className="account-profile-field-input"
-                data-field="workspace-role"
-              >
-                {workspaceRoles.map((role) => (
-                  <option key={role} value={role}>
-                    {ROLE_LABELS[role]}
-                  </option>
-                ))}
-              </select>
+            <div className="account-profile-field" data-field="workspace-admin">
+              <span className="account-profile-field-label">Workspace</span>
+              <Checkbox
+                label={`Admin of ${attachedWorkspace.name}`}
+                checked={draft.attachedAdmin}
+                onCheckedChange={(on) => setDraft((current) => ({ ...current, attachedAdmin: on }))}
+                disabled={creating}
+              />
             </div>
           )}
           {providers.choosable && (
@@ -513,15 +510,13 @@ export function CreateUserForm({
             className="account-profile-field-textarea"
           />
         </div>
-        {attachedWorkspace && (
-          <InvitePolicyPicker
-            scope={policyScope}
-            value={draft.policyIds}
-            onChange={(policyIds) => setDraft((current) => ({ ...current, policyIds }))}
-            disabled={creating}
-            api={policyApi}
-          />
-        )}
+        <CapabilityGroupPicker
+          at={capabilitiesAt}
+          value={draft.capabilities}
+          onChange={(capabilities) => setDraft((current) => ({ ...current, capabilities }))}
+          disabled={creating}
+          {...(loadCapabilities ? { load: loadCapabilities } : {})}
+        />
       </AccountSectionCard>
 
       {organizationRoute && (
@@ -531,8 +526,9 @@ export function CreateUserForm({
               Workspaces <span className="org-member-detail-count">{grants.length}</span>
             </h3>
             <p>
-              Workspaces they can access, with their role there. Admins reach every workspace of the organization
-              anyway; with no organization role, they only reach the workspaces picked here.
+              The workspaces they work in, at their level, and those they administer. Org admins reach every
+              workspace of the organization anyway; someone in no workspace is one of the organization&apos;s
+              people.
             </p>
           </header>
           <div className="org-settings-users-table-wrap org-create-user-workspaces">
@@ -549,19 +545,15 @@ export function CreateUserForm({
                         <span>{workspace.name}</span>
                       </label>
                       {picked && (
-                        <select
-                          value={picked.role}
-                          onChange={(event) => setWorkspaceRole(workspace.id, event.target.value as WorkspaceRole)}
-                          className="account-profile-field-input"
-                          aria-label={`Role in ${workspace.name}`}
-                          data-field="workspace-role"
-                        >
-                          {workspaceRoles.map((role) => (
-                            <option key={role} value={role}>
-                              {ROLE_LABELS[role]}
-                            </option>
-                          ))}
-                        </select>
+                        <span data-field="workspace-admin">
+                          <Checkbox
+                            label="Admin"
+                            aria-label={`Admin of ${workspace.name}`}
+                            checked={picked.admin}
+                            onCheckedChange={(on) => setWorkspaceAdmin(workspace.id, on)}
+                            disabled={creating}
+                          />
+                        </span>
                       )}
                     </li>
                   );

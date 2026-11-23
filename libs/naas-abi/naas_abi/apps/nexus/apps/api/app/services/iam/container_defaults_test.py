@@ -19,6 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
     NOTHING_SID,
     SqlDefaultsStore,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.levels import LEVELS
 from naas_abi.apps.nexus.apps.api.app.services.iam.membership_routes_test import (  # noqa: F401
     api,
 )
@@ -45,9 +46,9 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.pos
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import WorkspaceCreateInput
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import WorkspaceService
 from naas_abi_core.engine.call_context import as_service_account, use_call_context
-from naas_abi_core.services.iam import module_scopes
+from naas_abi_core.services.iam import module_scopes, roles
 from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError, PermissionDeniedError
-from naas_abi_core.services.iam.names import PLATFORM
+from naas_abi_core.services.iam.names import MY_CONTAINERS_SCOPE, PLATFORM
 
 NOW = datetime(2026, 1, 1)
 USE = "module:UseAgent"
@@ -155,6 +156,9 @@ async def test_a_new_organization_and_workspace_get_their_access_and_groups(worl
         }
         org_admins_hold = world.iam.list_attachments(principal_id=org_record.admins_group_id)
         ws_admins_hold = world.iam.list_attachments(principal_id=ws_record.admins_group_id)
+        people_hold = world.iam.list_attachments(principal_id=org_record.members_group_id)
+        workspace_hold = world.iam.list_attachments(principal_id=ws_record.members_group_id)
+    levels = LEVELS.get(world.iam)
     # "<O> access": the platform's, allowing nothing yet.
     assert (org_access.name, org_access.owner_scope) == ("Acme access", PLATFORM)
     assert [s.sid for s in org_access.document.statements] == [NOTHING_SID]
@@ -164,19 +168,45 @@ async def test_a_new_organization_and_workspace_get_their_access_and_groups(worl
         ALPHA,
         org_access.id,
     )
-    assert {g.name for g in org_groups.values()} == {"Acme members", "Acme admins"}
-    assert {g.name for g in ws_groups.values()} == {"Alpha members", "Alpha admins"}
-    # The admins hold the access policy: the org's below it, the workspace's at it.
-    assert [(a.policy_id, a.scope) for a in org_admins_hold] == [(org_access.id, org_below("acme"))]
-    assert [(a.policy_id, a.scope) for a in ws_admins_hold] == [(ws_access.id, ALPHA)]
-    # The creator, owner of both, is in both groups of each.
-    for record in (org_record, ws_record):
-        assert _members(world, record.members_group_id) == {"olivia"}
-        assert _members(world, record.admins_group_id) == {"olivia"}
+    # #1585: "<O> people" and "<W> workspace" (membership groups), and the admins.
+    assert {g.name for g in org_groups.values()} == {"Acme people", "Acme admins"}
+    assert {g.name for g in ws_groups.values()} == {"Alpha workspace", "Alpha admins"}
+    assert org_groups[org_record.members_group_id].membership_of == org_container("acme")
+    assert ws_groups[ws_record.members_group_id].membership_of == ALPHA
+    assert ws_groups[ws_record.admins_group_id].membership_of == ALPHA
+    below = org_below("acme")
+    # (IAM's companion of the role below the organization, builtin.platform.member, aside.)
+    assert sorted(
+        (a.policy_id, a.scope)
+        for a in org_admins_hold
+        if not a.policy_id.startswith("builtin.platform.")
+    ) == sorted(
+        [
+            (org_access.id, below),
+            (roles.ADMIN, org_container("acme")),
+            (roles.ADMIN, below),
+        ]
+    )
+    assert sorted((a.policy_id, a.scope) for a in people_hold) == sorted(
+        [(roles.VIEWER, MY_CONTAINERS_SCOPE), (levels.viewer_access, MY_CONTAINERS_SCOPE)]
+    )
+    # W's bound: "<W> workspace" holds "<W> access" at W.
+    assert [(a.policy_id, a.scope) for a in workspace_hold] == [(ws_access.id, ALPHA)]
+    assert sorted((a.policy_id, a.scope) for a in ws_admins_hold) == sorted(
+        [
+            (roles.ADMIN, MY_CONTAINERS_SCOPE),
+            (levels.workspace_admin_access, MY_CONTAINERS_SCOPE),
+        ]
+    )
+    # The creator, admin of both (owner is no longer assigned).
+    assert _members(world, org_record.admins_group_id) == {"olivia"}
+    assert _members(world, org_record.members_group_id) == {"olivia"}
+    assert _members(world, ws_record.members_group_id) == {"olivia"}
+    assert _members(world, ws_record.admins_group_id) == {"olivia"}
 
 
 @pytest.mark.asyncio
-async def test_the_groups_follow_the_roles(world, nexus_db):
+async def test_the_groups_are_the_memberships(world, nexus_db):
     _org, _ws, org_record, ws_record = await _acme(nexus_db)
     await MEMBERSHIPS.grant("bob", "owner", ALPHA)
     await MEMBERSHIPS.grant("carol", "admin", ALPHA)
@@ -273,8 +303,12 @@ async def test_a_new_workspace_exposes_nothing_until_widened_and_narrows_below_i
             document=_agents("recruiter", "scout"),
         )
     assert _uses(world, "dave", _agent(ALPHA, "scout"))
-    # A plain member holds nothing by the members group.
+    # A plain member uses what Alpha offers (Member access within its bound, #1585),
+    # nothing it does not.
     await MEMBERSHIPS.grant("carol", "member", ALPHA)
+    assert _uses(world, "carol", _agent(ALPHA, "recruiter"))
+    assert not _uses(world, "carol", _agent(ALPHA, "coach"))
+    await MEMBERSHIPS.grant("carol", "viewer", ALPHA)
     assert not _uses(world, "carol", _agent(ALPHA, "recruiter"))
 
 
@@ -411,21 +445,29 @@ async def test_an_organization_with_workspaces_is_not_deleted(world, nexus_db):
 
 
 @pytest.mark.asyncio
-async def test_the_delete_route_is_the_owners_and_refuses_while_workspaces_remain(api, team):  # noqa: F811
-    async with api("admin") as http:
-        assert (await http.delete("/api/organizations/org-1")).status_code == 403
-    async with api("member") as http:
-        assert (await http.delete("/api/organizations/org-1")).status_code == 403
-    async with api("owner") as http:
+async def test_the_delete_route_is_the_platform_admins_and_refuses_while_workspaces_remain(
+    api,  # noqa: F811
+    team,
+):
+    """#1585: deleting an organization is the platform admin's (owners of before
+    included, nobody else); its workspaces are deleted by its admins first."""
+    for person in ("owner", "admin", "member"):
+        async with api(person) as http:
+            assert (await http.delete("/api/organizations/org-1")).status_code == 403
+    team.platform_admin("root")
+    async with api("root") as http:
         refused = await http.delete("/api/organizations/org-1")
         assert refused.status_code == 409
         assert "WS (ws-1)" in refused.json()["detail"]
+    async with api("admin") as http:  # an admin of org-1
         assert (await http.delete("/api/workspaces/ws-1")).status_code in (200, 204)
+    async with api("root") as http:
         assert (await http.delete("/api/organizations/org-1")).status_code == 200
         assert (await http.delete("/api/organizations/org-1")).status_code in (403, 404)
     with as_service_account("api"):
         assert team.iam.container("nexus", "organization", "org-1") is None
-    # The platform admin deletes one too.
+    # The platform admin deletes one too (Bob is let create organizations: no user may).
+    team.may_create_organizations("bob")
     async with api("bob") as http:
         made = await http.post("/api/organizations", json={"name": "Beta Corp", "slug": "beta"})
         assert made.status_code == 200, made.text
@@ -505,22 +547,26 @@ async def _check_upgrade(nexus, nexus_db) -> None:
                     assert sub.owner_scope.startswith(record.container)
                 if org:
                     assert access.parent_id == records[org_container(org)].access_policy_id
-                # Not attached to the admins group: that would give what the move kept.
-                assert nexus.iam.list_attachments(principal_id=record.admins_group_id) == []
-            # The later workspace's, made now, is attached: it allows nothing.
+                # Held by no group: that would bound (or give) what the move kept.
+                for group in (record.members_group_id, record.admins_group_id):
+                    assert record.access_policy_id not in {
+                        a.policy_id for a in nexus.iam.list_attachments(principal_id=group)
+                    }
+            # The later workspace's, made now, is its bound: "<W> workspace" holds it.
             made = records[late]
             assert [
-                a.policy_id for a in nexus.iam.list_attachments(principal_id=made.admins_group_id)
-            ] == [made.access_policy_id]
+                (a.policy_id, a.scope)
+                for a in nexus.iam.list_attachments(principal_id=made.members_group_id)
+            ] == [(made.access_policy_id, late)]
             assert (
                 nexus.iam.get_policy(made.access_policy_id).parent_id
                 == records[org_container("org-late")].access_policy_id
             )
-            # The groups hold the role holders.
+            # The groups are made empty (#1585): the roles of before stay attachments
+            # until the access move (#1587).
             alpha = records[workspace_container("org-1", "ws-a")]
-            holders = container_defaults.holders_by_container(nexus.iam).get(alpha.container, {})
-            assert set(nexus.iam.list_group_members(alpha.members_group_id)) == set(holders)
-            assert nexus.principal("bob") in set(nexus.iam.list_group_members(made.admins_group_id))
+            assert nexus.iam.list_group_members(alpha.members_group_id) == []
+            assert nexus.iam.list_group_members(made.admins_group_id) == []
         # Again: nothing more.
         async with nexus_db() as db:
             again = await container_defaults.migrate(db)
@@ -726,7 +772,7 @@ async def test_a_failure_part_way_leaves_nothing_and_the_next_start_makes_it_onc
         report = await container_defaults.migrate(db)
         assert not report.failed and await _recorded(db)
     assert len(_named(world, "Acme access")) == 1 and len(_named(world, "Alpha access")) == 1
-    assert _groups_of(world, ALPHA) == ["Alpha admins", "Alpha members"]
+    assert _groups_of(world, ALPHA) == ["Alpha admins", "Alpha workspace"]
 
 
 @pytest.mark.asyncio
@@ -744,8 +790,8 @@ async def test_what_a_start_made_and_did_not_record_is_found_again(world, nexus_
         records = {r.container: r for r in await SqlDefaultsStore(db).all()}
     assert not report.failed
     assert len(_named(world, "Acme access")) == 1 and len(_named(world, "Alpha access")) == 1
-    assert _groups_of(world, org_container("acme")) == ["Acme admins", "Acme members"]
-    assert _groups_of(world, ALPHA) == ["Alpha admins", "Alpha members"]
+    assert _groups_of(world, org_container("acme")) == ["Acme admins", "Acme people"]
+    assert _groups_of(world, ALPHA) == ["Alpha admins", "Alpha workspace"]
     assert records[ALPHA].access_policy_id == _named(world, "Alpha access")[0].id
 
 
@@ -886,7 +932,9 @@ async def test_a_workspace_of_an_organization_with_no_record_is_under_its_access
         world.iam.update_policy(
             org_record.access_policy_id, expected_revision=1, document=_agents("recruiter", "coach")
         )
-    with use_call_context(NexusIam.context("olivia")):
+    # Olivia's role at Acme is one of before (an attachment made while the moves were
+    # pending), not "Acme admins": the platform admin widens Beta.
+    with use_call_context(NexusIam.context("root")):
         world.iam.update_policy(
             ws_record.access_policy_id, expected_revision=1, document=_agents("recruiter", "coach")
         )

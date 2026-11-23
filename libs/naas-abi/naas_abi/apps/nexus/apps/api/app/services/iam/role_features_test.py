@@ -39,6 +39,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.testing import LegacyNexusIam
 from naas_abi_core.engine.call_context import as_service_account, use_call_context
 from naas_abi_core.services.iam import roles
 from naas_abi_core.services.iam.IAMPorts import Attachment, Policy
+from naas_abi_core.services.iam.names import MY_CONTAINERS_SCOPE
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 from sqlalchemy import inspect, text
 
@@ -461,6 +462,28 @@ async def test_an_interrupted_move_keeps_the_old_features_and_finishes_next_star
         assert _decisions(nexus) == before
         nexus.rewrite()
         assert _decisions(nexus) == before
+
+
+@pytest.mark.asyncio
+async def test_a_role_held_at_my_workspaces_is_no_old_role_and_the_move_goes_on(nexus_db):
+    """A new install makes its default groups before this move runs: "<W> admins"
+    holds ``builtin.admin`` at ``${my workspaces}``. That role is the new model's,
+    no scope ``abi:<org>:<workspace>`` of the older IAM: it brought no feature, and
+    the move records itself past it."""
+    nexus = _previous(_world())
+    with nexus.installed():
+        with as_service_account("api"):
+            group = nexus.iam.create_group("Alpha admins")
+            nexus.iam.attach_policy(roles.ADMIN, group.id, MY_CONTAINERS_SCOPE)
+        async with nexus_db() as db:
+            await _previous_database(db, nexus)
+            assert await role_features.migrate_role_features(db, FLAGS)
+            assert (
+                await db.execute(
+                    text("SELECT 1 FROM iam_migrations WHERE name = :n"),
+                    {"n": role_features.MIGRATION_NAME},
+                )
+            ).scalar()
 
 
 @pytest.mark.asyncio

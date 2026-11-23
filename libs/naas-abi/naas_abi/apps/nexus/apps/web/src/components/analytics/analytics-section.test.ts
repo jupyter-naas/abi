@@ -156,11 +156,12 @@ describe('AnalyticsSection', () => {
     expect(state.seen).toContain('/api/organizations/org-b/analytics/workspaces?period=today');
   });
 
-  it('reads nothing and says so when the caller may not read the scope', async () => {
+  it('says so when the caller may not read the scope', async () => {
     state.access['/api/workspaces/ws-c/analytics/access'] = { can_read: false };
     const m = await render({ kind: 'workspace', workspaceId: 'ws-c' });
     expect(m.host.textContent).toContain('You cannot read these analytics');
-    expect(state.seen).toEqual(['/api/workspaces/ws-c/analytics/access']);
+    expect(m.host.textContent).not.toContain('Times in');
+    expect(state.seen).toContain('/api/workspaces/ws-c/analytics/access');
   });
 
   it('lists chats as metadata only without the conversation right: no message view', async () => {

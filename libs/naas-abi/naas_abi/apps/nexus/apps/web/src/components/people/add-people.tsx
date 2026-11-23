@@ -5,10 +5,9 @@ import { AlertCircle, Search, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
 import { SettingsNotice } from '@/components/settings/settings-ui';
-import { InvitePolicyPicker } from '@/components/invitations/invite-policy-picker';
-import { ROLE_LABELS } from '@/components/access/roles/role-change';
+import { Checkbox } from '@/components/ui/checkbox';
+import { CapabilityGroupPicker, type CapabilityGroupsAt } from '@/components/invitations/invite-policy-picker';
 import { getApiUrl } from '@/lib/config';
-import type { IamAdminApi } from '@/lib/iam-admin/api';
 import { cn } from '@/lib/utils';
 import {
   CANDIDATE_DELAY_MS,
@@ -17,12 +16,23 @@ import {
   candidateQuery,
   createPeopleApi,
   createUserHref,
+  LEVEL_EVERYWHERE_NOTE,
+  type CapabilityGroup,
   type MemberCandidate,
   type PeopleApi,
-  type WorkspaceRole,
 } from '@/lib/people';
 import { InvitedBadge } from './member-status';
-import { addPeopleListing, addableRoles, moveActive, optionText, type AddPeopleOption, type FoundPeople } from './add-people-model';
+import {
+  KEEP_LEVEL,
+  addPeopleListing,
+  levelChoices,
+  moveActive,
+  optionText,
+  pickedAccess,
+  type AddPeopleOption,
+  type FoundPeople,
+  type LevelChoice,
+} from './add-people-model';
 
 function avatarUrl(avatar: string | null | undefined): string {
   if (!avatar) return '';
@@ -50,26 +60,21 @@ const NO_MEMBERS: ReadonlySet<string> = new Set();
 /**
  * Add people (Workspace settings › Members): a search box over the workspace's organization.
  * It asks from two characters on, once the typing stops; a suggestion shows avatar, name and
- * email. Picking one asks for the role (and optional policies), then adds them at once. With no
+ * email. Picking one asks for their level (in all their workspaces), whether they administer
+ * this workspace and the capability groups they are put in, then adds them at once. With no
  * match, "Create user '<text>'" opens the create page prefilled. The listbox follows the
  * WAI-ARIA combobox pattern: arrows, Home and End move, Enter picks, Escape closes.
  */
 export function AddPeople({
   workspaceId,
-  callerRole,
-  policyScope,
   memberIds = NO_MEMBERS,
   onAdded,
   navigate,
   api,
-  policyApi,
+  loadCapabilities,
   searchDelayMs = CANDIDATE_DELAY_MS,
 }: {
   workspaceId: string;
-  /** The caller's role here: only an owner may give owner. */
-  callerRole: string | null | undefined;
-  /** The workspace's IAM scope the policies attach at; null asks for none. */
-  policyScope: string | null;
   /** Members already here: never suggested, even when the API still lists them. */
   memberIds?: ReadonlySet<string>;
   onAdded: (candidate: MemberCandidate, emailSent: boolean) => void | Promise<void>;
@@ -77,7 +82,7 @@ export function AddPeople({
   navigate: (href: string) => void;
   /** Tests pass fakes. */
   api?: Pick<PeopleApi, 'candidates' | 'addMember'>;
-  policyApi?: Pick<IamAdminApi, 'attachable'>;
+  loadCapabilities?: (at: CapabilityGroupsAt) => Promise<CapabilityGroup[]>;
   searchDelayMs?: number;
 }) {
   const client = useMemo(() => api ?? createPeopleApi(), [api]);
@@ -93,8 +98,10 @@ export function AddPeople({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [picked, setPicked] = useState<MemberCandidate | null>(null);
-  const [role, setRole] = useState<WorkspaceRole>('member');
-  const [policyIds, setPolicyIds] = useState<string[]>([]);
+  const [level, setLevel] = useState<LevelChoice>(KEEP_LEVEL);
+  const [admin, setAdmin] = useState(false);
+  const [capabilities, setCapabilities] = useState<string[]>([]);
+  const capabilitiesAt = useMemo<CapabilityGroupsAt>(() => ({ workspaceId }), [workspaceId]);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState('');
 
@@ -139,16 +146,18 @@ export function AddPeople({
       return;
     }
     setPicked(option.candidate);
-    setRole('member');
-    setPolicyIds([]);
+    setLevel(KEEP_LEVEL);
+    setAdmin(false);
+    setCapabilities([]);
     setAddError('');
   };
 
   const reset = () => {
     setPicked(null);
     setText('');
-    setPolicyIds([]);
-    setRole('member');
+    setCapabilities([]);
+    setLevel(KEEP_LEVEL);
+    setAdmin(false);
     setAddError('');
     setFound({ text: '', items: [] });
     refocus.current = true;
@@ -164,10 +173,15 @@ export function AddPeople({
 
   const add = async () => {
     if (!picked) return;
+    const chosen = pickedAccess(level, admin, capabilities);
+    if (!chosen.ok) {
+      setAddError(chosen.error);
+      return;
+    }
     setAdding(true);
     setAddError('');
     try {
-      const { emailSent } = await client.addMember(workspaceId, { userId: picked.user_id, role, policyIds });
+      const { emailSent } = await client.addMember(workspaceId, { userId: picked.user_id, ...chosen.access });
       await onAdded(picked, emailSent);
       reset();
     } catch (error) {
@@ -202,8 +216,6 @@ export function AddPeople({
       setActive((current) => moveActive(current, event.key, options.length));
     }
   };
-
-  const roles = addableRoles(callerRole);
 
   return (
     <div className="space-y-3" data-add-people>
@@ -331,18 +343,21 @@ export function AddPeople({
               </div>
             </div>
             <Select
-              value={role}
-              onChange={(event) => setRole(event.target.value as WorkspaceRole)}
-              className="sm:w-40"
-              aria-label="Role in this workspace"
-              data-field="role"
+              value={level}
+              onChange={(event) => setLevel(event.target.value as LevelChoice)}
+              className="sm:w-64"
+              aria-label="Level"
+              data-field="level"
             >
-              {roles.map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABELS[r]}
+              {levelChoices().map((choice) => (
+                <option key={choice.value || 'keep'} value={choice.value}>
+                  {choice.label}
                 </option>
               ))}
             </Select>
+            <span data-field="admin">
+              <Checkbox label="Workspace admin" checked={admin} onCheckedChange={setAdmin} disabled={adding} />
+            </span>
             <div className="flex gap-2">
               <Button onClick={() => void add()} disabled={adding} data-action="add">
                 {adding ? 'Adding…' : 'Add'}
@@ -352,13 +367,16 @@ export function AddPeople({
               </Button>
             </div>
           </div>
-          <InvitePolicyPicker
+          <p className="text-xs text-muted-foreground" data-level-note>
+            {LEVEL_EVERYWHERE_NOTE}
+          </p>
+          <CapabilityGroupPicker
             className="max-w-xl"
-            scope={policyScope}
-            value={policyIds}
-            onChange={setPolicyIds}
+            at={capabilitiesAt}
+            value={capabilities}
+            onChange={setCapabilities}
             disabled={adding}
-            api={policyApi}
+            {...(loadCapabilities ? { load: loadCapabilities } : {})}
           />
           <p className="text-xs text-muted-foreground">
             Added at once, and emailed that they have access.
