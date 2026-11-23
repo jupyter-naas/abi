@@ -59,6 +59,29 @@ describe('workspace settings nav', () => {
     expect(labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { access: IAM }))).not.toContain('Roles & permissions');
   });
 
+  it('lists Analytics and Access for a role that opens settings until their reads answer', () => {
+    const pending = labels(
+      visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, {
+        roleOpens: true,
+        accessKnown: false,
+        analyticsKnown: false,
+      })
+    );
+    expect(pending).toEqual(expect.arrayContaining(['Analytics', 'Groups', 'Policies']));
+    const denied = labels(
+      visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, {
+        roleOpens: true,
+        access: { actions: {} },
+        readsAnalytics: false,
+        accessKnown: true,
+        analyticsKnown: true,
+      })
+    );
+    expect(denied).not.toContain('Analytics');
+    expect(denied).not.toContain('Groups');
+    expect(denied).not.toContain('Policies');
+  });
+
   it('shows Analytics, in the General group, only to whoever may read the workspace analytics', () => {
     expect(labels(visibleSettingsGroups(resources()))).not.toContain('Analytics');
     expect(labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { access: IAM }))).not.toContain(

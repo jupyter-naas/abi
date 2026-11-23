@@ -45,6 +45,20 @@ describe('org settings nav', () => {
 });
 
 describe('org settings nav › Analytics', () => {
+  it('keeps Analytics and Access listed for an owner while their reads have not answered', () => {
+    const pending = orgSettingsNavForRole('owner', { accessKnown: false, analyticsKnown: false }).map((item) => item.slug);
+    expect(pending).toEqual(expect.arrayContaining(['analytics', 'groups', 'policies']));
+    const denied = orgSettingsNavForRole('admin', {
+      access: iam(),
+      readsAnalytics: false,
+      accessKnown: true,
+      analyticsKnown: true,
+    }).map((item) => item.slug);
+    expect(denied).not.toContain('analytics');
+    expect(denied).not.toContain('groups');
+    expect(denied).not.toContain('policies');
+  });
+
   it('shows Analytics to an owner or admin once the API says they may read it', () => {
     for (const role of ['owner', 'admin']) {
       expect(orgSettingsNavForRole(role).map((item) => item.slug)).not.toContain('analytics');

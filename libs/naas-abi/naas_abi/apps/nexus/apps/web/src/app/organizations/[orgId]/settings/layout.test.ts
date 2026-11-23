@@ -32,6 +32,7 @@ vi.mock('@/hooks/use-settings-levels', async () => {
   return {
     useSettingsTabs: ({ organization }: { organization?: { id: string; items: never[] } }) => ({
       tabs: [],
+      pagesReady: true,
       level: currentSettingsLevel(
         settingsLevels({
           account: [],
@@ -50,6 +51,10 @@ vi.mock('@/lib/iam-admin/use-access', () => ({
 }));
 vi.mock('@/hooks/use-analytics-access', () => ({
   useReadsAnalytics: () => state.readsAnalytics,
+  useAnalyticsAccess: () => ({
+    status: 'ready' as const,
+    access: { can_read: state.readsAnalytics, timezone: 'UTC' },
+  }),
 }));
 vi.mock('@/stores/workspace', () => {
   const store = { currentWorkspaceId: 'ws-1' };

@@ -129,14 +129,28 @@ export function settingsItemShown(
   return true;
 }
 
-/** Whether the caller may open an entry: what it `needs` (an entry that needs nothing: yes). */
+/** Whether the caller may open an entry: what it `needs` (an entry that needs nothing: yes).
+ *  ``roleOpens``: the role already brings these pages, so Analytics and Access stay listed
+ *  until their own read has answered (``accessKnown`` / ``analyticsKnown``). */
 export function settingsItemNeedsMet(
   item: SettingsNavItem,
-  { access = null, readsAnalytics = false }: { access?: AccessView | null; readsAnalytics?: boolean } = {}
+  {
+    access = null,
+    readsAnalytics = false,
+    roleOpens = false,
+    accessKnown = true,
+    analyticsKnown = true,
+  }: {
+    access?: AccessView | null;
+    readsAnalytics?: boolean;
+    roleOpens?: boolean;
+    accessKnown?: boolean;
+    analyticsKnown?: boolean;
+  } = {}
 ): boolean {
   if (!item.needs) return true;
-  if (item.needs === 'analytics') return readsAnalytics;
-  return opensSection(access, item.needs);
+  if (item.needs === 'analytics') return readsAnalytics || (roleOpens && !analyticsKnown);
+  return opensSection(access, item.needs) || (roleOpens && !accessKnown);
 }
 
 /**
@@ -148,13 +162,19 @@ export function visibleSettingsGroups(
   resources: WorkspaceResources | null,
   flags?: Partial<Record<string, boolean>>,
   groups: SettingsNavGroup[] = SETTINGS_GROUPS,
-  { access = null, readsAnalytics = false }: { access?: AccessView | null; readsAnalytics?: boolean } = {}
+  held: {
+    access?: AccessView | null;
+    readsAnalytics?: boolean;
+    roleOpens?: boolean;
+    accessKnown?: boolean;
+    analyticsKnown?: boolean;
+  } = {}
 ): SettingsNavGroup[] {
   return groups
     .map((group) => ({
       ...group,
       items: group.items.filter(
-        (item) => settingsItemNeedsMet(item, { access, readsAnalytics }) && settingsItemShown(item, resources, flags)
+        (item) => settingsItemNeedsMet(item, held) && settingsItemShown(item, resources, flags)
       ),
     }))
     .filter((group) => group.items.length > 0);

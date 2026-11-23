@@ -59,7 +59,6 @@ vi.mock('@/stores/auth', async (importOriginal) => {
     },
   };
 });
-vi.mock('@/hooks/use-workspace-resources', () => ({ useWorkspaceResources: () => ({ resources: null }) }));
 
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useSettingsTabs } from '@/hooks/use-settings-levels';

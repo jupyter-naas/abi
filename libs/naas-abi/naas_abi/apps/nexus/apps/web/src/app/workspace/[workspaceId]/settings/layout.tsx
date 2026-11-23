@@ -43,7 +43,12 @@ export default function SettingsLayout({
   const isIndex = INDEX_PATTERN.test(pathname);
   const showMobileList = isMobile && isIndex;
   const showMobileDetail = isMobile && !isIndex;
-  const { tabs, level } = useSettingsTabs({ mobile: isMobile });
+  const { tabs, level, pagesReady } = useSettingsTabs({ mobile: isMobile });
+  const item = settingsItemFor(pathname);
+  // General carries the workspace's features. Analytics and Access do not wait for it,
+  // and they do not start that read.
+  const holdsForTabs = (!item || item.href === '/settings/general') && !pagesReady;
+  const wantsResources = !!item && (!!item.feature || !!item.kinds || (pagesReady && item.href === '/settings/general'));
 
   // Reload: the workspaces and what this one has.
   const reload = useCallback(
@@ -51,9 +56,10 @@ export default function SettingsLayout({
     [fetchWorkspaces, workspaceId]
   );
   // A page of something the caller may not use here has nothing to manage.
-  // Read again each time the settings open: a module or a policy changed since shows.
-  const { status: resourcesStatus, resources } = useWorkspaceResources(workspaceId, { refresh: true });
-  const item = settingsItemFor(pathname);
+  // Read again when a page that lists them opens: a module or a policy changed since shows.
+  const { status: resourcesStatus, resources } = useWorkspaceResources(wantsResources ? workspaceId : undefined, {
+    refresh: wantsResources,
+  });
   const outsideSet = Boolean(item && resources && !settingsItemShown(item, resources));
   // Who may open these pages at all: the dock's rule (useWorkspaceSettingsAccess). Someone
   // who holds only `iam:` rights here goes to the first page of Access they hold; anyone else
@@ -67,11 +73,12 @@ export default function SettingsLayout({
   }, [access, iam, opens, workspaceId, router]);
   // Only a page of the column that opens is reopened: not the index, a former URL that
   // redirects, nor a page refused, outside the set, or not decided yet.
+  const resourcesDecide = !!item && (!!item.feature || !!item.kinds);
   useRememberSettingsPath(
-    item && opens === true && resourcesStatus === 'ready' && !outsideSet ? pathname : null
+    item && opens === true && !outsideSet && (!resourcesDecide || resourcesStatus === 'ready') ? pathname : null
   );
   const page =
-    opens === null || (access === 'iam' && opens === false) ? null : opens === false ? (
+    holdsForTabs || opens === null || (access === 'iam' && opens === false) ? null : opens === false ? (
       <SettingsNoAccess of="workspace" />
     ) : outsideSet && item && resources ? (
       <NotInWorkspace label={item.label} />

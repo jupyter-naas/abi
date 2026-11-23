@@ -3,14 +3,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useParams, useRouter } from 'next/navigation';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
+import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { useRememberSettingsPath } from '@/hooks/use-remember-settings-scope';
 import { useSettingsTabs } from '@/hooks/use-settings-levels';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { opensAccess } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
-import { useReadsAnalytics } from '@/hooks/use-analytics-access';
+import { useAnalyticsAccess } from '@/hooks/use-analytics-access';
 import { SettingsLevelsNav } from '@/components/settings/settings-levels-nav';
 import { SettingsLayoutRoot, useWorkspaceReturnPath } from '@/components/settings/settings-shell';
 import { SettingsShellHeader } from '@/components/settings/settings-shell-header';
@@ -36,39 +36,46 @@ export default function OrganizationSettingsLayout({
   const router = useRouter();
   const params = useParams();
   const orgId = params.orgId as string;
+  // The list already carries the caller's role: the tabs use it without waiting for this
+  // organization's own read (colours, and a role the list does not have yet).
+  const { status: orgsStatus, orgs } = useOpenableOrganizations();
+  const listed = orgs.find((org) => org.id === orgId);
   // The caller's role, for the organization it was read for: a client-side move to
   // another organization knows no role there until its own read answers.
   const [viewer, setViewer] = useState<{ orgId: string; role: string | null } | null>(null);
-  // Whether the organization was read (its answer, or a refusal): the role is known.
-  const roleKnown = !!orgId && viewer?.orgId === orgId;
-  const viewerRole = roleKnown ? viewer.role : null;
-  // Each page of Access is shown to whoever IAM lets open it at the organization.
+  const fetched = !!orgId && viewer?.orgId === orgId;
+  const roleKnown = fetched || (orgsStatus !== 'checking' && !!listed);
+  const viewerRole = fetched ? viewer.role : (listed?.role ?? null);
+  const isMobile = useIsMobile();
+  // The organization list is the permission read for these tabs. An owner or admin sees
+  // Analytics and Access at once; a read that says no takes the entry off, and the page
+  // loads on its own.
+  const listReady = orgsStatus !== 'checking';
   const { access, loading: accessLoading } = useIamAccess(orgId ? organizationContainer(orgId) : undefined, undefined, {
-    skip: !orgId,
+    skip: !listReady || !orgId,
   });
   const holdsIam = opensAccess(access, 'organization');
-  // The Settings tabs' rule, for this organization: its owners and admins, or whoever IAM
-  // shows a page of Access here. Anyone else sees no section.
   const settingsAccess = orgSettingsAccess({
     role: viewerRole,
     roleKnown,
     holdsIam,
-    accessSettled: !accessLoading,
+    accessSettled: listReady && !accessLoading,
   });
-  // Analytics is shown once the API says the caller may read the organization's.
-  const readsAnalytics = useReadsAnalytics(orgId ? { kind: 'organization', orgId } : null);
+  const analyticsScope = listReady && orgId ? { kind: 'organization' as const, orgId } : null;
+  const analyticsEntry = useAnalyticsAccess(analyticsScope);
+  const readsAnalytics = analyticsEntry.access?.can_read === true;
   const visibleNav = useMemo(
-    () => orgSettingsNavForRole(viewerRole, { access, readsAnalytics }),
-    [viewerRole, access, readsAnalytics]
+    () =>
+      orgSettingsNavForRole(viewerRole, {
+        access,
+        readsAnalytics,
+        accessKnown: listReady && !!orgId && !accessLoading,
+        analyticsKnown: !!analyticsScope && analyticsEntry.status !== 'checking',
+      }),
+    [viewerRole, access, readsAnalytics, listReady, orgId, accessLoading, analyticsScope, analyticsEntry.status]
   );
   const navOrganization = useMemo(() => ({ id: orgId, items: visibleNav }), [orgId, visibleNav]);
-  const sectionHrefs = useMemo(
-    () => (orgId ? visibleNav.map((item) => orgSettingsSectionPath(orgId, item.slug)) : []),
-    [orgId, visibleNav]
-  );
-  useDevRouteWarmup(sectionHrefs);
-  const isMobile = useIsMobile();
-  const { tabs, level } = useSettingsTabs({ organization: navOrganization, mobile: isMobile });
+  const { tabs, level, pagesReady } = useSettingsTabs({ organization: navOrganization, mobile: isMobile });
   const { isDetail, section, sectionLabel } = parseOrgSettingsRoute(pathname);
   // A member's page (`users/<id>`): whoever opens Access here sees what they hold there.
   const memberPage = section === 'users' && MEMBER_PAGE.test(pathname ?? '');
@@ -117,7 +124,7 @@ export default function OrganizationSettingsLayout({
       }
     };
 
-    if (orgId) {
+    if (orgId && pagesReady) {
       fetchOrg();
     }
 
@@ -128,7 +135,7 @@ export default function OrganizationSettingsLayout({
 
     window.addEventListener('org-branding-updated', handleBrandingUpdate);
     return () => window.removeEventListener('org-branding-updated', handleBrandingUpdate);
-  }, [orgId]);
+  }, [orgId, pagesReady]);
 
   useEffect(() => {
     if (!orgId) return;
