@@ -2,10 +2,11 @@
 
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import { authFetch, useAuthStore } from '@/stores/auth';
+import { authFetch } from '@/stores/auth';
+import { usePermissionRevision, usePermissionSessionKey } from '@/lib/permission-cache';
 import { openableOrganizations, organizationsOpenedByRole } from '@/hooks/use-organization-settings-access';
 
-type Fetcher = (url: string) => Promise<Response>;
+type Fetcher = (url: string, options?: RequestInit) => Promise<Response>;
 
 /** `role`: the caller's there, which decides the sections an organization shows them. */
 export type OpenableOrganization = { id: string; name: string; role: string | null };
@@ -24,7 +25,9 @@ function asOpenable(org: ListedOrganization): OpenableOrganization {
 
 /** `GET /api/organizations`, with the caller's role in each. Nothing when the list is refused. */
 export async function fetchOrganizationList(fetcher: Fetcher = authFetch): Promise<ListedOrganization[]> {
-  const response = await fetcher('/api/organizations');
+  const response = await (fetcher === authFetch
+    ? fetcher('/api/organizations', { cache: 'force-cache' })
+    : fetcher('/api/organizations'));
   if (response.status === 401 || response.status === 403 || response.status === 404) return [];
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const orgs = (await response.json()) as Listed[];
@@ -71,13 +74,13 @@ export function createOpenableOrganizationsStore(fetcher: Fetcher = authFetch, n
           // Settings tabs can paint, then read the access of the rest.
           const listed = await fetchOrganizationList(fetcher);
           const byRole = organizationsOpenedByRole(listed).map(asOpenable);
-          if (byRole.length > 0 && get().userId === userId) {
+          if (byRole.length > 0 && get().pending === call && get().userId === userId) {
             set({ status: 'ready', orgs: byRole, loadedAt: now() });
           }
           const orgs = (await openableOrganizations(listed, fetcher)).map(asOpenable);
-          if (get().userId === userId) set({ status: 'ready', orgs, loadedAt: now() });
+          if (get().pending === call && get().userId === userId) set({ status: 'ready', orgs, loadedAt: now() });
         } catch {
-          if (get().userId === userId) {
+          if (get().pending === call && get().userId === userId) {
             const kept = get().orgs;
             set({ status: kept ? 'ready' : 'error', orgs: kept });
           }
@@ -106,17 +109,16 @@ export function needsOpenableOrganizations(
 
 /** The caller's openable organizations: `checking` until the first answer for this user. */
 export function useOpenableOrganizations(): { status: OpenableOrganizationsStatus; orgs: OpenableOrganization[] } {
-  const userId = useAuthStore((s) => s.user?.id ?? 'session');
+  const userId = usePermissionSessionKey();
+  const revision = usePermissionRevision();
   const status = useOpenableOrganizationsStore((s) => s.status);
   const orgs = useOpenableOrganizationsStore((s) => s.orgs);
   const knownUser = useOpenableOrganizationsStore((s) => s.userId);
   const load = useOpenableOrganizationsStore((s) => s.load);
 
   useEffect(() => {
-    if (needsOpenableOrganizations(useOpenableOrganizationsStore.getState(), userId, Date.now())) {
-      void load(userId);
-    }
-  }, [userId, load]);
+    void load(userId);
+  }, [userId, load, revision]);
 
   if (knownUser !== userId) return { status: 'checking', orgs: [] };
   return { status, orgs: orgs ?? [] };
