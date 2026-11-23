@@ -16,7 +16,7 @@ import { forgetSettingsPaths } from '@/lib/settings-scope-path';
 import { dropWebPass, keepWebPass } from '@/lib/web-pass';
 import { clearViewFlag, setViewFlag, viewFlagActive, readViewFlag, onViewFlagChange } from '@/lib/view-flag';
 import { changesPermissions, configurePermissionContext, permissionReadKey, PermissionSessionChanged, usePermissionCache } from '@/lib/permission-cache';
-import { apiPath, clearResources, invalidateResourcesAfter } from '@/lib/resource-cache';
+import { apiPath, clearResources, configureResourceSession, invalidateResourcesAfter } from '@/lib/resource-cache';
 import {
   announceViewRefusal,
   navigation,
@@ -274,6 +274,8 @@ useAuthStore.subscribe((state, previous) => {
   );
 });
 configurePermissionContext(identifyPermissions);
+// Business answers are kept once the API has answered the session read (its CSRF token).
+configureResourceSession(() => !!useAuthStore.getState().csrfToken);
 identifyPermissions();
 onViewFlagChange(() => identifyPermissions(true));
 if (typeof window !== 'undefined') {

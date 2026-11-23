@@ -115,6 +115,18 @@ describe('readResource', () => {
     expect(loads).toEqual(['a', 'a']);
   });
 
+  it('delivers, without keeping, a read begun before the session was confirmed', async () => {
+    const { cache, read, loads } = setup(null);
+    const reply = deferred<Response>();
+    const early = readResource(ORG, { orgId: 'a' }, () => reply.promise, { cache });
+    // The API confirms the session meanwhile: the read carried that session's cookie.
+    cache.getState().bind('user-a');
+    reply.resolve(json({ name: 'Acme' }));
+    expect(await (await early).json()).toEqual({ name: 'Acme' });
+    await read('a');
+    expect(loads).toEqual(['a']);
+  });
+
   it('never delivers an answer begun in another session, even after A, B, then A again', async () => {
     const { cache } = setup('user-a');
     const reply = deferred<Response>();

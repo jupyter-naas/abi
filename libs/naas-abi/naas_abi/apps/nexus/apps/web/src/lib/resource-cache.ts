@@ -103,10 +103,22 @@ export type ResourceCache = ReturnType<typeof createResourceCache>;
 
 export const useResourceCache = createResourceCache();
 
+let sessionConfirmed: () => boolean = () => true;
+
+/**
+ * The auth store says when the API has confirmed the session of this page load. A user
+ * restored from the browser's storage lacks what the session read adds (its provider):
+ * nothing is kept until then, so that read does not count as another identity.
+ */
+export function configureResourceSession(confirmed: () => boolean): void {
+  sessionConfirmed = confirmed;
+  followSession(useResourceCache);
+}
+
 /** The permission cache already names the session (API, user, provider, View as): follow it. */
 function followSession(cache: ResourceCache) {
   const { identity, enabled } = usePermissionCache.getState();
-  cache.getState().bind(enabled ? identity : null);
+  cache.getState().bind(enabled && sessionConfirmed() ? identity : null);
 }
 usePermissionCache.subscribe(() => followSession(useResourceCache));
 followSession(useResourceCache);
@@ -169,13 +181,9 @@ export function readResource<P>(
     const now = sessionOf(cache);
     if (now.session !== started.session || now.epoch !== started.epoch) throw new ResourceSessionChanged();
   };
-  // An unknown or changing session keeps nothing, and its answers are checked all the same.
-  if (started.session === null) {
-    return load().then((response) => {
-      current();
-      return response;
-    });
-  }
+  // An unknown or unconfirmed session keeps nothing. Its read carried the cookie the
+  // session is then confirmed for: it is answered as before, never kept.
+  if (started.session === null) return load();
 
   const now = cache.getState().now;
   const previous = cache.getState().entries.get(key);

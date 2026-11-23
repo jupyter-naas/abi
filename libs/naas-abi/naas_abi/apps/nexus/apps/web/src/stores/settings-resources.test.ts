@@ -51,6 +51,9 @@ function fakeApi() {
     if (path === '/api/organizations/org-a' || path === '/api/organizations/org-b') {
       return Response.json({ id: path.split('/').pop(), name: 'Acme', current_user_role: 'admin', login_border_radius: '8' });
     }
+    if (path === '/api/auth/oidc/session') {
+      return Response.json({ user: person('one'), view: null, provider: 'idp', csrf_token: 'csrf-one' });
+    }
     if (path.endsWith('/domains')) return Response.json([{ domain: 'acme.test', verified: true }]);
     if (path === '/api/agents/sync' || path === '/api/agents/') return Response.json(roster);
     if (path.startsWith('/api/agents/')) return Response.json({ ok: true });
@@ -192,6 +195,24 @@ describe('Workspace Agents: one roster for the list, the detail and the store', 
     expect(useAgentsStore.getState().agents[0].name).toBe('Abi 2');
     await readAgentRoster('ws-1');
     expect(agentCalls()).toEqual(['POST /api/agents/sync', 'PATCH /api/agents/abi', 'GET /api/agents/']);
+  });
+
+  it('a page load confirms the session once: what began before it counts, nothing is asked twice', async () => {
+    // A restored user whose session the API has not confirmed yet (no CSRF token, no provider).
+    useAuthStore.setState({ csrfToken: null, provider: null });
+    // The reconciliation confirms the session (it reads it for its CSRF token) while the
+    // catalog read is in flight.
+    await Promise.all([visitList(), useModelsStore.getState().fetchModels()]);
+    expect(useAuthStore.getState().provider).toBe('idp');
+    expect(useModelsStore.getState().models).toHaveLength(1);
+
+    await Promise.all([visitList(), useModelsStore.getState().fetchModels(), readAgentRoster('ws-1')]);
+    expect(calls.filter((c) => c.includes('/api/agents') || c.includes('/api/providers')).sort()).toEqual([
+      // The detail's raw roster, not kept from an unconfirmed session: read once.
+      'GET /api/agents/',
+      'GET /api/providers/models',
+      'POST /api/agents/sync',
+    ]);
   });
 
   it('another person reconciles and reads their own roster', async () => {
