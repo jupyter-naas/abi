@@ -5543,6 +5543,23 @@ class IAMService(IIAMService, PolicySource):
         self._placements.clear()
         self._floors.clear()
 
+    def authorization_revision(self) -> int:
+        """A fresh store revision, after dropping any stale authorization state.
+
+        Unlike the periodic revision check this never skips or trusts a change
+        notice. A response cache calls it before and after its read/fill: it may
+        reuse an answer only while this revision and its verified caller match.
+        Store failures propagate and discard cached subjects/policies.
+        """
+        with self._revision_check_lock:
+            try:
+                self.refresh_if_changed()
+            except Exception:
+                self.invalidate()
+                raise
+            assert self._seen_revision is not None
+            return self._seen_revision
+
     def _check_revision(self) -> None:
         """Drop the caches when another process changed the store: the store's
         revision is read at most every ``revision_check_seconds``, by one thread
@@ -5573,11 +5590,13 @@ class IAMService(IIAMService, PolicySource):
         revision = self.store.revision()
         if revision == self._seen_revision:
             return False
-        self._seen_revision = revision
         self.invalidate()
         # Catalogs another process registered (a module's, at its approval).
         for catalog in self.store.list_catalogs():
             self._registry.register(catalog)
+        # Publish only after stale state is gone. A concurrent fresh revision
+        # read must never mistake a notice's in-progress refresh for completion.
+        self._seen_revision = revision
         return True
 
     def _changed(self) -> None:

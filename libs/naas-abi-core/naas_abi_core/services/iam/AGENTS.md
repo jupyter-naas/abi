@@ -2189,6 +2189,16 @@ hint: it reads the store's revision and drops its caches when that differs from 
 saw, whatever the notice says (a forged or huge revision stops nothing; a restored store
 counts too); a process that sees a revision gap drops its whole cache.
 
+An in-process response cache can call `authorization_revision()` through
+`IIAMService`: it reads the store on every call, refreshes stale local policies,
+subjects and placements, and returns the revision it observed. Unlike the periodic
+check it never skips a read; a failure clears authorization caches and propagates.
+Consumers must check it before and after a cached read/fill and bind entries to
+the same verified caller and narrowing. It does not authorize an unseen request:
+only an answer already authorized at that unchanged revision may be reused.
+The remote IAM facade does not implement this optional capability; consumers
+must fall back to live authorization, never use a remembered revision.
+
 ## Broker permissions
 
 The NATS auth callout (`engine/nats_auth_callout.py`, see `engine/AGENTS.md`) gives each

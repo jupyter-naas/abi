@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+from dataclasses import replace
 
 import pytest
 from fastapi import FastAPI
@@ -16,18 +17,40 @@ from naas_abi_core.services.cache.CacheService import TIER_COLD, CacheService
 from starlette.datastructures import Headers
 
 
-def _build(tmp_path, ttl: datetime.timedelta = datetime.timedelta(hours=24)):
+def _build(
+    tmp_path,
+    ttl: datetime.timedelta = datetime.timedelta(hours=24),
+    *,
+    cache=None,
+    revision=lambda: 1,
+    on_list=lambda: None,
+):
     calls = {"agents": 0, "skills": 0, "chat": 0}
     app = FastAPI()
 
     @app.get("/api/agents/")
     def list_agents(workspace_id: str = "ws"):
         calls["agents"] += 1
+        on_list()
         return {"workspace": workspace_id, "calls": calls["agents"]}
 
     @app.patch("/api/agents/{agent_id}")
     def update_agent(agent_id: str):
         return {"id": agent_id}
+
+    @app.get("/api/skills/")
+    def list_skills():
+        calls["skills"] += 1
+        return {"calls": calls["skills"]}
+
+    @app.post("/api/agents/sync")
+    def sync_agents():
+        return {"reconciled": True}
+
+    @app.post("/api/iam/admin/policies/validate")
+    @app.post("/api/iam/admin/simulate")
+    def validate():
+        return {"valid": True}
 
     @app.post("/api/iam/admin/attachments")
     def attach():
@@ -45,7 +68,7 @@ def _build(tmp_path, ttl: datetime.timedelta = datetime.timedelta(hours=24)):
         calls["chat"] += 1
         return {"calls": calls["chat"]}
 
-    cache = CacheService(adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path)))])
+    cache = cache or CacheService(adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path)))])
     # The bearer token is the user id in tests; no token means anonymous.
     app.add_middleware(
         SettingsCacheMiddleware,
@@ -54,6 +77,7 @@ def _build(tmp_path, ttl: datetime.timedelta = datetime.timedelta(hours=24)):
             (Headers(scope=scope).get("authorization") or "").removeprefix("Bearer ") or None
         ),
         ttl=ttl,
+        authorization_revision=revision,
     )
     return TestClient(app), calls
 
@@ -81,6 +105,16 @@ def test_query_string_is_part_of_the_key(tmp_path) -> None:
     client, calls = _build(tmp_path)
     _get(client, "/api/agents/?workspace_id=ws1")
     _get(client, "/api/agents/?workspace_id=ws2")
+    assert calls["agents"] == 2
+
+
+def test_repeated_parameter_order_cannot_alias_different_workspaces(tmp_path):
+    client, calls = _build(tmp_path)
+    first = _get(client, "/api/agents/?workspace_id=one&workspace_id=two")
+    second = _get(client, "/api/agents/?workspace_id=two&workspace_id=one")
+    assert first.json()["workspace"] == "two"
+    assert second.json()["workspace"] == "one"
+    assert second.headers[CACHE_HEADER] == "MISS"
     assert calls["agents"] == 2
 
 
@@ -185,6 +219,7 @@ def test_a_broken_cache_never_breaks_the_request(tmp_path) -> None:
         SettingsCacheMiddleware,
         cache_resolver=lambda: BrokenCache(),
         user_resolver=lambda headers: "alice",
+        authorization_revision=lambda: 1,
     )
     response = TestClient(app).get("/api/agents/", headers={CACHE_HEADER: "1"})
     assert response.status_code == 200
@@ -215,6 +250,7 @@ def test_cached_answers_still_carry_cors_headers(tmp_path) -> None:
         SettingsCacheMiddleware,
         cache_resolver=lambda: cache,
         user_resolver=lambda headers: "alice",
+        authorization_revision=lambda: 1,
     )
     app.add_middleware(
         CORSMiddleware,
@@ -246,6 +282,7 @@ def test_invalidate_all_drops_every_entry(tmp_path) -> None:
         SettingsCacheMiddleware,
         cache_resolver=lambda: cache,
         user_resolver=lambda headers: "alice",
+        authorization_revision=lambda: 1,
     )
     client = TestClient(app)
     client.get("/api/agents/", headers={CACHE_HEADER: "1"})
@@ -274,7 +311,9 @@ def _credentialed(tmp_path):
         return {"calls": calls["agents"]}
 
     cache = CacheService(adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path)))])
-    app.add_middleware(SettingsCacheMiddleware, cache_resolver=lambda: cache)
+    app.add_middleware(
+        SettingsCacheMiddleware, cache_resolver=lambda: cache, authorization_revision=lambda: 1
+    )
 
     class Identity:
         def __init__(self, inner):
@@ -339,3 +378,399 @@ def test_any_credential_still_refreshes_and_invalidates_its_user(tmp_path) -> No
 
     assert refreshed.status_code == 204
     assert _as(client, "session").headers[CACHE_HEADER] == "MISS"
+
+
+@pytest.mark.parametrize("path", ["/api/iam/admin/policies/validate", "/api/iam/admin/simulate"])
+def test_read_like_posts_preserve_resource_caches(tmp_path, path):
+    client, _ = _build(tmp_path)
+    _get(client, "/api/agents/")
+    _get(client, "/api/skills/")
+
+    assert client.post(path).status_code == 200
+
+    assert _get(client, "/api/agents/").headers[CACHE_HEADER] == "HIT"
+    assert _get(client, "/api/skills/").headers[CACHE_HEADER] == "HIT"
+
+
+def test_agent_sync_keeps_its_response_and_only_invalidates_agents(tmp_path):
+    client, _ = _build(tmp_path)
+    _get(client, "/api/agents/")
+    _get(client, "/api/skills/")
+
+    assert client.post("/api/agents/sync").json() == {"reconciled": True}
+
+    assert _get(client, "/api/agents/").headers[CACHE_HEADER] == "MISS"
+    assert _get(client, "/api/skills/").headers[CACHE_HEADER] == "HIT"
+
+
+@pytest.mark.parametrize("change", ["detach", "policy", "group", "suspend", "delete"])
+@pytest.mark.parametrize("source", ["same-service", "other-service", "direct-store"])
+def test_cached_permission_is_never_reused_after_revocation(tmp_path, change, source):
+    """A real IAM and two SQLite connections; no mocked authorization decisions."""
+    from fastapi import HTTPException
+    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
+    from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
+    from naas_abi_core.engine.call_context import as_service_account, use_call_context
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreSQLite import IAMStoreSQLite
+    from naas_abi_core.services.iam.IAMService import IAMService
+    from naas_abi_core.services.iam.policy import PolicyDocument, Statement
+
+    path = str(tmp_path / "iam.sqlite")
+    world = NexusIam(store=IAMStoreSQLite(path))
+    person = world.principal("reader")
+    with as_service_account("engine"):
+        group = world.iam.create_group("Readers")
+        world.iam.add_group_member(group.id, person)
+        policy = world.iam.create_policy(
+            "Roster",
+            PolicyDocument(statements=(Statement("Allow", ("nexus:ListAgents",), ("*",)),)),
+        )
+        holder = group.id if change == "group" else person
+        world.iam.attach_policy(policy.id, holder)
+    denied = PolicyDocument(statements=(Statement("Deny", ("nexus:ListAgents",), ("*",)),))
+
+    reader = world.iam
+    other = IAMService(IAMStoreSQLite(path), revision_check_seconds=60)
+    writer = other if source == "other-service" else reader
+    app = FastAPI()
+    calls = []
+
+    @app.get("/api/agents/")
+    def roster():
+        with use_call_context(world.context(person)):
+            if not reader.authorize("nexus:ListAgents", "abi:nexus:agent/-").allowed:
+                raise HTTPException(403)
+        calls.append(True)
+        return {"agents": ["private-agent"]}
+
+    app.add_middleware(
+        SettingsCacheMiddleware,
+        cache_resolver=lambda: CacheService(
+            adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path / "cache")))]
+        ),
+        user_resolver=lambda scope: person,
+    )
+    with world.installed():
+        assert runtime.iam() is reader
+        client = TestClient(app)
+        assert _get(client, "/api/agents/").headers[CACHE_HEADER] == "MISS"
+        assert _get(client, "/api/agents/").headers[CACHE_HEADER] == "HIT"
+        assert len(calls) == 1
+
+        with as_service_account("engine"):
+            if source == "direct-store":
+                store = other.store
+                if change == "detach":
+                    store.detach(policy.id, holder, None)
+                elif change == "policy":
+                    store.update_policy(replace(policy, document=denied), policy.revision)
+                elif change == "group":
+                    store.remove_group_member(group.id, person)
+                else:
+                    record = store.get_principal(person)
+                    store.update_principal(
+                        replace(record, status="deleted" if change == "delete" else "suspended")
+                    )
+            elif change == "detach":
+                writer.detach_policy(policy.id, holder)
+            elif change == "policy":
+                writer.update_policy(policy.id, expected_revision=policy.revision, document=denied)
+            elif change == "group":
+                writer.remove_group_member(group.id, person)
+            elif change == "suspend":
+                writer.suspend_principal(person)
+            else:
+                writer.delete_principal(person)
+
+        response = _get(client, "/api/agents/")
+        assert response.status_code == 403
+        assert response.headers.get(CACHE_HEADER) != "HIT"
+        assert len(calls) == 1
+
+
+def test_an_iam_failure_never_serves_a_previously_cached_answer(tmp_path):
+    revision = [1]
+
+    def fresh():
+        if revision[0] is None:
+            raise RuntimeError("IAM unavailable")
+        return revision[0]
+
+    client, calls = _build(tmp_path, revision=fresh)
+    _get(client, "/api/agents/")
+    assert _get(client, "/api/agents/").headers[CACHE_HEADER] == "HIT"
+    revision[0] = None
+
+    assert CACHE_HEADER not in _get(client, "/api/agents/").headers
+    assert calls["agents"] == 2  # the route, with its own guards, ran live
+
+
+def test_an_unavailable_iam_resolver_also_prevents_cache_fills(tmp_path, monkeypatch):
+    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
+    from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (
+        default_authorization_revision,
+    )
+
+    monkeypatch.setattr(runtime, "_getter", lambda: None)
+    client, calls = _build(tmp_path, revision=default_authorization_revision)
+    assert CACHE_HEADER not in _get(client, "/api/agents/").headers
+    assert CACHE_HEADER not in _get(client, "/api/agents/").headers
+    assert calls["agents"] == 2
+
+
+def test_a_response_crossing_an_iam_change_does_not_fill_the_new_revision(tmp_path):
+    revision = [1]
+
+    def change_during_endpoint():
+        revision[0] += 1
+
+    client, calls = _build(tmp_path, revision=lambda: revision[0], on_list=change_during_endpoint)
+    _get(client, "/api/agents/")
+    assert _get(client, "/api/agents/").headers[CACHE_HEADER] == "MISS"
+    assert calls["agents"] == 2
+
+
+def test_a_change_while_reading_a_cache_hit_forwards_to_the_live_route(tmp_path, monkeypatch):
+    revision = [1]
+    cache = CacheService(adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path)))])
+    client, calls = _build(tmp_path, cache=cache, revision=lambda: revision[0])
+    _get(client, "/api/agents/")
+    original = cache.get
+
+    def revoke_while_reading(key, *args):
+        value = original(key, *args)
+        revision[0] += 1
+        return value
+
+    monkeypatch.setattr(cache, "get", revoke_while_reading)
+    assert _get(client, "/api/agents/").headers[CACHE_HEADER] == "MISS"
+    assert calls["agents"] == 2
+
+
+def test_other_workers_read_invalidation_from_cold_even_with_stale_hot_metadata(tmp_path):
+    from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (
+        _GLOBAL_GENERATION_KEY,
+    )
+    from naas_abi_core.services.cache.CacheService import TIER_HOT
+
+    def worker(name):
+        return CacheService(
+            adapters=[
+                (TIER_HOT, CacheFSAdapter(str(tmp_path / name))),
+                (TIER_COLD, CacheFSAdapter(str(tmp_path / "shared"))),
+            ]
+        )
+
+    first, second = worker("hot1"), worker("hot2")
+    a, _ = _build(tmp_path, cache=first)
+    b, calls = _build(tmp_path, cache=second)
+    _get(b, "/api/agents/")
+    _get(b, "/api/skills/")
+    # A hot metadata entry left behind by an older worker must never be trusted.
+    second.hot.set_json(_GLOBAL_GENERATION_KEY, second.cold.get(_GLOBAL_GENERATION_KEY))
+    assert _get(b, "/api/agents/").headers[CACHE_HEADER] == "HIT"
+
+    a.patch("/api/agents/a1")
+
+    assert _get(b, "/api/agents/").headers[CACHE_HEADER] == "MISS"
+    assert calls["agents"] == 2
+    assert _get(b, "/api/skills/").headers[CACHE_HEADER] == "HIT"
+    invalidate_all(first)
+    assert _get(b, "/api/skills/").headers[CACHE_HEADER] == "MISS"
+
+
+def test_overlapping_invalidations_never_reuse_a_generation(tmp_path, monkeypatch):
+    from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (
+        _GLOBAL_GENERATION_KEY,
+        _bump_generation,
+        _read_generation,
+    )
+
+    cache = CacheService(adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path)))])
+    original = cache.cold.set_json
+    observed = []
+
+    def overlap(key, value):
+        if not observed:
+            observed.append(value["v"])
+            # A second write completes before the first one's final store.
+            observed.append(_bump_generation(cache, key))
+        original(key, value)
+
+    monkeypatch.setattr(cache.cold, "set_json", overlap)
+    last = _bump_generation(cache, _GLOBAL_GENERATION_KEY)
+    assert last != observed[1]
+    assert _read_generation(cache, _GLOBAL_GENERATION_KEY) == last
+
+
+def test_a_failed_refresh_does_not_report_success(tmp_path, monkeypatch):
+    cache = CacheService(adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path)))])
+    client, _ = _build(tmp_path, cache=cache)
+
+    def failed(*args, **kwargs):
+        raise RuntimeError("cold tier unavailable")
+
+    monkeypatch.setattr(cache.cold, "set_json", failed)
+    assert client.post(REFRESH_PATH, headers={"Authorization": "Bearer alice"}).status_code == 503
+
+
+def test_a_failed_metadata_read_never_trusts_the_hot_response(tmp_path, monkeypatch):
+    from naas_abi_core.services.cache.CacheService import TIER_HOT
+
+    cache = CacheService(
+        adapters=[
+            (TIER_HOT, CacheFSAdapter(str(tmp_path / "hot"))),
+            (TIER_COLD, CacheFSAdapter(str(tmp_path / "cold"))),
+        ]
+    )
+    client, calls = _build(tmp_path, cache=cache)
+    _get(client, "/api/agents/")
+    assert _get(client, "/api/agents/").headers[CACHE_HEADER] == "HIT"
+
+    def failed(*args, **kwargs):
+        raise RuntimeError("cold tier unavailable")
+
+    monkeypatch.setattr(cache.cold, "get", failed)
+    assert CACHE_HEADER not in _get(client, "/api/agents/").headers
+    assert calls["agents"] == 2
+
+
+def test_a_response_finishing_after_a_data_mutation_is_not_reused(tmp_path):
+    cache = CacheService(adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path)))])
+    client, calls = _build(tmp_path, cache=cache, on_list=lambda: invalidate_all(cache))
+    _get(client, "/api/agents/")
+    assert _get(client, "/api/agents/").headers[CACHE_HEADER] == "MISS"
+    assert calls["agents"] == 2
+
+
+def test_a_store_finishing_after_invalidation_cannot_resurrect_an_entry(tmp_path, monkeypatch):
+    cache = CacheService(adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path)))])
+    client, calls = _build(tmp_path, cache=cache)
+    original = cache.set_json
+
+    def late_store(key, value):
+        invalidate_all(cache)
+        original(key, value)  # an older in-flight response completes after invalidation
+
+    monkeypatch.setattr(cache, "set_json", late_store)
+    _get(client, "/api/agents/")
+    assert _get(client, "/api/agents/").headers[CACHE_HEADER] == "MISS"
+    assert calls["agents"] == 2
+
+
+def test_an_external_revocation_refilters_a_cached_listing(tmp_path, nexus_iam):
+    from naas_abi_core.engine.call_context import as_service_account, use_call_context
+    from naas_abi_core.services.iam.IAMService import IAMService
+    from naas_abi_core.services.iam.policy import PolicyDocument, Statement
+
+    person = nexus_iam.principal("reader")
+    resources = ["abi:nexus:agent/first", "abi:nexus:agent/second"]
+    with as_service_account("engine"):
+        policy_id = nexus_iam.iam.create_policy(
+            "Agents",
+            PolicyDocument(statements=(Statement("Allow", ("nexus:GetAgent",), tuple(resources)),)),
+        ).id
+        nexus_iam.iam.attach_policy(policy_id, person)
+    app = FastAPI()
+
+    @app.get("/api/agents/")
+    def roster():
+        with use_call_context(nexus_iam.context(person)):
+            return list(nexus_iam.iam.filter("nexus:GetAgent", resources).allowed)
+
+    app.add_middleware(
+        SettingsCacheMiddleware,
+        cache_resolver=lambda: CacheService(adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path)))]),
+        user_resolver=lambda scope: person,
+    )
+    client = TestClient(app)
+    assert _get(client, "/api/agents/").json() == resources
+    assert _get(client, "/api/agents/").headers[CACHE_HEADER] == "HIT"
+    # No notification or Nexus write request reaches the reader.
+    writer = IAMService(nexus_iam.iam.store)
+    policy = writer.store.get_policy(policy_id)
+    with as_service_account("engine"):
+        writer.update_policy(
+            policy.id,
+            expected_revision=policy.revision,
+            document=PolicyDocument(
+                statements=(Statement("Allow", ("nexus:GetAgent",), (resources[0],)),)
+            ),
+        )
+
+    response = _get(client, "/api/agents/")
+    assert response.headers[CACHE_HEADER] == "MISS"
+    assert response.json() == resources[:1]
+    assert _get(client, "/api/agents/").headers[CACHE_HEADER] == "HIT"
+
+
+@pytest.mark.asyncio
+async def test_a_write_is_acknowledged_after_transaction_cleanup_and_invalidation(tmp_path):
+    from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (
+        _family_generation_key,
+        _read_generation,
+    )
+
+    cache = CacheService(adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path)))])
+    key = _family_generation_key("/api/agents")
+    before = _read_generation(cache, key)
+    committed = False
+    acknowledged = []
+
+    async def mutation(scope, receive, send):
+        nonlocal committed
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-type", b"application/json")],
+            }
+        )
+        await send({"type": "http.response.body", "body": b'{"saved": true}'})
+        # As a FastAPI yield dependency: its transaction closes after the response.
+        committed = True
+
+    async def receive():
+        return {"type": "http.request", "body": b""}
+
+    async def send(message):
+        assert committed
+        assert _read_generation(cache, key) != before
+        acknowledged.append(message)
+
+    middleware = SettingsCacheMiddleware(mutation, cache_resolver=lambda: cache)
+    await middleware({"type": "http", "method": "PATCH", "path": "/api/agents/a1"}, receive, send)
+    assert [message["type"] for message in acknowledged] == [
+        "http.response.start",
+        "http.response.body",
+    ]
+    assert acknowledged[-1]["body"] == b'{"saved": true}'
+
+
+@pytest.mark.asyncio
+async def test_app_proxy_event_stream_is_forwarded_as_it_arrives(tmp_path):
+    cache = CacheService(adapters=[(TIER_COLD, CacheFSAdapter(str(tmp_path)))])
+    forwarded = []
+
+    async def stream(scope, receive, send):
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-type", b"text/event-stream")],
+            }
+        )
+        assert len(forwarded) == 1
+        await send({"type": "http.response.body", "body": b"data: first\n\n", "more_body": True})
+        assert len(forwarded) == 2
+        await send({"type": "http.response.body", "body": b"data: last\n\n"})
+
+    async def receive():
+        return {"type": "http.request", "body": b""}
+
+    async def send(message):
+        forwarded.append(message)
+
+    middleware = SettingsCacheMiddleware(stream, cache_resolver=lambda: cache)
+    await middleware({"type": "http", "method": "POST", "path": "/api/apps/proxy"}, receive, send)
+    assert len(forwarded) == 3
