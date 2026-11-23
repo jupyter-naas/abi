@@ -488,9 +488,11 @@ class IAMService(IIAMService, PolicySource):
     def explain(
         self, action: str, resource: str, *, principal_id: str | None = None
     ) -> Explanation:
-        """Which statement decides, for the caller or for ``principal_id``.
+        """Which statement decides, for the caller or for ``principal_id``: IAM's
+        id, or a user by the id Nexus names them (a session's ``user-...``), found
+        as a call made for that user is (``_resolve``).
 
-        Needs ``iam:Explain`` on the principal asked about.
+        Needs ``iam:Explain`` on the principal asked about, as named.
         """
         current = current_call_context()
         subject_id = principal_id if principal_id is not None else current.principal.id
@@ -503,11 +505,21 @@ class IAMService(IIAMService, PolicySource):
         )
         if principal_id is None:
             return self.authorizer.explain(current, action, resource)
-        record = self._get_principal(principal_id)
+        record = self._explained(principal_id)
         if record.kind == "group":
             raise ValueError("Explain a user or a service account, not a group")
         ctx = CallContext(principal=_call_principal(record))
         return self.authorizer.explain(ctx, action, resource)
+
+    def _explained(self, principal_id: str) -> PrincipalRecord:
+        """The principal ``explain`` asks about: by IAM's id, else the user a call
+        naming them that way acts for."""
+        if _PRINCIPAL_ID.match(principal_id):
+            return self._get_principal(principal_id)
+        record = self._resolve(CallPrincipal(id=principal_id, kind="user"))
+        if record is None:
+            raise IAMNotFoundError(f"Principal {principal_id} not found")
+        return record
 
     # =========================================================================
     # PolicySource: what the policy authorizer reads.
