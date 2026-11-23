@@ -10,6 +10,7 @@ an unchanged one is kept.
 
 from __future__ import annotations
 
+import threading
 import time
 
 import pytest
@@ -170,3 +171,69 @@ def test_every_change_reaches_another_process_without_a_notice(h, change):
 def test_the_defaults_keep_subjects_ten_minutes_and_check_every_two_seconds():
     assert iam_service_module.SUBJECT_TTL_SECONDS == 600
     assert iam_service_module.REVISION_CHECK_SECONDS == 2
+
+
+@pytest.mark.parametrize("change", list(CHANGES))
+def test_authorization_revision_refreshes_without_waiting_for_a_notice(h, change):
+    setup, act, before, after = CHANGES[change]
+    person = h.user("reader")
+    setup(h, person)
+    other = _other_process(h, revision_check_seconds=60)
+    assert other.allowed(QUERY, graph("a"), person) is before
+    revision = other.iam.authorization_revision()
+
+    act(h, person)
+
+    assert other.iam.authorization_revision() != revision
+    assert other.allowed(QUERY, graph("a"), person) is after
+
+
+def test_authorization_revision_does_not_trust_cached_grants_on_store_failure(
+    h, monkeypatch
+):
+    person = h.user("reader")
+    _attach(h, person)
+    other = _other_process(h, revision_check_seconds=60)
+    assert other.allowed(QUERY, graph("a"), person)
+
+    def unreadable():
+        raise RuntimeError("store unavailable")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(other.iam.store, "revision", unreadable)
+        with pytest.raises(RuntimeError, match="store unavailable"):
+            other.iam.authorization_revision()
+
+    _detach(h, person)
+    # The failed check dropped its subjects, even before the periodic check runs.
+    assert not other.allowed(QUERY, graph("a"), person)
+
+
+def test_a_change_notice_cannot_publish_a_revision_before_discarding_old_grants(
+    h, monkeypatch
+):
+    person = h.user("reader")
+    _attach(h, person)
+    other = _other_process(h, revision_check_seconds=60)
+    assert other.allowed(QUERY, graph("a"), person)
+    _detach(h, person)
+    started, release = threading.Event(), threading.Event()
+    original = other.iam.invalidate
+
+    def delayed_notice():
+        if threading.current_thread() is notice:
+            started.set()
+            assert release.wait(5)
+        original()
+
+    monkeypatch.setattr(other.iam, "invalidate", delayed_notice)
+    notice = threading.Thread(target=other.iam.refresh_if_changed)
+    notice.start()
+    try:
+        assert started.wait(5)
+        other.iam.authorization_revision()
+        assert not other.allowed(QUERY, graph("a"), person)
+    finally:
+        release.set()
+        notice.join(5)
+        assert not notice.is_alive()

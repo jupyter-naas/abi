@@ -1206,6 +1206,15 @@ class IIAMService(ABC):
 
     # -- decisions ------------------------------------------------------------
 
+    def authorization_revision(self) -> int:
+        """Read the authoritative revision and refresh local authorization caches.
+
+        Optional for in-process consumers caching already-authorized answers.
+        An implementation unable to prove freshness must raise, never return a
+        previously observed revision. Not exposed as a remote IAM operation.
+        """
+        raise NotImplementedError("Fresh authorization revisions are not available")
+
     @abstractmethod
     def authorize(self, action: str, resource: str) -> Decision: ...
 
