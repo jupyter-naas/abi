@@ -38,6 +38,9 @@ import type {
 } from './types';
 
 export const IAM_ADMIN_API = '/api/iam/admin';
+const sessionClients = new WeakSet<object>();
+/** Default clients already share authFetch's canonical permission cache. */
+export const isSessionIamApi = (api: object): boolean => sessionClients.has(api);
 
 export type Fetcher = (url: string, options?: RequestInit) => Promise<Response>;
 
@@ -95,8 +98,8 @@ function query(params: Record<string, string | number | null | undefined>): stri
   return text ? `?${text}` : '';
 }
 
-async function read<T>(fetcher: Fetcher, url: string, fallback: string): Promise<T> {
-  const response = await fetcher(url);
+async function read<T>(fetcher: Fetcher, url: string, fallback: string, options?: RequestInit): Promise<T> {
+  const response = await (options ? fetcher(url, options) : fetcher(url));
   if (!response.ok) throw await failure(response, fallback);
   return (await response.json()) as T;
 }
@@ -119,11 +122,11 @@ async function send<T>(
 
 /** Every call of the admin API, bound to one fetcher (tests pass a fake). */
 export function createIamAdminApi(fetcher: Fetcher = authFetch) {
-  return {
+  const api = {
     /** What the caller may do on the platform, or on the attachments of `scope`
      *  (an organization's or a workspace's container) when one is given. */
-    access: (scope?: string) =>
-      read<AccessView>(fetcher, path('access') + query({ scope }), 'Could not read your access.'),
+    access: (scope?: string, { refresh = false }: { refresh?: boolean } = {}) =>
+      read<AccessView>(fetcher, path('access') + query({ scope }), 'Could not read your access.', refresh ? { cache: 'reload' } : undefined),
     /** The actions the caller may grant at `scope` (within `parent`, for a sub-policy of it). */
     catalogs: (scope?: string, parent?: string | null) =>
       read<CatalogsView>(fetcher, path('catalogs') + query({ scope, parent }), 'Could not load the action catalogs.'),
@@ -345,6 +348,8 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
     audit: (filter: { operation?: string; resource_id?: string; limit?: number } = {}) =>
       read<{ items: AuditEntry[] }>(fetcher, path('audit') + query(filter), 'Could not load the audit log.'),
   };
+  if (fetcher === authFetch) sessionClients.add(api);
+  return api;
 }
 
 export type IamAdminApi = ReturnType<typeof createIamAdminApi>;

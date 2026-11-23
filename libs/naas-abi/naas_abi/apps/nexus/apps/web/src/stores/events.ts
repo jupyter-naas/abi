@@ -2,6 +2,8 @@
 
 import { create } from 'zustand';
 import { authFetch } from '@/stores/auth';
+import { fetchPlatformActions } from '@/hooks/use-platform-settings-access';
+import { permissionSessionKey, usePermissionCache } from '@/lib/permission-cache';
 import type { PlatformEvent } from '@/app/settings/system/events/bfo-event-projection';
 
 export interface EventRow {
@@ -55,6 +57,7 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 /** Bumped whenever the stream restarts, so in-flight responses are dropped. */
 let generation = 0;
 const seenUris = new Set<string>();
+let accessCheck: { session: string; promise: Promise<void> } | null = null;
 
 function buildUrl(
   state: Pick<EventsState, 'classFilter' | 'search'>,
@@ -129,24 +132,36 @@ export const useEventsStore = create<EventsState>((set, get) => ({
   loadingOlder: false,
   hasMoreOlder: true,
 
-  checkAccess: async () => {
-    try {
-      // The event log is a read: nexus:ReadSystem, which /api/admin/ping asks.
-      const res = await authFetch('/api/admin/ping');
-      set({ authState: res.ok ? 'authorized' : 'denied' });
-    } catch {
-      set({ authState: 'denied' });
-      return;
-    }
-    if (get().authState !== 'authorized') return;
-    try {
-      const res = await authFetch('/api/admin/events/types');
-      if (!res.ok) return;
-      const data = await res.json();
-      set({ availableTypes: Array.isArray(data) ? data : [] });
-    } catch {
-      /* non-fatal: the dropdown just stays empty */
-    }
+  checkAccess: () => {
+    const session = permissionSessionKey();
+    if (accessCheck?.session === session) return accessCheck.promise;
+    if (!usePermissionCache.getState().enabled) return Promise.resolve();
+    const current = () => permissionSessionKey() === session;
+    const read = async () => {
+      try {
+        // The same ReadSystem decision the Settings navigation already reads.
+        const actions = await fetchPlatformActions();
+        if (!current()) return;
+        set({ authState: actions['nexus:ReadSystem'] === true ? 'authorized' : 'denied' });
+      } catch {
+        if (current()) set({ authState: 'denied' });
+        return;
+      }
+      if (get().authState !== 'authorized') return;
+      try {
+        const res = await authFetch('/api/admin/events/types');
+        if (!res.ok || !current()) return;
+        const data = await res.json();
+        if (current()) set({ availableTypes: Array.isArray(data) ? data : [] });
+      } catch {
+        /* non-fatal: the dropdown just stays empty */
+      }
+    };
+    const promise = read().finally(() => {
+      if (accessCheck?.promise === promise) accessCheck = null;
+    });
+    accessCheck = { session, promise };
+    return promise;
   },
 
   setPaused: (paused) => set({ paused }),
@@ -196,7 +211,7 @@ export const useEventsStore = create<EventsState>((set, get) => ({
     } catch {
       /* non-fatal */
     } finally {
-      set({ loadingOlder: false });
+      if (gen === generation) set({ loadingOlder: false });
     }
   },
 
@@ -219,6 +234,22 @@ export const useEventsStore = create<EventsState>((set, get) => ({
     };
   },
 }));
+
+usePermissionCache.subscribe((state, previous) => {
+  if (state.generation !== previous.generation) {
+    generation += 1;
+    seenUris.clear();
+    useEventsStore.setState({
+      authState: 'checking', events: [], availableTypes: [], selectedUri: null,
+      lastPollAt: null, loadingOlder: false, hasMoreOlder: true,
+      ...(state.identity !== previous.identity ? { search: '', classFilter: '' } : {}),
+    });
+  }
+  if (state.enabled && subscribers > 0 &&
+      (state.generation !== previous.generation || state.revision !== previous.revision)) {
+    void useEventsStore.getState().checkAccess().then(() => poll());
+  }
+});
 
 /** The row the graph pane should draw, or null when nothing is selected. */
 export function selectSelectedEvent(state: EventsState): PlatformEvent | null {
