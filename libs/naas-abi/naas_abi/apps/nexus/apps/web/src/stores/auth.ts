@@ -16,6 +16,7 @@ import { forgetSettingsPaths } from '@/lib/settings-scope-path';
 import { dropWebPass, keepWebPass } from '@/lib/web-pass';
 import { clearViewFlag, setViewFlag, viewFlagActive, readViewFlag, onViewFlagChange } from '@/lib/view-flag';
 import { changesPermissions, configurePermissionContext, permissionReadKey, PermissionSessionChanged, usePermissionCache } from '@/lib/permission-cache';
+import { apiPath, clearResources, invalidateResourcesAfter } from '@/lib/resource-cache';
 import {
   announceViewRefusal,
   navigation,
@@ -365,11 +366,21 @@ export async function withAuth(init: RequestInit = {}): Promise<RequestInit> {
   return { ...init, headers, credentials: authCredentials() };
 }
 
+export interface AuthFetchPolicy {
+  /**
+   * Whether the API's settings cache may answer this GET (`X-Nexus-Cache`). A resource
+   * read states it (`ResourcePolicy.backendCache`), so a prefetch and a page read agree;
+   * left out, the open page decides (`shouldUseSettingsCache`), for the reads not yet
+   * declared as resources.
+   */
+  settingsCache?: boolean;
+}
+
 /**
  * Authenticated fetch wrapper: the session cookie, the CSRF token on changes.
  * On a 401 the session is re-read once before giving up and signing out.
  */
-export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+export async function authFetch(url: string, options: RequestInit = {}, policy: AuthFetchPolicy = {}): Promise<Response> {
   if (typeof window !== 'undefined') {
     identifyPermissions();
     const apiBase = getApiUrl();
@@ -384,23 +395,31 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
       );
     }
   }
-  return liveAuthFetch(url, options);
+  return liveAuthFetch(url, options, undefined, policy);
 }
 
-async function liveAuthFetch(url: string, options: RequestInit = {}, permissionGeneration?: number): Promise<Response> {
+async function liveAuthFetch(
+  url: string,
+  options: RequestInit = {},
+  permissionGeneration?: number,
+  policy: AuthFetchPolicy = {},
+): Promise<Response> {
   const apiBase = getApiUrl();
 
   // Prepend API_BASE if URL is relative
   const fullUrl = url.startsWith('http') ? url : `${apiBase}${url}`;
 
-  // Settings pages read through the backend's 24h settings cache (see lib/settings-cache).
+  // Settings reads go through the backend's 24h settings cache (see lib/settings-cache):
+  // as the resource declares, else as the open page says.
+  const method = (options.method || 'GET').toUpperCase();
   const wantSettingsCache =
     typeof window !== 'undefined' &&
     fullUrl.startsWith(apiBase) &&
     !new Headers(options.headers).has(SETTINGS_CACHE_HEADER) &&
-    shouldUseSettingsCache(window.location.pathname, options.method);
+    (policy.settingsCache === undefined
+      ? shouldUseSettingsCache(window.location.pathname, options.method)
+      : policy.settingsCache && method === 'GET');
 
-  const method = (options.method || 'GET').toUpperCase();
   const current = () => {
     if (permissionGeneration !== undefined) identifyPermissions();
     if (permissionGeneration !== undefined && permissionGeneration !== usePermissionCache.getState().generation) {
@@ -432,6 +451,11 @@ async function liveAuthFetch(url: string, options: RequestInit = {}, permissionG
     }
     if (response.ok && changesPermissions(fullUrl, method, apiBase)) {
       usePermissionCache.getState().invalidate();
+      // What a list holds follows IAM: every kept resource answer goes too.
+      clearResources();
+    } else if (response.ok && !SAFE_METHODS.has(method)) {
+      const path = apiPath(fullUrl, apiBase);
+      if (path) invalidateResourcesAfter(path);
     }
     return response;
   } finally {

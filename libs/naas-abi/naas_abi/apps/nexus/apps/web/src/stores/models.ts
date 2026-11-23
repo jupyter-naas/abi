@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { defineResource, invalidateResource, pathUnder, readResource, type ReadOptions } from '@/lib/resource-cache';
 
 /**
  * A single entry from the model catalog (`GET /api/providers/models`).
@@ -15,6 +16,59 @@ export interface CatalogModel {
 
 // Re-fetch the catalog at most once every 5 minutes.
 const MODELS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+const changesCatalog = (path: string) => pathUnder(path, '/api/providers') || pathUnder(path, '/api/secrets');
+
+/**
+ * The deployment's catalogs, read by the chat, Agents and Models settings: one request
+ * for all of them, kept 5 minutes in memory, dropped by any provider or secret change.
+ */
+export const PROVIDER_MODELS = defineResource<Record<string, never>>({
+  name: 'provider-models',
+  ttlMs: MODELS_CACHE_TTL_MS,
+  key: () => '',
+  backendCache: false,
+  invalidatedBy: changesCatalog,
+});
+
+export const AVAILABLE_PROVIDERS = defineResource<Record<string, never>>({
+  name: 'available-providers',
+  ttlMs: MODELS_CACHE_TTL_MS,
+  key: () => '',
+  backendCache: false,
+  invalidatedBy: changesCatalog,
+});
+
+/** `GET /api/providers/models`, shared. */
+export async function readProviderModels(options?: ReadOptions): Promise<Response> {
+  const { authFetch } = await import('./auth');
+  const { getApiUrl } = await import('@/lib/config');
+  return readResource(
+    PROVIDER_MODELS,
+    {},
+    () => authFetch(`${getApiUrl()}/api/providers/models`, {}, { settingsCache: PROVIDER_MODELS.backendCache }),
+    options,
+  );
+}
+
+/** `GET /api/providers/available`, shared. */
+export async function readAvailableProviders(options?: ReadOptions): Promise<Response> {
+  const { authFetch } = await import('./auth');
+  const { getApiUrl } = await import('@/lib/config');
+  return readResource(
+    AVAILABLE_PROVIDERS,
+    {},
+    () => authFetch(`${getApiUrl()}/api/providers/available`, {}, { settingsCache: AVAILABLE_PROVIDERS.backendCache }),
+    options,
+  );
+}
+
+/** After a catalog edit: every consumer reads the catalog again. */
+export function invalidateModelCatalog(): void {
+  invalidateResource(PROVIDER_MODELS);
+  invalidateResource(AVAILABLE_PROVIDERS);
+  useModelsStore.setState({ lastFetchedAt: null });
+}
 
 interface ModelsState {
   models: CatalogModel[];
@@ -34,9 +88,7 @@ export const useModelsStore = create<ModelsState>()(
           if (last && Date.now() - last < MODELS_CACHE_TTL_MS) return;
         }
         try {
-          const { authFetch } = await import('./auth');
-          const { getApiUrl } = await import('@/lib/config');
-          const res = await authFetch(`${getApiUrl()}/api/providers/models`);
+          const res = await readProviderModels({ force });
           if (!res.ok) return;
           const data = await res.json();
           const models: CatalogModel[] = (Array.isArray(data) ? data : []).map(

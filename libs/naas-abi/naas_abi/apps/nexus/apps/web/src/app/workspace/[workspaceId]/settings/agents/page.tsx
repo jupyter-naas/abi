@@ -5,9 +5,8 @@ import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Sea
 import { cn } from '@/lib/utils';
 import { getLogoUrl } from '@/lib/logo-url';
 import { useIntegrationsStore } from '@/stores/integrations';
-import { useAgentsStore, type Agent } from '@/stores/agents';
+import { SETTINGS_RECONCILE_MS, ensureAgentsSynced, useAgentsStore, type Agent } from '@/stores/agents';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
-import { useServersStore } from '@/stores/servers';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
@@ -69,24 +68,24 @@ export default function AgentsPage() {
     deleteAgent,
     fetchAgents,
   } = useAgentsStore();
-  const { fetchServers } = useServersStore();
   const { models, fetchModels } = useModelsStore();
   const { confirm: confirmDelete, dialog: confirmDialog } = useConfirm();
 
-  // Fetch agents from database
+  // The roster, reconciled with the code's agents when the last reconciliation is older
+  // than SETTINGS_RECONCILE_MS (or Reload was pressed), else as held.
   useEffect(() => {
     const loadAgents = async () => {
       try {
         if (!workspaceId) return;
-        await fetchAgents(workspaceId, true);
-        await fetchServers(workspaceId);
+        await ensureAgentsSynced(workspaceId, SETTINGS_RECONCILE_MS);
+        await fetchAgents(workspaceId);
       } catch (error) {
         console.error('Failed to fetch agents:', error);
       }
     };
 
-    loadAgents();
-  }, [fetchAgents, fetchServers, workspaceId]);
+    void loadAgents();
+  }, [fetchAgents, workspaceId]);
 
   useEffect(() => {
     setMounted(true);

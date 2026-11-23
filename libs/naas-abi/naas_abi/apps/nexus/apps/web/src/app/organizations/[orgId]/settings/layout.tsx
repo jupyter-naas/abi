@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { opensAccess } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
+import { readOrganization } from '@/lib/organization-resource';
 import { useAnalyticsAccess } from '@/hooks/use-analytics-access';
 import { SettingsLevelsNav } from '@/components/settings/settings-levels-nav';
 import { SettingsLayoutRoot, useWorkspaceReturnPath } from '@/components/settings/settings-shell';
@@ -102,9 +103,7 @@ export default function OrganizationSettingsLayout({
   useEffect(() => {
     const fetchOrg = async () => {
       try {
-        const { authFetch } = await import('@/stores/auth');
-
-        const response = await authFetch(`/api/organizations/${orgId}`);
+        const response = await readOrganization(orgId);
         if (response.ok) {
           const data = await response.json();
           setViewer({ orgId, role: data.current_user_role ?? null });

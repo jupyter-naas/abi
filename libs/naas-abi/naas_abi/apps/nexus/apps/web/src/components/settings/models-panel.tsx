@@ -12,7 +12,7 @@ import {
   SlidersHorizontal,
   XCircle,
 } from 'lucide-react';
-import { authFetch } from '@/stores/auth';
+import { readAvailableProviders, readProviderModels } from '@/stores/models';
 import { getApiUrl } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -192,10 +192,8 @@ export function ModelsPanel() {
   const fetchAll = async () => {
     setError(null);
     try {
-      const [providersRes, modelsRes] = await Promise.all([
-        authFetch(`${getApiBase()}/api/providers/available`),
-        authFetch(`${getApiBase()}/api/providers/models`),
-      ]);
+      // The catalogs the chat and the store read too: one request each.
+      const [providersRes, modelsRes] = await Promise.all([readAvailableProviders(), readProviderModels()]);
       if (!providersRes.ok) throw new Error(`Providers: HTTP ${providersRes.status}`);
       if (!modelsRes.ok) throw new Error(`Models: HTTP ${modelsRes.status}`);
       setProviders(await providersRes.json());
