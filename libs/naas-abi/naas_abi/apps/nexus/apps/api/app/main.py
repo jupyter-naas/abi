@@ -20,6 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.core.database import init_db
 from naas_abi.apps.nexus.apps.api.app.core.frame_headers import (
     embed_csp,
     frame_ancestors,
+    ignored_frame_origins,
     is_embeddable,
 )
 from naas_abi.apps.nexus.apps.api.app.core.logging import configure_logging
@@ -910,6 +911,11 @@ def _configure_middleware(app: FastAPI) -> None:
     logger.info(
         f"[CORS] Configured origins: {cors_origins} (regex: {cors_kwargs.get('allow_origin_regex')})"
     )
+    # The same entries make the embeddable paths' frame-ancestors, which keeps
+    # only real origins (core/frame_headers): name the rest once, here.
+    ignored = ignored_frame_origins(getattr(settings, "frontend_url", ""), cors_origins)
+    if ignored:
+        logger.warning(f"[frame-ancestors] ignored origins: {ignored}")
     # Settings pages' 24h API cache. Added before CORS so it sits inside it: cached
     # answers still go out through CORS and get its headers.
     from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (

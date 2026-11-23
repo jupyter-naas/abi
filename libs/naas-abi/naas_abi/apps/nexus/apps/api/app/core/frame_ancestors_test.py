@@ -17,7 +17,16 @@ from fastapi.testclient import TestClient
 from naas_abi import ABIModule, NexusConfig
 
 FRONTEND = "https://nexus.example"
-CORS = ["https://nexus.example", "http://localhost:3042", "https://admin.example/"]
+# Valid origins, with a wildcard, an entry carrying a directive of its own and
+# what an empty PUBLIC_WEB_HOST renders to among them.
+CORS = [
+    "https://nexus.example",
+    "*",
+    "http://localhost:3042",
+    "https://x.example; script-src *",
+    "https://admin.example/",
+    "http://",
+]
 SANDBOX = "sandbox allow-scripts allow-forms"
 FOREIGN = {"Origin": "https://evil.example", "Referer": "https://other.example/page"}
 
@@ -87,6 +96,25 @@ def test_only_configured_origins_may_frame_an_embeddable_path(client, path):
     assert "x-frame-options" not in asked.headers
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/app-html/bob/budget/index.html",
+        "/app-preview/token/",
+        "/app-remote/grant/acme.research/console/index.html",
+    ],
+)
+def test_configuration_adds_no_wildcard_and_no_directive(client, path):
+    csp = client.get(path).headers["content-security-policy"]
+    directives = [d.strip().split()[0] for d in csp.split(";") if d.strip()]
+
+    assert directives.count("frame-ancestors") == 1
+    assert "script-src" not in csp
+    assert "*" not in csp
+    assert "x.example" not in csp
+    assert "http:// " not in csp and not csp.rstrip(";").endswith("http://")
+
+
 def test_a_sandboxed_page_naming_no_origin_adds_no_ancestor(client):
     response = client.get("/app-preview/token/", headers={"Origin": "null"})
     assert _ancestors(response)[0] == "'self'"
@@ -109,3 +137,25 @@ def test_everything_else_is_still_never_framed(client):
     response = client.get("/api/data", headers=FOREIGN)
     assert response.headers["x-frame-options"] == "DENY"
     assert "evil.example" not in response.headers.get("content-security-policy", "")
+
+
+def test_dropped_entries_are_named_once_at_startup_and_cors_keeps_its_list(monkeypatch, caplog):
+    config = SimpleNamespace(configuration=SimpleNamespace(nexus_config=NexusConfig()))
+    with patch.object(ABIModule, "get_instance", return_value=config):
+        from naas_abi.apps.nexus.apps.api.app import main
+    from starlette.middleware.cors import CORSMiddleware
+
+    monkeypatch.setattr(main.settings, "frontend_url", FRONTEND)
+    app = FastAPI()
+    app.state.abi_cors_origins = CORS
+
+    with caplog.at_level("WARNING", logger=main.__name__):
+        main._configure_middleware(app)
+
+    warnings = [r.getMessage() for r in caplog.records if "[frame-ancestors]" in r.getMessage()]
+    assert warnings == [
+        "[frame-ancestors] ignored origins: ['*', 'https://x.example; script-src *', 'http://']"
+    ]
+    # CORS is out of scope here: its origins are passed on as configured.
+    cors = next(m for m in app.user_middleware if m.cls is CORSMiddleware)
+    assert cors.kwargs["allow_origins"] == CORS
