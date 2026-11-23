@@ -98,7 +98,6 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     KIND_OF_TYPE,
-    OFFER_SIDS,
     SECTIONS,
     TYPE_OF_KIND,
     WHOLE_MODULE,
@@ -106,6 +105,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     Offer,
     in_offer_form,
     offer_of,
+    offer_section,
     with_offer,
 )
 from naas_abi_core.engine.call_context import (
@@ -122,7 +122,6 @@ from naas_abi_core.services.iam.IAMPorts import (
     ResourceNotFoundError,
 )
 from naas_abi_core.services.iam.names import MY_CONTAINERS_SCOPE, PLATFORM, is_below
-from naas_abi_core.services.iam.policy import MAX_PATTERNS
 from sqlalchemy import inspect as sql_inspect
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -488,7 +487,7 @@ def ceiling_offer(
     held = Offer()
     for statement in _statements_of(document):
         sid, effect, actions, resources = _statement_parts(statement)
-        if sid in OFFER_SIDS and effect == "Allow":
+        if offer_section(sid) is not None and effect == "Allow":
             held = held.merged(offer_of({"statements": [statement]}))
             continue
         if sid == NOTHING_SID:
@@ -547,10 +546,6 @@ def ceiling_offer(
                 items |= {(module, n) for n in universe.of_module(kind, module)}
             items.discard((module, name))
         items |= set(held.items(kind))
-        if len(items) > MAX_PATTERNS:
-            raise AccessModelStop(
-                f"a ceiling offers {len(items)} {kind}, past {MAX_PATTERNS} in one section"
-            )
         offered[kind] = items
     offer = Offer(
         **{kind: frozenset(items) for kind, items in offered.items()},
