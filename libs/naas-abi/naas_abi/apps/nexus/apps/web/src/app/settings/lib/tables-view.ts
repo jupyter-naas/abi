@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import type { ColumnFilterState } from '@/lib/graph-query/filters';
+import { onPageStateOwnerChange } from '@/lib/page-state';
 
 export type TablesColumnId = 'table' | 'section' | 'description' | 'rows' | 'columns';
 export type SortDir = 'asc' | 'desc';
@@ -10,7 +11,8 @@ export type SortDir = 'asc' | 'desc';
  * How the Nexus tables page was left: search, column filters, sort and the open
  * schema. It lives in memory for the tab, so a table's close button brings the
  * page back as it was. It also keeps each table's label as the API gave it, for
- * the phone's header.
+ * the phone's header. Like every page state (`lib/page-state.ts`), it belongs to the
+ * session: another account, sign-out or a view (View as) starts it afresh.
  */
 interface TablesViewState {
   search: string;
@@ -31,13 +33,17 @@ interface TablesViewState {
   rememberLabels: (tables: readonly { name: string; label: string }[]) => void;
 }
 
-export const useTablesView = create<TablesViewState>((set) => ({
+const LEFT_AS_NEW = {
   search: '',
   columnFilters: {},
   sortKey: null,
   sortDir: 'asc',
   openTable: null,
   labels: {},
+} satisfies Partial<TablesViewState>;
+
+export const useTablesView = create<TablesViewState>((set) => ({
+  ...LEFT_AS_NEW,
   setSearch: (search) => set({ search }),
   setColumnFilters: (next) => set((state) => ({ columnFilters: next(state.columnFilters) })),
   setSort: (sortKey, sortDir) => set({ sortKey, sortDir }),
@@ -50,3 +56,5 @@ export const useTablesView = create<TablesViewState>((set) => ({
       },
     })),
 }));
+
+onPageStateOwnerChange(() => useTablesView.setState(LEFT_AS_NEW));
