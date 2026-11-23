@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { BadgeCheck, Building2, Check, Clock, Copy, Mail, MapPin, Save } from 'lucide-react';
 import { selectSession, useAuthStore } from '@/stores/auth';
+import { readOrganization, readOrganizationDomains } from '@/lib/organization-resource';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '../components/org-settings-section-card';
 import { pendingDomainCount, verifiedDomains, type OrgDomain } from './domain';
@@ -70,10 +71,9 @@ export default function OrganizationGeneralPage() {
 
     const load = async () => {
       try {
-        const { authFetch } = await import('@/stores/auth');
         const [orgRes, domainsRes] = await Promise.all([
-          authFetch(`/api/organizations/${orgId}`),
-          authFetch(`/api/organizations/${orgId}/domains`),
+          readOrganization(orgId),
+          readOrganizationDomains(orgId),
         ]);
         if (cancelled) return;
 

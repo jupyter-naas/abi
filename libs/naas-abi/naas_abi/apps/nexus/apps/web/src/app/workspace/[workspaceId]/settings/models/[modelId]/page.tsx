@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { authFetch } from '@/stores/auth';
+import { invalidateModelCatalog } from '@/stores/models';
 import { getApiUrl } from '@/lib/config';
 import { ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -146,6 +147,8 @@ export default function ModelDetailPage() {
         throw new Error(`Failed to save changes (${res.status}).`);
       }
       const data: Model = await res.json();
+      // The list, the chat and the agents name the model from the catalog.
+      invalidateModelCatalog();
       setModel(data);
       setForm(toForm(data));
       setSavedAt(Date.now());

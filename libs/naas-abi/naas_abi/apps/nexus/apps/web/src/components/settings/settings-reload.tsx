@@ -7,7 +7,8 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SETTINGS_CACHE_REFRESH_PATH, isCachedSettingsRoute } from '@/lib/settings-cache';
 import { authFetch } from '@/stores/auth';
-import { useAgentsStore } from '@/stores/agents';
+import { clearResources } from '@/lib/resource-cache';
+import { forgetAgentsSync, useAgentsStore } from '@/stores/agents';
 import { useModelsStore } from '@/stores/models';
 import { useSkillsStore } from '@/stores/skills';
 
@@ -17,6 +18,8 @@ const SettingsReloadContext = createContext<SettingsReloadValue | null>(null);
 
 /** Forget the stores' own short client-side caches so the remounted page fetches again. */
 function resetClientCaches() {
+  clearResources();
+  forgetAgentsSync();
   useAgentsStore.setState({ lastFetchedAt: {} });
   useSkillsStore.setState({ lastFetchedAt: {} });
   useModelsStore.setState({ lastFetchedAt: null });
