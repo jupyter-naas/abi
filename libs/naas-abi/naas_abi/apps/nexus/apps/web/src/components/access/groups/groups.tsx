@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react';
 import { IamAdminError } from '@/lib/iam-admin/api';
+import { listAllGroups } from '@/lib/iam-admin/batched';
 import type { AttachmentView, GroupView, PrincipalView } from '@/lib/iam-admin/types';
 import { NO_PROVIDERS, fetchInviteProviders, type InviteProviders } from '@/lib/invitations';
 import type { AccessViewProps } from '../access-props';
@@ -73,12 +74,14 @@ export function GroupsView({
 
   const load = useCallback(async () => {
     try {
-      const items = (await api.listGroups(scope.value ?? undefined)).items;
+      // Each group's member count comes with the list (#1608): null where the caller may not
+      // read the group, as its detail would be refused. No detail is read per group.
+      const items = await listAllGroups(api, scope.value ?? undefined);
       setGroups(items);
+      setCounts(
+        Object.fromEntries(items.flatMap((g) => (typeof g.member_count === 'number' ? [[g.id, g.member_count]] : []))),
+      );
       setError(null);
-      // One read per group for the member count: groups are few.
-      const details = await Promise.all(items.map((g) => api.getGroup(g.id).catch(() => null)));
-      setCounts(Object.fromEntries(details.flatMap((d) => (d ? [[d.id, d.members.length]] : []))));
     } catch (e) {
       setError(message(e));
     }

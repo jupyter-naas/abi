@@ -406,6 +406,38 @@ async def test_a_persons_access_is_read_from_their_groups(api, team):
     assert refused.status_code == 403
 
 
+@pytest.mark.asyncio
+async def test_a_persons_access_is_read_by_their_iam_id_without_the_directory(api, team):
+    """The person's page is opened by their IAM id (#1608): their access is read with
+    it, one request, never the whole directory to find their account first."""
+    team.grant("member", "member", "abi:nexus:organization/org-1/nexus:workspace/ws-1")
+    principal = team.principal("member")
+    assert principal != "member"  # an account linked from the old login
+    async with api.as_("root") as http:
+        by_account = await http.get("/api/admin/users/member/access")
+        by_principal = await http.get(f"/api/admin/users/{quote(principal)}/access")
+        unknown = await http.get("/api/admin/users/usr_00000000000000000000000000/access")
+    async with api.as_("member") as http:
+        refused = await http.get(f"/api/admin/users/{quote(principal)}/access")
+    assert by_principal.status_code == 200, by_principal.text
+    assert by_principal.json() == by_account.json()
+    assert by_principal.json()["user_id"] == "member"
+    assert by_principal.json()["principal_id"] == principal
+    assert unknown.status_code == 404
+    assert refused.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_account_has_no_access_page(api, team):
+    """As it is not in the directory the page used to search: "no account yet"."""
+    principal = team.principal("member")
+    async with api.as_("root") as http:
+        deleted = await http.delete("/api/admin/users/member?confirm=member@example.com")
+        assert deleted.status_code == 200, deleted.text
+        assert (await http.get("/api/admin/users/member/access")).status_code == 404
+        assert (await http.get(f"/api/admin/users/{quote(principal)}/access")).status_code == 404
+
+
 # -- invitations ---------------------------------------------------------------------------
 
 

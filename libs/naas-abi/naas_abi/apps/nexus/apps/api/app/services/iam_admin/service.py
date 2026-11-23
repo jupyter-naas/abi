@@ -46,6 +46,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PermissionDeniedError,
     Policy,
     PrincipalKind,
+    PrincipalRecord,
 )
 from naas_abi_core.services.iam.IAMService import (
     attachment_resource,
@@ -82,6 +83,11 @@ AUDIT_LIMIT = 500
 MAX_ATTACHABLE_SCAN = 2000
 # How long a service-account key lives unless told: IAM's own default applies when None.
 MAX_KEY_DAYS = 365
+# A page of groups (#1608): IAM's default, and the largest one a request may ask for.
+GROUPS_PAGE_DEFAULT = 100
+GROUPS_PAGE_MAX = 500
+# The principals one attachments read may name (a person and their groups, #1608).
+MAX_PRINCIPALS_PER_READ = 100
 
 # What each action decides on, for ``access``: the type of its resource.
 _WILDCARD_TYPE = {
@@ -584,20 +590,40 @@ class IamAdminService:
         self,
         user: Any,
         *,
-        principal_id: str | None = None,
+        principal_id: str | Collection[str] | None = None,
         policy_id: str | None = None,
         scope: str | None = None,
     ) -> dict[str, Any]:
+        """The attachments the caller may list. ``principal_id`` may name several
+        principals (a person and their groups, at most ``MAX_PRINCIPALS_PER_READ``): the
+        answer is each one's, in the order named, as one read of each would give them,
+        and each policy and principal is named once."""
         if scope is not None:
             validate_scope(scope)
+        wanted: list[str | None] = (
+            [principal_id]
+            if principal_id is None or isinstance(principal_id, str)
+            else list(dict.fromkeys(principal_id))
+        )
+        if not wanted:
+            wanted = [None]
+        if len(wanted) > MAX_PRINCIPALS_PER_READ:
+            raise ValueError(f"At most {MAX_PRINCIPALS_PER_READ} principals at once")
 
         # One principal's or one policy's attachments across levels: IAM keeps each one the
         # caller may list, so an empty answer says only that there is none to show them. A
         # level's list, or every attachment, stays refused to whoever may list none there.
-        across_levels = scope is None and (principal_id is not None or policy_id is not None)
+        named = wanted != [None]
+        across_levels = scope is None and (named or policy_id is not None)
 
         def read(session: IIAMService) -> dict[str, Any]:
-            found = session.list_attachments(principal_id=principal_id, policy_id=policy_id)
+            found = [
+                attachment
+                for principal in wanted
+                for attachment in session.list_attachments(
+                    principal_id=principal, policy_id=policy_id
+                )
+            ]
             if scope is not None:
                 found = [a for a in found if a.scope == scope]
             if not across_levels:
@@ -859,20 +885,51 @@ class IamAdminService:
 
     # -- groups -----------------------------------------------------------------------
 
-    async def list_groups(self, user: Any, scope: str | None = None) -> dict[str, Any]:
-        """The groups the caller may list; with ``scope``, that level's own (and,
-        at a workspace, its org's the caller attaches to there). A scope below a
-        container lists that container's."""
+    async def list_groups(
+        self,
+        user: Any,
+        scope: str | None = None,
+        *,
+        after: str | None = None,
+        limit: int = GROUPS_PAGE_DEFAULT,
+        member_counts: bool = False,
+    ) -> dict[str, Any]:
+        """A page of the groups the caller may list (IAM's order, ``next_after`` for the
+        next); with ``scope``, that level's own (and, at a workspace, its org's the caller
+        attaches to there). A scope below a container lists that container's. With
+        ``member_counts``, each group's ``member_count``: the number of its members for a
+        group the caller may read (``iam:GetGroup``, as its detail), else None."""
         owner = validate_owner_scope(_owner_of(scope)) if scope is not None else None
+        if not 1 <= limit <= GROUPS_PAGE_MAX:
+            raise ValueError(f"A page holds 1 to {GROUPS_PAGE_MAX} groups")
 
         def read(session: IIAMService) -> dict[str, Any]:
-            page = session.list_groups(scope=owner)
+            page = session.list_groups(scope=owner, limit=limit, after=after)
             self._listing(session, "iam:ListGroups", self._wildcard("group", _owner_of(owner)))(
                 page.items
             )
-            return {"items": [views.principal_view(g) for g in page.items if g.status != "deleted"]}
+            groups = [g for g in page.items if g.status != "deleted"]
+            items = [views.principal_view(g) for g in groups]
+            if member_counts:
+                counts = self._member_counts(session, groups)
+                for item in items:
+                    item["member_count"] = counts.get(item["id"])
+            return {"items": items, "next_after": page.next_after}
 
         return await self._read(user, read)
+
+    @staticmethod
+    def _member_counts(session: IIAMService, groups: list[PrincipalRecord]) -> dict[str, int]:
+        """How many members each group has, for those the caller may read: decided in one
+        ``filter`` as ``get_group`` decides each (``iam:GetGroup`` on the group as named at
+        its owner), then IAM's own ``list_group_members``. No member is named."""
+        names = {g.id: group_resource(g.id, g.owner_scope) for g in groups}
+        readable = set(session.filter("iam:GetGroup", names.values()).allowed)
+        return {
+            group_id: len(set(session.list_group_members(group_id)))
+            for group_id, name in names.items()
+            if name in readable
+        }
 
     def _group_view(self, session: IIAMService, group_id: str) -> dict[str, Any]:
         group = session.get_group(group_id)
