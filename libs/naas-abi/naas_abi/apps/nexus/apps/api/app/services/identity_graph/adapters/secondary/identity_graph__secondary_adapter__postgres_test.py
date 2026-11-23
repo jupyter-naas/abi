@@ -76,6 +76,15 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
                 module_path="bob",
                 is_default=1,
             ),
+            # Another agent of the workspace's roster: not the default, so not mirrored.
+            AgentConfigModel(
+                id="agc-2",
+                workspace_id="ws-1",
+                name="Abi",
+                class_name="AbiAgent",
+                module_path="naas_abi",
+                is_default=0,
+            ),
         ]
     )
     await session.commit()
@@ -114,5 +123,7 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
     assert [(a.workspace_id, a.app_id) for a in snapshot.app_configs] == [
         ("ws-1", "external.acme:web")
     ]
+    # Only the workspace's default agent: one row per agent per workspace would make
+    # the graph scale with workspaces x agents (25k rows on 115 workspaces).
     [agent] = snapshot.agent_configs
     assert (agent.id, agent.class_name, agent.is_default) == ("agc-1", "BobAgent", True)

@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { classDefinitionHref, individualHref, instancePage, instancePageRequest, instancePageView, INSTANCE_PAGE_SIZE } from './graph-instance-browser';
 import { explorerQuery } from './graph-explorer';

@@ -566,6 +566,36 @@ class IAMStoreContract(ABC):
         assert store.delete_placement("document", "nexus-ws-1/*") is True
         assert store.delete_placement("document", "nexus-ws-1/*") is False
 
+    def test_a_claimed_placement_keeps_its_first_container(self, store: IAMStore):
+        claimed = store.claim_placement(Placement("vector_store", "docs", WS))
+        before = store.revision()
+
+        held = store.claim_placement(Placement("vector_store", "docs", WS_2))
+
+        assert claimed == held == Placement("vector_store", "docs", WS)
+        assert store.revision() == before  # a refused claim writes nothing
+        assert store.list_placements("vector_store") == [claimed]
+
+    def test_concurrent_claims_keep_one_placement(self, store: IAMStore):
+        import threading
+
+        containers = [WS, WS_2, ORG, PLATFORM] * 4
+        held: list[Placement] = []
+        start = threading.Barrier(len(containers))
+
+        def claim(container: str) -> None:
+            start.wait()
+            held.append(store.claim_placement(Placement("dataset", "ns", container)))
+
+        threads = [threading.Thread(target=claim, args=(c,)) for c in containers]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert len({placement.container for placement in held}) == 1
+        assert store.list_placements("dataset") == [held[0]]
+
     def test_containers(self, store: IAMStore):
         org = ContainerRecord("nexus", "organization", "org-1")
         ws = ContainerRecord("nexus", "workspace", "ws-1", ORG)
@@ -674,6 +704,71 @@ class IAMStoreContract(ABC):
         # Again: what is a path already is kept.
         assert set(store.rewrite_names(rewriter).values()) == {0}
         assert store.get_policy(written.id).revision == written.revision + 1
+
+    def test_a_name_held_in_both_grammars_is_merged(self, store: IAMStore):
+        """An attachment or a pending grant written in the new grammar while the
+        rewrite waited, next to its twin of the old one: the rewrite is not
+        refused; the twin made first stays (its id, date and author), rewritten,
+        and the other goes, named to the rewriter."""
+        owner = store.create_policy(policy())
+        bob = store.create_principal(user())
+        team = store.create_principal(group())
+        twins = {}
+        for old, new in (
+            ("abi:org-1:-", ORG),
+            ("abi:org-1:*", ORG + "/*"),
+            ("abi:org-1:ws-1", WS),
+        ):
+            for principal in (bob, team):
+                before = store.attach(
+                    Attachment(new_id("att"), owner.id, principal.id, old)
+                )
+                after = store.attach(
+                    Attachment(new_id("att"), owner.id, principal.id, new)
+                )
+                twins[before.id] = (after.id, new)
+        # One with no twin is rewritten as ever.
+        alone = store.attach(
+            Attachment(new_id("att"), owner.id, bob.id, "abi:org-1:ws-2")
+        )
+        old_grant = store.add_pending_grant(
+            PendingGrant(
+                new_id("pgr"),
+                "builtin",
+                "ann@example.com",
+                owner.id,
+                "abi:org-1:-",
+                created_by=bob.id,
+            )
+        )
+        new_grant = store.add_pending_grant(
+            PendingGrant(new_id("pgr"), "builtin", "ann@example.com", owner.id, ORG)
+        )
+
+        rewriter = _Rewriter()
+        counts = store.rewrite_names(rewriter)
+        assert (counts["attachments"], counts["attachments_merged"]) == (7, 6)
+        assert (counts["pending_grants"], counts["pending_grants_merged"]) == (1, 1)
+        held = {
+            a.id: a.scope
+            for a in store.list_attachments()
+            if a.principal_id in (bob.id, team.id)
+        }
+        assert held == {
+            **{kept: scope for kept, (_, scope) in twins.items()},
+            alone.id: WS_2,
+        }
+        assert store.get_pending_grant(new_grant.id) is None
+        grant = store.get_pending_grant(old_grant.id)
+        assert grant is not None and grant.scope == ORG
+        assert grant.created_by == bob.id
+        assert sorted(rewriter.merges) == sorted(
+            [("attachment", gone, kept) for kept, (gone, _) in twins.items()]
+            + [("pending_grant", new_grant.id, old_grant.id)]
+        )
+
+        # Again: nothing left to rewrite or merge.
+        assert set(store.rewrite_names(_Rewriter()).values()) == {0}
 
     def test_a_placement_of_the_old_form_is_rewritten(self, store: IAMStore):
         """Only an upgraded store holds one: its SQL test seeds the row, the
@@ -919,6 +1014,10 @@ class _Rewriter(NameRewriter):
 
     def __init__(self) -> None:
         self.seen: list[LegacyPlacement] = []
+        self.merges: list[tuple[str, str, str]] = []
+
+    def merged(self, kind: str, dropped: str, kept: str) -> None:
+        self.merges.append((kind, dropped, kept))
 
     def containers(self) -> list[ContainerRecord]:
         return [

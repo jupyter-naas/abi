@@ -54,6 +54,7 @@ export function SettingsLayoutNav({
   resizable = true,
   children,
 }: {
+  /** The nav's accessible name; the top bar already shows it, so it is not repeated here. */
   title: string;
   /** False in the mobile list, where the nav fills the screen. */
   resizable?: boolean;
@@ -65,9 +66,7 @@ export function SettingsLayoutNav({
   return (
     <>
       {isDragging && <div className="fixed inset-0 z-50 cursor-col-resize" />}
-      <nav className="settings-layout-nav" style={resizable ? { width } : undefined}>
-        <h2 className="settings-layout-nav-title">{title}</h2>
-        <div className="settings-layout-nav-divider" />
+      <nav className="settings-layout-nav" aria-label={title} style={resizable ? { width } : undefined}>
         {children}
       </nav>
       {resizable && (

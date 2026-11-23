@@ -24,6 +24,185 @@
 
 <!-- version list -->
 
+## v5.1.0 (2026-11-19)
+
+### Bug Fixes
+
+- **core**: The DuckLake cleanup test passes between midnight and 1am UTC
+  ([`7dedcb0`](https://github.com/jupyter-naas/abi/commit/7dedcb00c0adffe19d24621533a7347e421f741c))
+
+- **iam**: The rewrite of the names merges a row held in both grammars
+  ([`33d00b5`](https://github.com/jupyter-naas/abi/commit/33d00b57f8b4cb138a243e52a9f66b08ebe7f5d7))
+
+### Code Style
+
+- **core**: Ruff format the DuckLake adapter test
+  ([`35d5bcc`](https://github.com/jupyter-naas/abi/commit/35d5bcc9e6669df43f03f0116a3598e831910f80))
+
+### Features
+
+- **api**: Make /docs, /redoc and /openapi.json a configuration choice
+  ([`9a32daf`](https://github.com/jupyter-naas/abi/commit/9a32dafd8ee1e17ef3bc8047d808d5ec642eb73b))
+
+
+## v5.0.0 (2026-11-19)
+
+### Features
+
+- **core, sdk, cli**: Module connections end on IAM changes, not every two minutes
+  ([`2f55f6b`](https://github.com/jupyter-naas/abi/commit/2f55f6b01e56bdc9c74a9c4963d9aab70e5bfca0))
+
+### Testing
+
+- Generate the broker's system password in tests; the dokploy reference is no secret
+  ([`f6186e7`](https://github.com/jupyter-naas/abi/commit/f6186e7b7142643855fdcd564982c8204be40454))
+
+
+## v4.0.0 (2026-11-19)
+
+### Features
+
+- **marketplace**: X as a remote module, in-engine x removed (#1423, #1425-#1428)
+  ([`113b1e9`](https://github.com/jupyter-naas/abi/commit/113b1e9d232e4fd35960e15c69e91278cef8ac25))
+
+### Breaking Changes
+
+- **marketplace**: Naas_abi_marketplace.applications.x is removed. Run the remote module with
+  X_CONFIG_FILE (the old config: block, without bearer_token), and run reprocess_tweet_envelopes
+  once with force: true to rebuild the dataset in the module's namespace.
+
+
+## v3.6.6 (2026-11-18)
+
+### Bug Fixes
+
+- **iam**: A policy is held where it applies, not in every container
+  ([`1ab4725`](https://github.com/jupyter-naas/abi/commit/1ab4725dc3cd0a018928b6783396f376405f0dc3))
+
+- **invites**: An authorized invitation makes the account at the provider
+  ([`dc1943b`](https://github.com/jupyter-naas/abi/commit/dc1943bb482d77c2b887c75916fd1032f6ca93f2))
+
+
+## v3.6.5 (2026-11-18)
+
+### Performance Improvements
+
+- **iam**: Keep pattern expansions and subjects until the store changes
+  ([`1a263f5`](https://github.com/jupyter-naas/abi/commit/1a263f59d3f78a0aad4b2786ad1189e97955a1e4))
+
+
+## v3.6.4 (2026-11-18)
+
+### Bug Fixes
+
+- **api**: No auto-reload by default, uvicorn log level of its own
+  ([`27b2f69`](https://github.com/jupyter-naas/abi/commit/27b2f69e5f53fed06a17f92e0f8316229025bb70))
+
+- **dev**: Abi dev up keeps the API's auto-reload
+  ([`d492a69`](https://github.com/jupyter-naas/abi/commit/d492a69b0c81eb3934e67ae4e6bb32cbf218d7d1))
+
+
+## v3.6.3 (2026-11-18)
+
+### Performance Improvements
+
+- **iam**: Evaluate only the statements that name the action
+  ([`6abca5e`](https://github.com/jupyter-naas/abi/commit/6abca5ebd0e572e8d018c07df9ba1293340b22de))
+
+
+## v3.6.2 (2026-11-18)
+
+### Bug Fixes
+
+- **core**: Dataset catalog monitor reads specs from the metadata catalog
+  ([`a479b1a`](https://github.com/jupyter-naas/abi/commit/a479b1a04c4fe49eebf7a9bacd2cbb57267a89d1))
+
+- **core**: Dataset list reads specs from the metadata catalog
+  ([`66a5e10`](https://github.com/jupyter-naas/abi/commit/66a5e10f33d1f5ec7bcdf95aac0beef3c97422ec))
+
+
+## v3.6.1 (2026-11-17)
+
+### Bug Fixes
+
+- **core**: SQLite document adapter reuses its connections
+  ([`1e69294`](https://github.com/jupyter-naas/abi/commit/1e69294dd0dbb7c8a7f54a4a2de85dba155b8e90))
+
+
+## v3.6.0 (2026-11-17)
+
+### Chores
+
+- Maintenance across core, nexus, marketplace and deploy templates
+  ([`232291c`](https://github.com/jupyter-naas/abi/commit/232291c110f3961bfeabc00fbcc3db6c1dc72537))
+
+### Features
+
+- **idp**: Mail the code to login_hint at once, so the address is typed once
+  ([`11a41d2`](https://github.com/jupyter-naas/abi/commit/11a41d2a864cac600a9732f9c1b64c8c9e5d2385))
+
+
+## v3.5.2 (2026-11-16)
+
+### Bug Fixes
+
+- **core**: The .env repair keeps the file's owner
+  ([`8c789df`](https://github.com/jupyter-naas/abi/commit/8c789df2b52124bc9696863a594a8111fdb73d62))
+
+- **core, cli**: Keep the engine's own secrets out of the compose .env
+  ([`a62d8f7`](https://github.com/jupyter-naas/abi/commit/a62d8f7dea8189c67640650d86ec599b50b2d4bf))
+
+- **core, cli**: Repair .env only where the adapter's config is known
+  ([`467b301`](https://github.com/jupyter-naas/abi/commit/467b3014f4224d8dd0e024723930e4ef1057a221))
+
+
+## v3.5.1 (2026-11-16)
+
+### Bug Fixes
+
+- **core**: Render templatable SPARQL query arguments so they cannot change the query
+  ([`163b631`](https://github.com/jupyter-naas/abi/commit/163b631f0e6a01e5c54d159326df07308cd4b694))
+
+
+## v3.5.0 (2026-11-16)
+
+### Features
+
+- **anthropic**: Add the Claude 5.5 generation models (Opus 5.5, Sonnet 5.5, Haiku 5.5, Fable 5.1)
+  ([`9c4b22d`](https://github.com/jupyter-naas/abi/commit/9c4b22da0f55866add94eb764b73b7588310679e))
+
+
+## v3.4.0 (2026-11-16)
+
+### Features
+
+- **discovery**: Remote agents carry display name, avatar and suggestions
+  ([`d878002`](https://github.com/jupyter-naas/abi/commit/d87800209b387589148ef547ed101c9842d54090))
+
+- **discovery**: Remote apps carry their tile image (avatar_url)
+  ([`fe0947c`](https://github.com/jupyter-naas/abi/commit/fe0947c14e46ea9ab88dd5582f0823d7267f47c8))
+
+
+## v3.3.3 (2026-11-11)
+
+
+## v3.3.2 (2026-11-10)
+
+### Bug Fixes
+
+- **cli**: The git author labels terminal events and never bounds the engine's access
+  ([`18eacf4`](https://github.com/jupyter-naas/abi/commit/18eacf479193ef2be464e39bd71e6aecf4e7b6bf))
+
+- **event**: The terminal author guards, labels identity events, and its limits are recorded
+  ([`67713af`](https://github.com/jupyter-naas/abi/commit/67713af455cf85c00f74dd30f4bfdfe0972f33e9))
+
+- **event**: Type the terminal identity tokens for both a ContextVar and a call-context field
+  ([`6d34455`](https://github.com/jupyter-naas/abi/commit/6d344552fb36c4c94f9be95a210558fd4921d373))
+
+- **iam**: Platform grants survive a regeneration of the managed policies by any instance
+  ([`6ba1e4a`](https://github.com/jupyter-naas/abi/commit/6ba1e4a23c0c5132f7cb6713fa1ec473683ae75b))
+
+
 ## v3.3.1 (2026-11-09)
 
 ### Bug Fixes

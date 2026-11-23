@@ -339,6 +339,7 @@ if WORKFLOWS_AVAILABLE:
         max_attempts: int = 1,
         input_schema: dict[str, Any] | str | None = None,
         output_schema: dict[str, Any] | str | None = None,
+        skip_if_running: bool = False,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Declare and bind a workflow on a module method ``(self, ctx, inp) -> Out``.
 
@@ -356,6 +357,7 @@ if WORKFLOWS_AVAILABLE:
             max_attempts=max_attempts,
             input_schema=input_schema,
             output_schema=output_schema,
+            skip_if_running=skip_if_running,
         )
 
         def decorate(method: Callable[..., Any]) -> Callable[..., Any]:
@@ -371,6 +373,7 @@ if WORKFLOWS_AVAILABLE:
                 max_attempts=max_attempts,
                 input_schema=input_schema,
                 output_schema=output_schema,
+                skip_if_running=skip_if_running,
             )
             method.__abi_job__ = descriptor  # type: ignore[attr-defined]
             # Not __abi_workflow__: the SDK mixin would wrap it as an async handler.

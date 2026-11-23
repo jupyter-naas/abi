@@ -296,6 +296,7 @@ def workflow(
     max_attempts: int = 1,
     input_schema: dict[str, Any] | str | None = None,
     output_schema: dict[str, Any] | str | None = None,
+    skip_if_running: bool = False,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Declare and bind a workflow on an async module method
     ``(self, ctx: FlowContext, inp: In) -> Out``.
@@ -318,6 +319,7 @@ def workflow(
             max_attempts=max_attempts,
             input_schema=input_schema,
             output_schema=output_schema,
+            skip_if_running=skip_if_running,
         )
         method.__abi_job__ = descriptor  # type: ignore[attr-defined]
         method.__abi_workflow__ = spec  # type: ignore[attr-defined]
@@ -337,6 +339,7 @@ def method_workflow(
     max_attempts: int = 1,
     input_schema: dict[str, Any] | str | None = None,
     output_schema: dict[str, Any] | str | None = None,
+    skip_if_running: bool = False,
 ) -> tuple[JobDescriptor, WorkflowSpec]:
     """The descriptor and spec of a workflow method ``(self, ctx, inp) -> out``, as
     ``@workflow`` declares it; core's sync ``@workflow`` uses it for sync methods."""
@@ -357,6 +360,7 @@ def method_workflow(
         kind="workflow",
         input_schema=in_schema,
         output_schema=out_schema,
+        skip_if_running=skip_if_running,
     )
     return descriptor, spec
 
@@ -376,6 +380,7 @@ def declare_workflow(
     timeout: timedelta | None = None,
     max_attempts: int = 1,
     wrap: HandlerWrap | None = None,
+    skip_if_running: bool = False,
 ) -> JobDescriptor:
     """``JobsMixin.declare_workflow``. ``wrap(handler, spec)`` makes the job handler
     (default ``workflow_handler``, for an async ``handler``); core passes its own to
@@ -402,6 +407,7 @@ def declare_workflow(
         kind="workflow",
         input_schema=in_schema,
         output_schema=out_schema,
+        skip_if_running=skip_if_running,
     )
     module.declare_job(descriptor, wrap(handler, spec))
     module.__dict__.setdefault("_abi_workflow_specs", {})[name] = spec

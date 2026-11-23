@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import type { Result } from '../data/data-api';
 import type { TracesApi } from '../traces/traces-api';
 import { TRACE_ID, trace } from '../traces/traces-fixtures';
@@ -87,6 +88,44 @@ async function open(api: JobsApi) {
 }
 
 describe('JobsTab', () => {
+  it('tells the page how many jobs there are, for the count by its title', async () => {
+    const { api } = fakeApi();
+    const onJobCount = vi.fn();
+    mounted = await mount(JobsTab, { api, tracesApi, onJobCount });
+    await mounted.flush();
+    await mounted.flush();
+    expect(onJobCount).toHaveBeenLastCalledWith(2);
+  });
+
+  it('does not ask for the overview again until the last one answered, and aborts it on close', async () => {
+    vi.useFakeTimers();
+    try {
+      const { api } = fakeApi();
+      const signals: AbortSignal[] = [];
+      let answer: (value: Result<JobsOverview>) => void = () => undefined;
+      api.overview = vi.fn((signal?: AbortSignal) => {
+        if (signal) signals.push(signal);
+        return new Promise<Result<JobsOverview>>((resolve) => {
+          answer = resolve;
+        });
+      });
+      mounted = await mount(JobsTab, { api, tracesApi });
+
+      await act(async () => void (await vi.advanceTimersByTimeAsync(60_000)));
+      expect(api.overview).toHaveBeenCalledTimes(1);
+
+      await act(async () => answer({ ok: true, data: { project: 'zen', jobs: [], sources: {} } }));
+      await act(async () => void (await vi.advanceTimersByTimeAsync(5000)));
+      expect(api.overview).toHaveBeenCalledTimes(2);
+
+      await mounted.unmount();
+      mounted = null;
+      expect(signals[1].aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('lists jobs with schedules, failing ones first', async () => {
     const { api } = fakeApi();
     await open(api);
@@ -108,7 +147,7 @@ describe('JobsTab', () => {
 
     expect(q('.job-detail')?.textContent).toContain('0 0 6 * * *');
     expect(q('.job-detail')?.textContent).toContain('ValueError');
-    expect(api.runs).toHaveBeenLastCalledWith(expect.objectContaining({ module: 'ops.billing', job: 'sync' }));
+    expect(api.runs).toHaveBeenLastCalledWith(expect.objectContaining({ module: 'ops.billing', job: 'sync' }), expect.any(AbortSignal));
   });
 
   it('opens a run from the strip with its timeline, error, logs, payload and trace', async () => {
@@ -130,7 +169,7 @@ describe('JobsTab', () => {
     expect(panel()?.querySelectorAll('[role="treeitem"]')).toHaveLength(4);
     expect(panel()?.querySelector('.trace-header a')?.getAttribute('href')).toBe(`http://jaeger/trace/${TRACE_ID}`);
     await mounted!.click(button('Open in Traces', panel() ?? document));
-    expect(push).toHaveBeenCalledWith(`/settings/system/traces?trace=${TRACE_ID}`);
+    expect(push).toHaveBeenCalledWith(`/settings/activity/traces?trace=${TRACE_ID}`);
   });
 
   it('runs a job now and follows the run from queued to started', async () => {
@@ -182,7 +221,7 @@ describe('JobsTab', () => {
 
     await mounted!.click(button('Failed'));
     await mounted!.flush();
-    expect(api.runs).toHaveBeenLastCalledWith(expect.objectContaining({ statuses: ['FAILED', 'TIMED_OUT'] }));
+    expect(api.runs).toHaveBeenLastCalledWith(expect.objectContaining({ statuses: ['FAILED', 'TIMED_OUT'] }), expect.any(AbortSignal));
   });
 });
 
@@ -205,7 +244,7 @@ describe('JobsTab failure notification', () => {
     expect(banner?.textContent).toContain('sync');
 
     await mounted.click(button('Show failed runs', banner ?? document));
-    expect(api.runs).toHaveBeenLastCalledWith(expect.objectContaining({ statuses: ['FAILED', 'TIMED_OUT'] }));
+    expect(api.runs).toHaveBeenLastCalledWith(expect.objectContaining({ statuses: ['FAILED', 'TIMED_OUT'] }), expect.any(AbortSignal));
 
     await mounted.click(button('Mark as seen', banner ?? document));
     expect(onFailuresSeen).toHaveBeenCalled();

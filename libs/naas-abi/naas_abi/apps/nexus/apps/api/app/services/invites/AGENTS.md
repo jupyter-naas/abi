@@ -38,7 +38,7 @@ IdP group bindings are the same idea for a whole group of a provider: the member
 | `runtime.py` | `RUNTIME`: builds the service from the engine's, `claimer` (the sign-in hook), `get_invitation_service` (the route dependency); tests `configure` another |
 | `adapters/primary/invites__primary_adapter__FastAPI.py` | `/api/invitations/...` and `/api/idp-groups/...` |
 | `adapters/secondary/postgres.py` | The `invitations` table (`migrations/0060_add_invitations.sql`) |
-| `adapters/secondary/engine.py` | The engine's identity and IAM: grants and bindings as `api` on behalf of the inviting person, reads and withdrawals as `api` for nobody |
+| `adapters/secondary/engine.py` | The engine's identity and IAM: grants and bindings as `api` on behalf of the inviting person, reads, withdrawals and an authorized invitation's provisioning as `api` for nobody |
 | `adapters/secondary/mailer.py` | The invitation mail through the engine's email service |
 | `mail.py` | The email service, the dev-frontend subject mark, and the notice mailed to someone who already had an account (`send_added_notice`) |
 
@@ -60,7 +60,10 @@ IdP group bindings are the same idea for a whole group of a provider: the member
   `provisioning: none`, which the UI explains.
 - `GET /api/invitations/organizations/{id}`, `/workspaces/{id}` (pending), `POST
   /api/invitations/{id}/resend`, `DELETE /api/invitations/{id}` (also withdraws the pending
-  grants).
+  grants). A resend counts against the invite routes' limits (per inviting user, per address),
+  once a window per invitation, and, like every invitation mail, against the organization's
+  `invitation_mails_per_day` (`rate_limit.check_invitation_mail_quota`). The mail's subject names
+  the platform only; names its people chose are quoted in the body.
 - `GET|PUT|DELETE /api/idp-groups/organizations/{id}` and `/workspaces/{id}`: the bound
   groups, `{provider, group, role}`.
 
@@ -73,10 +76,19 @@ IdP group bindings are the same idea for a whole group of a provider: the member
   ("Grant only what you hold" in core's `services/iam/AGENTS.md`: `GrantNotHeldError`, a 403 naming what they lack);
   reads and withdrawals are Nexus's own (`as_service_account("api")`, no user). The owner rule is also kept here
   (`may_grant_owner`). The claimed attachments are the memberships: Nexus keeps no membership row.
-- **Making the person at the provider needs the right to.** The provider's admin API is called as `api` on behalf of
-  the inviting user, so IAM checks `identity:ProvisionUser` for them (not an organization role's); without it, or
-  for an address that is not on a domain the organization verified and routed to that provider, the invitation is
-  pending grants only (`provisioning_skipped`). Never call `provision` for nobody on a user's say-so.
+- **The authorized invitation is the warrant to make the person at the provider.** Once the route authorized the
+  invitation (`InviteOrganizationMember` / `InviteWorkspaceMember` at its scope) and IAM accepted its pending grants
+  on the inviting person's behalf ("Grant only what you hold", the owner rule), Nexus calls the provider's admin API
+  as `api` for nobody: `builtin.api` holds `identity:ProvisionUser`, the inviting person needs no right of their own
+  there. So an organization admin or a workspace owner onboards people, and the account exists before the first
+  sign-in, which a provider without self-signup (no `ABI_IDP_SIGNUP`, as production runs) needs to mail a code.
+  Never call `provision` for nobody outside such an invitation: a refused route or grant makes nobody (grants come
+  first), and `api` refused (the deployment withholds the right) fails the invitation and takes back its grants
+  (502, `PROVIDER_FAILURES`). An invitation to the platform alone (`services/accounts`, no grant, no warrant) is
+  still made on behalf of the inviting user, who needs `identity:ProvisionUser`: without it nothing is made, the
+  answer says `provisioning_skipped` and the mail promises no code. `provisioning_skipped` stays in the answers for
+  compatibility and is false for an organization's or a workspace's invitation. A provider whose people are
+  managed there (`provisioning: none`) is never called.
 - **Authorize an invitation at the scope of its roles.** One with an `org_role` is the organization
   administrators' (`require_invitation_admin`), and a workspace-only invite never rewrites it
   (`OrgInvitationExistsError`).
@@ -135,10 +147,15 @@ IdP group bindings are the same idea for a whole group of a provider: the member
   lower levels.
 - **Who authorizes the inviting person.** The route's IAM check (`InviteOrganizationMember` /
   `InviteWorkspaceMember`); then the grants are written as `api` on behalf of the inviting person, whom IAM checks
-  for the attachment and for holding what it grants (the owner rule is kept here too), and the provisioning call is made as `api` on behalf of the inviting user, which asks `identity:ProvisionUser`.
-  Platform members and organization admins do not hold it by default; an operator grants it (or is a platform
-  admin). The one exception is an address on a domain the organization verified (`organization_domains`, its own,
-  routed to that provider): provisioned as Nexus's own call.
+  for the attachment and for holding what it grants (the owner rule is kept here too). That authorized invitation
+  is the warrant: the provisioning call is made as `api` for nobody, so organization admins and workspace owners
+  need no `identity:ProvisionUser` (#1520: with the provider's self-signup off, the people they invited could never
+  sign in). *Consequences:* whoever may invite at a scope makes accounts at the provider for the addresses they
+  invite; every platform member may create an organization and invite from it, so the bounds are the invite routes'
+  rate limits and the organization's `invitation_mails_per_day`. An account the invitation made has an unverified
+  email that only a code mailed to the address proves, so it gives the inviter no access to it. The platform-level
+  invite (Platform Settings › Users) keeps to the inviter's own `identity:ProvisionUser`. ADR:
+  `docs/adr/20261118_invitation_provisions_the_account.md`.
 - Withdrawing an invitation withdraws its pending grants, but not a membership already made. An invitee who
   already has a Nexus account is added directly; a person whose verified email another Nexus account holds is still
   refused at sign-in (accounts are never linked across providers: `services/oidc/AGENTS.md`).

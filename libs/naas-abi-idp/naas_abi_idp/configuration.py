@@ -30,19 +30,36 @@ class Branding:
     """How the login page and the mail look. Every field is optional text; the
     page escapes it, and only ``https`` (or same-origin) images load."""
 
+    # The defaults are those of the Nexus login page (its tenant settings), so
+    # the two look alike when neither is branded.
     app_name: str = "ABI"
     primary_color: str = "#22c55e"
-    background_color: str = "#f5f5f5"
+    # The button on hover; None darkens the primary color.
+    accent_color: str | None = None
+    background_color: str = "#ffffff"
     card_color: str = "#ffffff"
+    input_color: str = "#f4f4f4"
     text_color: str = "#1a1a1a"
-    border_radius: int = 12
+    border_radius: int = 0
     logo_url: str | None = None
+    # The tab icon (``<link rel="icon">``): an https URL or a path on this origin.
+    favicon_url: str | None = None
     footer_text: str = ""
     tab_title: str | None = None
 
     def __post_init__(self) -> None:
-        for name in ("primary_color", "background_color", "card_color", "text_color"):
-            if not re.fullmatch(r"#[0-9a-fA-F]{3,8}", getattr(self, name)):
+        for name in (
+            "primary_color",
+            "accent_color",
+            "background_color",
+            "card_color",
+            "input_color",
+            "text_color",
+        ):
+            value = getattr(self, name)
+            if value is None and name == "accent_color":
+                continue
+            if not re.fullmatch(r"#[0-9a-fA-F]{3,8}", value):
                 raise ValueError(f"branding.{name} is a hex color such as #22c55e")
         if not 0 <= int(self.border_radius) <= 48:
             raise ValueError("branding.border_radius is 0 to 48")
@@ -50,6 +67,10 @@ class Branding:
             scheme = urlsplit(self.logo_url).scheme
             if scheme not in ("https", "http", ""):
                 raise ValueError("branding.logo_url is an http(s) URL or a path")
+        if self.favicon_url is not None:
+            scheme = urlsplit(self.favicon_url).scheme
+            if scheme not in ("https", ""):
+                raise ValueError("branding.favicon_url is an https URL or a path")
 
     @classmethod
     def of(
@@ -100,15 +121,34 @@ class IdPConfiguration(ModuleConfiguration):
     domain_branding: dict[str, Branding] = field(default_factory=dict)
     from_email: str = "no-reply@abi.local"
     from_name: str | None = None
+    # A local stack's catch-all mailbox (Mailpit, say): the code page links to it.
+    # http(s) only, http included since a local mailbox has no TLS. Unset in
+    # production: the page then says nothing about it.
+    mailbox_url: str | None = None
 
     # Sign-in codes.
-    code_length: int = 6
+    code_length: int = 8
     code_ttl_seconds: int = 900
-    max_attempts: int = 5  # wrong guesses per address, across every active code
-    max_active_codes: int = 5
+    # Wrong guesses a code takes before it is void. A code belongs to the
+    # sign-in that asked for it: guesses from elsewhere never reach it.
+    max_attempts: int = 5
+    # Live codes per sign-in; a new one replaces the oldest.
+    max_active_codes: int = 2
+    # Wrong guesses one client makes for one address over
+    # ``failure_window_seconds``; past it that client is refused for that
+    # address until its oldest failure leaves the window. Others are not.
+    max_failures: int = 10
+    # Wrong guesses for one address from every client together over the same
+    # window; past it each code takes one guess. Nobody is refused.
+    max_failures_per_address: int = 100
+    failure_window_seconds: int = 86400
     # Failures per address and per client IP, and the window they count in.
     rate_limit_window_seconds: int = 300
+    # Code mails per window: one client's for an address, and every client's.
     rate_limit_email_sends: int = 5
+    rate_limit_email_sends_per_address: int = 30
+    # Code mails one client asks for one address over ``failure_window_seconds``.
+    rate_limit_email_sends_per_window: int = 20
     rate_limit_ip_attempts: int = 20
     # Code requests per client IP: loose, since a proxy's address is every
     # user's when it is not trusted to forward the real one.
@@ -153,6 +193,12 @@ class IdPConfiguration(ModuleConfiguration):
                 raise ValueError("issuer is an https URL (http on localhost only)")
             if parts.query or parts.fragment or self.issuer.endswith("/"):
                 raise ValueError("issuer is a bare URL without a trailing slash")
+        if self.mailbox_url is not None:
+            self.mailbox_url = self.mailbox_url.strip() or None
+        if self.mailbox_url is not None:
+            parts = urlsplit(self.mailbox_url)
+            if parts.scheme not in ("http", "https") or not parts.hostname:
+                raise ValueError("mailbox_url is an http(s) URL")
         for name in ("access_token_seconds", "id_token_seconds"):
             if not 60 <= getattr(self, name) <= MAX_TOKEN_SECONDS:
                 raise ValueError(f"{name} is 60 to {MAX_TOKEN_SECONDS}")
@@ -160,6 +206,21 @@ class IdPConfiguration(ModuleConfiguration):
             raise ValueError("code_length is 4 to 10")
         if self.max_attempts < 1 or self.max_active_codes < 1:
             raise ValueError("max_attempts and max_active_codes are at least 1")
+        if (
+            self.max_failures < 1
+            or self.max_failures_per_address < 1
+            or self.rate_limit_email_sends_per_window < 1
+            or self.rate_limit_email_sends_per_address < 1
+        ):
+            raise ValueError(
+                "max_failures, max_failures_per_address, "
+                "rate_limit_email_sends_per_window and "
+                "rate_limit_email_sends_per_address are at least 1"
+            )
+        if self.failure_window_seconds < self.rate_limit_window_seconds:
+            raise ValueError(
+                "failure_window_seconds is at least rate_limit_window_seconds"
+            )
 
     def branding_for(self, email: str | None) -> Branding:
         domain = email.rsplit("@", 1)[-1].lower() if email and "@" in email else ""
@@ -195,6 +256,7 @@ class IdPConfiguration(ModuleConfiguration):
         for key, cast in (
             ("ABI_IDP_FROM_EMAIL", ("from_email", str)),
             ("ABI_IDP_FROM_NAME", ("from_name", str)),
+            ("ABI_IDP_MAILBOX_URL", ("mailbox_url", str)),
             ("ABI_IDP_SIGNUP", ("signup_enabled", _flag)),
             ("ABI_IDP_PASSWORD_LOGIN", ("password_login_enabled", _flag)),
         ):

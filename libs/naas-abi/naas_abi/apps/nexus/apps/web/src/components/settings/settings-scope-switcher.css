@@ -1,0 +1,100 @@
+/* Neutral tokens: scope menu does not pick up organization brand colours. */
+.settings-scope-switcher-trigger {
+  display: inline-flex;
+  max-width: min(100%, 320px);
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--foreground-hex);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-sm);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.settings-scope-switcher-trigger:hover,
+.settings-scope-switcher-trigger[data-state='open'],
+.settings-scope-switcher-trigger:focus,
+.settings-scope-switcher-trigger:focus-visible {
+  border: none;
+  outline: none;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* Keyboard focus shows on the title, not as a box around the trigger. */
+.settings-scope-switcher-trigger:focus-visible .settings-scope-switcher-title {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.settings-scope-switcher-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-scope-switcher-chevron {
+  flex-shrink: 0;
+  color: var(--muted-foreground-hex);
+  opacity: 0.85;
+}
+
+.settings-scope-switcher-content {
+  z-index: 10050;
+  min-width: min(288px, calc(100vw - 16px));
+  max-width: min(360px, calc(100vw - 16px));
+  max-height: min(70vh, 480px);
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--border-hex);
+  border-radius: 0;
+  background-color: var(--card-hex, var(--background-hex));
+  color: var(--foreground-hex);
+  box-shadow: var(--shadow-lg, 0 10px 40px rgb(0 0 0 / 0.12));
+}
+
+.settings-scope-switcher-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--foreground-hex);
+  text-decoration: none;
+  outline: none;
+  transition: background-color 0.15s ease;
+}
+
+.settings-scope-switcher-link:hover,
+.settings-scope-switcher-link[data-highlighted] {
+  background-color: var(--muted-bg-hex);
+}
+
+.settings-scope-switcher-link[aria-current='page'] {
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-scope-switcher-check {
+  width: 16px;
+  flex-shrink: 0;
+  color: var(--color-primary, hsl(var(--primary)));
+}
+
+
+.settings-scope-switcher-separator {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background-color: var(--border-hex);
+}

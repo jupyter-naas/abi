@@ -10,6 +10,7 @@ import {
   Braces,
   Building2,
   HardDrive,
+  History,
   KeyRound,
   Lock,
   Mail,
@@ -190,11 +191,10 @@ export function EventPreview({ detail }: { detail: ResourceDetail }) {
 
 export const eventView: ServiceView = {
   name: 'event',
-  label: 'Events',
+  label: 'Event store',
   description:
     "The engine's append-only event log: every key set, object written, graph changed and agent run, by event type.",
-  icon: Radio,
-  group: 'Streams & logs',
+  icon: History,
   readOnly: true,
   noun: { one: 'event', many: 'events' },
   nounFor: (entry) =>

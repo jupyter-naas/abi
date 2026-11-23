@@ -12,6 +12,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { discardDeferredStorage } from '@/lib/deferred-storage';
 import { clearAuthFlagCookie, mergeAuthPersistedState, setAuthFlagCookie } from '@/lib/auth-session';
 import { getSafeStorage } from '@/lib/safe-storage';
+import { dropWebPass, keepWebPass } from '@/lib/web-pass';
 import { clearViewFlag, setViewFlag, viewFlagActive, readViewFlag } from '@/lib/view-flag';
 import {
   announceViewRefusal,
@@ -89,6 +90,8 @@ export const useAuthStore = create<AuthState>()(
       // Logout - clears auth state and ALL persisted store data
       logout: () => {
         clearAuthFlagCookie();
+        // This host's own routes stop answering for the browser at once.
+        dropWebPass();
         // The sign-out ends the view on the server; the browser forgets it too.
         clearViewFlag();
         const { csrfToken } = get();
@@ -183,6 +186,8 @@ export const useAuthStore = create<AuthState>()(
           });
           if (response.status === 401) {
             clearViewFlag();
+            // No session: this host's own routes stop answering for the browser too.
+            dropWebPass();
             if (get().isAuthenticated) {
               clearAuthFlagCookie();
               set({ user: null, view: null, viewer: null, csrfToken: null, isAuthenticated: false });
@@ -220,6 +225,8 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             error: null,
           });
+          // This host's own server routes (images, maps) know the session by its web pass.
+          keepWebPass(apiBase, () => get().csrfToken);
           return true;
         } catch {
           return false;

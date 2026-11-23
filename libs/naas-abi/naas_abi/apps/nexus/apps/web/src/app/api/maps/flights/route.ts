@@ -5,12 +5,13 @@ import {
   sampleAircraft,
   viewportAircraft,
 } from './flights';
+import { mapsRoute } from '../_guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** Maps-owned flights proxy: viewport adsb.lol, global airplanes.live sample. */
-export async function GET(req: Request) {
+async function handle(req: Request) {
   try {
     const url = new URL(req.url);
     const query = parseFlightsQuery(url.searchParams);
@@ -54,3 +55,5 @@ export async function GET(req: Request) {
     );
   }
 }
+
+export const GET = mapsRoute('flights', handle, { perMinute: 240 });

@@ -39,7 +39,10 @@ rule of its own.
 - **Sharing is a statement for the receiving workspace.** A policy attached at a
   scope may only allow `${scope}/` resources, so a grant onto another workspace's
   graph cannot be a scoped attachment. For each workspace `GRANTS` keeps two
-  policies, `workspace.<ws>.graphs.read` and `workspace.<ws>.graphs.write`:
+  policies, `workspace.<ws>.graphs.read` and `workspace.<ws>.graphs.write`,
+  made at the platform as `api` and found by name among the platform's policies
+  only (a policy of that name an organization or workspace owns is not them; the
+  IAM admin routes refuse names starting with `workspace.`):
   - `read` Allows the list and read actions on the graphs the workspace reads or
     writes (`SharedGraphsRead`), and Denies what the workspace closes: creating
     graphs when `allow_create` or `include_owned` is off (`NoNewGraphs`), and its
@@ -75,12 +78,24 @@ rule of its own.
 - `api` needs the `iam:*Policy` actions (create, update, delete, get, list) and
   attach/detach, which the enumerated `builtin.api` statements hold.
 - `read_all` shares the graphs that exist when the assignment is applied (a graph
-  created later joins at the next sync), and only those of the workspace's own
-  organization and the platform's (`graph_iam.within`): never another organization's,
-  nor another personal workspace's (one in no organization, at the platform).
+  created later joins at the next sync), and only those placed in the workspace's own
+  organization, plus the schema graph (`graph_iam.within`): never another
+  organization's, nor another personal workspace's (one in no organization, at the
+  platform). A platform graph (placed nowhere) is shared by naming it in `read`.
+- Nexus's own graphs (`graph/nexus`, `graph/nexus-identity`, any `graph/nexus-<name>`:
+  `graph_policy_config.is_nexus_system_graph`) are in no workspace's catalog, view or
+  assignment, even named.
 - Dropping or clearing a graph shared for writing is the owning workspace's alone.
 - Strings that reach SPARQL are escaped (`query/sparql_safe.py`): Nexus reads every
   graph as itself when it consults its application graph.
+- **Uploads are data.** `/analyze` and `/import` read at most `GRAPH_UPLOAD_MAX_BYTES`
+  (413 past it) and parse with `naas_abi_core.utils.rdf_upload`: a child process
+  with no network and a time limit, off the event loop. JSON-LD may only use
+  embedded contexts. Errors are fixed messages; details stay in the log.
+- **Caches follow the graphs a scope reads.** A cache key digests the generations
+  of the graphs its scope reads (`_scope_cache_key`); a write advances its graph's
+  generation (`_invalidate_graph_cache`), so only scopes reading that graph miss.
+  The cache directory is pruned by age and count (`_prune_cache_dir`).
 
 ## Tests
 

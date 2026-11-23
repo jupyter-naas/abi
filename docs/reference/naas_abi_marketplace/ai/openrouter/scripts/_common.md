@@ -28,7 +28,7 @@ Shared helper functions used by OpenRouter integration CLI scripts to:
   - Uses object storage via `configuration.services.object_storage.load()` or `module.engine.services.object_storage`.
 
 - Module name constant
-  - `MODULE_NAME = "naas_abi_marketplace.applications.openrouter"`
+  - `MODULE_NAME = "naas_abi_marketplace.ai.openrouter"`
 
 ## Usage
 ```python

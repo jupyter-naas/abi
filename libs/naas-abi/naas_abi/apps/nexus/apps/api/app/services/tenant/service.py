@@ -6,6 +6,7 @@ class TenantService:
     @staticmethod
     async def get_tenant_config() -> TenantResponse:
         return TenantResponse(
+            name=settings.tenant.name,
             tab_title=settings.tenant.tab_title,
             favicon_url=settings.tenant.favicon_url,
             logo_url=settings.tenant.logo_url,

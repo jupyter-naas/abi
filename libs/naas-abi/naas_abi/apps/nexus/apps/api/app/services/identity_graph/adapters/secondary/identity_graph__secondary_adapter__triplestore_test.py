@@ -44,3 +44,36 @@ def test_an_empty_snapshot_drops_the_graph_and_inserts_nothing() -> None:
     IdentityGraphStoreSecondaryAdapterTripleStore(lambda: store).replace_graph(GRAPH, Graph())
 
     assert store.calls == [("query", f"DROP SILENT GRAPH <{GRAPH}>")]
+
+
+def _graph_of(n: int) -> Graph:
+    graph = Graph()
+    for i in range(n):
+        graph.add((URIRef(f"http://ex.org/s{i}"), RDF.type, URIRef("http://ex.org/A")))
+    return graph
+
+
+def test_a_large_snapshot_is_inserted_in_batches_that_add_up_to_it() -> None:
+    store = _RecordingTripleStore()
+    snapshot = _graph_of(5)
+
+    IdentityGraphStoreSecondaryAdapterTripleStore(lambda: store, batch_size=2).replace_graph(
+        GRAPH, snapshot
+    )
+
+    assert store.calls[0] == ("query", f"DROP SILENT GRAPH <{GRAPH}>")
+    assert [len(batch) for batch in store.inserted] == [2, 2, 1]
+    union = Graph()
+    for batch in store.inserted:
+        union += batch
+    assert set(union) == set(snapshot)
+
+
+def test_a_snapshot_within_one_batch_is_one_insert() -> None:
+    store = _RecordingTripleStore()
+
+    IdentityGraphStoreSecondaryAdapterTripleStore(lambda: store, batch_size=10).replace_graph(
+        GRAPH, _graph_of(10)
+    )
+
+    assert [len(batch) for batch in store.inserted] == [10]

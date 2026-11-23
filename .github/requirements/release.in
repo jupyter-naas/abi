@@ -1,0 +1,6 @@
+# Release tooling (release.yml): semantic-release, and uv for the packages'
+# build_command.
+python-semantic-release==10.5.2
+# 3.1.60 removed Actor.name_email_regex, which semantic-release 10.5.2 uses.
+GitPython>=3.1.43,<3.1.60
+uv

@@ -57,7 +57,11 @@ Nexus adds no role check of its own.
   it the caller may list, IAM's `list_sub_policies`). `PUT` takes `parent`: absent keeps it, `null` or `""`
   removes it, an id sets it. Deleting a parent that has sub-policies is a 409 naming them
 - `GET|POST|DELETE /attachments` (`?scope=`, `?principal_id=`, `?policy_id=`; without `scope`, at every level, each
-  attachment kept by IAM where the caller may `iam:ListAttachments` it), `GET /attachable-policies?scope=`. An
+  attachment kept by IAM where the caller may `iam:ListAttachments` it), `GET /attachable-policies?scope=`.
+  `POST` at a container attaches to a user only once related to its top container (an attachment of their own within
+  it: a membership, an accepted invitation; `IamGateway.belongs`), unless the caller may attach the policy unscoped
+  (the platform admin): anyone else is invited, and an unrelated user is answered 404, as an unknown one, with no
+  profile. So every profile these routes name is of a principal related to a level the caller administers. An
   attachment carries `policy_owner_scope` (where its policy is owned, read as `api` for the id the caller sees), so a
   page links each row to the policy at its owner
 - `GET /principals` (`?kind=&after=&q=`: `q` is IAM's search text, `list_principals(text=)`), `GET /principals/{id}`,

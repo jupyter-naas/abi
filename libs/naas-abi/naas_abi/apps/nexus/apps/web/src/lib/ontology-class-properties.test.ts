@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { classRestrictions } from './ontology-class-properties';
 import type { DictionaryTerm } from './ontology-dictionary-tree';

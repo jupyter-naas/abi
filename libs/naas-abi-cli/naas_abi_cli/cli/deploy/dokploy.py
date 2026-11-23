@@ -32,8 +32,10 @@ from ..admin_credentials import (
     ensure_idp_client_secret,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
+    generate_data_service_secret,
     generate_nats_password,
 )
+from ..private_dir import is_secret_file, private_directory, private_file
 from .local import (
     DEFAULT_ENV_VALUES,
     _build_hosts_from_domain,
@@ -42,6 +44,7 @@ from .local import (
     _read_env_vars,
     compose_project_name,
     project_uses_nats,
+    upgrade_data_service_config,
 )
 
 COMPOSE_FILE = "docker-compose.dokploy.yml"
@@ -337,7 +340,9 @@ def _dokploy_config(local_config: str, include_coding: bool, project_path: str) 
         "# stack sets ENV=dokploy, so the engine reads this file.\n"
     )
     crlf = "\r\n" in local_config
-    local_config = local_config.replace("\r\n", "\n")
+    # An older project reaches Redis, Qdrant and the broker's monitoring port
+    # as before they took credentials.
+    local_config = upgrade_data_service_config(local_config.replace("\r\n", "\n"))
     if not local_config.endswith("\n"):
         local_config += "\n"
     adapters = _rendered_adapters(local_config, project_path)
@@ -473,6 +478,10 @@ def _env_layout(
         ("MINIO_ROOT_USER", fixed(DEFAULT_ENV_VALUES["MINIO_ROOT_USER"])),
         ("MINIO_ROOT_PASSWORD", uuid),
         ("FUSEKI_ADMIN_PASSWORD", uuid),
+        # Fuseki, Redis and Qdrant refuse to start without these.
+        ("FUSEKI_ENGINE_PASSWORD", generate_data_service_secret),
+        ("REDIS_PASSWORD", generate_data_service_secret),
+        ("QDRANT_API_KEY", generate_data_service_secret),
         (
             "FUSEKI_COMPACT_INTERVAL_SECONDS",
             fixed(DEFAULT_ENV_VALUES["FUSEKI_COMPACT_INTERVAL_SECONDS"]),
@@ -645,8 +654,12 @@ def _backup_env(project_path: str, env_path: Path) -> str | None:
         return None
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     backup_path = os.path.join(project_path, BACKUP_DIRECTORY, timestamp)
-    os.makedirs(backup_path, exist_ok=True)
-    shutil.copy2(env_path, os.path.join(backup_path, ENV_FILE))
+    # A copy of the secrets: every level its owner's only.
+    private_directory(os.path.join(project_path, os.path.dirname(BACKUP_DIRECTORY)))
+    private_directory(backup_path)
+    backup_file = os.path.join(backup_path, ENV_FILE)
+    private_file(backup_file)
+    shutil.copyfile(env_path, backup_file)
     return backup_path
 
 
@@ -817,6 +830,8 @@ def setup_dokploy_deploy(
     for name, content in files.items():
         target = os.path.join(project_path, name)
         os.makedirs(os.path.dirname(target), exist_ok=True)
+        if is_secret_file(name):
+            private_file(target)
         with open(target, "w", encoding="utf-8", newline="") as out:
             out.write(content)
 

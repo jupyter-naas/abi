@@ -11,7 +11,7 @@ Provider runtime/service utilities for routing chat completion and streaming req
 - ABI server (HTTP) and ABI in-process agents (`inprocess://...`)
 - Remote, module-published agents (`type="remote"`)
 
-Includes provider endpoint safety validation and URL query redaction for logs.
+Every provider HTTP call goes through `provider_client()`, the guarded outbound client of `naas_abi_core.utils.outbound`: each host is resolved once, non-public addresses are refused unless the origin (host and port) is listed in `provider_allowed_origins`, or, for Ollama calls only, is the platform Ollama's origin; the connection goes to the checked address. Keys come from the resolved configuration only, never from the platform's settings.
 
 ## Public API
 
@@ -34,8 +34,14 @@ Includes provider endpoint safety validation and URL query redaction for logs.
   - Raised when a provider endpoint URL fails safety checks.
 
 ### Endpoint/logging helpers
-- `redact_url_for_logs(url: str) -> str`
-  - Redacts sensitive query keys (e.g., `token`, `api_key`, `authorization`) for safe logging.
+- `provider_origin_entries(*, ollama=False) -> list[str]`
+  - `settings.provider_allowed_origins`, plus the platform Ollama's endpoint when `ollama`.
+- `provider_client(timeout: float, *, ollama=False) -> httpx.AsyncClient`
+  - The guarded client every provider call uses; `ollama=True` for the Ollama calls only.
+- `client_error_message(exc) -> str`
+  - What a chat client is told when a provider call fails; the exception text stays in the log.
+- `agent_path_segment(name) -> str`
+  - An agent name as one percent-encoded URL path segment; refuses empty, `.`, `..` and control characters.
 - `validated_provider_endpoint(config: ProviderConfig) -> str | None`
   - Validates/normalizes `config.endpoint` based on `config.type`.
   - Returns a sanitized endpoint (no trailing `/`) or `None`.
@@ -66,7 +72,7 @@ Includes provider endpoint safety validation and URL query redaction for logs.
 - `stream_with_cloudflare(messages, config, system_prompt) -> AsyncGenerator[str, None]`
   - Streams SSE from Cloudflare Workers AI.
 - `stream_with_abi(messages, config, system_prompt=None) -> AsyncGenerator[str | dict[str, Any], None]`
-  - Streams SSE from ABI server `POST {endpoint}/agents/{agent}/stream-completion?token=...`.
+  - Streams SSE from ABI server `POST {endpoint}/agents/{agent}/stream-completion`, the agent name encoded as one path segment and the token in `Authorization: Bearer`.
   - May also yield dict step events (tool usage/response, routing, model calls).
 - `stream_with_abi_inprocess(messages, config, thread_id, *, user_context_preamble) -> AsyncGenerator[str | dict[str, Any], None]`
   - Streams from an in-process ABI agent.
@@ -98,11 +104,8 @@ Includes provider endpoint safety validation and URL query redaction for logs.
 - Optional SDKs:
   - `anthropic` (required for `complete_with_anthropic`)
   - `openai` (required for `complete_with_openai`)
-- Settings fallback (from `naas_abi.apps.nexus.apps.api.app.core.config.settings`):
-  - `settings.anthropic_api_key`
-  - `settings.openai_api_key`
-  - `settings.cloudflare_api_token`
-  - `settings.cloudflare_account_id`
+- Settings (from `naas_abi.apps.nexus.apps.api.app.core.config.settings`):
+  - `settings.provider_allowed_origins` (see `provider_client`). There is no fallback to platform keys: `anthropic`, `openai` and `cloudflare` calls need the key (and account) of the resolved configuration.
 - Ollama endpoint resolution:
   - `naas_abi.apps.nexus.apps.api.app.services.ollama.resolve_endpoint()`
 
@@ -113,8 +116,8 @@ Includes provider endpoint safety validation and URL query redaction for logs.
 - Optional HTTPS requirement (e.g., official/custom endpoints require HTTPS).
 - No credentials in URL.
 - No query/fragment in endpoint URL.
-- Blocks metadata hosts (`169.254.169.254`, `metadata.google.internal`).
-- Blocks local/private IPs and `.local` hostnames unless explicitly allowed (Ollama allows localhost/private LAN; ABI allows localhost for non-`inprocess://`).
+- Blocks cloud metadata hosts always.
+- Blocks local and private hosts (`naas_abi_core.utils.outbound.host_refusal`) unless the endpoint's origin is listed in `provider_allowed_origins`, or, for the `ollama` type only, is the platform Ollama's origin.
 
 ## Usage
 
@@ -167,7 +170,7 @@ asyncio.run(main())
 
 ## Caveats
 - `complete_chat(...)` requires `injection_preamble` (no default); pass `None` explicitly if not used.
-- `stream_with_openai_compatible(...)` uses `config.api_key` directly (no settings fallback) and will fail if it is missing.
+- Every provider call uses `config.api_key` (and `config.account_id`) directly, with no settings fallback, and fails if it is missing.
 - Custom endpoint paths differ:
   - `complete_with_custom`: `POST {endpoint}/v1/chat/completions`
   - `stream_with_openai_compatible`: `POST {endpoint}/chat/completions`

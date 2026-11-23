@@ -13,13 +13,15 @@ The invited person may not exist yet, so nothing is attached to an account:
 2. The **provisioning** port makes the person exist at the provider (the
    built-in IdP's admin app, Zitadel, Keycloak), unless the provider's people
    are managed in the provider (``provisioning: none``): then the grants alone
-   wait for them there.
+   wait for them there. The invitation IAM authorized is the warrant: Nexus
+   makes the account as itself once IAM accepted the grants on the inviting
+   person's behalf (``_provision``).
 3. Nexus keeps the **invitation** (who invited whom, where, as what) to list,
    resend and revoke it, and marks it accepted once the person signs in (``claim``).
 
 The service never decides whether the inviting person may invite: the route
-did, before it called, and IAM's checks of the grants it writes run
-as ``api`` for nobody (``GrantsGateway``).
+did, before it called, and IAM checks each grant it writes as ``api`` on behalf
+of that person (``GrantsGateway``: they may attach it and hold what it grants).
 """
 
 from __future__ import annotations
@@ -53,6 +55,9 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     ProviderChoice,
     Provisioned,
     ProvisioningRefused,
+)
+from naas_abi.apps.nexus.apps.api.app.services.organizations.domain_proof import (
+    is_public_mail_domain,
 )
 from naas_abi_core import logger
 
@@ -97,8 +102,13 @@ class InvitationService:
             if found is None:
                 raise NoProviderError(f"{requested!r} is not an identity provider")
             return found
-        domain = email.rsplit("@", 1)[-1]
-        routed = await self.persistence.provider_for_domain(domain, organization_id)
+        domain = email.rsplit("@", 1)[-1].strip().lower()
+        # A public mail domain is no organization's, whatever an older claim says.
+        routed = (
+            None
+            if is_public_mail_domain(domain)
+            else await self.persistence.provider_for_domain(domain, organization_id)
+        )
         for name in (routed, known.default):
             found = known.get(name) if name else None
             if found is not None:
@@ -161,10 +171,14 @@ class InvitationService:
         inviting person must be able to attach there and hold. A renewal carries
         the ones it names, and the earlier ones it drops are withdrawn.
 
-        The provider makes the person exist only for an inviting user IAM lets
-        create accounts there (``identity:ProvisionUser``), or for an address on a
-        domain the organization verified and routed to that provider. Otherwise the
-        grants wait for the person's sign-in, as with a provider that manages its people.
+        The provider makes the person exist once IAM authorized the invitation: the
+        route let the inviting person invite there, and IAM accepted the pending
+        grants on their behalf. Nexus then makes the account as itself, so an
+        organization admin or a workspace owner onboards people without
+        ``identity:ProvisionUser``. An invitation to the platform alone carries no
+        grant, so it keeps to the inviting user's own right: without it nothing is
+        made at the provider (``provisioning_skipped``) and the mail says so. A
+        provider that manages its people (``provisioning: none``) is never asked.
         """
         email = email.lower().strip()
         platform = organization_id is None and workspace_id is None
@@ -214,8 +228,11 @@ class InvitationService:
         made = await self._grant(choice.name, email, grants, by=invited_by)
         grant_ids = [g.id for g in made] + list(kept.values())
         try:
+            # The grants IAM accepted for the inviting person are the warrant to
+            # make the account as Nexus; an invitation with none (the platform's)
+            # has only the inviter's own right.
             provisioned, skipped = await self._provision(
-                choice, email, name, organization_id, invited_by
+                choice, email, name, invited_by, warranted=bool(made)
             )
             if provisioned is not None and provisioned.created and provisioned.subject:
                 # ABI made this account: only such an account is changed or deleted
@@ -281,6 +298,7 @@ class InvitationService:
             inviter_name=inviter_name,
             organization_name=organization_name,
             workspace_name=workspace_name,
+            account_made=not skipped,
         )
         return InviteOutcome(
             invitation=invitation,
@@ -297,18 +315,23 @@ class InvitationService:
         choice: ProviderChoice,
         email: str,
         name: str | None,
-        organization_id: str | None,
         invited_by: str | None,
+        *,
+        warranted: bool,
     ) -> tuple[Provisioned | None, bool]:
-        """``(what the provider made, whether provisioning was withheld)``."""
+        """``(what the provider made, whether provisioning was withheld)``.
+
+        ``warranted``: IAM accepted pending grants of this invitation on the
+        inviter's behalf, after the route authorized the invitation. That is the
+        warrant: the account is made as Nexus (``api``, for nobody), and Nexus
+        failing to (``ProvisioningRefused``: a deployment without the right) fails
+        the invitation. Without one (an invitation to the platform alone), only on
+        behalf of the inviter, whose own right IAM decides: refused, nothing is
+        made and the grants, if any, wait for the person's sign-in. Never on a
+        user's say-so outside an authorized invitation."""
         if choice.managed_in_provider:
             return None, False
-        routed = await self.persistence.provider_for_domain(
-            email.rsplit("@", 1)[-1], organization_id
-        )
-        if routed == choice.name or invited_by is None:
-            # An address the organization proved it controls (or the system's own
-            # call): Nexus's own, for nobody.
+        if invited_by is None or warranted:
             return await self.directory.provision(choice, email, name), False
         try:
             return await self.directory.provision(choice, email, name, by=invited_by), False
@@ -379,6 +402,7 @@ class InvitationService:
         inviter_name: str | None,
         organization_name: str | None,
         workspace_name: str | None,
+        account_made: bool = True,
     ) -> bool:
         try:
             return await self.mailer.send(
@@ -392,6 +416,7 @@ class InvitationService:
                     workspace_role=invitation.workspace_role,
                     sign_in_url=self._sign_in_url(invitation.email, choice.name),
                     managed_in_provider=choice.managed_in_provider,
+                    account_made=account_made,
                 )
             )
         except Exception as exc:  # noqa: BLE001 - the invitation stands; the admin may resend

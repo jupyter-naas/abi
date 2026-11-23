@@ -19,7 +19,22 @@ class DataType(str, Enum):
     TEXT = "text"
     JSON = "json"
     BINARY = "binary"
+    # Entries written by older releases only. Such an entry is listed and
+    # deleted like any other, but it is never decoded, written or sent: a read
+    # of it is a miss.
     PICKLE = "pickle"
+
+
+# What an entry may be stored as, and what crosses the NATS wire.
+STORED_TYPES: frozenset[DataType] = frozenset(
+    {DataType.TEXT, DataType.JSON, DataType.BINARY}
+)
+
+
+def check_stored_type(data_type: DataType) -> None:
+    """Refuse a data type the cache never stores (``ValueError``)."""
+    if data_type not in STORED_TYPES:
+        raise ValueError(f"cache entries are text, json or binary, not {data_type}")
 
 
 class CachedData(BaseModel):
@@ -103,7 +118,12 @@ class ICacheService:
     def delete(self, key: str) -> None:
         raise NotImplementedError("Not implemented")
 
-    def get(self, key: str, ttl: datetime.timedelta | None = None) -> Any:
+    def get(
+        self,
+        key: str,
+        ttl: datetime.timedelta | None = None,
+        data_type: DataType | None = None,
+    ) -> Any:
         raise NotImplementedError("Not implemented")
 
     def set_text(self, key: str, value: str) -> None:
@@ -113,9 +133,6 @@ class ICacheService:
         raise NotImplementedError("Not implemented")
 
     def set_binary(self, key: str, value: bytes) -> None:
-        raise NotImplementedError("Not implemented")
-
-    def set_pickle(self, key: str, value: Any) -> None:
         raise NotImplementedError("Not implemented")
 
     def set_json_if_absent(self, key: str, value: dict) -> bool:

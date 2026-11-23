@@ -107,6 +107,16 @@ class MapsBasemapPolicyError(PermissionError):
     """Refused by policy (e.g. deleting a seeded basemap)."""
 
 
+# An attribution is text, with links written exactly ``<a href="https://...">label</a>``:
+# the map's attribution control writes it as HTML, so no other markup is stored.
+_ATTRIBUTION_LINK = re.compile(r"""<a href="https://[^\s"'<>`]+">[^<>]*</a>""")
+
+
+def is_attribution_text(value: str) -> bool:
+    """Plain text and ``<a href="https://...">label</a>`` links, nothing else."""
+    return not re.search(r"[<>]", _ATTRIBUTION_LINK.sub("", value))
+
+
 def _is_tile_template(value: Any) -> bool:
     return (
         isinstance(value, str)
@@ -205,8 +215,15 @@ def validate_renderer(renderer: dict[str, Any]) -> list[str]:
         ):
             errors.append("renderer.subdomains must be a list of short names")
         attribution = renderer.get("attribution", "")
-        if not isinstance(attribution, str) or len(attribution) > MAX_ATTRIBUTION_LENGTH:
-            errors.append(f"renderer.attribution must be text (max {MAX_ATTRIBUTION_LENGTH})")
+        if (
+            not isinstance(attribution, str)
+            or len(attribution) > MAX_ATTRIBUTION_LENGTH
+            or not is_attribution_text(attribution)
+        ):
+            errors.append(
+                f"renderer.attribution must be text (max {MAX_ATTRIBUTION_LENGTH}), with links "
+                'written <a href="https://...">label</a>'
+            )
         max_zoom = renderer.get("max_zoom", 19)
         if not isinstance(max_zoom, int) or not 1 <= max_zoom <= 22:
             errors.append("renderer.max_zoom must be between 1 and 22")

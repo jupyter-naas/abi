@@ -2,10 +2,19 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FolderKanban, Loader2, LogOut } from 'lucide-react';
+import { AlertCircle, Loader2, LogOut } from 'lucide-react';
+import { useTenant } from '@/contexts/tenant-context';
 import { clearAuthFlagCookie } from '@/lib/auth-session';
 import { authFetch, selectSession, useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
+
+function isLightColor(hex: string): boolean {
+  const c = hex.replace('#', '');
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6;
+}
 
 function slugify(value: string): string {
   const base = value
@@ -19,6 +28,7 @@ function slugify(value: string): string {
 
 export default function NoWorkspacePage() {
   const router = useRouter();
+  const tenant = useTenant();
   const user = useAuthStore((s) => s.user);
   const token = useAuthStore(selectSession);
   const logout = useAuthStore((s) => s.logout);
@@ -117,71 +127,139 @@ export default function NoWorkspacePage() {
     router.replace('/auth/login');
   };
 
+  // The login page's look (auth/login/login-form.tsx), from the same tenant branding.
+  const primaryColor = tenant.primary_color || '#34D399';
+  const accentColor = tenant.accent_color || '#1FA574';
+  const bgColor = tenant.background_color || '#FFFFFF';
+  const cardColor = tenant.login_card_color || '#FFFFFF';
+  const radius = `${tenant.login_border_radius || '0'}px`;
+  const cardIsLight = isLightColor(cardColor);
+  const textColor = tenant.login_text_color || (cardIsLight ? '#1a1a1a' : '#ffffff');
+  const mutedTextColor = cardIsLight ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)';
+  const subtitleColor = cardIsLight ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.45)';
+  const logoUrl = tenant.logo_rectangle_url || tenant.logo_url;
+
   if (!authReady || checking) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div
+        className="flex min-h-screen items-center justify-center"
+        style={{ backgroundColor: bgColor, fontFamily: tenant.font_family || undefined }}
+      >
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Checking workspace access...</p>
+          <Loader2 className="h-8 w-8 animate-spin" style={{ color: primaryColor }} />
+          <p className="text-sm" style={{ color: mutedTextColor }}>
+            Checking workspace access...
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-sm">
-        <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <FolderKanban size={24} />
+    <div
+      className="flex min-h-screen flex-col items-center justify-center px-4"
+      style={{ backgroundColor: bgColor, fontFamily: tenant.font_family || undefined }}
+    >
+      {tenant.font_url && <link rel="stylesheet" href={tenant.font_url} />}
+      <div
+        className="w-full"
+        style={{
+          maxWidth: tenant.login_card_max_width || '440px',
+          padding: tenant.login_card_padding || '2.5rem 3rem 3rem',
+          backgroundColor: cardColor,
+          borderRadius: radius,
+          color: textColor,
+        }}
+      >
+        {logoUrl && (
+          <div className="mb-6 flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={logoUrl} alt={tenant.tab_title} className="h-12 max-w-full object-contain" />
+          </div>
+        )}
+        <div className="mb-6 text-center">
+          <h1 className="text-2xl font-bold leading-tight">No workspace yet</h1>
+          <p className="mt-2 text-sm" style={{ color: mutedTextColor }}>
+            You are signed in{user?.email ? ` as ${user.email}` : ''}, but you are not a member of
+            any workspace. Ask an organization admin to invite you, or create one below.
+          </p>
         </div>
-        <h1 className="text-xl font-semibold tracking-tight">No workspace yet</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          You are signed in{user?.email ? ` as ${user.email}` : ''}, but you are not a member of any
-          workspace. Ask an organization admin to invite you, or create one below.
-        </p>
 
-        <form onSubmit={handleCreate} className="mt-6 space-y-3">
-          <label className="block text-sm font-medium" htmlFor="workspace-name">
-            Workspace name
-          </label>
-          <input
-            id="workspace-name"
-            value={name}
-            onChange={(e) => {
-              setNameTouched(true);
-              setName(e.target.value);
-            }}
-            placeholder={user?.name?.trim() || 'My workspace'}
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-            disabled={submitting}
-            autoFocus
-          />
-          <p className="text-xs text-muted-foreground">Slug: {suggestedSlug}</p>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error && (
+          <div
+            className="mb-6 flex items-center gap-2 bg-destructive/10 p-3 text-sm text-destructive"
+            style={{ borderRadius: radius }}
+          >
+            <AlertCircle size={16} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="workspace-name" className="text-sm font-medium">
+              Workspace name
+            </label>
+            <input
+              id="workspace-name"
+              value={name}
+              onChange={(e) => {
+                setNameTouched(true);
+                setName(e.target.value);
+                if (error) setError(null);
+              }}
+              placeholder={user?.name?.trim() || 'My workspace'}
+              className="flex h-11 w-full px-4 py-2 text-sm focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{
+                borderRadius: radius,
+                backgroundColor: tenant.login_input_color || '#F4F4F4',
+                border: 'none',
+                color: textColor,
+                '--tw-ring-color': `${accentColor}33`,
+              } as React.CSSProperties}
+              disabled={submitting}
+              autoFocus
+            />
+            <p className="text-xs" style={{ color: subtitleColor }}>
+              Slug: {suggestedSlug}
+            </p>
+          </div>
           <button
             type="submit"
             disabled={submitting}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+            className="flex h-11 w-full items-center justify-center gap-2 px-4 text-sm font-medium text-white transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-60"
+            style={{
+              backgroundColor: primaryColor,
+              borderRadius: radius,
+              '--tw-ring-color': primaryColor,
+            } as React.CSSProperties}
+            onMouseEnter={(e) => {
+              if (!submitting) e.currentTarget.style.backgroundColor = accentColor;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = primaryColor;
+            }}
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Create workspace
           </button>
         </form>
 
-        <p className="mt-4 text-xs text-muted-foreground">
-          Any signed-in user can create a personal workspace via the API. Organization settings
-          Create Workspace buttons still require an org admin workflow and are not wired for members.
-        </p>
-
         <button
           type="button"
           onClick={handleSignOut}
-          className="mt-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+          className="mt-6 flex h-11 w-full items-center justify-center gap-2 px-4 text-sm font-medium transition-all"
+          style={{ borderRadius: radius, border: `1px solid ${mutedTextColor}`, color: textColor }}
         >
           <LogOut size={14} />
           Sign out
         </button>
       </div>
+      {tenant.login_footer_text && (
+        <p className="mt-8 text-center text-caption" style={{ color: subtitleColor }}>
+          {tenant.login_footer_text}
+        </p>
+      )}
     </div>
   );
 }

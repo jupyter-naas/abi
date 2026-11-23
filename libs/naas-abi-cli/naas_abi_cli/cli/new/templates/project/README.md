@@ -48,7 +48,9 @@ registry (discovery), and their agents show up in Nexus next to the engine's.
   their own containers, declared in `docker-compose.override.yml`.
 - The broker admits two static users, generated in `.env`: the engine logs in
   as `engine` (`NATS_ENGINE_PASSWORD`) and answers the broker's auth callout as
-  `auth` (`NATS_AUTH_PASSWORD`, `NATS_AUTH_CALLOUT_SEED`).
+  `auth` (`NATS_AUTH_PASSWORD`, `NATS_AUTH_CALLOUT_SEED`); as `sys`
+  (`NATS_SYSTEM_PASSWORD`, the broker's system account) it ends the module
+  connections an IAM change affects.
 - Every module runs as its own service account, `module/<project>/<module_id>`,
   with its own key (`ABI_SERVICE_KEY`): it logs in to the broker with it and
   gets only the subjects its approved permission manifest allows. No module
@@ -67,12 +69,13 @@ broker or the modules.
 
 ### Check that it works
 
-With `abi start` the broker's monitoring port is `localhost:8222`. With
-`abi dev up` it is printed at start (`NATS mode (... monitoring http://...)`).
+With `abi dev up` the broker's monitoring port is printed at start
+(`NATS mode (... monitoring http://...)`). With `abi start` it answers on the
+stack's `nats-monitor` network only, from inside the `nats` container:
 
 ```bash
-curl -s localhost:8222/healthz     # {"status":"ok"}
-curl -s localhost:8222/connz | python3 -m json.tool | grep '"name"'
+docker compose exec nats wget -qO- http://nats-monitor:8222/healthz   # {"status":"ok"}
+docker compose exec nats wget -qO- http://nats-monitor:8222/connz | python3 -m json.tool | grep '"name"'
                                    # the engine's connections, then each module's
 ```
 

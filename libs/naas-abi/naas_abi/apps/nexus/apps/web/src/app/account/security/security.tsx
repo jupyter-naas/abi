@@ -1,15 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import { Shield, Smartphone, AlertTriangle } from 'lucide-react';
+import { Shield, AlertTriangle } from 'lucide-react';
 import { AccountPageHeader } from '../components/account-page-header';
 import { AccountSectionCard } from '../components/account-section-card';
-import { AccountActionRow } from '../components/account-action-row';
 import './security.css';
 
 export default function SecurityPage() {
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-
   const sessions = [
     {
       id: '1',
@@ -33,31 +29,6 @@ export default function SecurityPage() {
         title="Security"
         subtitle="Manage your account security settings"
       />
-
-      <AccountSectionCard padded>
-        <AccountActionRow
-          icon={Smartphone}
-          title="Two-Factor Authentication"
-          description={
-            twoFactorEnabled
-              ? 'Your account is protected with 2FA'
-              : 'Add an extra layer of security'
-          }
-          action={
-            <button
-              type="button"
-              onClick={() => setTwoFactorEnabled(!twoFactorEnabled)}
-              className={
-                twoFactorEnabled
-                  ? 'account-security-2fa-button account-security-2fa-button-disable'
-                  : 'account-security-2fa-button account-security-2fa-button-enable'
-              }
-            >
-              {twoFactorEnabled ? 'Disable' : 'Enable'}
-            </button>
-          }
-        />
-      </AccountSectionCard>
 
       <AccountSectionCard padded>
         <h3 className="account-security-sessions-title">Active Sessions</h3>

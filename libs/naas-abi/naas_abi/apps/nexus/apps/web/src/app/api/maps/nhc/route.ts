@@ -1,4 +1,5 @@
 import { mapsPinResponse, mapsUpstreamGet } from '../_lib';
+import { mapsRoute } from '../_guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -7,7 +8,7 @@ export const dynamic = 'force-dynamic';
  * NOAA NHC current tropical storms (CORS-safe proxy).
  * Upstream: https://www.nhc.noaa.gov/CurrentStorms.json
  */
-export async function GET() {
+async function handle() {
   try {
     const res = await mapsUpstreamGet(
       'https://www.nhc.noaa.gov/CurrentStorms.json',
@@ -80,3 +81,5 @@ function parseCoord(value: string | number | undefined): number | null {
   if (hemi === 'N' || hemi === 'E') n = Math.abs(n);
   return Number.isFinite(n) ? n : null;
 }
+
+export const GET = mapsRoute('nhc', handle, { perMinute: 120 });

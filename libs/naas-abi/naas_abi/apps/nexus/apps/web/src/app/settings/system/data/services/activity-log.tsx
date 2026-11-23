@@ -208,7 +208,6 @@ export const activityLogView: ServiceView = {
   label: 'Activity log',
   description: 'Every API request and recorded action, per actor: who called what, how it answered, how long it took.',
   icon: ScrollText,
-  group: 'Streams & logs',
   readOnly: true,
   noun: { one: 'event', many: 'events' },
   nounFor: (entry) =>

@@ -8,6 +8,7 @@ import {
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
+import { useWarmAvatarSettingsLinks } from '@/hooks/use-avatar-settings-links';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { isMobileChatThreadOpen, parseChatRoute } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { getWorkspacePath } from '../sidebar/utils';
@@ -53,6 +54,8 @@ export function MobileTopBar({
   const setMobilePendingChatSlug = useWorkspaceStore((s) => s.setMobilePendingChatSlug);
 
   const user = useAuthStore((s) => s.user);
+  // The menu's Organization and Platform entries are read now, not when it opens.
+  useWarmAvatarSettingsLinks();
   const { title: pageTitle } = useShellTitle();
 
   useEffect(() => setMounted(true), []);

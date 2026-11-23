@@ -15,6 +15,7 @@ from typing import Any
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import (
     MAX_PROMPT_BYTES,
     RemoteAgent,
+    RemoteAgentSuggestion,
     RemoteAgentUnavailable,
     split_key,
 )
@@ -62,7 +63,17 @@ class DiscoveryRemoteAgentDirectory:
                         INVOKE_CAPABILITY in agent.capabilities
                         and agent.contract_major == CONTRACT_MAJOR
                     ):
-                        remote = RemoteAgent(instance.module_id, agent.name, agent.description)
+                        remote = RemoteAgent(
+                            instance.module_id,
+                            agent.name,
+                            agent.description,
+                            display_name=getattr(agent, "display_name", ""),
+                            avatar_url=getattr(agent, "avatar_url", ""),
+                            suggestions=tuple(
+                                RemoteAgentSuggestion(s.label, s.value, s.description)
+                                for s in getattr(agent, "suggestions", ())
+                            ),
+                        )
                         found.setdefault(remote.key, remote)  # replicas publish identical agents
             if not after:
                 return sorted(found.values(), key=lambda a: a.key)

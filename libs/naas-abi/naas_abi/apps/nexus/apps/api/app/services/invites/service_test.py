@@ -145,6 +145,8 @@ class Directories(DirectoryGateway):
         self.provisioned_by: list[str | None] = []
         # The users IAM lets create accounts at a provider (``identity:ProvisionUser``).
         self.may = {"usr-alice"}
+        # Whether Nexus's own identity (``api``, no user) holds that right.
+        self.system_may = True
         self.fail: Exception | None = None
 
     async def directory(self):
@@ -157,6 +159,8 @@ class Directories(DirectoryGateway):
             return None
         if by is not None and by not in self.may:
             raise ProvisioningRefused(f"{by} may not create accounts at {provider.name}")
+        if by is None and not self.system_may:
+            raise ProvisioningRefused(f"api may not create accounts at {provider.name}")
         self.provisioned.append((provider.name, email, name))
         self.provisioned_by.append(by)
         return Provisioned(subject="sub-1", created=True)
@@ -620,44 +624,69 @@ async def test_renewing_does_not_withdraw_what_another_invitation_holds():
 
 
 # -- who may make accounts at the provider --------------------------------------------------
+#
+# The invitation IAM authorized is the warrant: once the route let the inviting person
+# invite there and IAM accepted the pending grants on their behalf, Nexus makes the account
+# at the provider as itself. The platform's own invitation (no grant) keeps to the
+# inviter's own right (``identity:ProvisionUser``).
 
 
 @pytest.mark.asyncio
-async def test_a_user_without_the_right_creates_no_account_at_the_provider():
-    """Anyone may own an organization they made: that must not let them create
-    accounts in the provider's directory for addresses they control."""
+async def test_an_organization_admins_invitation_makes_the_account_at_the_provider():
+    """An org admin holds no ``identity:ProvisionUser``: the invitation IAM authorized
+    makes the account all the same, as Nexus, so the person can sign in (#1520)."""
     h = Harness()
-    outcome = await h.invite(invited_by="usr-mallory", email="victim@corp.example")
-    assert h.directory.provisioned == []
-    assert outcome.provisioning_skipped and not outcome.user_created
-    # The invitation still stands: grants wait for whoever signs in with that address.
-    assert {g[1] for g in h.grants.live.values()} == {"victim@corp.example"}
-    assert outcome.invitation.status == "pending" and len(h.mailer.sent) == 1
-
-
-@pytest.mark.asyncio
-async def test_an_address_on_a_domain_the_organization_verified_is_provisioned():
-    h = Harness()
-    h.store.domains["corp.example"] = "builtin"
-    outcome = await h.invite(invited_by="usr-mallory", email="bob@corp.example")
-    assert h.directory.provisioned == [("builtin", "bob@corp.example", None)]
-    assert h.directory.provisioned_by == [None]  # Nexus's own call: the domain is proven
+    outcome = await h.invite(invited_by="usr-orgadmin", email="new@example.com")
+    assert h.directory.provisioned == [("builtin", "new@example.com", None)]
+    assert h.directory.provisioned_by == [None]  # as the system, not as the inviter
     assert outcome.user_created and not outcome.provisioning_skipped
-    # A domain routed to another provider proves nothing for this one.
-    h2 = Harness(BUILTIN, OKTA)
-    h2.store.domains["corp.example"] = "okta"
-    refused = await h2.invite(
-        invited_by="usr-mallory", email="eve@corp.example", provider="builtin"
-    )
-    assert h2.directory.provisioned == [] and refused.provisioning_skipped
+    # The grants were still written on the inviter's behalf: IAM checked them.
+    assert h.grants.granted_by == ["usr-orgadmin", "usr-orgadmin"]
+    assert h.store.provisioned == {("builtin", "sub-1")}
+    (mail,) = h.mailer.sent
+    assert mail.account_made
 
 
 @pytest.mark.asyncio
-async def test_a_user_who_holds_the_right_provisions_as_themselves():
+async def test_a_workspace_owners_invitation_makes_the_account_at_the_provider():
     h = Harness()
-    h.directory.may.add("usr-ops")
-    outcome = await h.invite(invited_by="usr-ops", email="bob@elsewhere.example")
-    assert h.directory.provisioned_by == ["usr-ops"] and outcome.user_created
+    outcome = await h.invite(
+        invited_by="usr-wsowner", org_role=None, workspace_role="member", email="new@example.com"
+    )
+    assert h.directory.provisioned_by == [None]
+    assert outcome.user_created and not outcome.provisioning_skipped
+    assert h.grants.granted_by == ["usr-wsowner"]
+
+
+@pytest.mark.asyncio
+async def test_an_invitation_iam_refused_makes_no_account():
+    """Grants first: when IAM refuses one (a role the inviter may not attach, or
+    grants more than they hold), nobody is made at the provider and nothing stays."""
+    h = Harness()
+    h.grants.fail_on = 2
+    with pytest.raises(PermissionError):
+        await h.invite(invited_by="usr-orgadmin", email="new@example.com")
+    assert h.directory.provisioned == [] and h.grants.live == {}
+    assert h.store.rows == {} and h.mailer.sent == []
+
+
+@pytest.mark.asyncio
+async def test_an_owner_invitation_by_someone_who_is_no_owner_makes_no_account():
+    h = Harness()
+    with pytest.raises(OwnerGrantRefusedError):
+        await h.invite(invited_by="usr-orgadmin", org_role="owner", email="new@example.com")
+    assert h.directory.provisioned == [] and h.grants.live == {}
+
+
+@pytest.mark.asyncio
+async def test_when_nexus_may_not_make_accounts_the_invitation_is_taken_back():
+    """``api`` without ``identity:ProvisionUser`` is a deployment fault, not the
+    inviter's: the invitation fails and takes back its grants."""
+    h = Harness()
+    h.directory.system_may = False
+    with pytest.raises(ProvisioningRefused):
+        await h.invite(invited_by="usr-orgadmin", email="new@example.com")
+    assert h.grants.live == {} and h.store.rows == {} and h.mailer.sent == []
 
 
 @pytest.mark.asyncio
@@ -665,6 +694,38 @@ async def test_a_provider_that_manages_its_people_is_never_asked():
     h = Harness(OKTA, default="okta")
     outcome = await h.invite(invited_by="usr-mallory")
     assert h.directory.provisioned == [] and not outcome.provisioning_skipped
+    assert not outcome.user_created
+    (mail,) = h.mailer.sent
+    assert mail.managed_in_provider
+
+
+async def _platform_invite(h, **overrides):
+    return await h.invite(
+        organization_id=None,
+        org_role=None,
+        workspace_id=None,
+        workspace_role=None,
+        organization_name=None,
+        workspace_name=None,
+        **overrides,
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_platform_invitation_keeps_to_the_inviters_own_right():
+    """No grant, so no warrant but the inviter's own: someone allowed the platform's
+    invite who may not create accounts at the provider makes none."""
+    h = Harness()
+    refused = await _platform_invite(h, invited_by="usr-ops", email="new@example.com")
+    assert h.directory.provisioned == [] and refused.provisioning_skipped
+    assert not refused.user_created
+    # The mail does not promise a code the provider will not send.
+    (mail,) = h.mailer.sent
+    assert not mail.account_made
+    h.directory.may.add("usr-ops")
+    made = await _platform_invite(h, invited_by="usr-ops", email="carol@example.com")
+    assert h.directory.provisioned_by == ["usr-ops"] and made.user_created
+    assert not made.provisioning_skipped and h.mailer.sent[-1].account_made
 
 
 # -- invitations that carry an organization role --------------------------------------------
@@ -819,3 +880,14 @@ async def test_renewing_keeps_a_carried_policy_at_its_own_scope():
         v[2] == "pol_org_features" and v[3] == "abi:nexus:organization/org-1"
         for v in h.grants.live.values()
     )
+
+
+@pytest.mark.asyncio
+async def test_a_public_mail_domain_routes_no_invitation():
+    """An organization's older claim of a public mail domain chooses nothing: the
+    default provider is used, as for any address no organization holds."""
+    h = Harness(BUILTIN, OKTA, default="builtin")
+    h.store.domains["gmail.com"] = "okta"
+    h.store.domains["corp.example"] = "okta"
+    assert (await h.service.choose("pat@gmail.com", None, "org-1")).name == "builtin"
+    assert (await h.service.choose("pat@Corp.Example", None, "org-1")).name == "okta"

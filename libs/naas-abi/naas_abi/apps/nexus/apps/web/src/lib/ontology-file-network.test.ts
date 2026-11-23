@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { buildFileNetwork, type ProcessSlice } from './ontology-file-network';
 import { dashboardRestrictions } from './ontology-dashboard';

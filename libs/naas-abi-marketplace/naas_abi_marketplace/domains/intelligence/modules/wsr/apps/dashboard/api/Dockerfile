@@ -2,18 +2,15 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies from pyproject.toml before copying source
-# so Docker layer caching avoids re-installing on source-only changes.
-COPY pyproject.toml .
-RUN pip install --no-cache-dir \
-    "fastapi>=0.115" \
-    "uvicorn[standard]>=0.30" \
-    "httpx>=0.27" \
-    "pydantic>=2.7" \
-    "pydantic-settings>=2.3" \
-    "python-dotenv>=1.0"
+# Install dependencies before copying source so Docker layer caching avoids
+# re-installing on source-only changes. requirements.txt is `uv export` of
+# uv.lock: every package at the locked version, with its hashes.
+COPY requirements.txt .
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
 COPY . .
+
+USER nobody
 
 EXPOSE 8080
 

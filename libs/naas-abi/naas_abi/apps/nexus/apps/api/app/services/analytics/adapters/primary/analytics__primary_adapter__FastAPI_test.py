@@ -3,6 +3,8 @@ analytics are the platform's: only a platform admin reads or writes them."""
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
 
@@ -110,3 +112,57 @@ def test_a_platform_admin_reads_and_rebuilds_the_analytics(team, tmp_path) -> No
     assert client.get("/api/analytics/metadata").status_code == 200
     assert client.get("/api/analytics/scenarios").status_code == 200
     assert client.post("/api/analytics/rebuild").status_code == 200
+
+
+class _BlockingIngest:
+    """An analytics service whose ingestion blocks its thread until released, as
+    a publish over NATS does while the broker is slow."""
+
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self.released_while_waiting: bool | None = None
+
+    def ingest_event(self, event) -> str:  # noqa: ANN001 - the service's signature
+        self.entered.set()
+        self.released_while_waiting = self.release.wait(timeout=3)
+        return "event-log#seq=1"
+
+
+@pytest.mark.asyncio
+async def test_a_slow_ingestion_does_not_hold_the_event_loop(team) -> None:
+    """``POST /events`` publishes synchronously (NATS RPC). Run on the event loop,
+    a slow broker froze every request of the engine, /health included."""
+    import httpx
+
+    team.platform_admin("root")
+    app = FastAPI()
+    app.include_router(analytics.router, prefix="/api/analytics")
+    app.dependency_overrides[get_db] = _no_db
+    app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(id="root")
+    slow = _BlockingIngest()
+    app.dependency_overrides[analytics.get_analytics_service] = lambda: slow
+
+    event = {
+        "event_id": "e-1",
+        "timestamp": "2026-11-18T10:28:00Z",
+        "session_id": "s-1",
+        "event_name": "page_view",
+    }
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        posting = asyncio.create_task(client.post("/api/analytics/events", json=event))
+        # The loop must keep running while the ingestion waits: this coroutine
+        # sees it enter, then releases it.
+        for _ in range(300):
+            if slow.entered.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert slow.entered.is_set()
+        assert not posting.done()
+        slow.release.set()
+        response = await asyncio.wait_for(posting, timeout=5)
+
+    assert response.status_code == 200
+    assert response.json()["stored_at"] == "event-log#seq=1"
+    assert slow.released_while_waiting is True

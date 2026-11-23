@@ -396,7 +396,10 @@ class Agent(ToolCallRepair):
         messages = state["messages"]
         if state["system_prompt"]:
             messages = [SystemMessage(content=state["system_prompt"]), *messages]
-        messages = self._normalize_tool_inputs_in_messages(messages)
+        promote_text_handoffs = self._writes_tool_calls_as_text(self._chat_model)
+        messages = self._normalize_tool_inputs_in_messages(
+            messages, promote_text_handoffs
+        )
         messages = compact_old_tool_messages(messages)
         try:
             response = await self._chat_model_with_tools.ainvoke(messages)
@@ -410,7 +413,9 @@ class Agent(ToolCallRepair):
                 },
             )
         if isinstance(response, AIMessage):
-            response = self._normalize_ai_message_tool_inputs(response)
+            response = self._normalize_ai_message_tool_inputs(
+                response, promote_text_handoffs
+            )
         if (
             isinstance(response, AIMessage)
             and len(getattr(response, "tool_calls", None) or []) > 0

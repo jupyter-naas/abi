@@ -173,6 +173,20 @@ Next.js 14 App Router under `apps/web/`. State is Zustand (`src/stores/*.ts`, on
 
 Cloudflare Pages deploy: `pnpm build:cf` then `wrangler pages deploy` (see `apps/web/package.json`, `wrangler.toml`). Standard `pnpm dev` runs Next.js on port 3000.
 
+### Server routes that fetch for a page
+
+`/api/image-data`, `/api/link-preview` and `/api/maps/*` run on the web host, which never sees the API's
+session cookie. They answer only a browser that holds a **web pass** (`lib/web-pass.ts`: the auth store asks
+the API for one once the session is known, renews it while the app is open and drops it when the session ends; see
+`api/app/services/oidc/AGENTS.md`, "The web pass"). The readable cookie `nexus-web-pass-until` says when
+the pass ends; the workspace layout renders its pages once a pass is in hand (`useWebPassReady`, five
+seconds at most), so their first requests to these routes carry it. A URL a page gives them is fetched with
+`lib/public-fetch.ts`: `https` on the default port, every address of every hop on the public internet (no
+loopback, private, link-local or Docker network address), the connection made to the address that was
+checked, three redirects, a size and a time cap. `/api/image-data` serves remote answers only as raster
+images, and every image with `nosniff` and a sandboxing CSP. A logo the API serves is read from the API
+with the session (`lib/logo-data-uri.ts`), never through these routes.
+
 ### View as (the web side)
 
 An administrator sees Nexus as another person, read-only, in one workspace (server: `apps/api/app/services/view_as/AGENTS.md`). The web starts and stops the view, shows who is viewed, and keeps nothing of it. It decides nothing: IAM and the server do.
@@ -251,7 +265,7 @@ Rules for page CSS:
 
 ### Org branding
 
-Org-specific border radius comes from the org `loginBorderRadius` field and is exposed as `--org-border-radius`. Layouts set `data-org-branded="true"` on the branded subtree. Avatars always use `9999px` border radius and are excluded from org radius overrides.
+Org-specific border radius comes from the org `loginBorderRadius` field and is exposed as `--org-border-radius`. The tenant's `login_border_radius` is applied first on `document.documentElement` (`data-org-branded` and `--org-border-radius`) so pages outside the workspace shell follow it; a workspace then overwrites `--org-border-radius` with its organization's value. Layouts also set `data-org-branded="true"` on the branded subtree. Avatars always use `9999px` border radius and are excluded from org radius overrides.
 
 In semantic CSS, prefer:
 
@@ -472,7 +486,7 @@ Graph-layer evidence panels start closed, open from the Locations toolbar button
 
 Basemap tiles use `https://tile.openstreetmap.org/{z}/{x}/{y}.png` directly in both themes, with visible OpenStreetMap attribution and normal browser caching/referrer behavior. No API key or tile proxy is required. Standard tile layers carry `maps-basemap`; dark-mode CSS recolors only their tile images and updates map chrome immediately when the workspace theme changes. Never apply the filter to the entire map or to thematic/WMS overlays, markers, or attribution. Do not restore unauthenticated CARTO raster URLs: they return an API-key watermark. Follow [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/); do not prefetch or bulk-download tiles.
 
-Shared Leaflet bootstrap: `maps/lib/leaflet-map.ts` + `maps-feed-canvas.tsx`. CORS / User-Agent proxies live only under `/api/maps/*` (Maps-owned). FIRMS VIIRS WMS is proxied at `/api/maps/firms` only when `FIRMS_MAP_KEY` (or `NEXT_PUBLIC_FIRMS_MAP_KEY`) is set; without a key the Wildfires canvas is EONET-only (never ship a keyless/placeholder FIRMS WMS URL). OpenWeather temp tiles are not used (keys required). AIS is a process-local AISStream WebSocket on the Node Maps runtime (`next start` / Docker nexus-web); Cloudflare Pages isolates cannot hold the stream and must report that. Live flights and AIS pass map bounds on pan/zoom. Toolbar meta shows source, coverage, and observation age. `fetchPins` may return either a pin array or a `MapsFeedResult`.
+Shared Leaflet bootstrap: `maps/lib/leaflet-map.ts` + `maps-feed-canvas.tsx`. CORS / User-Agent proxies live only under `/api/maps/*` (Maps-owned). Each proxy is exported through `mapsRoute` (`api/maps/_guard.ts`): it answers signed-in users only (their web pass, `lib/web-pass-server.ts`; the middleware stops a request without one), at most `perMinute` requests a minute per user, and a proxy that spends a deployment key (Google Places and Street View, FIRMS, OpenAQ) keeps its upstream answers on the server for `cacheSeconds` (64 MB per process at most, expired answers dropped first); answers are `private`. `custom/` keeps its own Bearer check. FIRMS VIIRS WMS is proxied at `/api/maps/firms` only when `FIRMS_MAP_KEY` (or `NEXT_PUBLIC_FIRMS_MAP_KEY`) is set; without a key the Wildfires canvas is EONET-only (never ship a keyless/placeholder FIRMS WMS URL). OpenWeather temp tiles are not used (keys required). AIS is a process-local AISStream WebSocket on the Node Maps runtime (`next start` / Docker nexus-web); Cloudflare Pages isolates cannot hold the stream and must report that. Live flights and AIS pass map bounds on pan/zoom. Toolbar meta shows source, coverage, and observation age. `fetchPins` may return either a pin array or a `MapsFeedResult`.
 
 Map initialization must receive the effect's abort signal and check it after lazy imports, before constructing Leaflet. Feed refreshes share the same setup promise; teardown owns only that effect's map and markers. Keep Strict Mode enabled. `maps/components/maps-feed-canvas.test.ts` mounts the real component and Leaflet in jsdom to cover remounts, marker selection, country filtering and stale requests after dataset changes. Run `pnpm test maps-feed-canvas.test.ts leaflet-map.test.ts maps-feed.test.ts maps-view.test.ts maps-pin-media.test.ts datasets.test.ts src/app/api/maps/ais/store.test.ts src/app/api/maps/flights/route.test.ts src/app/api/maps/streetview/route.test.ts`, then `pnpm typecheck`. Vitest and jsdom are locked local development dependencies.
 
@@ -516,7 +530,8 @@ src/app/workspace/[workspaceId]/files/
 ├── lib/
 │   ├── files-route.ts            # parseFilesRoute, filesBrowsePath (mobile list-detail)
 │   ├── files-route.test.ts
-│   └── drive-label.ts            # Drive root, label, breadcrumb helpers
+│   ├── drive-label.ts            # Drive sources, scopes, roots, labels, breadcrumbs
+│   └── drive-label.test.ts
 ├── components/
 │   ├── files-components.css      # Shared mobile chrome styles
 │   ├── files-mobile-toolbar.tsx
@@ -537,6 +552,22 @@ src/app/workspace/[workspaceId]/files/
 | `FilesAddSheet` | Bottom sheet for create/upload actions | `browse.tsx` |
 
 Route parsing lives in `lib/files-route.ts` and is imported by `workspace-layout.tsx` and `files-section.tsx`.
+
+### Drives
+
+Every drive is a tree of the object storage under `naas_abi/`, served by the files API (`/api/files`, `?scope=`) and listed in the Files sidebar (`files-section.tsx`), the browser and Workspace settings › Drives (`settings/drives/drive-rows.ts`). The sources, scopes and roots are in `lib/drive-label.ts` (`REMOTE_DRIVE_SOURCES`); a deep link is `?source=<source>&path=<path>`.
+
+| Drive | Source / scope | Root | Made by | Who reaches it |
+|---|---|---|---|---|
+| My Drive | `my-drive` / `my_drive` | `my-drive/<user>` | `MyDriveWriter`, `backfill_my_drives` | the user (`my_file/<user>`) |
+| Workspace drive | `workspace` / `workspace` | `workspace-drive/<ws>` | `WorkspaceDriveWriter`, `backfill_workspace_drives` | the workspace's roles (`ListFiles`…, `file/workspace/...`) |
+| Organization drive | `organization-drive` / `organization_drive` | `organization-drive/<org>` | `OrganizationDriveWriter`, `backfill_organization_drives` | decided at the organization (`ListOrgFiles`, `GetOrgFile`: viewers and up; `PutOrgFile`, `DeleteOrgFile`: admins and owners; `<org>/nexus:file/organization/...`), then its policies |
+| Platform drive | `platform-drive` / `platform_drive` | `platform-drive` | `backfill_platform_drive` | the workspace's roles, when the workspace flag `platform_drive_enabled` is on |
+| System drive | `system-drive` / `system_drive` | the whole store | none | admins (`*SystemFile`), when `system_drive_enabled` is on |
+
+- **The organization drive** (#1511) holds what belongs to the organization as a whole. A workspace reaches its own organization's drive alone: the API reads the organization from the workspace's IAM container, never from the request, and a workspace in no organization has none (404). It needs the workspace's `files` feature. Its object storage is placed in the organization's container (`files/placement.py`), so a role held only in one of its workspaces does not reach it. Who reads or writes which folder is a policy at the organization: grant `nexus:PutOrgFile` on `${scope}/nexus:file/organization/operations/*` to let members write `operations/`, deny `GetOrgFile` on a folder to hide it. The kernel also checks the object storage action on the caller's organization role, so a viewer given `PutOrgFile` also needs `object_storage:PutObject` there.
+- **Shown to who may open it.** `/api/workspaces` answers `organization_drive` (IAM's `ListOrgFiles` on the drive's root) and `organization_name`; the sidebar row and the Drives settings row use the organization's name, so two organizations' drives differ.
+- **Staff folders.** The workspace, organization and platform drives get the nine staff folders and their README (`assets/staff_folders/`, worded for any drive).
 
 ### Responsive layout
 
@@ -622,6 +653,10 @@ src/app/workspace/[workspaceId]/chat/
 | Route parsing | Module (`lib/chat-route.ts`) | Imported by shell layout, sidebar, and `chat-interface.tsx` |
 
 Route parsing lives in `lib/chat-route.ts` and is imported by `workspace-layout.tsx`, `chat-section.tsx`, `mobile-top-bar.tsx`, and `chat-interface.tsx`.
+
+### Cited links
+
+An answer's sources are every `http(s)` URL of its text, its tool outputs and its sources, so text an agent read chooses them. `components/chat/citation-frames.ts` decides how they are framed: a page of this app or of the API is never framed (it opens in a new tab), the hidden embeddability probe is `sandbox=""` (no script, an origin of its own), and the preview panel's sandbox never holds `allow-same-origin`. Tests: `citation-frames.test.ts`.
 
 ### Semantic CSS
 
@@ -819,7 +854,10 @@ cd apps/api && uv run pytest tests/ -v
 cd apps/api && uv run mypy app/
 cd apps/api && uv run ruff check app/
 cd apps/web && pnpm typecheck
+cd apps/web && pnpm test
 ```
+
+**Web tests run on vitest only.** `pnpm test` runs every `src/**/*.test.ts` and is a pull request check (`nexus-web-tests` in `.github/workflows/pull_request.yml`), so it must stay green. Import `test`/`describe`/`it` from `vitest`, never from `node:test`: vitest finds no suite in a `node:test` file and the file fails. `node:assert/strict` is fine. A test that describes a behaviour not built yet is `it.skip` with a comment saying what is missing, not a failing test.
 
 ## Conventional commits
 

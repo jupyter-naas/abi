@@ -7,6 +7,7 @@ import {
   fetchNaturalEarthCountries,
   type NaturalEarthFeatureCollection,
 } from './maps-natural-earth-basemap';
+import { attributionHtml } from './maps-attribution';
 
 /**
  * Basemaps are data: the workspace catalog from `/api/maps/catalog` (seeded by
@@ -97,7 +98,8 @@ export function createBasemapTileLayer(
 ): TileLayer {
   return L.tileLayer(tileTemplate(renderer), {
     className: 'maps-basemap',
-    attribution: renderer.attribution ?? '',
+    // Leaflet writes attributions as HTML: only text and plain https links reach it.
+    attribution: attributionHtml(renderer.attribution),
     maxZoom: renderer.max_zoom ?? 19,
     ...(renderer.subdomains?.length ? { subdomains: renderer.subdomains } : {}),
   });

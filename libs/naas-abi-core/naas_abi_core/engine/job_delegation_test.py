@@ -28,6 +28,7 @@ from naas_abi_core.engine.nats_broker_control import BrokerControl, Refused, _Re
 from naas_abi_core.services.iam.modules import subject_token
 from naas_abi_core.services.iam.tests.authorization_contract import contract_iam
 from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
+from naas_abi_sdk.transport import RPCError
 
 PEOPLE_JOBS = "abi:discovery:job/acme/people/*"
 LEGACY_JOBS = "abi:discovery:job/acme/legacy/*"
@@ -130,10 +131,15 @@ def test_an_engine_job_triggered_for_a_user_runs_as_its_account_for_them():
         ("job/legacy", None),
     ]
 
-    # A module acting for the user, or no user: the job's account alone.
-    as_module = Principal(id=module.id, kind="service_account", name=module.name)
-    assert run_as(as_module, bob) is None
+    # Nexus for no user: the job's account alone.
     assert run_as(_api(api), None) is None
+    # A module, for the user or not: refused, as the run would act with the job
+    # account's rights rather than its own.
+    as_module = Principal(id=module.id, kind="service_account", name=module.name)
+    for user in (bob, None):
+        with pytest.raises(RPCError) as refused:
+            run_as(as_module, user)
+        assert refused.value.code == "PERMISSION_DENIED"
 
 
 def test_a_user_who_may_start_only_workflows_gets_a_delegation_never_none():

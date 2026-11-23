@@ -1,50 +1,36 @@
 # CodingAgent
 
 ## What it is
-- A `CodingAgent` implementation backed by an `OpencodeAgent` server.
-- Configured to operate within the `naas_abi` module working directory and guided by a fixed system prompt.
+- The "OpenCode Coding" agent: an `OpencodeAgent` that talks to the OpenCode server of the caller's own coding sandbox.
+- Off by default: it is a `naas_abi` module agent only when the module configuration sets `opencode_coding_agent: true`.
+- It never starts OpenCode on the API host. Without a coding sandbox bound to the conversation (`coding_harness_base`), `start()` raises `OpencodeStartupError`.
 
 ## Public API
 - `class CodingAgent(OpencodeAgent)`
-  - Agent specialization with:
-    - `name = "CodingAgent"`
-    - `description = "Coding agent backed by an opencode server for the naas_abi module."`
-    - `system_prompt` set to the module’s `SYSTEM_PROMPT`
+  - `name = "OpenCode Coding"`
+  - `enabled_by = "opencode_coding_agent"`: the module configuration flag that loads it (`ModuleAgentLoader`).
 - `CodingAgent.New(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[dict] = None) -> CodingAgent`
-  - Factory constructor that:
-    - Sets `workdir` to the `naas_abi` module root (two levels above this file).
-    - Reads optional configuration from environment variables:
-      - `NAAS_ABI_CODING_AGENT_PORT` → `port` (int) or `None` if unset/blank
-      - `NAAS_ABI_CODING_AGENT_MODEL` → `model` (defaults to `"openai/gpt-5.3-codex"`)
-    - Ignores `agent_configuration` (explicitly deleted).
+  - Ignores `agent_configuration`.
+- `_base_url`: the bound sandbox's OpenCode server.
+- `start()`: checks that the sandbox's server answers `/global/health`; starts nothing.
 
-## Configuration/Dependencies
-- Depends on:
-  - `naas_abi_core.services.agent.Agent.AgentSharedState`
-  - `naas_abi_core.services.agent.OpencodeAgent.OpencodeAgent`
-  - `naas_abi_core.services.agent.OpencodeAgent.OpencodeAgentConfiguration`
-- Environment variables:
-  - `NAAS_ABI_CODING_AGENT_PORT`: optional port for the opencode server (string parsed to `int`).
-  - `NAAS_ABI_CODING_AGENT_MODEL`: optional model identifier; default `"openai/gpt-5.3-codex"`.
+## Configuration
+
+```yaml
+modules:
+  - module: naas_abi
+    config:
+      opencode_coding_agent: true
+```
 
 ## Usage
 ```python
 from naas_abi.agents.CodingAgent import CodingAgent
+from naas_abi_core.services.agent.context import coding_harness_base
 
-agent = CodingAgent.New()
-```
-
-With environment overrides:
-```python
-import os
-from naas_abi.agents.CodingAgent import CodingAgent
-
-os.environ["NAAS_ABI_CODING_AGENT_PORT"] = "8080"
-os.environ["NAAS_ABI_CODING_AGENT_MODEL"] = "openai/gpt-5.3-codex"
-
+coding_harness_base.set("http://<sandbox harness>")
 agent = CodingAgent.New()
 ```
 
 ## Caveats
-- `agent_configuration` passed to `New()` is ignored.
-- `NAAS_ABI_CODING_AGENT_PORT` must be a valid integer if set; otherwise `int(...)` will raise `ValueError`.
+- OpenCode permission requests are refused (`OpencodeAgent`): nothing is granted on the user's behalf.

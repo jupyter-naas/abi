@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 
 from naas_abi.apps.nexus.apps.api.app.services.skills.port import (
+    MAX_PROMPT_CHARS,
     SKILL_SCOPES,
     SkillCreateInput,
     SkillPersistencePort,
@@ -49,16 +51,49 @@ class RequestContext:
     actor_user_id: str
 
 
+# ``await may_manage(user_id, org_id)``: whether the user administers the organization.
+OrganizationGate = Callable[[str, str], Awaitable[bool]]
+
+ORGANIZATION = "organization"
+
+
+async def _organization_admin(user_id: str, org_id: str) -> bool:
+    """An organization skill is part of every chat of the organization: making,
+    changing or deleting one is the organization's administrators' to do."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+    return await AUTHZ.allowed("UpdateOrganization", user=user_id, org=org_id)
+
+
 class SkillService:
     """Skills of a workspace.
 
-    Who may do what is decided by IAM at the route (``UpdateSkill``...). The
-    context only names the caller: a user-scoped skill is private to its
-    creator, whatever role anyone holds.
+    Who may do what in a workspace is decided by IAM at the route
+    (``UpdateSkill``...). The context only names the caller: a user-scoped skill is
+    private to its creator, whatever role anyone holds. An organization skill
+    reaches every workspace of the organization, so creating one, widening a skill
+    to it, and changing or deleting one also need the organization's
+    administration (``may_manage``).
     """
 
-    def __init__(self, adapter: SkillPersistencePort):
+    def __init__(self, adapter: SkillPersistencePort, may_manage: OrganizationGate | None = None):
         self.adapter = adapter
+        self._may_manage = may_manage or _organization_admin
+
+    async def _require_organization(self, user_id: str, org_id: str | None) -> None:
+        if not org_id:
+            raise SkillValidationError("This workspace belongs to no organization")
+        if not await self._may_manage(user_id, org_id):
+            raise SkillPermissionError(
+                "Only the organization's admins and owners manage its skills"
+            )
+
+    @staticmethod
+    def _validate_prompt(prompt: str) -> None:
+        if not prompt.strip():
+            raise SkillValidationError("Prompt cannot be empty")
+        if len(prompt) > MAX_PROMPT_CHARS:
+            raise SkillValidationError(f"Prompt is longer than {MAX_PROMPT_CHARS} characters")
 
     def _ensure_can_modify(self, context: RequestContext, skill: SkillRecord) -> None:
         # User-scoped skills are private to their creator; wider scopes are
@@ -107,8 +142,11 @@ class SkillService:
         self._validate_scope(data.scope)
         if not data.name.strip():
             raise SkillValidationError("Name cannot be empty")
-        if not data.prompt.strip():
-            raise SkillValidationError("Prompt cannot be empty")
+        self._validate_prompt(data.prompt)
+        if data.scope == ORGANIZATION:
+            await self._require_organization(
+                data.user_id, await self.adapter.organization_of(data.workspace_id)
+            )
         # Models often set slug to "create-skill" because that was the slash
         # command that started the draft. Remap before validation.
         data.slug = await self._validate_slug(
@@ -130,6 +168,13 @@ class SkillService:
         self._ensure_can_modify(context, existing)
         if updates.scope is not None:
             self._validate_scope(updates.scope)
+        if updates.prompt is not None:
+            self._validate_prompt(updates.prompt)
+        if ORGANIZATION in (existing.scope, updates.scope):
+            org_id = existing.organization_id or await self.adapter.organization_of(
+                existing.workspace_id
+            )
+            await self._require_organization(context.actor_user_id, org_id)
         if updates.slug is not None:
             updates.slug = await self._validate_slug(
                 existing.workspace_id,
@@ -157,4 +202,26 @@ class SkillService:
         if not existing:
             return False
         self._ensure_can_modify(context, existing)
+        # Its creator may take an organization skill back; anyone else administers
+        # the organization.
+        if existing.scope == ORGANIZATION and existing.user_id != context.actor_user_id:
+            org_id = existing.organization_id or await self.adapter.organization_of(
+                existing.workspace_id
+            )
+            await self._require_organization(context.actor_user_id, org_id)
         return await self.adapter.delete(skill_id)
+
+    async def set_enabled_in(
+        self, context: RequestContext, skill_id: str, workspace_id: str, enabled: bool
+    ) -> SkillRecord | None:
+        """Turn an organization skill on or off in ``workspace_id``, one of its
+        organization's workspaces. The route checked that the caller administers
+        that workspace."""
+        existing = await self.adapter.get_by_id(skill_id)
+        if not existing or existing.scope != ORGANIZATION or not existing.organization_id:
+            return None
+        if await self.adapter.organization_of(workspace_id) != existing.organization_id:
+            return None
+        await self.adapter.set_enabled_in(skill_id, workspace_id, enabled, context.actor_user_id)
+        found = await self.adapter.list_visible(workspace_id, context.actor_user_id)
+        return next((s for s in found if s.id == skill_id), None)

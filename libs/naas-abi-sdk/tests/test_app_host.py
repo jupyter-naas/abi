@@ -46,7 +46,7 @@ class FakeMsg:
     def __init__(self, request: pb.HttpRequest, token="caller-token", data=None):
         self.data = request.SerializeToString() if data is None else data
         self.headers = {"Nats-Auth-Token": token}
-        self.reply = "_INBOX.x"
+        self.reply = "_INBOX.x.1"
         self.sent: list[bytes] = []
         self._client = SimpleNamespace(
             max_payload=8 * 1024 * 1024, publish=self._publish

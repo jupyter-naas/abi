@@ -1,15 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { Building2, HelpCircle, LogOut, ShieldCheck, User } from 'lucide-react';
+import { Blocks, Building2, HelpCircle, LogOut, ShieldCheck, User, type LucideIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
-import { useOrganizationSettingsAccess } from '@/hooks/use-organization-settings-access';
-import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
-import { visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
+import { useAvatarSettingsLinks, type AvatarSettingsEntry } from '@/hooks/use-avatar-settings-links';
+import { useOpensWorkspaceSettings } from '@/hooks/use-workspace-settings-access';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspacePath } from './sidebar/utils';
+import './account-menu.css';
 
 export type AccountMenuUser = {
   name?: string | null;
@@ -45,6 +45,40 @@ export function UserAvatar({
   );
 }
 
+/** One settings scope of the menu: a link, a muted row while its access is read, or nothing. */
+function SettingsScopeItem({
+  entry,
+  label,
+  icon: Icon,
+  onClose,
+}: {
+  entry: AvatarSettingsEntry;
+  label: string;
+  icon: LucideIcon;
+  onClose: () => void;
+}) {
+  if (entry === null) return null;
+  if (entry === 'loading') {
+    return (
+      <span
+        role="menuitem"
+        aria-disabled="true"
+        aria-busy="true"
+        className="account-menu-settings-item account-menu-settings-item-loading"
+      >
+        <Icon size={14} className="shrink-0 text-muted-foreground" />
+        {label}
+      </span>
+    );
+  }
+  return (
+    <Link href={entry.href} role="menuitem" onClick={onClose} className="account-menu-settings-item">
+      <Icon size={14} className="shrink-0 text-muted-foreground" />
+      {entry.label}
+    </Link>
+  );
+}
+
 export function AccountMenuPanel({
   user,
   onClose,
@@ -58,73 +92,69 @@ export function AccountMenuPanel({
 }) {
   const router = useRouter();
   const logout = useAuthStore((s) => s.logout);
-  // IAM decides, as Organization settings does for its own sections: never a workspace role.
-  const canOrganizationSettings = useOrganizationSettingsAccess();
-  // Whenever any of its pages is open to the user: IAM decides, not a role name.
-  const platformSettings = usePlatformSettingsAccess();
-  const canPlatformSettings =
-    platformSettings.status === 'ready' &&
-    visiblePlatformSettingsGroups(platformSettings.actions).length > 0;
+  const links = useAvatarSettingsLinks();
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const helpHref = getWorkspacePath(currentWorkspaceId, '/help');
+  // The workspace's architecture: for those who open its settings, as the sidebar was.
+  const showInfrastructure = useOpensWorkspaceSettings() && !!currentWorkspaceId;
+  const infrastructureHref = getWorkspacePath(currentWorkspaceId, '/settings/infrastructure');
 
   return (
     <div
       role="menu"
       data-org-branded="true"
-      className={cn('z-[10000] min-w-56 w-64 rounded-none border bg-card p-2 shadow-lg', className)}
+      className={cn('account-menu-panel z-[10000] min-w-56 w-64 rounded-none border bg-card p-2 shadow-lg', className)}
       style={style}
     >
-      <div className="border-b border-border/50 px-4 py-3">
-        <p className="truncate font-medium" title={user?.name || 'User'}>
+      <div className="account-menu-header border-b border-border/50">
+        <p className="account-menu-header-name truncate font-medium" title={user?.name || 'User'}>
           {user?.name || 'User'}
         </p>
-        <p className="min-w-0 truncate text-xs text-muted-foreground" title={user?.email || ''}>
+        <p className="account-menu-header-email min-w-0 truncate text-muted-foreground" title={user?.email || ''}>
           {user?.email || ''}
         </p>
       </div>
 
-      <div className="py-2">
-        <Link
-          href="/account/profile"
-          role="menuitem"
-          onClick={onClose}
-          className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-muted"
+      <div className="account-menu-body">
+        <div
+          className="account-menu-settings-group border-b border-border/50"
+          role="group"
+          aria-label="Settings"
         >
-          <User size={16} className="shrink-0 text-muted-foreground" />
-          Account Settings
-        </Link>
-        {canOrganizationSettings && (
           <Link
-            href="/organizations"
+            href={links.account.href}
             role="menuitem"
             onClick={onClose}
-            className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-muted"
+            className="account-menu-settings-item"
           >
-            <Building2 size={16} className="shrink-0 text-muted-foreground" />
-            Organization Settings
+            <User size={14} className="shrink-0 text-muted-foreground" />
+            {links.account.label}
           </Link>
-        )}
-        {canPlatformSettings && (
+          <SettingsScopeItem entry={links.organization} label="Organization" icon={Building2} onClose={onClose} />
+          <SettingsScopeItem entry={links.platform} label="Platform" icon={ShieldCheck} onClose={onClose} />
+        </div>
+        <div className="account-menu-help-group" role="group" aria-label="Help">
+          {showInfrastructure && (
+            <Link
+              href={infrastructureHref}
+              role="menuitem"
+              onClick={onClose}
+              className="account-menu-settings-item"
+            >
+              <Blocks size={14} className="shrink-0 text-muted-foreground" />
+              Infrastructure
+            </Link>
+          )}
           <Link
-            href="/settings"
+            href={helpHref}
             role="menuitem"
             onClick={onClose}
-            className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-muted"
+            className="account-menu-settings-item"
           >
-            <ShieldCheck size={16} className="shrink-0 text-muted-foreground" />
-            Platform Settings
+            <HelpCircle size={14} className="shrink-0 text-muted-foreground" />
+            Help
           </Link>
-        )}
-        <Link
-          href={helpHref}
-          role="menuitem"
-          onClick={onClose}
-          className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-muted"
-        >
-          <HelpCircle size={16} className="shrink-0 text-muted-foreground" />
-          Help
-        </Link>
+        </div>
       </div>
 
       <div className="border-t border-border/50 py-2">
@@ -136,9 +166,9 @@ export function AccountMenuPanel({
             logout();
             router.push('/auth/login');
           }}
-          className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-destructive transition-colors hover:bg-destructive/10"
+          className="account-menu-item w-full text-destructive hover:bg-destructive/10"
         >
-          <LogOut size={16} className="shrink-0" />
+          <LogOut size={14} className="shrink-0" />
           Log Out
         </button>
       </div>

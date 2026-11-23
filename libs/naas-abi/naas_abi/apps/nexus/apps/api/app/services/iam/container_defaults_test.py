@@ -7,6 +7,7 @@ what is mocked."""
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 import pytest
@@ -299,6 +300,86 @@ async def test_a_workspace_admin_edits_its_access_within_the_organizations(world
     assert agents == {"${scope}/module:agent/people/a", "${scope}/module:agent/people/b"}
 
 
+async def _org_and_workspace(nexus_db, org_id: str, ws_id: str, owner: str):
+    """``owner`` creates the organization, then a workspace in it, as the routes do;
+    returns their records."""
+    async with nexus_db() as db:
+        orgs = OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
+        await orgs.create_organization(
+            name=org_id.title(), slug=org_id, owner_id=owner, now=NOW, org_id=org_id
+        )
+        workspaces = WorkspaceService(adapter=WorkspaceSecondaryAdapterPostgres(db=db))
+        await workspaces.create_workspace(
+            WorkspaceCreateInput(
+                name=ws_id.title(), slug=ws_id, owner_id=owner, organization_id=org_id, id=ws_id
+            )
+        )
+        await db.commit()
+        store = SqlDefaultsStore(db)
+        return (
+            await store.get(org_container(org_id)),
+            await store.get(workspace_container(org_id, ws_id)),
+        )
+
+
+def _turned_off(*names: str) -> dict:
+    """A workspace's access after the upgrade: every agent of ``people`` but
+    ``names``, turned off there (``TurnedOffAgents``)."""
+    document = _agents("*")
+    document["statements"].append(
+        {
+            "sid": "TurnedOffAgents",
+            "effect": "Deny",
+            "actions": [USE],
+            "resources": [f"${{scope}}/module:agent/people/{n}" for n in names],
+        }
+    )
+    return document
+
+
+@pytest.mark.asyncio
+async def test_an_agent_turned_off_in_a_workspace_is_still_granted_to_another_organization(
+    world, nexus_db
+):
+    """#1519: the platform admin owns Alpha (in Acme), which turned Scout off, so
+    holds that Deny there. Granting the agents of ``people`` to Globex, a new
+    organization, is held where "Globex access" applies (below Globex), not in
+    every container: Alpha's Deny does not stop it, and Scout stays off in Alpha.
+    A Deny where it applies (Iota, in Initech) still does."""
+    async with nexus_db() as db:
+        await _users(db, "root", "olivia", "bob")
+    world.platform_admin("root")
+    acme, alpha = await _org_and_workspace(nexus_db, "acme", "alpha", "root")
+    await MEMBERSHIPS.grant("bob", "admin", ALPHA)
+    with use_call_context(NexusIam.context("root")):
+        world.iam.update_policy(acme.access_policy_id, expected_revision=1, document=_agents("*"))
+        world.iam.update_policy(
+            alpha.access_policy_id, expected_revision=1, document=_turned_off("scout")
+        )
+    assert not _uses(world, "root", _agent(ALPHA, "scout"))
+    globex, _gamma = await _org_and_workspace(nexus_db, "globex", "gamma", "olivia")
+    gamma = workspace_container("globex", "gamma")
+    with use_call_context(NexusIam.context("root")):
+        world.iam.update_policy(globex.access_policy_id, expected_revision=1, document=_agents("*"))
+    # Globex's admins use every agent of people in its workspaces, Scout included.
+    assert _uses(world, "olivia", _agent(gamma, "scout"))
+    assert _uses(world, "olivia", _agent(gamma, "recruiter"))
+    # Alpha still turns Scout off for whoever holds its access.
+    assert not _uses(world, "bob", _agent(ALPHA, "scout"))
+    assert _uses(world, "bob", _agent(ALPHA, "recruiter"))
+    assert not _uses(world, "olivia", _agent(ALPHA, "recruiter"))
+    # Where the policy applies, the Deny stops it: root owns Iota, of Initech.
+    initech, iota = await _org_and_workspace(nexus_db, "initech", "iota", "root")
+    with use_call_context(NexusIam.context("root")):
+        world.iam.update_policy(
+            iota.access_policy_id, expected_revision=1, document=_turned_off("scout")
+        )
+        with pytest.raises(PermissionDeniedError, match="nexus:workspace/iota/module:agent"):
+            world.iam.update_policy(
+                initech.access_policy_id, expected_revision=1, document=_agents("*")
+            )
+
+
 # -- forgotten with it ------------------------------------------------------------------
 
 
@@ -456,6 +537,87 @@ async def test_the_upgrade_on_the_sqlite_store(nexus_db, tmp_path):
     from naas_abi_core.services.iam.adapters.secondary.IAMStoreSQLite import IAMStoreSQLite
 
     await _check_upgrade(previous._world(IAMStoreSQLite(str(tmp_path / "iam.sqlite"))), nexus_db)
+
+
+@pytest.mark.asyncio
+async def test_a_turned_off_agent_of_a_module_not_loaded_is_denied_once_it_loads(
+    nexus_db, monkeypatch
+):
+    """The move does not wait for a module the engine did not load: it sets the
+    turned-off agent aside, and the first start that loads its class denies it in
+    the workspace's access policy, under the scope the roster names it by."""
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import split_key
+    from naas_abi.apps.nexus.apps.api.app.services.iam import policy_tree
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
+    from sqlalchemy import text
+
+    unloaded = "acme.people.agents/Xavier"
+    loaded = {"now": False}
+
+    def resolver():
+        def resolve(class_name, provider, *, strict=False):
+            if class_name == unloaded:
+                if not loaded["now"]:
+                    if strict:
+                        raise policy_tree.AgentNotLoaded(class_name)
+                    return None
+                return ModuleScope("agent", "acme.people", "X")
+            module, name = split_key(class_name)
+            return ModuleScope("agent", module, name)
+
+        return resolve
+
+    monkeypatch.setattr(policy_tree, "_agent_resolver", resolver)
+    previous_database = previous._previous_database
+
+    async def with_the_unloaded_agent(db) -> None:
+        await previous_database(db)
+        await db.execute(
+            text(
+                "INSERT INTO agent_configs (id, workspace_id, name, class_name, provider, "
+                "is_default, enabled, created_at, updated_at) VALUES ('xavier', 'ws-b', "
+                "'Xavier', :c, NULL, 0, 0, :at, :at)"
+            ),
+            {"c": unloaded, "at": NOW},
+        )
+        await db.commit()
+
+    monkeypatch.setattr(previous, "_previous_database", with_the_unloaded_agent)
+
+    async def deferred() -> list:
+        async with nexus_db() as db:
+            raw = (
+                await db.execute(
+                    text("SELECT report FROM iam_migrations WHERE name = :n"),
+                    {"n": policy_tree.MIGRATION_NAME},
+                )
+            ).scalar()
+        return json.loads(raw)[policy_tree.DEFERRED_KEY]
+
+    nexus = previous._world()
+    x_in_b = module_scopes.scope_resource(
+        "agent", "acme.people", "X", container=workspace_container("org-1", "ws-b")
+    )
+    with nexus.installed():
+        assert await previous._upgrade(nexus, nexus_db) is not None
+        assert not policy_tree.pending()
+        assert await deferred() == [{"workspace": "ws-b", "class_name": unloaded}]
+        async with nexus_db() as db:
+            await container_defaults.migrate(db)
+        assert _uses(nexus, "dave", x_in_b)
+        # Still not loaded: nothing denied, still set aside.
+        async with nexus_db() as db:
+            assert await policy_tree.deny_deferred_agents(db) == 0
+        assert len(await deferred()) == 1
+        loaded["now"] = True
+        async with nexus_db() as db:
+            assert await policy_tree.deny_deferred_agents(db) == 1
+        nexus.iam.invalidate()
+        assert await deferred() == []
+        assert not _uses(nexus, "dave", x_in_b)
+        # Again: nothing more.
+        async with nexus_db() as db:
+            assert await policy_tree.deny_deferred_agents(db) == 0
 
 
 async def _recorded(db) -> bool:
@@ -758,3 +920,35 @@ async def test_a_recorded_workspace_access_with_no_parent_is_put_under_its_organ
         )
     async with nexus_db() as db:
         assert (await container_defaults.migrate(db)).reparented == []
+
+
+def test_a_workspace_adopts_only_an_access_policy_its_own_organization_owns(world):
+    """What the sets' move made is found by its description, which anyone writing a
+    policy chooses: another organization's policy that names the workspace is never
+    its access, and stays where it is; the workspace gets one of its own."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import policy_tree
+
+    one = world.org("org-1")
+    world.org("org-2")
+    world.workspace("org-1", "ws-1")
+    ws2 = world.workspace("org-2", "ws-2")
+    describe = "What workspace ws-2 uses, within its organization's: x." + policy_tree.MADE
+    document = {
+        "version": "2026-10-13",
+        "statements": [
+            {"effect": "Allow", "actions": ["nexus:GetWorkspace"], "resources": ["${scope}/*"]}
+        ],
+    }
+    with as_service_account("api"):
+        other = world.iam.create_policy("WS2 access", document, description=describe, scope=one)
+        records, report = container_defaults.plan_and_apply(
+            world.iam,
+            {"org-1": "Org One", "org-2": "Org Two"},
+            {"ws-1": ("org-1", "WS1"), "ws-2": ("org-2", "WS2")},
+            {},
+        )
+        kept = world.iam.get_policy(other.id)
+    ws2_record = next(r for r in records if r.container == ws2)
+    assert ws2_record.access_policy_id != other.id
+    assert kept.owner_scope == one
+    assert ws2 in report.made and ws2 not in report.adopted

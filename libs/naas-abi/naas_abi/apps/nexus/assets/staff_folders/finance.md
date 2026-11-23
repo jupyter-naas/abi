@@ -19,4 +19,4 @@ obligations. If the subject of a file is a figure in the ledger, it belongs here
 - Strategy and the plans a budget serves: `plans/`.
 - Financial analyses of **other** organizations (competitors, targets): `intelligence/`.
 
-Financial files are often confidential. Check who can read this workspace before adding them.
+Financial files are often confidential. Check who can read this drive before adding them.

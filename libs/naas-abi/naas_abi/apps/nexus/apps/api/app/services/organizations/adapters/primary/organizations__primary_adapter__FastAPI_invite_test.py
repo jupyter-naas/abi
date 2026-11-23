@@ -81,6 +81,7 @@ def _client(members: list[OrganizationMemberRecord]) -> TestClient:
 @pytest.fixture(autouse=True)
 def _no_rate_limit(monkeypatch) -> None:
     monkeypatch.setattr(org_api, "check_rate_limit", AsyncMock())
+    monkeypatch.setattr(org_api, "check_invitation_mail_quota", AsyncMock())
 
 
 def test_reinviting_an_existing_member_resends_instead_of_400(monkeypatch, team) -> None:

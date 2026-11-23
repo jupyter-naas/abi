@@ -36,13 +36,13 @@ from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 from naas_abi.apps.nexus.graph_policy_config import (
-    NEXUS_GRAPH,
     WorkspaceGraphPolicyConfig,
+    without_system_graphs,
 )
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError
-from naas_abi_core.services.iam.names import anywhere, encode_id, resource_name
+from naas_abi_core.services.iam.names import PLATFORM, anywhere, encode_id, resource_name
 from naas_abi_core.services.iam.policy import POLICY_VERSION, PolicyDocument
 from naas_abi_core.services.triple_store.iam_catalog import CATALOG, GRAPH, SERVICE
 from sqlalchemy import text
@@ -110,7 +110,9 @@ def assignment_of(
     shared = set(config.read) | set(config.write)
     if config.read_all:
         shared |= set(catalog)
-    shared.discard(NEXUS_GRAPH)  # the application catalog is never shared
+    # Nexus's own graphs (the application catalog, the identity graph) are never shared.
+    shared = without_system_graphs(shared)
+    written = without_system_graphs(set(config.write))
     reading: list[dict[str, Any]] = []
     if shared:
         reading.append(
@@ -142,13 +144,13 @@ def assignment_of(
                 }
             )
     writing: list[dict[str, Any]] = []
-    if config.write:
+    if written:
         writing.append(
             {
                 "sid": "SharedGraphsWrite",
                 "effect": "Allow",
                 "actions": WRITE_ACTIONS,
-                "resources": [p for iri in sorted(config.write) for p in _anywhere(iri)],
+                "resources": [p for iri in sorted(written) for p in _anywhere(iri)],
             }
         )
 
@@ -173,11 +175,20 @@ class GraphGrants:
     # -- policies, found by name ---------------------------------------------------
 
     def _scan(self, iam: Any) -> None:
+        """The platform's policies named for a workspace. Nexus makes them at the
+        platform, as ``api``: a policy of that name owned by an organization or a
+        workspace is someone else's, and never stands for the workspace's grants."""
         names: dict[str, str] = {}
         after: str | None = None
         while True:
             page = iam.list_policies(limit=200, after=after)
-            names.update({p.name: str(p.id) for p in page.items if p.name.startswith("workspace.")})
+            names.update(
+                {
+                    p.name: str(p.id)
+                    for p in page.items
+                    if p.name.startswith("workspace.") and _platform_owned(p)
+                }
+            )
             if page.next_after is None:
                 break
             after = page.next_after
@@ -191,7 +202,8 @@ class GraphGrants:
         if known is None:
             return None
         try:
-            if iam.get_policy(known).name == name:
+            found = iam.get_policy(known)
+            if found.name == name and _platform_owned(found):
                 return known
         except IAMNotFoundError:
             pass
@@ -339,6 +351,11 @@ class GraphGrants:
 
 
 _INDEX_SECONDS = 60.0
+
+
+def _platform_owned(policy: Any) -> bool:
+    return str(getattr(policy, "owner_scope", PLATFORM)) == PLATFORM
+
 
 GRANTS = GraphGrants()
 

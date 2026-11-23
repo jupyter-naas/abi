@@ -314,3 +314,44 @@ def test_the_idp_module_account_owns_the_idp_namespace_and_no_manifest_opens_it(
             idp.get("users", "bob")
         with pytest.raises(DocumentNotFound):
             idp.put("users", "eve", {"email": "eve@example.com"})
+
+
+def test_a_new_document_namespace_keeps_the_workspace_that_placed_it_first(tmp_path):
+    from dataclasses import replace
+
+    from naas_abi_core.engine.call_context import current_call_context
+    from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+    from naas_abi_core.services.iam.tests.iam_harness import (
+        NEXUS,
+        IAMHarness,
+        statement,
+    )
+
+    contract = TestDocumentAuthorization()
+    owner, iam = contract._owner(tmp_path)
+    with internal_call():
+        iam.register_catalog(NEXUS)
+    h = IAMHarness(iam)
+    ws1, ws2 = h.register("ws-1"), h.register("ws-2")
+    alice = h.user("alice")
+    h.grant(alice.id, statement("Allow", ["document:*"], ["*"]))
+    adapter = owner.adapter
+    ensure = adapter.ensure_collection
+
+    def ensured_while_another_workspace_commits(namespace, spec):
+        ensure(namespace, spec)
+        with internal_call():
+            iam.claim_placement("document", namespace, ws1)
+            iam.claim_placement("document", f"{namespace}/*", ws1)
+
+    adapter.ensure_collection = ensured_while_another_workspace_commits
+    try:
+        with h.as_(alice), use_call_context(
+            replace(current_call_context(), container=ws2)
+        ), pytest.raises(PermissionDeniedError):
+            owner.for_namespace("reports").ensure_collection(CollectionSpec(name="c"))
+    finally:
+        adapter.ensure_collection = ensure
+
+    assert iam.resolve_placement("document", "reports") == ws1
+    assert iam.resolve_placement("document", "reports/c") == ws1

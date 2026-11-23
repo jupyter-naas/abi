@@ -231,7 +231,7 @@ export default function OrgLoginPage() {
 
       {/* Login Card — size from branding (reference: 440px, 2.5rem 3rem 3rem) */}
       <div
-        className={cn('w-full shadow-lg', !cardRadius && 'rounded-2xl')}
+        className="w-full"
         style={{
           maxWidth: cardMaxWidth,
           padding: cardPadding,

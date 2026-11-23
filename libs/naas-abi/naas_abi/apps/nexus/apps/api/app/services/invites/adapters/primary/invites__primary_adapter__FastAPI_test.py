@@ -115,6 +115,7 @@ async def api(team, nexus_db, monkeypatch):
         return None
 
     monkeypatch.setattr(workspaces_module, "check_rate_limit", no_limit)
+    monkeypatch.setattr(workspaces_module, "check_invitation_mail_quota", no_limit)
     invites = InvitationService(
         Store(),
         Directories(BUILTIN),

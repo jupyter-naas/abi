@@ -515,7 +515,7 @@ intentMapping:getSubjectGraphQuery a intentMapping:TemplatableSparqlQuery ;
 intentMapping:subjectUriArg a intentMapping:QueryArgument ;
     intentMapping:argumentName "subject_uri" ;
     intentMapping:argumentDescription "The URI of the subject to retrieve triples for" ;
-    intentMapping:validationPattern "^https?://.+$" ;
+    intentMapping:validationPattern "^https?://[^\\s<>\"{}|^`\\\\]+$" ;
     intentMapping:validationFormat "uri" .
 
 intentMapping:depthArg a intentMapping:QueryArgument ;

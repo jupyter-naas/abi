@@ -20,7 +20,7 @@ Interface (port) definitions and small utilities for a cache layer:
 
 ### Enums
 - `DataType(str, Enum)`
-  - Values: `TEXT`, `JSON`, `BINARY`, `PICKLE`
+  - Values: `TEXT`, `JSON`, `BINARY`, `PICKLE` (legacy entries only: never stored, decoded or sent; `STORED_TYPES` and `check_stored_type` name what is stored)
   - Purpose: identifies how cached data is represented/serialized.
 
 ### Models / Data containers
@@ -65,11 +65,10 @@ Interface (port) definitions and small utilities for a cache layer:
   - `__init__(adapter: ICacheAdapter)`: stores `adapter`.
   - `exists(key: str) -> bool`
   - `delete(key: str) -> None`
-  - `get(key: str, ttl: datetime.timedelta | None = None) -> Any`
+  - `get(key: str, ttl: datetime.timedelta | None = None, data_type: DataType | None = None) -> Any`
   - `set_text(key: str, value: str) -> None`
   - `set_json(key: str, value: dict) -> None`
   - `set_binary(key: str, value: bytes) -> None`
-  - `set_pickle(key: str, value: Any) -> None`
   - `set_json_if_absent(key: str, value: dict) -> bool`
   - `set_binary_if_absent(key: str, value: bytes) -> bool`
   - `list_keys(prefix: str = "", *, limit: int = 100, after: str | None = None) -> CacheKeyPage`

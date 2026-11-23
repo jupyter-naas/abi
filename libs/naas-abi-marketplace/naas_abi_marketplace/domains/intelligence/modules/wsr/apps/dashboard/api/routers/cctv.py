@@ -2,16 +2,19 @@
 CCTV router — abi:CCTVStreamingProcess HTTP interface.
 
 Endpoints:
-  GET /api/cctv                   — merged camera list (mideast + NYC + London + OWDB)
-  GET /api/cctv/snapshot?url=...  — streaming image/HLS proxy with 4-second TTL
+  GET /api/cctv                              — merged camera list (mideast + NYC + London + OWDB)
+  GET /api/cctv/snapshot?id=...&kind=image   — a listed camera's current image or
+                                               stream (``kind=video``), 4-second TTL
 """
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse, Response
 
 from services.cctv import cctv_service
+from services.cctv.CCTVService import UnknownCamera
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["cctv"])
@@ -27,17 +30,22 @@ async def get_cctv() -> JSONResponse:
 
 
 @router.get("/api/cctv/snapshot")
-async def get_cctv_snapshot(url: str = Query(..., description="Source image or HLS URL")) -> Response:
+async def get_cctv_snapshot(
+    id: str = Query(..., description="Camera id, from GET /api/cctv"),
+    kind: Literal["image", "video"] = Query("image"),
+) -> Response:
     try:
-        body, ct = await cctv_service.proxy_snapshot(url)
-        return Response(
-            content=body,
-            media_type=ct,
-            headers={
-                "Cache-Control": "public, max-age=4",
-                "Access-Control-Allow-Origin": "*",
-            },
-        )
+        body, ct = await cctv_service.proxy_snapshot(id, kind)
+    except UnknownCamera:
+        return JSONResponse({"error": "unknown camera"}, status_code=404)
     except Exception as exc:
-        log.warning("[cctv/snapshot] proxy failed for %s: %s", url, exc)
-        return JSONResponse({"error": str(exc)}, status_code=502)
+        log.warning("[cctv/snapshot] proxy failed for camera %s: %s", id, exc)
+        return JSONResponse({"error": "camera unavailable"}, status_code=502)
+    return Response(
+        content=body,
+        media_type=ct,
+        headers={
+            "Cache-Control": "public, max-age=4",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )

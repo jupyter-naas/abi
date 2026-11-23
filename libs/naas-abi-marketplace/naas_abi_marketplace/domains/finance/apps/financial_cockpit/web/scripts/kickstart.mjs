@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // financial-cockpit kickstart — one command to make the template runnable:
 //   1. create config/config.yaml   (from config.example.yaml — the editable app config)
-//   2. create .env                 (from .env.example, with a fresh random SESSION_SECRET)
+//   2. create .env                 (from .env.example, with a fresh random SESSION_SECRET
+//                                   and ROOT_PASSWORD)
 // Idempotent: existing files are kept, never overwritten. Run with `--force` to
 // regenerate .env (rotates SESSION_SECRET → invalidates existing sessions).
 import { existsSync, copyFileSync, readFileSync, writeFileSync } from 'node:fs';
@@ -25,30 +26,28 @@ if (!existsSync(config)) {
   log(`• ${rel(config)} already exists — kept`);
 }
 
-// 2. .env
+// 2. .env — both secrets random, never a value the template ships.
 const env = join(root, '.env');
-let rootPassword = 'demo';
+let rootPassword = null;
 if (!existsSync(env) || force) {
   let txt = readFileSync(join(root, '.env.example'), 'utf8');
   const secret = randomBytes(48).toString('base64url');
+  rootPassword = randomBytes(18).toString('base64url');
   txt = txt.replace(/^SESSION_SECRET=.*$/m, `SESSION_SECRET=${secret}`);
-  if (/^ROOT_PASSWORD=\s*$/m.test(txt)) {
-    txt = txt.replace(/^ROOT_PASSWORD=\s*$/m, `ROOT_PASSWORD=${rootPassword}`);
-  } else {
-    const m = txt.match(/^ROOT_PASSWORD=(.*)$/m);
-    if (m && m[1].trim()) rootPassword = m[1].trim();
-  }
-  writeFileSync(env, txt);
-  log(`✓ ${force && existsSync(env) ? 'regenerated' : 'created'} ${rel(env)} with a random SESSION_SECRET`);
+  txt = txt.replace(/^ROOT_PASSWORD=.*$/m, `ROOT_PASSWORD=${rootPassword}`);
+  writeFileSync(env, txt, { mode: 0o600 });
+  log(`✓ ${force && existsSync(env) ? 'regenerated' : 'created'} ${rel(env)} with a random SESSION_SECRET and ROOT_PASSWORD`);
 } else {
-  const m = readFileSync(env, 'utf8').match(/^ROOT_PASSWORD=(.*)$/m);
-  if (m && m[1].trim()) rootPassword = m[1].trim();
-  log(`• ${rel(env)} already exists — kept (use --force to rotate the secret)`);
+  log(`• ${rel(env)} already exists — kept (use --force to rotate both secrets)`);
 }
 
 console.log('\nDone. Next steps:\n');
 console.log('  npm install');
 console.log('  npm run dev\n');
 console.log('  Then open http://localhost:3000/login and sign in with the');
-console.log(`  root password:  ${rootPassword}\n`);
+if (rootPassword) {
+  console.log(`  root password:  ${rootPassword}  (kept in ${rel(env)} as ROOT_PASSWORD)\n`);
+} else {
+  console.log(`  root password in ${rel(env)} (ROOT_PASSWORD)\n`);
+}
 console.log('  Demo data lives in ./data — edit it or point DATA_LOCAL_ROOT at your own.\n');

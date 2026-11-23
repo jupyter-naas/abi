@@ -161,11 +161,11 @@ def test_get_tools_filters_allowlisted_github_tools_and_appends_workflows(
 
     with (
         patch(
-            "naas_abi_marketplace.applications.github.integrations.GitHubIntegration.as_tools",
+            "naas_abi_marketplace.domains.operations.modules.support.integrations.GitHubIntegration.as_tools",
             return_value=rest_tools,
         ),
         patch(
-            "naas_abi_marketplace.applications.github.integrations.GitHubGraphqlIntegration.as_tools",
+            "naas_abi_marketplace.domains.operations.modules.support.integrations.GitHubGraphqlIntegration.as_tools",
             return_value=gql_tools,
         ),
     ):

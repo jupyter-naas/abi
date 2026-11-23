@@ -116,7 +116,7 @@ def test_the_host_answers_on_its_instance_subject():
             data=pb.ListerQuery(
                 service="demo_research", type="brief", container=WS
             ).SerializeToString(),
-            reply="_INBOX.x",
+            reply="_INBOX.x.1",
             headers=None,
             _client=SimpleNamespace(publish=AsyncMock()),
         )
@@ -130,7 +130,7 @@ def test_the_host_answers_on_its_instance_subject():
         messages.reply = fake_reply
         try:
             await host._handle(msg)
-            await host._handle(SimpleNamespace(data=b"\xff\xff", reply="_INBOX.y", headers=None))
+            await host._handle(SimpleNamespace(data=b"\xff\xff", reply="_INBOX.y.1", headers=None))
         finally:
             messages.reply = original
         assert [i.id for i in replies[0].items] == ["q1", "q3"]

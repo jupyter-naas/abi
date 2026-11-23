@@ -22,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.skills import (
     SkillService,
     SkillUpdateInput,
 )
+from naas_abi.apps.nexus.apps.api.app.services.skills.port import MAX_PROMPT_CHARS
 from naas_abi.apps.nexus.apps.api.app.services.skills.service import (
     RequestContext,
     SkillPermissionError,
@@ -57,7 +58,7 @@ def _now() -> datetime:
 class SkillCreateBody(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=200)
-    prompt: str = Field(..., min_length=1)
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_CHARS)
     slug: str | None = Field(default=None, max_length=100)  # Defaults to slugified name
     description: str | None = Field(default=None, max_length=2000)
     scope: str = Field(default="user")  # user | workspace | organization
@@ -68,9 +69,13 @@ class SkillUpdateBody(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     slug: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
-    prompt: str | None = Field(default=None, min_length=1)
+    prompt: str | None = Field(default=None, min_length=1, max_length=MAX_PROMPT_CHARS)
     scope: str | None = None
     enabled: bool | None = None
+
+
+class SkillSwitchBody(BaseModel):
+    enabled: bool
 
 
 @router.get("/", dependencies=[guard("ListSkills", literal="-")])
@@ -105,6 +110,8 @@ async def create_skill(
                 enabled=body.enabled,
             ),
         )
+    except SkillPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except SkillValidationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -165,6 +172,35 @@ async def update_skill(
     return skill
 
 
+@router.put(
+    "/{skill_id}/workspaces/{workspace_id}",
+    dependencies=[
+        guard(
+            "UpdateWorkspace",
+            denied="Only the workspace's admins turn an organization skill on or off there",
+        )
+    ],
+)
+async def switch_skill_in_workspace(
+    skill_id: str,
+    workspace_id: str,
+    body: SkillSwitchBody,
+    current_user: User = Depends(get_current_user_required),
+    skill_service: SkillService = Depends(get_skill_service),
+) -> SkillRecord:
+    """An organization skill, on or off in one workspace of its organization: the
+    admins of each workspace decide whether its chats carry it."""
+    skill = await skill_service.set_enabled_in(
+        context=request_context(current_user),
+        skill_id=skill_id,
+        workspace_id=workspace_id,
+        enabled=body.enabled,
+    )
+    if skill is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return skill
+
+
 @router.post("/{skill_id}/use", dependencies=[declares("MarkSkillUsed")])
 async def mark_skill_used(
     skill_id: str,
@@ -196,6 +232,8 @@ async def delete_skill(
         )
     except SkillPermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except SkillValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="Skill not found")
     return {"status": "deleted"}

@@ -329,6 +329,20 @@ def _principal_id(world, user: str) -> str:
 def test_an_org_admin_attaches_roles_in_their_org_only(world):
     member = _principal_id(world, "stranger")
     scope = org_container("org-1")
+    # Not related to org-1 yet: answered as an unknown principal, with no
+    # profile, and nothing is attached (such a user is invited instead).
+    unrelated = post(
+        world, "/attachments", "admin", policy_id="builtin.viewer", principal_id=member, scope=scope
+    )
+    assert unrelated.status_code == 404
+    assert "principal" not in unrelated.json()
+    assert not [
+        a
+        for a in get(world, f"/attachments?scope={scope}", "admin").json()["items"]
+        if a["principal_id"] == member
+    ]
+    # Related to it (a membership of one of its workspaces): attached.
+    world.nexus.grant("stranger", "viewer", world.nexus.workspace("org-1", "ws-related"))
     attached = post(
         world, "/attachments", "admin", policy_id="builtin.viewer", principal_id=member, scope=scope
     )
@@ -369,6 +383,23 @@ def test_an_org_admin_attaches_roles_in_their_org_only(world):
         headers=as_("admin"),
     )
     assert again.status_code == 404
+
+
+def test_attach_keeps_membership_from_who_may_not_attach(world):
+    """A caller who may not attach there gets the same answer for a principal
+    related to the org and for one that is not: nothing tells them apart."""
+    related = _principal_id(world, "related")
+    world.nexus.grant("related", "viewer", world.nexus.workspace("org-1", "ws-rel"))
+    unrelated = _principal_id(world, "unrelated")
+    scope = org_container("org-1")
+    answers = [
+        post(
+            world, "/attachments", "member", policy_id="builtin.viewer", principal_id=p, scope=scope
+        )
+        for p in (related, unrelated)
+    ]
+    assert answers[0].status_code == answers[1].status_code
+    assert answers[0].status_code in (403, 404)
 
 
 def test_a_member_attaches_nothing(world):
@@ -935,9 +966,10 @@ def test_a_workspace_admin_manages_its_own_policies_and_groups(world, ws2):
     assert added.status_code == 200, added.text
     assert [m["id"] for m in added.json()["members"]] == [colleague]
 
-    # Users of another org and service accounts never join.
+    # Users of another org and service accounts never join; another org's user is
+    # answered as an unknown principal.
     outsider = _principal_id(world, "outsider")
-    assert put(world, f"/groups/{group['id']}/members/{outsider}", "ws2admin").status_code == 422
+    assert put(world, f"/groups/{group['id']}/members/{outsider}", "ws2admin").status_code == 404
     with as_service_account("engine"):
         account = world.nexus.iam.create_service_account("ci/nightly")
     assert put(world, f"/groups/{group['id']}/members/{account.id}", "ws2admin").status_code == 422
@@ -1487,3 +1519,90 @@ def test_a_sub_policy_is_offered_where_iam_lets_it_be_attached(world, ws2):
         scope=ws2,
     )
     assert refused.status_code == 403 and "unscoped" in refused.json()["detail"]
+
+
+def test_policy_writes_keep_the_names_and_descriptions_nexus_finds_its_own_by(world) -> None:
+    """A workspace's graph grants (``workspace.…``) and what the sets' move made
+    (``policy_tree.MADE``) are Nexus's: no administrator writes those marks."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.policy_tree import MADE
+
+    org = org_container("org-1")
+    document = {
+        "version": "2026-10-13",
+        "statements": [
+            {"effect": "Allow", "actions": ["nexus:GetWorkspace"], "resources": ["${scope}/*"]}
+        ],
+    }
+    moved = "What workspace ws-2 uses, within its organization's: x." + MADE
+    for user in ("admin", "root"):
+        named = post(
+            world,
+            "/policies",
+            user,
+            name="workspace.ws-2.graphs.read",
+            document=document,
+            scope=org,
+        )
+        described = post(
+            world,
+            "/policies",
+            user,
+            name="WS2 access",
+            document=document,
+            scope=org,
+            description=moved,
+        )
+        assert (named.status_code, described.status_code) == (422, 422)
+    made = post(
+        world,
+        "/policies",
+        "admin",
+        name="WS2 access",
+        document=document,
+        scope=org,
+        description="Ours",
+    )
+    assert made.status_code == 201, made.text
+    for change in ({"name": "Workspace.ws-2.graphs.write"}, {"description": moved}):
+        renamed = world.client.put(
+            f"/api/iam/admin/policies/{made.json()['id']}",
+            json={"expected_revision": made.json()["revision"], **change},
+            headers=as_("admin"),
+        )
+        assert renamed.status_code == 422
+
+
+def test_an_edit_keeps_the_name_and_description_nexus_gave_a_policy(world) -> None:
+    """A policy Nexus made keeps its marks through an edit of its statements (the
+    editor sends the name and description back with every save); changing a
+    description to Nexus's mark is still refused."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.policy_tree import MADE
+
+    org = org_container("org-1")
+    document = {
+        "version": "2026-10-13",
+        "statements": [
+            {"effect": "Allow", "actions": ["nexus:GetWorkspace"], "resources": ["${scope}/*"]}
+        ],
+    }
+    moved = "What workspace ws-1 uses, within its organization's: x." + MADE
+    with as_service_account("api"):
+        made = world.nexus.iam.create_policy("WS1 access", document, description=moved, scope=org)
+    edited = world.client.put(
+        f"/api/iam/admin/policies/{made.id}",
+        json={
+            "expected_revision": made.revision,
+            "name": made.name,
+            "description": moved,
+            "document": {**document, "statements": [{**document["statements"][0], "sid": "Read"}]},
+        },
+        headers=as_("admin"),
+    )
+    assert edited.status_code == 200, edited.text
+    plain = post(world, "/policies", "admin", name="Plain", document=document, scope=org)
+    marked = world.client.put(
+        f"/api/iam/admin/policies/{plain.json()['id']}",
+        json={"expected_revision": plain.json()["revision"], "description": moved},
+        headers=as_("admin"),
+    )
+    assert marked.status_code == 422

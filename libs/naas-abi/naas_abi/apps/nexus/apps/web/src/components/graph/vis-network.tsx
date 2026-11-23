@@ -7,6 +7,7 @@ import 'vis-network/styles/vis-network.css';
 import type { GraphNode, GraphEdge } from '@/stores/knowledge-graph';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { logoDataUri as fetchLogoDataUri } from '@/lib/logo-data-uri';
 import { BFO_BUCKET_BY_TYPE, BFO_BUCKET_DEFS } from '@/lib/bfo-buckets';
 import { edgeSides } from './bfo-edge-rules';
 import { bfoZoneLayout, drawBfoZones, zoneBounds, zoneParents, type ZoneLayout } from './bfo-zone-layout';
@@ -1146,10 +1147,8 @@ export function VisNetwork({
       await Promise.all(
         missing.map(async (url) => {
           try {
-            const res = await fetch(`/api/image-data?url=${encodeURIComponent(url)}`);
-            if (!res.ok) return;
-            const json = (await res.json()) as { dataUri?: string };
-            if (json.dataUri) updates[url] = json.dataUri;
+            const dataUri = await fetchLogoDataUri(url);
+            if (dataUri) updates[url] = dataUri;
           } catch {
             // Ignore broken/missing logos; nodes will render without them.
           }

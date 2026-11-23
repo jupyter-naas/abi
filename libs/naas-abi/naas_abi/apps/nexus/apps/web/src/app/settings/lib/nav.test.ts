@@ -2,9 +2,15 @@ import { describe, expect, it } from 'vitest';
 import {
   firstPlatformSettingsPath,
   holds,
+  GENERAL_ITEM,
+  laysOutOwnPanes,
+  NEXUS_TABLES_ITEM,
+  ORGANIZATIONS_ITEM,
   parsePlatformSettingsRoute,
   platformSettingsGroups,
   platformSettingsItemFor,
+  ROLES_ITEM,
+  USERS_ITEM,
   visiblePlatformSettingsGroups,
   type PlatformActions,
 } from './nav';
@@ -34,35 +40,55 @@ const userLister: PlatformActions = { ...none(), 'nexus:ListUsers': true };
 const ids = (actions: PlatformActions | null) =>
   visiblePlatformSettingsGroups(actions).flatMap((group) => group.items.map((item) => item.id));
 
+const GROUPS = ['Administration', 'System', 'Activity', 'Resources', 'Data'];
+const items = (label: string) =>
+  (platformSettingsGroups.find((group) => group.label === label)?.items ?? []).map((item) => [
+    item.label,
+    item.href,
+  ]);
+
 describe('platformSettingsGroups', () => {
-  it('is Database (Nexus tables), then System, then Tenancy (Organizations, Users), then Access (Roles & permissions)', () => {
-    expect(platformSettingsGroups.map((group) => group.label)).toEqual([
-      'Database',
-      'System',
-      'Tenancy',
-      'Access',
-    ]);
-    expect(platformSettingsGroups[0].items.map((item) => [item.label, item.href])).toEqual([
-      ['Nexus tables', '/settings/tables'],
-    ]);
-    expect(platformSettingsGroups[1].items.map((item) => [item.label, item.href])).toEqual([
-      ['Overview', '/settings/system'],
-      ['Services', '/settings/system/services'],
-      ['Data', '/settings/system/data'],
-      ['Jobs', '/settings/system/jobs'],
-      ['Agents', '/settings/system/agents'],
-      ['Modules', '/settings/system/modules'],
-      ['NATS', '/settings/system/nats'],
-      ['Live traffic', '/settings/system/traffic'],
-      ['Traces', '/settings/system/traces'],
-      ['Events', '/settings/system/events'],
-    ]);
-    expect(platformSettingsGroups[2].items.map((item) => [item.label, item.href])).toEqual([
+  it('is Administration, then System, Activity, Resources and Data', () => {
+    expect(platformSettingsGroups.map((group) => group.label)).toEqual(GROUPS);
+    expect(items('Administration')).toEqual([
+      ['General', '/settings/general'],
       ['Organizations', '/settings/organizations'],
       ['Users', '/settings/users'],
-    ]);
-    expect(platformSettingsGroups[3].items.map((item) => [item.label, item.href])).toEqual([
       ['Roles & permissions', '/settings/roles'],
+    ]);
+    expect(items('System')).toEqual([
+      ['Overview', '/settings/system'],
+      ['Services', '/settings/system/services'],
+      ['Modules', '/settings/system/modules'],
+      ['Discovery', '/settings/system/discovery'],
+      ['Agents', '/settings/system/agents'],
+      ['Jobs', '/settings/system/jobs'],
+      ['NATS', '/settings/system/nats'],
+      ['Bus', '/settings/system/bus'],
+    ]);
+    expect(items('Activity')).toEqual([
+      ['Live traffic', '/settings/activity/traffic'],
+      ['Traces', '/settings/activity/traces'],
+      ['Events', '/settings/activity/events'],
+      ['Event store', '/settings/activity/event-store'],
+      ['Activity log', '/settings/activity/log'],
+    ]);
+    expect(items('Resources')).toEqual([
+      ['Models', '/settings/resources/models'],
+      ['Secrets', '/settings/resources/secrets'],
+      ['Email', '/settings/resources/email'],
+      ['Source control', '/settings/resources/source-control'],
+      ['Coding environments', '/settings/resources/coding-environments'],
+    ]);
+    expect(items('Data')).toEqual([
+      ['Nexus tables', '/settings/tables'],
+      ['Knowledge graph', '/settings/data/knowledge-graph'],
+      ['Vector store', '/settings/data/vector-store'],
+      ['Documents', '/settings/data/documents'],
+      ['Datasets', '/settings/data/datasets'],
+      ['Object storage', '/settings/data/object-storage'],
+      ['Key-value', '/settings/data/key-value'],
+      ['Cache', '/settings/data/cache'],
     ]);
   });
 
@@ -72,54 +98,57 @@ describe('platformSettingsGroups', () => {
     expect(new Set(labels).size).toBe(labels.length);
   });
 
-  it('needs nexus:ReadSystem for the tables, System and Organizations, nexus:ListUsers for Users, any iam: action for Roles & permissions', () => {
-    for (const item of [
-      ...platformSettingsGroups[0].items,
-      ...platformSettingsGroups[1].items,
-      platformSettingsGroups[2].items[0],
-    ]) {
-      expect(item.needs).toEqual({ action: 'nexus:ReadSystem' });
+  it('gives every page one place, one id and one icon', () => {
+    const all = platformSettingsGroups.flatMap((group) => group.items);
+    expect(new Set(all.map((item) => item.id)).size).toBe(all.length);
+    expect(new Set(all.map((item) => item.href)).size).toBe(all.length);
+    expect(all.every((item) => item.icon)).toBe(true);
+    expect(new Set(all.map((item) => item.icon)).size).toBe(all.length);
+  });
+
+  it('needs nexus:ListUsers for Users, any iam: action for Roles & permissions, nexus:ReadSystem for the rest', () => {
+    for (const item of platformSettingsGroups.flatMap((group) => group.items)) {
+      const expected =
+        item.id === 'users'
+          ? { action: 'nexus:ListUsers' }
+          : item.id === 'roles'
+            ? { anyOf: 'iam' }
+            : { action: 'nexus:ReadSystem' };
+      expect(item.needs).toEqual(expected);
     }
-    expect(platformSettingsGroups[2].items[1].needs).toEqual({ action: 'nexus:ListUsers' });
-    expect(platformSettingsGroups[3].items[0].needs).toEqual({ anyOf: 'iam' });
   });
 });
 
 describe('what the caller sees', () => {
-  it('shows a platform admin everything', () => {
-    expect(ids(platformAdmin)).toHaveLength(14);
+  it('shows a platform admin everything, General first', () => {
+    expect(ids(platformAdmin)).toHaveLength(30);
     expect(ids(platformAdmin)).toContain('users');
-    expect(visiblePlatformSettingsGroups(platformAdmin).map((group) => group.label)).toEqual([
-      'Database',
-      'System',
-      'Tenancy',
-      'Access',
-    ]);
-    expect(firstPlatformSettingsPath(platformAdmin)).toBe('/settings/tables');
+    expect(visiblePlatformSettingsGroups(platformAdmin).map((group) => group.label)).toEqual(GROUPS);
+    expect(firstPlatformSettingsPath(platformAdmin)).toBe('/settings/general');
   });
 
   it('shows a delegated IAM admin without nexus:ReadSystem only Roles & permissions', () => {
     expect(ids(delegatedIamAdmin)).toEqual(['roles']);
     expect(visiblePlatformSettingsGroups(delegatedIamAdmin).map((group) => group.label)).toEqual([
-      'Access',
+      'Administration',
     ]);
     expect(firstPlatformSettingsPath(delegatedIamAdmin)).toBe('/settings/roles');
   });
 
-  it('shows a reader of the system the tables and System, not Roles & permissions', () => {
+  it('shows a reader of the system everything but Users and Roles & permissions', () => {
     expect(ids(systemReader)).not.toContain('roles');
+    expect(ids(systemReader)).not.toContain('users');
     expect(ids(systemReader)).toContain('tables');
     expect(ids(systemReader)).toContain('system-events');
+    expect(ids(systemReader)).toContain('service-triple_store');
     const groups = visiblePlatformSettingsGroups(systemReader);
-    expect(ids(systemReader)).toContain('organizations');
-    expect(ids(systemReader)).not.toContain('users');
-    expect(groups.map((group) => group.label)).toEqual(['Database', 'System', 'Tenancy']);
-    expect(groups[0].items.map((item) => item.label)).toEqual(['Nexus tables']);
+    expect(groups.map((group) => group.label)).toEqual(GROUPS);
+    expect(groups[0].items.map((item) => item.label)).toEqual(['General', 'Organizations']);
   });
 
   it('shows Users to whoever IAM lets list the users, and nothing else to them', () => {
     expect(ids(userLister)).toEqual(['users']);
-    expect(visiblePlatformSettingsGroups(userLister).map((group) => group.label)).toEqual(['Tenancy']);
+    expect(visiblePlatformSettingsGroups(userLister).map((group) => group.label)).toEqual(['Administration']);
     expect(firstPlatformSettingsPath(userLister)).toBe('/settings/users');
   });
 
@@ -166,10 +195,13 @@ describe('parsePlatformSettingsRoute', () => {
     expect(parsePlatformSettingsRoute('/settings/tables/secrets/a%2Fb').rowId).toBe('a/b');
   });
 
-  it('parses System pages and Roles & permissions', () => {
+  it('parses System, Activity and service pages, and Roles & permissions', () => {
     expect(parsePlatformSettingsRoute('/settings/system').item?.id).toBe('system-overview');
     expect(parsePlatformSettingsRoute('/settings/system/jobs').item?.id).toBe('system-jobs');
-    expect(parsePlatformSettingsRoute('/settings/system/events').item?.id).toBe('system-events');
+    expect(parsePlatformSettingsRoute('/settings/activity/events').item?.id).toBe('system-events');
+    expect(parsePlatformSettingsRoute('/settings/system/bus').item?.id).toBe('service-bus');
+    expect(parsePlatformSettingsRoute('/settings/resources/models').item?.id).toBe('service-model_registry');
+    expect(parsePlatformSettingsRoute('/settings/data/documents').item?.id).toBe('service-document');
     expect(parsePlatformSettingsRoute('/settings/roles').item?.id).toBe('roles');
     expect(parsePlatformSettingsRoute('/settings/organizations').item?.id).toBe('organizations');
     expect(parsePlatformSettingsRoute('/settings/users').item?.id).toBe('users');
@@ -183,8 +215,26 @@ describe('parsePlatformSettingsRoute', () => {
   });
 
   it('matches the longest item', () => {
-    expect(platformSettingsItemFor('/settings/system/traces?trace=abc')?.id).toBe('system-traces');
+    expect(platformSettingsItemFor('/settings/activity/traces?trace=abc')?.id).toBe('system-traces');
+    expect(platformSettingsItemFor('/settings/data/documents?item=ns%2Fa')?.id).toBe('service-document');
     expect(platformSettingsItemFor('/settings/systemic')).toBeNull();
     expect(platformSettingsItemFor('/settings')).toBeNull();
+  });
+});
+
+describe('laysOutOwnPanes', () => {
+  it('keeps the margins of the organization pages on every Administration page', () => {
+    expect(laysOutOwnPanes(GENERAL_ITEM)).toBe(false);
+    expect(laysOutOwnPanes(ORGANIZATIONS_ITEM)).toBe(false);
+    expect(laysOutOwnPanes(USERS_ITEM)).toBe(false);
+    expect(laysOutOwnPanes(ROLES_ITEM)).toBe(false);
+  });
+
+  it('lets the System pages lay out their own panes', () => {
+    expect(laysOutOwnPanes({ id: 'overview' })).toBe(true);
+  });
+
+  it('leaves Nexus tables to their own layout', () => {
+    expect(laysOutOwnPanes(NEXUS_TABLES_ITEM)).toBe(false);
   });
 });

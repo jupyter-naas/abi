@@ -1,3 +1,5 @@
+# Development services for the Nexus Makefile. Their credentials are fixed
+# (nexus/nexus, minioadmin), so they listen on this machine only.
 services:
   # PostgreSQL database
   postgres:
@@ -8,7 +10,7 @@ services:
       POSTGRES_PASSWORD: nexus
       POSTGRES_DB: nexus
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +24,7 @@ services:
     image: redis:7-alpine
     container_name: nexus-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -39,8 +41,8 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"

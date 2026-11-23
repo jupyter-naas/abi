@@ -145,4 +145,21 @@ describe('words', () => {
       'The provider could not mail them',
     ]);
   });
+
+  it('say when no account was made at the provider', () => {
+    const said = inviteSummary({
+      user: user({ email: 'new@example.com', status: 'invited' }),
+      user_created: false,
+      sign_in_email_sent: true,
+      provisioning_skipped: true,
+      renewed: false,
+      warning: null,
+    });
+    expect(said).toEqual([
+      'new@example.com invited.',
+      'No account was made at the identity provider (you may not create one there). ' +
+        'The email tells them to sign in with an account they have there, or to ask an administrator to create one.',
+      'A sign-in link was emailed to them.',
+    ]);
+  });
 });
