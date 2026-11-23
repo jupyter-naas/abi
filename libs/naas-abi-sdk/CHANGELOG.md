@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v0.8.0 (2026-11-23)
+
+### Features
+
+- **iam**: Membership groups and the ${my workspaces} scope
+  ([#1584](https://github.com/jupyter-naas/abi/pull/1584),
+  [`ae12cc4`](https://github.com/jupyter-naas/abi/commit/ae12cc444fd44d2c67a3ca506846deee1ab9c97c))
+
+
 ## v0.7.0 (2026-11-19)
 
 ### Features
