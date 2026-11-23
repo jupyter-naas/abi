@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearResources } from '@/lib/resource-cache';
+import { clearResources, useResourceCache } from '@/lib/resource-cache';
 import { clearOrgBrandingCache, loadOrgBranding } from '@/lib/org-branding';
 import { readOrganization, readOrganizationDomains } from '@/lib/organization-resource';
 import { SETTINGS_CACHE_HEADER } from '@/lib/settings-cache';
@@ -213,6 +213,15 @@ describe('Workspace Agents: one roster for the list, the detail and the store', 
       'GET /api/providers/models',
       'POST /api/agents/sync',
     ]);
+  });
+
+  it('the resource session follows the session read without waiting for a read', () => {
+    useAuthStore.setState({ csrfToken: null, provider: null });
+    expect(useResourceCache.getState().session).toBeNull();
+    // The session read answers (same person): the cache binds at once, and so does
+    // what follows it (the Settings page state).
+    useAuthStore.setState({ csrfToken: 'csrf-one', provider: 'idp' });
+    expect(useResourceCache.getState().session).not.toBeNull();
   });
 
   it('another person reconciles and reads their own roster', async () => {

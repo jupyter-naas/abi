@@ -115,6 +115,11 @@ export function configureResourceSession(confirmed: () => boolean): void {
   followSession(useResourceCache);
 }
 
+/** The auth store changed: follow it now (a confirmation need not change the permission cache). */
+export function followResourceSession(): void {
+  followSession(useResourceCache);
+}
+
 /** The permission cache already names the session (API, user, provider, View as): follow it. */
 function followSession(cache: ResourceCache) {
   const { identity, enabled } = usePermissionCache.getState();
