@@ -12,17 +12,33 @@ the catalogs, the containers, every principal (with its group markers), the
 group memberships, every policy (managed ones included), every attachment, the
 placements and the pending grants. Keys, tokens and manifests decide nothing a
 person may do: they are not copied.
+
+What is copied can be kept as JSON (``snapshot``, ``store_of``): the access move
+keeps IAM as it was before it, and reads its report from that copy after the
+start that moved, a restart in between included.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import asdict, fields
+from datetime import datetime
 from typing import Any
 
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
-from naas_abi_core.services.iam.IAMPorts import IAMConflictError
+from naas_abi_core.services.iam.catalog import ActionCatalog
+from naas_abi_core.services.iam.IAMPorts import (
+    Attachment,
+    ContainerRecord,
+    IAMConflictError,
+    PendingGrant,
+    Placement,
+    Policy,
+    PrincipalRecord,
+)
 from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.iam.policy import PolicyDocument
 
 PAGE = 500
 
@@ -78,9 +94,37 @@ def _containers_first(records: list[Any]) -> list[Any]:
     return done
 
 
-def copy_store(iam: Any) -> IAMStoreMemory:
-    """A memory store holding what ``iam`` decides with, read as the engine."""
-    store = IAMStoreMemory()
+def _record(record: Any) -> dict[str, Any]:
+    """A flat record (its fields strings, flags, numbers and times) as JSON."""
+    return {k: v.isoformat() if isinstance(v, datetime) else v for k, v in asdict(record).items()}
+
+
+def _policy(policy: Policy) -> dict[str, Any]:
+    found = {f.name: getattr(policy, f.name) for f in fields(Policy) if f.name != "document"}
+    found = {k: v.isoformat() if isinstance(v, datetime) else v for k, v in found.items()}
+    found["document"] = policy.document.to_dict()
+    return found
+
+
+def _read_record(cls: type, data: dict[str, Any]) -> Any:
+    """``_record`` read back: a field holding a time is read as one."""
+    times = {f.name for f in fields(cls) if "datetime" in str(f.type)}
+    return cls(
+        **{
+            k: datetime.fromisoformat(v) if k in times and isinstance(v, str) else v
+            for k, v in data.items()
+        }
+    )
+
+
+def _read_policy(data: dict[str, Any]) -> Policy:
+    document = PolicyDocument.from_dict(data["document"])
+    return _read_record(Policy, {**data, "document": document})
+
+
+def snapshot(iam: Any) -> dict[str, Any]:
+    """What ``iam`` decides with, read as the engine, as JSON (``store_of`` makes a
+    store of it again)."""
     with as_service_account("engine"):
         catalogs = list(iam.list_catalogs())
         containers = list(iam.list_containers())
@@ -91,6 +135,29 @@ def copy_store(iam: Any) -> IAMStoreMemory:
         pending = list(iam.list_pending_grants())
         groups = [p for p in principals if p.kind == "group"]
         members = {g.id: list(iam.list_group_members(g.id)) for g in groups}
+    return {
+        "catalogs": [c.to_dict(stored=True) for c in catalogs],
+        "containers": [_record(c) for c in containers],
+        "principals": [_record(p) for p in principals],
+        "members": members,
+        "policies": [_policy(p) for p in policies],
+        "attachments": [_record(a) for a in attachments],
+        "placements": [_record(p) for p in placements],
+        "pending": [_record(g) for g in pending],
+    }
+
+
+def store_of(kept: dict[str, Any]) -> IAMStoreMemory:
+    """A memory store holding what ``snapshot`` read."""
+    store = IAMStoreMemory()
+    catalogs = [ActionCatalog.from_dict(c, stored=True) for c in kept["catalogs"]]
+    containers = [_read_record(ContainerRecord, c) for c in kept["containers"]]
+    principals = [_read_record(PrincipalRecord, p) for p in kept["principals"]]
+    members: dict[str, list[str]] = kept["members"]
+    policies = [_read_policy(p) for p in kept["policies"]]
+    attachments = [_read_record(Attachment, a) for a in kept["attachments"]]
+    placements = [_read_record(Placement, p) for p in kept["placements"]]
+    pending = [_read_record(PendingGrant, g) for g in kept["pending"]]
     for catalog in catalogs:
         store.put_catalog(catalog)
     for record in _containers_first(containers):
@@ -117,10 +184,15 @@ def copy_store(iam: Any) -> IAMStoreMemory:
     return store
 
 
+def copy_store(iam: Any) -> IAMStoreMemory:
+    """A memory store holding what ``iam`` decides with, read as the engine."""
+    return store_of(snapshot(iam))
+
+
 def shadow_of(iam: Any) -> IAMService:
     """An IAM service over a copy of ``iam`` (``copy_store``): what it decides is
     what ``iam`` decides, until one of them changes."""
     return IAMService(copy_store(iam))
 
 
-__all__ = ["copy_store", "shadow_of"]
+__all__ = ["copy_store", "shadow_of", "snapshot", "store_of"]

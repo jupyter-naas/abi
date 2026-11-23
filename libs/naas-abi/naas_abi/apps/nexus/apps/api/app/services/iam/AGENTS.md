@@ -34,8 +34,8 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `platform_files.py` | Platform Files given with the workspace (#1590): "Platform Files · read" / "· write", a platform group per workspace kept in step with its people (`set_workspace_platform_files`, `follow`, `sync_platform_files`, `ensure_configured`), the legacy flags (`convert_legacy_drive_flags`, `DriveFlagChange`) |
 | `platform_files_routes.py` | `GET`/`PUT /api/workspaces/{id}/platform-files`: `{workspace_id, mode, can_change}`; read as the configuration, changed by the platform admin alone |
 | `container_defaults.py` | Each organization's and workspace's access policy and groups ("Access policies and default groups"): "<O> access", "<O> admins", "<O> people"; "<W> access" (W's bound), "<W> workspace", "<W> admins"; made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), forgotten with it (`dropped`); `grouped` / `grouped_record` (whether its people are groups, #1585); a container recorded before #1585 keeps its "<X> members" and admins in step with the roles (`sync_scope`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
-| `access_model.py` | Startup, once, after `container_defaults_v1`: per-person attachments become groups, with the report of every access change ("The access move"; `migrate_access`, `iam_migrations` `access_model_v1`; `abi iam migrate-access --dry-run`, `migrate_from_cli`) |
-| `shadow_iam.py` | A copy of an IAM in memory (`shadow_of`): the access move tries its plan there first, and reads its report from the copy's decisions |
+| `access_model.py` | Startup, once, after `container_defaults_v1`: per-person attachments become groups, with the report of every access change, compared after the start ("The access move"; `migrate_access`, `complete_report`, `iam_migrations` `access_model_v1`; `abi iam migrate-access --dry-run`, `migrate_from_cli`) |
+| `shadow_iam.py` | A copy of an IAM in memory (`shadow_of`), or kept as JSON (`snapshot`, `store_of`): the access move tries its plan there first, and reads its report from the copies' decisions |
 | `../invites/migration.py` | Startup, once (background, after the moves): each pending Nexus invitation becomes an invited `users` row holding what its pending grants held, attached as `api` for no user (they were authorized at invitation), the grants withdrawn (`iam_migrations` `invitations_to_people_v1`, `abi user migrate-invitations`; `services/invites/AGENTS.md`) |
 | `module_moves.py` | Startup, once, after `container_names_v1`: a module scope a remote module serves now (`MOVES`: the X app, `app/naas_abi_marketplace.applications.x/x_proxy` to `app/applications.x/x_proxy`) renamed in policy documents and keys' narrowing (`iam.rewrite_names(MovedScopes)`, `iam_migrations` `module_moves_v1`): a pattern naming the old item names the new one, a wildcard over the old module gets the new item beside it, one already reaching it is left. Nexus's rows of the app id: migration `0072_remote_x_app.sql` |
 | `runtime.py` | Where Nexus gets IAM (the engine's); tests install their own with `configure` |
@@ -123,10 +123,13 @@ of one at a workspace is `${scope}/module:<type>/<module>/<name>`. One source of
 - **The `apps` and `agents` features** no longer gate using a module's apps and agents: they are the settings
   sections (`InstallApp`, `UpdateApp`, `UninstallApp`, agent edits) and the app projects. `nexus:UseApp` is left for a
   link that is no module's app (a Pages portal's sign-in).
-- **Listed as IAM decides.** What a workspace lists of a module (`GET /apps`, the agents roster, the workflows and
-  workspace settings › Agents, Apps, Workflows) is what the caller may use there, IAM's `filter` alone
-  (`filter_scopes`): no set, no switch. A workspace that should not offer a module denies it in a policy (its
-  access policy's Denies, "The upgrade").
+- **Listed as IAM decides, within the offer.** What a workspace lists of a module (`GET /apps`, the agents roster,
+  the workflows and workspace settings › Agents, Apps, Workflows) is what the caller may use there, IAM's `filter`
+  (`filter_scopes`): no set, no switch. It is also within the workspace's offer ("<W> access", `Authz.offer_of`,
+  remembered 30 s, forgotten by `widen_offer` and the offer editor), so an org admin or the platform admin, whom
+  IAM lets use more, sees in W what W offers (ADR `20261120_access_levels_and_groups`, decision 11). A workspace
+  with no record, or a policy that is no allow-list yet, is not narrowed. A single item (`require_scope`) is IAM's
+  alone.
 - **The listing** `GET /api/modules/scopes?workspace_id=|organization_id=` (`nexus:ListModuleScopes`, admin, or
   whoever may create or update policies there) is every module with its agents, apps, workflows, pipelines and
   declared catalog, with display data and the `resource` and `actions` a policy names (`services/modules/scopes.py`),
@@ -437,8 +440,10 @@ lock; it waits for `container_defaults_v1`. Built from what IAM holds now with S
   `in_offer_form`. A statement of no offer section that only names a module's declared actions is dropped, listed;
   any other shape stops the move. The features each "Features of <role>" gave at W become W's offer features, those
   given at O (or org-wide) and at O's workspaces "<O> access"'s (its Allows bound its workspaces' offers).
-- **Detached**: the built-in roles at organizations and workspaces, "Features of <role>", "<W> modules (...)", every
-  attachment of a platform admin. Kept and listed: a customer policy attached to one person, Nexus's per-person
+- **Detached**: the built-in roles at organizations and workspaces, "Features of <role>" (and the sets' move's copies
+  of an org-wide one, "What <id>, attached at <scope>, granted in <place>", one per workspace for each holder: what
+  they gave was the holder's, so they add nothing to W's offer), "<W> modules (...)", every attachment of a platform
+  admin. Kept and listed: a customer policy attached to one person, Nexus's per-person
   Denies ("Agents turned off in <W>"); core's companions (`builtin.platform.*`) follow the roles. Shared graph grants
   stay per person and are re-synced: read for W's people, write for its admins.
 - **Retired** once nothing holds them: "Features of <role>", "<W> modules (...)", "Feature · <X>", the old groups.
@@ -453,11 +458,19 @@ lock; it waits for `container_defaults_v1`. Built from what IAM holds now with S
   flags (`platform_files.convert_legacy_drive_flags`, #1590: once the people are in their groups, after
   `sync_platform_files`; it drops its holding table; a dry run asks it with `apply=False` on the copy).
 - **Safety.** A shape it does not know, or a plan the copy refuses (`AccessModelStop`), stops it: nothing written,
-  nothing recorded. The report is kept (`access_model_v1_planned`) before the real IAM changes; a start interrupted
-  half way is finished by the next, which reports the whole move. Every step is idempotent; a forced second run
-  changes nothing. Afterwards the real IAM's decisions are compared with the copy's (`unverified`).
-- **Dry run**: `abi iam migrate-access --dry-run [--json]` (the CLI's IAM, the project's `nexus_config`) prints the
-  report and writes nothing. Tests: `access_model_test.py` (decision matrices on `policy_tree_test`'s world and on
+  nothing recorded. Before the real IAM changes, the move is kept (`access_model_v1_planned`: its plan's report, its
+  inputs and IAM as it was, `shadow_iam.snapshot`); a start interrupted half way is finished by the next, which
+  reports the whole move. Every step is idempotent; a forced second run changes nothing.
+- **The start does not wait for the comparison.** `migrate_access` tries the plan on the copy, keeps the move, makes
+  it and records it with `decisions` "pending" (who joined which group, what was detached, retired and offered). The
+  API then serves, and `main._complete_access_report` runs `complete_report` in the background (one API process,
+  `container_names.lock_if_free`): every person's decisions compared from the kept copy, before and after, then the
+  real IAM's against the copy's (`unverified`; a change made since the move shows there too), `decisions`
+  "compared", the copy dropped. A restart before it ends compares again. On about 150 people in 115 workspaces the
+  start takes minutes and the comparison most of an hour.
+- **Dry run**: `abi iam migrate-access --dry-run [--json]` (the project's IAM, read from its store; the project's
+  `nexus_config`) compares at once, prints the report and writes nothing: levels IAM has not made yet are made in
+  the copy. Tests: `access_model_test.py` (decision matrices on `policy_tree_test`'s world and on
   `role_features_test`'s taken back to before #1585), `shadow_iam_test.py`.
 
 ## Platform Files given with the workspace (#1590)
@@ -794,7 +807,8 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   containers recorded before keep attachments until #1587.
 - **The access move reports IAM's own decisions** (#1587). *Decision:* the move is applied to a copy of IAM first
   (`shadow_iam`) and its report is the diff of every person's decisions on the copy, classified by reason; the real
-  IAM is changed only after the copy accepted the plan and the report was kept, then compared with the copy.
+  IAM is changed only after the copy accepted the plan and IAM as it was was kept. The decisions are compared after
+  the start, from that copy: comparing decides nothing and took most of an hour on a large deployment.
   "Features of <role>" choices become offer features (of the workspace, and of its organization, whose access bounds
   it). *Consequences:* a dry run writes nothing; an unexpected shape stops the move before any write; the start
   after an interrupted move finishes it with the whole report; a Viewer whose role's features went beyond the Viewer

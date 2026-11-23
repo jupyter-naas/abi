@@ -31,8 +31,9 @@ member there is a Member, a widening the report names). Then:
   (a module's declared actions) are dropped, named in the report; the result is
   checked with ``workspace_offer.in_offer_form``.
 - **Per-person attachments go**: the built-in roles at organizations and
-  workspaces, "Features of <role>", "<W> modules (...)", "Feature · <X>" held by
-  "<X> members"; every attachment of a platform admin beyond the group. A
+  workspaces, "Features of <role>" (with the sets' move's per-workspace copies of
+  an org-wide one), "<W> modules (...)", "Feature · <X>" held by "<X> members";
+  every attachment of a platform admin beyond the group. A
   customer policy attached to someone, and a Deny Nexus made for one person
   ("Agents turned off in <W>"), stay: they are exceptions, listed in the report.
 - **Shared graph grants** stay per person (S2: a workspace's group cannot hold
@@ -44,15 +45,26 @@ member there is a Member, a widening the report names). Then:
   (``nexus_config.migration.default_workspace_admin``), or are listed.
 
 **The report is IAM's own decisions.** The plan is applied first to a copy of
-IAM (``shadow_iam``); every person's decisions (Nexus's actions, features, the
-module items of the deployment, shared graphs, models) are compared before and
-after, each change classified (``REASONS``: the intended ones flagged). A dry run
-stops there and writes nothing. A plan the copy refuses, or a shape this move does
-not know (``AccessModelStop``), stops everything: nothing is recorded and nothing
-retired. The report is kept (``access_model_v1_planned``) before the real IAM is
-changed, so a start interrupted half way is finished by the next one with the
-report of the whole move; every step is idempotent. Afterwards the real IAM's
+IAM (``shadow_iam``). A plan the copy refuses, or a shape this move does not know
+(``AccessModelStop``), stops everything: nothing is recorded and nothing retired.
+Every person's decisions (Nexus's actions, features, the module items of the
+deployment, shared graphs, models) are compared before and after, each change
+classified (``REASONS``: the intended ones flagged); afterwards the real IAM's
 decisions are compared with the copy's (``unverified`` names any difference).
+
+**The start does not wait for the comparison** (``complete_report``). Comparing
+is most of the move's time (tens of minutes for a hundred people in a hundred
+workspaces) and decides nothing: only the copy's refusal stops the move. So the
+start tries the plan on the copy, keeps IAM as it was (``access_model_v1_planned``:
+the move's plan, its inputs and a copy of IAM, ``shadow_iam.snapshot``), makes the
+move and records it (``access_model_v1``, ``decisions`` "pending"), then serves;
+the comparison runs afterwards from the kept copy, fills in the report's changes
+and drops the copy. A restart before it ends compares again from the copy; a
+start interrupted half way through the move finishes it, and the report is still
+the whole move's, read from IAM as it was before it. Every step is idempotent.
+Until the comparison ends, the report says who joined which group, what was
+detached and retired and what each ceiling offers, not yet who gains or loses
+what. A dry run compares at once and writes nothing.
 """
 
 from __future__ import annotations
@@ -85,6 +97,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.levels import (
     MEMBER,
     VIEWER,
     Levels,
+    ensure_levels,
     find_levels,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
@@ -130,9 +143,14 @@ from starlette.concurrency import run_in_threadpool
 _log = logging.getLogger(__name__)
 
 MIGRATION_NAME = "access_model_v1"
-# The report of a move under way, kept before the real IAM changes: a start that
-# finishes an interrupted move reports the whole of it.
+# The move under way, kept before the real IAM changes (its plan's report, its
+# inputs, IAM as it was): a start that finishes an interrupted move, and the
+# comparison of decisions after the start, report the whole of it.
 PLANNED_NAME = "access_model_v1_planned"
+# ``Report.decisions``: compared (``changes`` and ``unverified`` are the move's),
+# or pending (the start moved; ``complete_report`` compares).
+COMPARED = "compared"
+PENDING = "pending"
 AFTER = (DEFAULTS_MIGRATION,)
 
 ROLE_POLICIES = {f"builtin.{r}": r for r in ("owner", "admin", "member", "viewer")}
@@ -153,6 +171,7 @@ OTHER_MODEL = "access-move/any-other-model"
 # The policies this move retires, recognised by name and description.
 FEATURES_OF = "Features of "
 FEATURES_OF_DESCRIPTION = "The features the "
+SETS_COPY_DESCRIPTION = "What "
 MODULES_OF_PEOPLE = " modules (its people)"
 MODULES_OF_ADMINS = " modules (admins and owners)"
 FEATURE_POLICY = "Feature · "
@@ -182,7 +201,7 @@ REASONS: dict[str, tuple[str, bool]] = {
         True,
     ),
     "level_global": ("A level is one choice: the highest held anywhere applies everywhere", False),
-    "level_features": ("The level's features, within what the workspace offers", False),
+    "level_features": ("The level's features, within what the workspace offers", True),
     "viewer_features": (
         "Viewers use the Viewer level's features (apps, datasets): a feature their role's "
         "features gave beyond those goes",
@@ -194,7 +213,10 @@ REASONS: dict[str, tuple[str, bool]] = {
         "Shared graphs: read for the workspace's people, write for its admins",
         False,
     ),
-    "org_admins": ("Org admins use the organization's offer in every workspace", False),
+    "org_admins": (
+        "Org admins use the organization's offer in every workspace; its lists show what it offers",
+        True,
+    ),
     "platform_admin": ("A platform admin holds builtin.platform_admin and nothing else", False),
     "default_admin": (
         "The deployment's default workspace admin (nexus_config.migration.default_workspace_admin)",
@@ -316,6 +338,7 @@ class Report:
     drive_flags: list[dict[str, Any]] = field(default_factory=list)
     unverified: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    decisions: str = COMPARED
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -343,6 +366,11 @@ class Report:
             f"attachments detached, {len(self.retired_policies)} policies and "
             f"{len(self.retired_groups)} groups retired, {len(self.converted_ceilings)} ceilings "
             "made offers."
+            + (
+                " Who gains and loses what is compared after the start."
+                if self.decisions == PENDING
+                else ""
+            )
         ]
         by_person: dict[str, list[Change]] = {}
         for change in self.changes:
@@ -426,12 +454,23 @@ def _user_id(iam: Any, principal_id: str) -> str:
 
 
 def is_retired_kind(policy: Any) -> str | None:
-    """Which retired kind ``policy`` is ("features", "modules", "feature"), or None."""
+    """Which retired kind ``policy`` is ("features", "features_copy", "modules",
+    "feature"), or None. A "features_copy" is what the sets' move made of a
+    "Features of <role>" attached org-wide, one per workspace for each holder
+    (``policy_tree``: "What <id>, attached at <scope>, granted in <place>"): retired
+    too, but what it gave was its holder's, not a choice for the workspace's people
+    (``chosen_features`` leaves it out)."""
     from naas_abi.apps.nexus.apps.api.app.services.iam.policy_tree import MADE
 
     name, description = str(policy.name), str(policy.description or "")
     if name.startswith(FEATURES_OF) and description.startswith(FEATURES_OF_DESCRIPTION):
         return "features"
+    if (
+        name.startswith(FEATURES_OF)
+        and description.startswith(SETS_COPY_DESCRIPTION)
+        and description.endswith(MADE)
+    ):
+        return "features_copy"
     if (
         name.endswith(MODULES_OF_PEOPLE) or name.endswith(MODULES_OF_ADMINS)
     ) and description.endswith(MADE):
@@ -1462,19 +1501,6 @@ def changes_of(
     return list(grouped.values())
 
 
-def merged_changes(planned: Sequence[Change], found: Sequence[Change]) -> list[Change]:
-    """An interrupted move's report (``planned``, from the state before it) with what
-    the start finishing it found: a decision already reported keeps its first
-    report."""
-    seen = {(c.principal_id, c.container, w) for c in planned for w in c.what}
-    merged = [Change(**asdict(c)) for c in planned]
-    for change in found:
-        rest = [w for w in change.what if (change.principal_id, change.container, w) not in seen]
-        if rest:
-            merged.append(Change(**{**asdict(change), "what": rest}))
-    return merged
-
-
 # -- the move -------------------------------------------------------------------------
 
 
@@ -1498,54 +1524,104 @@ def _levels(iam: Any) -> Levels:
     return levels
 
 
-def trial(iam: Any, inputs: Inputs) -> Trial:
-    """The move on a copy of ``iam`` (``shadow_iam``), in IAM's thread: the report
-    is the copy's decisions against ``iam``'s, classified. ``AccessModelStop`` when
-    the copy refuses the plan. ``iam`` is not changed."""
-    from naas_abi.apps.nexus.apps.api.app.services.iam.shadow_iam import shadow_of
+def _copy_levels(copy: Any) -> Levels:
+    """The levels of a copy of IAM, made in the copy when it has none (never through
+    ``LEVELS``, which remembers the levels of this process's IAM)."""
+    levels = find_levels(copy)
+    if levels is None:
+        with as_service_account("api"):
+            levels = ensure_levels(copy)
+    return levels
 
-    levels = _levels(iam)
-    copy = shadow_of(iam)
+
+def _tried(copy: Any, inputs: Inputs, levels: Levels) -> Outcome:
+    """The move made on ``copy``: ``AccessModelStop`` when the copy refuses it."""
     try:
-        tried = apply(copy, inputs, levels, dry_run=True)
+        return apply(copy, inputs, levels, dry_run=True)
     except AccessModelStop:
         raise
     except Exception as exc:  # noqa: BLE001 - whatever the copy refuses stops the move
         raise AccessModelStop(f"the plan failed on a copy of IAM: {exc!r}") from exc
+
+
+def _compared(
+    before_iam: Any, copy: Any, tried: Outcome, inputs: Inputs
+) -> tuple[list[Change], list[tuple[str, str]], Decisions]:
+    """The changes of decisions ``tried`` makes (``before_iam`` against ``copy``,
+    which ``tried`` moved), the graph probes and what the copy decides after."""
     graph = _graph_probes(copy, tried.graph_policies)
-    before = decisions(iam, tried.plans, inputs, graph)
+    before = decisions(before_iam, tried.plans, inputs, graph)
     after = decisions(copy, tried.plans, inputs, graph)
-    report = tried.report
-    report.changes = changes_of(before, after, tried.plans, inputs)
-    return Trial(report, tried.plans, graph, after, levels, copy)
+    return changes_of(before, after, tried.plans, inputs), graph, after
 
 
-def apply_tried(
-    iam: Any, inputs: Inputs, tried: Trial
-) -> tuple[dict[str, DefaultsRecord], list[str]]:
-    """The move ``tried`` made on ``iam`` itself, in IAM's thread; then ``iam``'s
-    decisions compared with the copy's. Returns the records to write and the
-    decisions that differ from the copy's."""
-    done = apply(iam, inputs, tried.levels, dry_run=False)
+def trial(iam: Any, inputs: Inputs) -> Trial:
+    """The move on a copy of ``iam`` (``shadow_iam``), in IAM's thread: the report
+    is the copy's decisions against ``iam``'s, classified. ``AccessModelStop`` when
+    the copy refuses the plan. ``iam`` is not changed (a dry run): levels it has not
+    made yet are made in the copy."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.shadow_iam import shadow_of
+
+    copy = shadow_of(iam)
+    levels = find_levels(iam) or _copy_levels(copy)
+    tried = _tried(copy, inputs, levels)
+    changes, graph, after = _compared(iam, copy, tried, inputs)
+    tried.report.changes = changes
+    return Trial(tried.report, tried.plans, graph, after, levels, copy)
+
+
+@dataclass
+class Prepared:
+    """A start's move, tried on a copy: the levels, its report (who joins which
+    group, what is detached, retired, offered; no decisions yet) and IAM as it was
+    (``shadow_iam.snapshot``)."""
+
+    levels: Levels
+    report: Report
+    before: dict[str, Any]
+
+
+def prepare(iam: Any, inputs: Inputs) -> Prepared:
+    """The move tried on a copy of ``iam``, in IAM's thread: ``AccessModelStop``
+    when the copy refuses it. ``iam`` gets the levels when it has none (as the move
+    would), nothing else."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.shadow_iam import snapshot, store_of
+    from naas_abi_core.services.iam.IAMService import IAMService
+
+    levels = _levels(iam)
+    before = snapshot(iam)
+    tried = _tried(IAMService(store_of(before)), inputs, levels)
+    tried.report.dry_run = False
+    return Prepared(levels, tried.report, before)
+
+
+def apply_planned(iam: Any, inputs: Inputs, levels: Levels) -> dict[str, DefaultsRecord]:
+    """The move made on ``iam`` itself, in IAM's thread. Returns the records to
+    write."""
+    done = apply(iam, inputs, levels, dry_run=False)
     platform_files.sync_platform_files(iam)
-    real = decisions(iam, tried.plans, inputs, tried.graph)
+    return done.records
+
+
+def compare(iam: Any, before: Mapping[str, Any], inputs: Inputs) -> tuple[list[Change], list[str]]:
+    """The changes of decisions of the move from IAM as it was (``before``, a
+    ``shadow_iam.snapshot``) and what ``iam`` decides now against the copy's
+    (``unverified``, at most 200; a change made in IAM since the move shows there
+    too). In IAM's thread; ``iam`` is only read."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.shadow_iam import store_of
+    from naas_abi_core.services.iam.IAMService import IAMService
+
+    before_iam = IAMService(store_of(before))
+    copy = IAMService(store_of(before))
+    tried = _tried(copy, inputs, _copy_levels(copy))
+    changes, graph, after = _compared(before_iam, copy, tried, inputs)
+    real = decisions(iam, tried.plans, inputs, graph)
     unverified = [
-        f"{key}: {real[key]} (the copy: {tried.after.get(key)})"
+        f"{key}: {real[key]} (the copy: {after.get(key)})"
         for key in sorted(real)
-        if tried.after.get(key) != real[key]
+        if after.get(key) != real[key]
     ][:200]
-    return done.records, unverified
-
-
-def merged_report(planned: Report | None, found: Report) -> Report:
-    """The report of a move: ``found`` (this start's trial), or, for a move a start
-    began and did not finish, the report it kept (``planned``, from the state before
-    it) with what this start found besides."""
-    if planned is None:
-        return found
-    merged = Report.from_dict(planned.to_dict())
-    merged.changes = merged_changes(planned.changes, found.changes)
-    return merged
+    return changes, unverified
 
 
 # -- Nexus's side ---------------------------------------------------------------------
@@ -1694,7 +1770,68 @@ async def convert_drive_flags(
     return [asdict(change) for change in changes]
 
 
-async def _planned(db: AsyncSession) -> Report | None:
+def inputs_json(inputs: Inputs) -> dict[str, Any]:
+    """``inputs`` as JSON (``read_inputs_json`` reads it back)."""
+    universe = inputs.universe
+    return {
+        "orgs": inputs.orgs,
+        "workspaces": {w: list(v) for w, v in inputs.workspaces.items()},
+        "records": [asdict(r) for r in inputs.records.values()],
+        "org_invited": sorted(list(p) for p in inputs.org_invited),
+        "default_admin": inputs.default_admin,
+        "default_admin_email": inputs.default_admin_email,
+        "enabled_features": list(inputs.enabled_features),
+        "universe": {
+            **{kind: sorted(list(i) for i in universe.items(kind)) for kind in SECTIONS},
+            "declared": sorted(universe.declared),
+            "declared_actions": sorted(list(a) for a in universe.declared_actions),
+        },
+        "member_models": list(inputs.member_models),
+    }
+
+
+def read_inputs_json(data: Mapping[str, Any]) -> Inputs:
+    universe = data["universe"]
+    return Inputs(
+        orgs=dict(data["orgs"]),
+        workspaces={w: (v[0], v[1]) for w, v in data["workspaces"].items()},
+        records={r["container"]: DefaultsRecord(**r) for r in data["records"]},
+        org_invited={(u, o) for u, o in data["org_invited"]},
+        default_admin=data["default_admin"],
+        default_admin_email=data["default_admin_email"],
+        enabled_features=tuple(data["enabled_features"]),
+        universe=Universe(
+            **{kind: frozenset((m, n) for m, n in universe[kind]) for kind in SECTIONS},
+            declared=frozenset(universe["declared"]),
+            declared_actions=frozenset((a, t) for a, t in universe["declared_actions"]),
+        ),
+        member_models=tuple(data["member_models"]),
+    )
+
+
+@dataclass
+class Planned:
+    """A move under way (``PLANNED_NAME``): its plan's report, and its inputs and IAM
+    as they were before it, which its decisions are compared from. Kept by a start
+    of the version before this one: its report alone, decisions compared."""
+
+    report: Report
+    inputs: Inputs | None = None
+    before: dict[str, Any] | None = None
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "report": self.report.to_dict(),
+                "inputs": inputs_json(self.inputs) if self.inputs is not None else None,
+                "before": self.before,
+            },
+            sort_keys=True,
+            default=str,
+        )
+
+
+async def _planned(db: AsyncSession) -> Planned | None:
     row = (
         await db.execute(
             text("SELECT report FROM iam_migrations WHERE name = :n"), {"n": PLANNED_NAME}
@@ -1703,18 +1840,40 @@ async def _planned(db: AsyncSession) -> Report | None:
     if row is None or not row[0]:
         return None
     try:
-        return Report.from_dict(json.loads(row[0]))
-    except (TypeError, ValueError):
-        _log.warning("The planned access move's report could not be read: reported anew")
+        data = json.loads(row[0])
+        if "report" not in data:
+            return Planned(Report.from_dict(data))
+        inputs = data.get("inputs")
+        return Planned(
+            Report.from_dict(data["report"]),
+            read_inputs_json(inputs) if inputs else None,
+            data.get("before"),
+        )
+    except (TypeError, ValueError, KeyError):
+        _log.warning("The planned access move could not be read: planned anew")
         return None
 
 
-async def _keep(db: AsyncSession, name: str, report: Report) -> None:
+async def _keep(db: AsyncSession, name: str, report: Report | Planned) -> None:
     await db.execute(text("DELETE FROM iam_migrations WHERE name = :n"), {"n": name})
     await db.execute(
         text("INSERT INTO iam_migrations (name, applied_at, report) VALUES (:n, :at, :r)"),
         {"n": name, "at": datetime.now(UTC).replace(tzinfo=None), "r": report.to_json()},
     )
+
+
+async def _kept_report(db: AsyncSession) -> Report | None:
+    row = (
+        await db.execute(
+            text("SELECT report FROM iam_migrations WHERE name = :n"), {"n": MIGRATION_NAME}
+        )
+    ).first()
+    if row is None or not row[0]:
+        return None
+    try:
+        return Report.from_dict(json.loads(row[0]))
+    except (TypeError, ValueError):
+        return None
 
 
 def log_report(report: Report) -> None:
@@ -1741,8 +1900,10 @@ async def migrate_access(
     iam: Any = None,
 ) -> Report | None:
     """The access move (see the module), once: None when ``iam_migrations`` records
-    it (``force``: run anyway) or it waits for ``container_defaults_v1``. A dry run
-    reports and writes nothing. Run under the moves' lock (``main``)."""
+    it (``force``: run anyway), it waits for ``container_defaults_v1``, or it
+    stopped. Made, its report's decisions are pending (``complete_report``). A dry
+    run reports, decisions compared, and writes nothing. Run under the moves' lock
+    (``main``)."""
     if not force and not dry_run and await _recorded(db, MIGRATION_NAME):
         return None
     for before in AFTER:
@@ -1753,15 +1914,14 @@ async def migrate_access(
     inputs = await read_inputs(db, universe=universe, settings=settings)
     named = await run_in_threadpool(lambda: _as_engine(lambda: named_universe(iam)))
     inputs.universe = inputs.universe.merged(named)
-    planned = None if dry_run else await _planned(db)
-    try:
-        tried = await run_in_threadpool(lambda: trial(iam, inputs))
-    except AccessModelStop as stop:
-        _log.error("The access move stopped, nothing changed or recorded: %s", stop)
-        return None
-    report = merged_report(planned, tried.report)
-    report.dry_run = dry_run
     if dry_run:
+        try:
+            tried = await run_in_threadpool(lambda: trial(iam, inputs))
+        except AccessModelStop as stop:
+            _log.error("The access move stopped, nothing changed or recorded: %s", stop)
+            return None
+        report = tried.report
+        report.dry_run = True
         try:
             report.drive_flags = await convert_drive_flags(tried.copy, db, apply=False)
         except Exception as exc:  # noqa: BLE001 - reported; the rest of the report stands
@@ -1769,13 +1929,24 @@ async def migrate_access(
             report.notes.append(f"The drive flags could not be read: {exc}")
         log_report(report)
         return report
-    # The whole move's report, kept before the real IAM changes: a start that
-    # finishes it reports the move from the state before it.
-    if planned is None:
-        await _keep(db, PLANNED_NAME, report)
-        await db.commit()
+    planned = await _planned(db)
     try:
-        records, unverified = await run_in_threadpool(lambda: apply_tried(iam, inputs, tried))
+        prepared = await run_in_threadpool(lambda: prepare(iam, inputs))
+    except AccessModelStop as stop:
+        _log.error("The access move stopped, nothing changed or recorded: %s", stop)
+        return None
+    # IAM as it was, kept before the real IAM changes: the report is read from it,
+    # after this start or after one that finishes an interrupted move.
+    if planned is None:
+        planned = Planned(prepared.report, inputs, prepared.before)
+        await _keep(db, PLANNED_NAME, planned)
+        await db.commit()
+    report = Report.from_dict(planned.report.to_dict())
+    report.dry_run = False
+    if planned.before is not None:
+        report.decisions = PENDING
+    try:
+        records = await run_in_threadpool(lambda: apply_planned(iam, inputs, prepared.levels))
     except Exception:  # noqa: BLE001 - nothing recorded: the next start finishes it
         _log.exception("The access move stopped half way: the next start finishes it")
         await db.rollback()
@@ -1786,15 +1957,51 @@ async def migrate_access(
         CONTAINER_DEFAULTS.remember(record)
     CONTAINER_DEFAULTS.forget_grouped()
     report.applied = True
-    report.unverified = unverified
     try:
         report.drive_flags = await convert_drive_flags(iam, db) or report.drive_flags
     except Exception as exc:  # noqa: BLE001 - reported; the people's move stands
         _log.exception("The drive flags were not converted")
         report.notes.append(f"The drive flags were not converted: {exc}")
     await _keep(db, MIGRATION_NAME, report)
-    await db.execute(text("DELETE FROM iam_migrations WHERE name = :n"), {"n": PLANNED_NAME})
+    if planned.before is None:
+        # Planned by the version before this one: its report holds the decisions.
+        await db.execute(text("DELETE FROM iam_migrations WHERE name = :n"), {"n": PLANNED_NAME})
     await db.commit()
+    log_report(report)
+    return report
+
+
+async def complete_report(sessions: Any, *, iam: Any = None) -> Report | None:
+    """The decisions of a recorded move compared (``compare``), from IAM as it was
+    before it (``PLANNED_NAME``): its report's ``changes`` and ``unverified``
+    filled in, the copy dropped. None when there is nothing to compare (no move
+    recorded, or compared already). ``sessions`` opens a session of Nexus's
+    database; none is held while comparing."""
+    async with sessions() as db:
+        if not await _recorded(db, MIGRATION_NAME):
+            return None
+        planned = await _planned(db)
+        report = await _kept_report(db)
+    if planned is None or report is None:
+        return None
+    if planned.before is None or planned.inputs is None:
+        return None
+    iam = iam if iam is not None else runtime.iam()
+    _log.info("Access move: comparing every person's decisions before and after the move")
+    inputs = planned.inputs
+    before = planned.before
+    try:
+        changes, unverified = await run_in_threadpool(lambda: compare(iam, before, inputs))
+    except AccessModelStop as stop:
+        report.notes.append(f"The decisions could not be compared: {stop}")
+        changes, unverified = [], []
+    report.changes = changes
+    report.unverified = unverified
+    report.decisions = COMPARED
+    async with sessions() as db:
+        await _keep(db, MIGRATION_NAME, report)
+        await db.execute(text("DELETE FROM iam_migrations WHERE name = :n"), {"n": PLANNED_NAME})
+        await db.commit()
     log_report(report)
     return report
 
@@ -1836,6 +2043,8 @@ async def migrate_from_cli(
 
 
 __all__ = [
+    "COMPARED",
+    "PENDING",
     "AccessModelStop",
     "Change",
     "Inputs",
@@ -1845,8 +2054,11 @@ __all__ = [
     "Report",
     "Universe",
     "ceiling_offer",
+    "compare",
+    "complete_report",
     "decisions",
     "migrate_access",
     "migrate_from_cli",
+    "prepare",
     "trial",
 ]

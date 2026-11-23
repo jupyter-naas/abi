@@ -903,3 +903,40 @@ async def test_the_moves_lock_holds_one_process_at_a_time_on_postgresql():
     finally:
         await first.dispose()
         await second.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_lock_taken_without_waiting_is_held_on_sqlite():
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine("sqlite+aiosqlite://")
+    try:
+        async with container_names.lock_if_free(engine, container_names.REPORT_LOCK) as held:
+            assert held
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_lock_taken_without_waiting_is_one_process_s_on_postgresql():
+    """Two API processes after their start: one compares the access move's
+    decisions, the other goes on without waiting for it."""
+    import os
+
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    dsn = os.environ.get("IAM_TEST_POSTGRES_DSN") or os.environ.get("DOCUMENT_TEST_POSTGRES_DSN")
+    if not dsn:
+        pytest.skip("Set IAM_TEST_POSTGRES_DSN to run on PostgreSQL")
+    url = dsn.replace("postgresql://", "postgresql+asyncpg://", 1)
+    first, second = create_async_engine(url), create_async_engine(url)
+    key = container_names.REPORT_LOCK
+    try:
+        async with container_names.lock_if_free(first, key) as one:
+            async with container_names.lock_if_free(second, key) as two:
+                assert one and not two
+        async with container_names.lock_if_free(second, key) as again:
+            assert again
+    finally:
+        await first.dispose()
+        await second.dispose()

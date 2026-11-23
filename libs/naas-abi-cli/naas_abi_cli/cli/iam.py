@@ -722,11 +722,20 @@ def migrate_access(
         raise click.ClickException(
             "Nexus applies the access move at its start: run with --dry-run to see its report"
         )
+    from types import SimpleNamespace
+
     module = importlib.import_module(_NEXUS_ACCESS_MODEL)
     url = database_url or _configured_database_url()
     settings = _configured_nexus_settings()
-    with _services(ctx) as services:
-        report = asyncio.run(module.migrate_from_cli(url, services, settings=settings))
+    # The project's IAM, read from its store as the other commands do: the move is
+    # tried on a copy of everything IAM holds, which a client of the engine's IAM
+    # over NATS does not list.
+    with _iam(ctx) as project_iam:
+        report = asyncio.run(
+            module.migrate_from_cli(
+                url, SimpleNamespace(iam=project_iam), settings=settings
+            )
+        )
     if report is None:
         raise click.ClickException(
             "The access move cannot run on this store: it waits for an earlier move "

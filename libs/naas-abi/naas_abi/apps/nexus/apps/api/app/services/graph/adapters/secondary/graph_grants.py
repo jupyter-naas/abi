@@ -257,7 +257,12 @@ class GraphGrants:
     async def _holders(container: str | None) -> tuple[set[str], set[str]]:
         if container is None:
             return set(), set()
-        members = await MEMBERSHIPS.members(container)
+        return GraphGrants.holders_of(await MEMBERSHIPS.members(container))
+
+    @staticmethod
+    def holders_of(members: Iterable[Any]) -> tuple[set[str], set[str]]:
+        """``(readers, writers)`` of a workspace whose people are ``members``."""
+        members = list(members)
         readers = {m.principal_id for m in members}
         # Its admins write ("<W> admins"); a member with no level holds a role of
         # before (an attachment), which wrote until the access move (#1587).
@@ -275,14 +280,16 @@ class GraphGrants:
         *,
         store: Any = None,
         legacy_owned: Iterable[str] = (),
+        holders: tuple[set[str], set[str]] | None = None,
     ) -> None:
         """Make IAM say what ``config`` says for the workspace, and hold it for
-        its current members."""
+        its current members (``holders``: ``(readers, writers)`` already read,
+        ``holders_of``)."""
         container = await AUTHZ.container_of(workspace_id)
         if container is None:
             logger.warning(f"Graph assignments of {workspace_id}: a workspace IAM does not know")
             return
-        readers, writers = await self._holders(container)
+        readers, writers = holders if holders is not None else await self._holders(container)
 
         recorded = await self._recorded_owners(store) if config.read_all and store else {}
 
@@ -379,8 +386,15 @@ async def _follow_roles(workspace_id: str, dropped: bool) -> None:
         await GRANTS.sync_members(workspace_id)
 
 
-async def sync_workspace(db: AsyncSession, workspace_id: str, *, store: Any = None) -> None:
-    """Project the saved assignments of one workspace into IAM."""
+async def sync_workspace(
+    db: AsyncSession,
+    workspace_id: str,
+    *,
+    store: Any = None,
+    holders: tuple[set[str], set[str]] | None = None,
+) -> None:
+    """Project the saved assignments of one workspace into IAM (``holders``: its
+    readers and writers, when already read)."""
     from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_placements import (  # noqa: E501
         legacy_owned_graphs,
     )
@@ -391,16 +405,31 @@ async def sync_workspace(db: AsyncSession, workspace_id: str, *, store: Any = No
     saved = await load_resource_policy(db, workspace_id, "graphs")
     config = WorkspaceGraphPolicyConfig.model_validate(saved.data)
     legacy = legacy_owned_graphs(store, workspace_id) if store is not None else set()
-    await GRANTS.apply(workspace_id, config, store=store, legacy_owned=legacy)
+    await GRANTS.apply(workspace_id, config, store=store, legacy_owned=legacy, holders=holders)
 
 
 async def sync_all(db: AsyncSession, *, store: Any = None) -> int:
-    """Project every workspace's saved assignments into IAM (startup)."""
+    """Project every workspace's saved assignments into IAM (startup). Who holds
+    what is read once for every workspace (``members_of``): one read per workspace
+    is a pass over every role's attachments each."""
     ids = [str(row[0]) for row in (await db.execute(text("SELECT id FROM workspaces"))).all()]
+    containers = {workspace_id: await AUTHZ.container_of(workspace_id) for workspace_id in ids}
+    known = sorted({c for c in containers.values() if c is not None})
+    try:
+        members = await MEMBERSHIPS.members_of(known) if known else {}
+    except Exception:  # noqa: BLE001 - each workspace reads its own, as before
+        logger.exception("The workspaces' members could not be read at once: read one by one")
+        members = None
     done = 0
     for workspace_id in ids:
+        container = containers[workspace_id]
+        holders = (
+            GraphGrants.holders_of(members.get(container, []))
+            if members is not None and container is not None
+            else None
+        )
         try:
-            await sync_workspace(db, workspace_id, store=store)
+            await sync_workspace(db, workspace_id, store=store, holders=holders)
             done += 1
         except Exception:  # noqa: BLE001 - one workspace never blocks the others
             logger.exception(f"Graph assignments of workspace {workspace_id} not applied")

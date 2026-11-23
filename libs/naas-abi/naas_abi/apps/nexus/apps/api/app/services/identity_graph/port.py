@@ -40,7 +40,8 @@ class IdentityOrganizationMembership:
     user_id: str
     # None: linked through one of the organization's workspaces, no org role.
     role: str | None
-    created_at: datetime.datetime
+    # None: held through a group, which does not say since when (#1587).
+    created_at: datetime.datetime | None
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,8 @@ class IdentityMembership:
     workspace_id: str
     user_id: str
     role: str
-    created_at: datetime.datetime
+    # None: held through a group, which does not say since when (#1587).
+    created_at: datetime.datetime | None
 
 
 @dataclass(frozen=True)

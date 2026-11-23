@@ -435,10 +435,10 @@ async def _prepare_iam() -> None:
                 # Each organization and workspace has its access policy and its
                 # members and admins groups (made once for those that predate them).
                 await container_defaults.migrate(db)
-                # Once, after those: per-person attachments become groups (#1587),
-                # with the report of every access change (logged, and kept in
-                # ``iam_migrations``). It stops with nothing recorded on a shape it
-                # does not know; one interrupted half way is finished next start.
+                # Once, after those: per-person attachments become groups (#1587).
+                # It stops with nothing recorded on a shape it does not know; one
+                # interrupted half way is finished next start. Who gains and loses
+                # what is compared after the start (``_complete_access_report``).
                 try:
                     await access_model.migrate_access(db)
                 except Exception:  # noqa: BLE001 - retried at the next start
@@ -452,6 +452,25 @@ async def _prepare_iam() -> None:
                     log.exception("The turned-off agents of modules loaded since were not denied")
     except Exception:
         log.exception("Nexus could not set up its authorization in IAM: every request is refused")
+
+
+async def _complete_access_report() -> None:
+    """The access move's decisions compared, after the start
+    (``access_model.complete_report``): the start that moves does not wait for
+    them (tens of minutes on a large deployment), and one restarted before they are
+    compared compares them again. One API process at a time; another goes on
+    without waiting."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, async_engine
+    from naas_abi.apps.nexus.apps.api.app.services.iam import access_model, container_names
+
+    try:
+        async with container_names.lock_if_free(async_engine, container_names.REPORT_LOCK) as held:
+            if held:
+                await access_model.complete_report(AsyncSessionLocal)
+    except Exception:  # noqa: BLE001 - compared again at the next start
+        logging.getLogger(__name__).exception(
+            "The access move's decisions were not compared: the next start compares them"
+        )
 
 
 async def _container_defaults_after_seeds() -> None:
@@ -681,6 +700,9 @@ async def _startup(app: FastAPI) -> None:
         asyncio.create_task(_backfill_drives())
         # After seeds and the moves: pending invitations become invited people.
         asyncio.create_task(_migrate_pending_invitations())
+        # The access move's report: who gains and loses what, compared from IAM as
+        # it was before the move, while the API serves.
+        asyncio.create_task(_complete_access_report())
 
     try:
         start_chat_ingestion_consumer(app)

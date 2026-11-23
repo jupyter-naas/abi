@@ -330,6 +330,35 @@ async def test_the_shared_grant_follows_the_workspaces_members(world, team) -> N
         world.select("newcomer", shared.uri)
 
 
+class _Workspaces:
+    """Nexus's database, as ``sync_all`` reads it: the workspaces' ids."""
+
+    def __init__(self, ids: list[str]) -> None:
+        self.ids = ids
+
+    async def execute(self, *_args, **_kwargs):
+        return SimpleNamespace(all=lambda: [(i,) for i in self.ids])
+
+
+@pytest.mark.asyncio
+async def test_the_start_reads_every_workspaces_holders_in_one_pass(
+    world, team, monkeypatch
+) -> None:
+    shared = await world.create("member", "ws-1")
+    world.put(shared.uri)
+    world.policies["ws-2"] = WorkspaceGraphPolicyConfig(read=[shared.uri])
+    team.grant("newcomer", "viewer", workspace_container("org-1", "ws-2"))
+
+    async def one_workspace_at_a_time(_scope):
+        raise AssertionError("each workspace's holders read on their own")
+
+    # One read of who holds what per workspace is a pass over every role's
+    # attachments each: at the start, one pass for them all.
+    monkeypatch.setattr(MEMBERSHIPS, "members", one_workspace_at_a_time)
+    await graph_grants.sync_all(_Workspaces(["ws-1", "ws-2"]), store=world.store)
+    assert world.select("newcomer", shared.uri)
+
+
 @pytest.mark.asyncio
 async def test_a_workspace_that_may_not_create_graphs_creates_none(world) -> None:
     await world.share("ws-1", WorkspaceGraphPolicyConfig(allow_create=False))

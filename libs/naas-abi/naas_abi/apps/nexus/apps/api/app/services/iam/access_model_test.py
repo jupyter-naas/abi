@@ -81,6 +81,8 @@ def _settings(admin: str | None = None, models: tuple[str, ...] = ()) -> SimpleN
 
 
 async def _move(nexus_db, nexus, **kwargs):
+    """The move as a start makes it, then its decisions compared as the start
+    leaves them to (``complete_report``): the whole report."""
     nexus.iam.invalidate()
     async with nexus_db() as db:
         report = await access_model.migrate_access(
@@ -91,6 +93,9 @@ async def _move(nexus_db, nexus, **kwargs):
             **kwargs,
         )
     nexus.iam.invalidate()
+    if report is not None and report.decisions == access_model.PENDING:
+        report = await access_model.complete_report(nexus_db, iam=nexus.iam)
+        nexus.iam.invalidate()
     return report
 
 
@@ -266,6 +271,54 @@ async def test_every_change_of_access_is_reported_with_its_reason(nexus_db):
 
 
 @pytest.mark.asyncio
+async def test_the_start_moves_and_the_decisions_are_compared_afterwards(nexus_db, tmp_path):
+    from naas_abi.apps.nexus.apps.api.app.core.database import Base
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    # The same world, moved and reported in one go, on a database of its own.
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'other.sqlite'}")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    other_db = async_sessionmaker(engine, expire_on_commit=False)
+    clean = previous._world()
+    with clean.installed():
+        subjects = previous._subjects(clean)
+        await _policy_tree_world_installed(clean, other_db)
+        whole = await _move(other_db, clean)
+        expected = _matrix(clean, subjects)
+    await engine.dispose()
+    assert whole is not None and whole.decisions == access_model.COMPARED
+
+    nexus = previous._world()
+    with nexus.installed():
+        await _policy_tree_world_installed(nexus, nexus_db)
+        nexus.iam.invalidate()
+        # The start: the move is made and recorded; comparing every person's
+        # decisions before and after (most of the move's time) is left for later.
+        async with nexus_db() as db:
+            started = await access_model.migrate_access(
+                db, universe=UNIVERSE, settings=_settings(), iam=nexus.iam
+            )
+        nexus.iam.invalidate()
+        assert started is not None and started.applied
+        assert started.decisions == access_model.PENDING and started.changes == []
+        assert _diff(expected, _matrix(nexus, previous._subjects(nexus))) == {}
+        recorded = json.loads(await _recorded(nexus_db, access_model.MIGRATION_NAME) or "{}")
+        assert recorded["decisions"] == access_model.PENDING
+        assert await _recorded(nexus_db, access_model.PLANNED_NAME)
+        # Afterwards: the report of the whole move, from IAM as it was before it.
+        report = await access_model.complete_report(nexus_db, iam=nexus.iam)
+        assert report is not None and report.decisions == access_model.COMPARED
+        assert _changes(report, what=True) == _changes(whole, what=True)
+        assert report.unverified == []
+        recorded = json.loads(await _recorded(nexus_db, access_model.MIGRATION_NAME) or "{}")
+        assert recorded["decisions"] == access_model.COMPARED and recorded["changes"]
+        assert await _recorded(nexus_db, access_model.PLANNED_NAME) is None
+        # Once compared, nothing is left to compare.
+        assert await access_model.complete_report(nexus_db, iam=nexus.iam) is None
+
+
+@pytest.mark.asyncio
 async def test_a_dry_run_reports_what_the_move_does_and_writes_nothing(nexus_db):
     nexus = previous._world()
     with nexus.installed():
@@ -415,8 +468,9 @@ async def test_an_interrupted_move_ends_as_an_uninterrupted_one(nexus_db, tmp_pa
         assert await _move(nexus_db, nexus) is None
         assert calls["n"] >= 6
         assert await _recorded(nexus_db, access_model.MIGRATION_NAME) is None
+        # Kept before the real IAM changed: IAM as it was, which the report is read from.
         planned = await _recorded(nexus_db, access_model.PLANNED_NAME)
-        assert planned and json.loads(planned)["changes"]
+        assert planned and json.loads(planned)["before"]["policies"]
         monkeypatch.setattr(nexus.iam, "detach_policy", real)
         finished = await _move(nexus_db, nexus)
         assert finished is not None and finished.applied
@@ -711,6 +765,58 @@ async def test_a_store_from_before_the_groups_moves_and_reports_each_change(nexu
             assert nexus.principal("henry") in nexus.iam.list_group_members(org_people)
         assert any(o.startswith("henry in ") for o in report.org_only)
         assert ("henry", "org-1", "read", "organization") not in changed
+
+
+@pytest.mark.asyncio
+async def test_a_copy_the_sets_move_made_of_features_of_admin_goes_and_offers_nothing(nexus_db):
+    """The sets' move copied an org-wide "Features of admin" into each workspace
+    (``policy_tree``: its name, "What <id>, attached at <scope>, granted in <place>"):
+    one per workspace for each org admin. The move retires it like the others, but
+    what it gave is the org admin's, not a choice for the workspace's people: it
+    adds nothing to the workspace's offer."""
+    nexus = features_world._previous(features_world._world())
+    with nexus.installed():
+        await _upgrade_role_features_world(nexus, nexus_db)
+        ws_c = workspace_container("org-2", "ws-c")
+        containers = [r.container for r in await _defaults(nexus_db)]
+        with as_service_account("engine"):
+            iam = nexus.iam
+            chosen = access_model.chosen_features(iam, containers)
+            gina = nexus.principal("gina")
+            copy = iam.create_policy(
+                "Features of admin",
+                parse_policy_document(
+                    {
+                        "version": POLICY_VERSION,
+                        "statements": [
+                            {
+                                "sid": "UseFeatures",
+                                "effect": "Allow",
+                                "actions": ["nexus:UseFeature"],
+                                "resources": [
+                                    f"${{scope}}/nexus:feature/{key}"
+                                    for key in features_world.KNOWN_FEATURE_KEYS
+                                ],
+                            }
+                        ],
+                    }
+                ),
+                description=(
+                    f"What pol_org_2_admin_features, attached at {org_container('org-2')}/*, "
+                    f"granted in {ws_c}: its modules and features within that place's "
+                    "access." + policy_tree.MADE
+                ),
+                scope=ws_c,
+            )
+            iam.attach_policy(copy.id, gina, ws_c)
+            assert access_model.is_retired_kind(copy) is not None
+            assert access_model.chosen_features(iam, containers) == chosen
+        report = await _move(nexus_db, nexus)
+        assert report is not None and report.applied
+        assert not [k for k in report.kept_attachments if "Features of admin" in k]
+        with as_service_account("engine"):
+            assert not nexus.iam.list_attachments(policy_id=copy.id)
+            assert copy.id not in {p.id for p in nexus.iam._all_policies()}
 
 
 @pytest.mark.asyncio

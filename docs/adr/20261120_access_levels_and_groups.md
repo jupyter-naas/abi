@@ -93,6 +93,11 @@ Administrators reason about people in two axes: **where** someone works (a works
      - owners lose delete;
      - leftover org Member roles go.
    - Members gain the datasets feature.
+   - Accepted widenings, flagged intended in the report:
+     - a level's features apply in every workspace, within its offer (`level_features`): a Member gains there a feature the workspace's old "Features of member" did not give but its offer has;
+     - org admins use the organization's offer in each of its workspaces (`org_admins`), and the workspace's lists show them its offer (decision 11).
+   - The sets' move's per-workspace copies of an org-wide "Features of <role>" go with the others. What they gave was their holder's, so they add nothing to the workspace's offer.
+   - The start that moves does not wait for the report. It tries the plan on a copy of IAM, the only check that stops the move, keeps IAM as it was (`access_model_v1_planned`), makes the move and records it, then serves. Who gains and loses what is compared afterwards, from the kept copy (`decisions` "pending", then "compared"). On a deployment of about 150 people in 115 workspaces, comparing takes most of an hour and the move itself a few minutes.
 
 10. **Platform Files comes with the workspace** (#1590).
     - Workspace settings › General › Platform Files is Off, Read, or Read and write, for everyone in the workspace. Only the platform admin changes it.
@@ -101,6 +106,11 @@ Administrators reason about people in two axes: **where** someone works (a works
     - As built (option (a)): a **platform group per workspace that has it**, "Platform Files · <W> (<workspace id>)", holds one of the two policies, unscoped. Nexus keeps its members equal to the people of W (the members of W's membership groups): at each membership change, where "Workspace admins" follows "<W> admins"; after a member is added or removed on the IAM admin pages; when the setting changes; and at each start, which also deletes the group of a deleted workspace. The setting is which policy the group holds, so IAM is its only store.
     - Why a group per workspace and not one per mode ("readers", "editors"): with one group per mode, leaving W would have to recompute the person's mode from all their other workspaces, and the setting would need a store of its own. With a group per workspace, a membership change is decided for W alone.
     - The legacy flags: `0073_drop_drive_flags.sql` copies the flagged workspaces into `workspace_drive_flags_legacy` (PostgreSQL only) before it drops the columns. `access_model_v1` converts `platform_drive_enabled` into Read and write and reports `system_drive_enabled` without converting it (System Files stays the platform admin's).
+
+11. **A workspace's lists show its offer, for everyone.** An Org Admin holds "<O> access" below the organization, so IAM lets them use, in every workspace of O, what O offers: a client's agents in another client's workspace. They need it: widening a workspace's offer is checked against what the writer holds there ("Grant only what you hold"), and org admins are who widen offers.
+    - Nexus narrows what it **shows**, not what IAM allows. What `Authz.filter_scopes` keeps (the agents, apps, workflows and pipelines a workspace lists, the chat's agents and their sub-agents, the models of the OpenAI gateway, the workspace's usage counts) is also within the workspace's offer. For Members and Workspace Admins this changes nothing, their level being bounded by the offer already. A single item asked by name (`require_scope`: opening an app, a turn of an agent) stays IAM's decision.
+    - A workspace with no record, or whose access policy is not an allow-list yet, is not narrowed. The offer is read as `api` and remembered for 30 seconds in each process; a change of an offer made in that process forgets it at once.
+    - Rejected: bounding org admins by the offer inside IAM ("<W> access" held by "<O> admins" at each W). Org admins could then no longer widen an offer, only the platform admins, unless Nexus wrote the offer for them, a second exception to "Grant only what you hold". It would add no protection either: an org admin may add any module of O to a workspace's offer and use it.
 
 ## Consequences
 
@@ -111,4 +121,6 @@ Administrators reason about people in two axes: **where** someone works (a works
 - **The catalog changes.** `DeleteWorkspace` moves to the Org Admin and `DeleteOrganization` to the Platform Admin. The Owner role stays declared, for the policies that name it, but nothing assigns it.
 - **People flows change in one place.** Since #1580, creating, adding and removing people goes through the people service's access gateway. Its grant changes from role and policies to level and groups, and the platform, organization and workspace user pages follow (S6).
 - **Nexus keeps the Platform Files groups in step,** like a grant meant for every person of W: a platform group per workspace that has it. A membership changed straight in IAM, around Nexus, is followed at the next start. A SQLite deployment keeps no legacy drive flag: its platform admin sets each workspace's Platform Files again.
+- **The move's report comes after its start.** For a while after the upgrade, its record says which groups people joined and what was detached and retired, but not yet who gained or lost what. A restart in between compares again from the kept copy, which the comparison then drops.
+- **What a workspace shows is narrower than what IAM allows** for org and platform admins (decision 11). An org admin who calls the API for an item their workspace does not offer is still allowed: the separation of clients is what Nexus shows, and who may widen offers.
 - **Deployment-specific choices are configuration,** not code: the member model set, a default admin for workspaces left empty, and personal workspaces.

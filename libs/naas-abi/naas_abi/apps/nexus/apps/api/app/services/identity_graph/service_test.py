@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+from dataclasses import replace
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.identity_graph.iris import (
@@ -341,6 +342,27 @@ def test_workspace_access_process_writes_the_membership_for_the_member() -> None
     _process(
         graph, NEXUS.AddUserToOrganization, creates=organization_membership_iri("org-1", "usr-2")
     )
+
+
+def test_a_membership_held_through_groups_has_no_when() -> None:
+    # Since the access move (#1587) people belong through groups, which do not say
+    # since when: the membership is still written, with no instant.
+    through_groups = replace(BOB_IN_ORG, created_at=None)
+    graph = build_identity_graph(
+        _snapshot(
+            organization_memberships=[through_groups],
+            memberships=[replace(BOB_IN_ACME, created_at=None), ALICE_OWNS_ACME],
+        )
+    )
+
+    org_process = _process(
+        graph, NEXUS.AddUserToOrganization, creates=organization_membership_iri("org-1", "usr-2")
+    )
+    ws_process = _process(
+        graph, NEXUS.AddUserToWorkspace, creates=workspace_membership_iri("ws-1", "usr-2")
+    )
+    assert (org_process, NEXUS.createdAt, None) not in graph
+    assert (ws_process, NEXUS.createdAt, None) not in graph
 
 
 def test_every_setup_process_has_a_when_and_a_where() -> None:

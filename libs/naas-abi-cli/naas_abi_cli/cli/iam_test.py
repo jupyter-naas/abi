@@ -599,16 +599,25 @@ def access_move(monkeypatch, service):
 
     monkeypatch.setattr(module, "migrate_from_cli", migrate_from_cli)
     monkeypatch.setattr(user_cli, "_configured_nexus_settings", lambda: "the settings")
-    opened = SimpleNamespace(iam=service)
+
+    def no_engine():
+        raise AssertionError(
+            "the engine's services (over NATS, a client of IAM) opened"
+        )
 
     def invoke(*args):
         return CliRunner().invoke(
             iam,
             ["migrate-access", "--database-url", "sqlite+aiosqlite:///n.db", *args],
-            obj={"services_opener": lambda: (opened, lambda: None)},
+            # The project's IAM, read from its store: the copy the move is tried on
+            # reads what a client of IAM over NATS does not serve.
+            obj={
+                "iam_opener": lambda: (service, lambda: None),
+                "services_opener": no_engine,
+            },
         )
 
-    return SimpleNamespace(invoke=invoke, calls=calls, state=state, opened=opened)
+    return SimpleNamespace(invoke=invoke, calls=calls, state=state, opened=service)
 
 
 def test_migrate_access_dry_run_prints_the_report(access_move):
@@ -617,9 +626,12 @@ def test_migrate_access_dry_run_prints_the_report(access_move):
     assert "Access move (dry run): 2 people" in result.output
     assert "Workspaces with no admin" in result.output and "abi:w" in result.output
     assert "Dry run: nothing changed" in result.output
-    assert access_move.calls == [
-        ("sqlite+aiosqlite:///n.db", access_move.opened, "the settings")
-    ]
+    [(url, services, settings)] = access_move.calls
+    assert (url, services.iam, settings) == (
+        "sqlite+aiosqlite:///n.db",
+        access_move.opened,
+        "the settings",
+    )
 
 
 def test_migrate_access_prints_json(access_move):
