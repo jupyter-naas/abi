@@ -7,14 +7,18 @@ every workspace listed. They are only shown: the API decides each call again.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Collection, Sequence
-from typing import Any
+from typing import Any, Final
 
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from starlette.concurrency import run_in_threadpool
 
 _log = logging.getLogger(__name__)
+
+# Shown as IAM says, whatever the workspace offers: who administers it keeps its settings.
+ALWAYS_SHOWN: Final = frozenset({"settings"})
 
 
 async def user_feature_flags(
@@ -24,7 +28,13 @@ async def user_feature_flags(
     IAM's ``nexus:UseFeature`` (the policies granting one),
     within the deployment's ``enabled`` features, in one ``filter``. None
     without IAM; when IAM fails to answer, every feature off (logged): the flags
-    are only shown, the API decides each call again."""
+    are only shown, the API decides each call again.
+
+    What a workspace shows is within its offer ("<W> access", ``AUTHZ.offer_of``),
+    for everyone: a platform admin or an organization's admin, whom IAM lets use
+    more, sees the workspace as its people do, as its lists show its offer
+    (``filter_scopes``). ``ALWAYS_SHOWN`` stays as IAM says: whoever may administer
+    the workspace keeps its settings, to offer a feature again."""
     from naas_abi.apps.nexus.apps.api.app.core.feature_flags import KNOWN_FEATURE_KEYS
     from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, upgrading
     from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
@@ -43,6 +53,21 @@ async def user_feature_flags(
         for key in keys
     }
 
+    # None: nothing to narrow by (no record, or no allow-list yet).
+    offers = dict(
+        zip(
+            [workspace_id for _, workspace_id in workspaces],
+            await asyncio.gather(
+                *(AUTHZ.offer_of(workspace_container(org_id, ws)) for org_id, ws in workspaces)
+            ),
+            strict=True,
+        )
+    )
+
+    def shown(workspace_id: str, key: str) -> bool:
+        offer = offers.get(workspace_id)
+        return key in ALWAYS_SHOWN or offer is None or key in offer.features
+
     def run() -> dict[str, dict[str, bool]] | None:
         try:
             iam = runtime.iam()
@@ -58,7 +83,8 @@ async def user_feature_flags(
             allowed = set()
         return {
             workspace_id: {
-                key: names.get((workspace_id, key)) in allowed for key in KNOWN_FEATURE_KEYS
+                key: names.get((workspace_id, key)) in allowed and shown(workspace_id, key)
+                for key in KNOWN_FEATURE_KEYS
             }
             for _, workspace_id in workspaces
         }

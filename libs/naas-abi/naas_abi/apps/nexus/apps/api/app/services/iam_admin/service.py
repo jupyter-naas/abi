@@ -579,10 +579,13 @@ class IamAdminService:
         detail = f"revision {expected_revision}"
         if parent is not None:
             detail += f", parent {parent}" if parent else ", no parent"
-        return await self._change(user, "update_policy", policy_id, update, detail=detail)
+        found = await self._change(user, "update_policy", policy_id, update, detail=detail)
+        _forget_offers()
+        return found
 
     async def delete_policy(self, user: Any, policy_id: str) -> None:
         await self._change(user, "delete_policy", policy_id, lambda s: s.delete_policy(policy_id))
+        _forget_offers()
 
     # -- attachments ------------------------------------------------------------------
 
@@ -1292,3 +1295,11 @@ def _actor_id(user: Any) -> str:
 
 
 __all__ = ["ACCESS_ACTIONS", "IamAdminService"]
+
+
+def _forget_offers() -> None:
+    """A policy changed here may be a workspace's offer ("<W> access", edited in Advanced or
+    Code): what its lists and its features show follows at once."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+    AUTHZ.forget_offers()

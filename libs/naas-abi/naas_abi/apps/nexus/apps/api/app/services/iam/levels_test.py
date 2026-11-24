@@ -166,6 +166,33 @@ async def test_the_lists_of_a_workspace_show_what_it_offers_and_nothing_beyond(w
     assert await listed("oadmin") == [wf, wf2, a, "built in the workspace"]
 
 
+@pytest.mark.asyncio
+async def test_a_workspace_shows_the_features_it_offers_to_everyone(world):
+    """What a workspace shows of its features (``user_feature_flags``) is within its offer,
+    for everyone: a platform admin and an organization's admin too, whom IAM lets use
+    more. Settings stays shown to whoever may administer it, to offer a feature again. A
+    change of the offer shows at once."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.user_features import user_feature_flags
+
+    await _team(world)
+    keys = ["chat", "files", "settings"]
+
+    async def shown(user: str) -> dict[str, bool]:
+        flags = await user_feature_flags(user, [("org-1", "ws-1")], keys)
+        assert flags is not None
+        return {key: flags["ws-1"][key] for key in keys}
+
+    W = world.W
+    assert _can(world, "root", "nexus:UseFeature", f"{W}/nexus:feature/files")  # IAM allows
+    assert await shown("root") == {"chat": True, "files": False, "settings": True}
+    assert (await shown("oadmin"))["files"] is False
+    assert (await shown("member"))["chat"] is True
+    with as_service_account("api"):
+        widen_offer(world.iam, world.record.access_policy_id, Offer.of(features=["files"]))
+    world.authz.forget_offers()  # as an offer's change does
+    assert (await shown("root"))["files"] is True
+
+
 def test_a_deployment_sets_the_features_of_each_level():
     """``feature_flags.level_features`` caps what a Viewer and a Member use (within
     each workspace's offer); unset, the defaults. A change rewrites the level
