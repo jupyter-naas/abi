@@ -47,20 +47,66 @@ export function accessEditable(
   return canManage && row.source === 'workspace' && row.user_id !== selfId;
 }
 
-export type MemberFilter = 'all' | 'admin' | Level;
+// -- the table: columns that sort and filter, as Platform settings › Users -----------------
 
-export const MEMBER_FILTERS: { value: MemberFilter; label: string }[] = [
-  { value: 'all', label: 'Everyone' },
-  { value: 'admin', label: 'Admins' },
-  { value: 'member', label: 'Members' },
-  { value: 'viewer', label: 'Viewers' },
+export type MemberColumnId = 'member' | 'level' | 'admin' | 'joined';
+
+export const MEMBER_COLUMNS: { id: MemberColumnId; label: string }[] = [
+  { id: 'member', label: 'Member' },
+  { id: 'level', label: 'Level' },
+  { id: 'admin', label: 'Workspace admin' },
+  { id: 'joined', label: 'Joined' },
 ];
 
-export function filterMembers(rows: WorkspaceMemberRow[], filter: MemberFilter, search: string): WorkspaceMemberRow[] {
-  const query = search.trim().toLowerCase();
-  return rows.filter((row) => {
-    if (filter === 'admin' && !row.admin) return false;
-    if ((filter === 'member' || filter === 'viewer') && row.level !== filter) return false;
-    return !query || row.name.toLowerCase().includes(query) || row.email.toLowerCase().includes(query);
-  });
+export const ADMIN = 'Admin';
+export const NOT_ADMIN = 'Not admin';
+export const NO_DATE = 'No date';
+const INVITED = 'Invited';
+const VIA_ORGANIZATION = 'Via organization';
+
+/** `YYYY-MM-DD` of the day they joined; '' when unknown. */
+export function joinedDay(row: Pick<WorkspaceMemberRow, 'joinedAt'>): string {
+  return row.joinedAt && !Number.isNaN(row.joinedAt.getTime()) ? row.joinedAt.toISOString().slice(0, 10) : '';
+}
+
+/** The texts of a cell, as the column filters and their facets see them. */
+export function memberCellValues(row: WorkspaceMemberRow, column: MemberColumnId): string[] {
+  switch (column) {
+    case 'member':
+      return [row.name, row.email].filter((v, i, all) => v && all.indexOf(v) === i);
+    case 'level':
+      return [levelLabel(row.level)];
+    case 'admin':
+      return [row.admin ? ADMIN : NOT_ADMIN];
+    case 'joined':
+      return [joinedDay(row) || NO_DATE];
+  }
+}
+
+/** Everything the search looks in: every column, whether they are invited, and how they reach it. */
+export function memberSearchTexts(row: WorkspaceMemberRow): string[] {
+  return [
+    ...MEMBER_COLUMNS.flatMap((column) => memberCellValues(row, column.id)),
+    row.status === 'invited' ? INVITED : '',
+    row.source === 'organization' ? VIA_ORGANIZATION : '',
+  ];
+}
+
+export type SortDir = 'asc' | 'desc';
+
+function sortText(row: WorkspaceMemberRow, column: MemberColumnId): string {
+  if (column === 'member') return (row.name || row.email).toLowerCase();
+  return memberCellValues(row, column).join(' ').toLowerCase();
+}
+
+/** Sorted by a column, those with no date last whichever way; ties by email. */
+export function sortMembers(rows: WorkspaceMemberRow[], column: MemberColumnId, dir: SortDir): WorkspaceMemberRow[] {
+  const sign = dir === 'asc' ? 1 : -1;
+  const undated = (row: WorkspaceMemberRow) => (column === 'joined' && !joinedDay(row) ? 1 : 0);
+  return [...rows].sort(
+    (a, b) =>
+      undated(a) - undated(b) ||
+      sign * sortText(a, column).localeCompare(sortText(b, column)) ||
+      a.email.localeCompare(b.email)
+  );
 }

@@ -1,8 +1,7 @@
 'use client';
 
-import { Suspense, useState, useEffect, useMemo } from 'react';
-import { Plus, Shield, Trash2, AlertCircle, Mail } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Suspense, useCallback, useState, useEffect, useMemo } from 'react';
+import { Plus, Shield, Trash2, AlertCircle, Mail, ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -13,6 +12,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
 import { AddPeopleDialog } from '@/components/people/add-people-dialog';
+import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
+import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-table-filter';
+import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
+import type { FacetBucket } from '@/lib/graph-query/types';
+import { matchesSearch } from '@/app/settings/lib/search';
+import { countFacets } from '@/app/settings/lib/page-helpers';
 import { InvitedBadge, ResendButton } from '@/components/people/member-status';
 import {
   addedNotice,
@@ -24,12 +29,16 @@ import {
   type Level,
 } from '@/lib/people';
 import {
-  MEMBER_FILTERS,
+  MEMBER_COLUMNS,
   accessEditable,
-  filterMembers,
+  joinedDay,
   levelLabel,
+  memberCellValues,
+  memberSearchTexts,
   readWorkspaceMember,
-  type MemberFilter,
+  sortMembers,
+  type MemberColumnId,
+  type SortDir,
   type WorkspaceMemberRow,
 } from './members-model';
 import {
@@ -37,12 +46,12 @@ import {
   SettingsLoading,
   SettingsNotice,
   SettingsPageHeader,
-  SettingsFilterSelect,
   SettingsSection,
   SettingsTableToolbar,
   countLabel,
-  settingsTable,
 } from '@/components/settings/settings-ui';
+// The table of Platform and Organization settings › Users: columns that sort and filter.
+import '@/app/organizations/[orgId]/settings/users/users.css';
 
 type Member = WorkspaceMemberRow;
 
@@ -90,7 +99,10 @@ function Members() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
-  const [levelFilter, setLevelFilter] = useState<MemberFilter>('all');
+  const [filters, setFilters] = useState<Partial<Record<MemberColumnId, ColumnFilterState>>>({});
+  const [sortKey, setSortKey] = useState<MemberColumnId>('member');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [openFilter, setOpenFilter] = useState<{ id: MemberColumnId; left: number; top: number } | null>(null);
   const { confirm: confirmRemove, dialog: confirmDialog } = useConfirm();
 
   const self = members.find((m) => m.user_id === authUser?.id);
@@ -177,7 +189,39 @@ function Members() {
     }
   };
 
-  const filteredMembers = filterMembers(members, levelFilter, searchQuery);
+  const filteredMembers = useMemo(
+    () =>
+      sortMembers(
+        members.filter(
+          (member) =>
+            matchesSearch(memberSearchTexts(member), searchQuery) &&
+            MEMBER_COLUMNS.every((column) =>
+              rowMatchesColumnFilter(memberCellValues(member, column.id), filters[column.id])
+            )
+        ),
+        sortKey,
+        sortDir
+      ),
+    [members, searchQuery, filters, sortKey, sortDir]
+  );
+  const loadFacets = useCallback(
+    async (columnId: string, query: string): Promise<FacetBucket[]> => {
+      const needle = query.trim().toLowerCase();
+      return countFacets(members.flatMap((member) => memberCellValues(member, columnId as MemberColumnId))).filter(
+        (bucket) => bucket.value.toLowerCase().includes(needle)
+      );
+    },
+    [members]
+  );
+  const toggleSort = (column: MemberColumnId) => {
+    if (sortKey === column) {
+      setSortDir((dir) => (dir === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(column);
+    setSortDir('asc');
+  };
+  const filtered = searchQuery.trim() !== '' || MEMBER_COLUMNS.some((column) => !isBlank(filters[column.id]));
   const adminCount = members.filter((m) => m.admin).length;
   const invitedCount = members.filter((m) => m.status === 'invited').length;
 
@@ -246,34 +290,94 @@ function Members() {
         <SettingsTableToolbar
           search={searchQuery}
           onSearchChange={setSearchQuery}
-          searchPlaceholder="Search members by name or email..."
-          filters={
-            <SettingsFilterSelect
-              label="Level"
-              value={levelFilter}
-              onChange={(value) => setLevelFilter(value as MemberFilter)}
-              options={MEMBER_FILTERS}
-            />
+          searchPlaceholder="Search name, email, level, admin, invited…"
+          meta={
+            <>
+              {`${countLabel(filteredMembers.length, members.length, 'member')} · ${adminCount} admin${adminCount === 1 ? '' : 's'}`}
+              {filtered && (
+                <button
+                  type="button"
+                  className="org-settings-users-filter-clear ml-3"
+                  data-action="clear-filters"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setFilters({});
+                  }}
+                >
+                  Clear search and filters
+                </button>
+              )}
+            </>
           }
-          meta={`${countLabel(filteredMembers.length, members.length, 'member')} · ${adminCount} admin${adminCount === 1 ? '' : 's'}`}
         />
-        <div className={settingsTable.wrapper}>
-          <table className={settingsTable.table}>
+        <div className="org-settings-users-table-wrap">
+          <table className="org-settings-users-table">
             <thead>
-              <tr className={settingsTable.headRow}>
-                <th className={settingsTable.th}>Member</th>
-                <th className={settingsTable.th} title={LEVEL_EVERYWHERE_NOTE}>
-                  Level
-                </th>
-                <th className={settingsTable.th}>Workspace admin</th>
-                <th className={settingsTable.th}>Joined</th>
-                <th className={cn(settingsTable.th, 'text-right')}>Actions</th>
+              <tr>
+                {MEMBER_COLUMNS.map((column) => {
+                  const sorted = sortKey === column.id;
+                  const active = !isBlank(filters[column.id]);
+                  return (
+                    <th key={column.id} title={column.id === 'level' ? LEVEL_EVERYWHERE_NOTE : undefined}>
+                      <div className="org-settings-users-th">
+                        <button
+                          type="button"
+                          className="org-settings-users-sort"
+                          data-sort={column.id}
+                          onClick={() => toggleSort(column.id)}
+                          title="Sort"
+                        >
+                          <span>{column.label}</span>
+                          {sorted && sortDir === 'asc' && <ChevronUp size={12} />}
+                          {sorted && sortDir === 'desc' && <ChevronDown size={12} />}
+                        </button>
+                        <button
+                          type="button"
+                          className={`org-settings-users-filter${active ? ' is-active' : ''}`}
+                          data-filter-trigger={column.id}
+                          title="Filter"
+                          onClick={(event) => {
+                            if (openFilter?.id === column.id) {
+                              setOpenFilter(null);
+                              return;
+                            }
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            setOpenFilter({ id: column.id, left: rect.left, top: rect.bottom + 4 });
+                          }}
+                        >
+                          <Filter size={11} />
+                        </button>
+                      </div>
+                      {openFilter?.id === column.id && (
+                        <ColumnFilterPopover
+                          columnId={column.id}
+                          label={column.label}
+                          datatype="string"
+                          facetable
+                          anchor={{ left: openFilter.left, top: openFilter.top }}
+                          state={filters[column.id]}
+                          onChange={(next) => setFilters((current) => ({ ...current, [column.id]: next }))}
+                          onClear={() =>
+                            setFilters((current) => {
+                              const next = { ...current };
+                              delete next[column.id];
+                              return next;
+                            })
+                          }
+                          loadFacets={loadFacets}
+                          onClose={() => setOpenFilter(null)}
+                        />
+                      )}
+                    </th>
+                  );
+                })}
+                <th aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
               {filteredMembers.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                  <td colSpan={MEMBER_COLUMNS.length + 1} className="org-settings-users-no-match">
                     No members match the current search and filters
                   </td>
                 </tr>
@@ -283,8 +387,8 @@ function Members() {
                 const inherited = member.source === 'organization';
                 const editable = accessEditable(member, { canManage, selfId: authUser?.id });
                 return (
-                  <tr key={member.id} className={settingsTable.row}>
-                    <td className={settingsTable.td}>
+                  <tr key={member.id}>
+                    <td>
                       <div className="flex items-center gap-3">
                         <div className="flex h-9 w-9 items-center justify-center bg-primary text-primary-foreground">
                           {initial}
@@ -319,7 +423,7 @@ function Members() {
                         </div>
                       </div>
                     </td>
-                    <td className={settingsTable.td}>
+                    <td>
                       {editable ? (
                         <Select
                           value={member.level ?? ''}
@@ -340,7 +444,7 @@ function Members() {
                         <span>{levelLabel(member.level)}</span>
                       )}
                     </td>
-                    <td className={settingsTable.td}>
+                    <td>
                       {editable ? (
                         <span data-field="admin">
                           <Checkbox
@@ -358,10 +462,8 @@ function Members() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className={cn(settingsTable.td, 'text-muted-foreground')}>
-                      {member.joinedAt ? member.joinedAt.toLocaleDateString() : '—'}
-                    </td>
-                    <td className={cn(settingsTable.td, 'text-right')}>
+                    <td className="text-muted-foreground">{joinedDay(member) || '—'}</td>
+                    <td className="text-right">
                       {canManage && !inherited && member.user_id !== authUser?.id && (
                         <Button
                           variant="destructive-ghost"

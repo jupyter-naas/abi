@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { accessEditable, filterMembers, levelLabel, readWorkspaceMember, type WorkspaceMemberRow } from './members-model';
+import {
+  accessEditable,
+  levelLabel,
+  memberCellValues,
+  memberSearchTexts,
+  readWorkspaceMember,
+  sortMembers,
+  type WorkspaceMemberRow,
+} from './members-model';
 
 const raw = (over: Record<string, unknown> = {}) => ({
   id: 'm1',
@@ -38,16 +46,38 @@ describe('a member of the workspace', () => {
     expect(accessEditable({ ...row, source: 'organization' }, { canManage: true, selfId: 'usr_me' })).toBe(false);
   });
 
-  it('is filtered by level or admin, and by name or email', () => {
+  it('gives each column the texts its filter and facets see', () => {
+    const ann = readWorkspaceMember(raw({ user_id: 'a', name: 'Ann', email: 'ann@example.com', role: 'admin' }));
+    expect(memberCellValues(ann, 'member')).toEqual(['Ann', 'ann@example.com']);
+    expect(memberCellValues(ann, 'level')).toEqual(['Member']);
+    expect(memberCellValues(ann, 'admin')).toEqual(['Admin']);
+    expect(memberCellValues(ann, 'joined')).toEqual(['2026-11-01']);
+    const old = readWorkspaceMember(raw({ role: 'viewer', level: null, created_at: null }));
+    expect(memberCellValues(old, 'level')).toEqual(['—']);
+    expect(memberCellValues(old, 'admin')).toEqual(['Not admin']);
+    expect(memberCellValues(old, 'joined')).toEqual(['No date']);
+  });
+
+  it('is found by any column, by Invited, and by Via organization', () => {
+    const row = readWorkspaceMember(raw({ status: 'invited', source: 'organization' }));
+    const texts = memberSearchTexts(row).join(' ');
+    for (const word of ['Bob', 'bob@example.com', 'Member', 'Not admin', 'Invited', 'Via organization']) {
+      expect(texts).toContain(word);
+    }
+  });
+
+  it('sorts by a column either way, the undated last, ties by email', () => {
     const rows: WorkspaceMemberRow[] = [
-      readWorkspaceMember(raw({ user_id: 'a', name: 'Ann', role: 'admin' })),
-      readWorkspaceMember(raw({ user_id: 'b', name: 'Bob', role: 'viewer', level: 'viewer' })),
-      readWorkspaceMember(raw({ user_id: 'c', name: 'Cid', email: 'cid@example.com' })),
+      readWorkspaceMember(raw({ user_id: 'c', name: 'Cid', email: 'cid@example.com', created_at: '2026-10-01T09:00:00' })),
+      readWorkspaceMember(raw({ user_id: 'a', name: 'Ann', email: 'ann@example.com', role: 'admin', created_at: null })),
+      readWorkspaceMember(raw({ user_id: 'b', name: 'Bob', role: 'viewer', level: 'viewer', created_at: '2026-11-05T09:00:00' })),
     ];
-    expect(filterMembers(rows, 'all', '').map((r) => r.user_id)).toEqual(['a', 'b', 'c']);
-    expect(filterMembers(rows, 'admin', '').map((r) => r.user_id)).toEqual(['a']);
-    expect(filterMembers(rows, 'viewer', '').map((r) => r.user_id)).toEqual(['b']);
-    expect(filterMembers(rows, 'member', '').map((r) => r.user_id)).toEqual(['a', 'c']);
-    expect(filterMembers(rows, 'all', 'cid@').map((r) => r.user_id)).toEqual(['c']);
+    const ids = (sorted: WorkspaceMemberRow[]) => sorted.map((r) => r.user_id);
+    expect(ids(sortMembers(rows, 'member', 'asc'))).toEqual(['a', 'b', 'c']);
+    expect(ids(sortMembers(rows, 'member', 'desc'))).toEqual(['c', 'b', 'a']);
+    expect(ids(sortMembers(rows, 'level', 'asc'))).toEqual(['a', 'c', 'b']);
+    expect(ids(sortMembers(rows, 'admin', 'asc'))).toEqual(['a', 'b', 'c']);
+    expect(ids(sortMembers(rows, 'joined', 'asc'))).toEqual(['c', 'b', 'a']);
+    expect(ids(sortMembers(rows, 'joined', 'desc'))).toEqual(['b', 'c', 'a']);
   });
 });
