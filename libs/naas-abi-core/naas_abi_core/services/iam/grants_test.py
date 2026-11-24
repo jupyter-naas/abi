@@ -474,6 +474,54 @@ def test_a_deny_of_the_giver_is_met_within_the_chain_only():
     assert holdings.first_uncovered(every_graph, W, parents=[sales]) is None
 
 
+def test_a_deny_of_the_chain_needs_no_cover():
+    """What a Deny of the chain refuses, the sub-policy never grants: the giver
+    needs neither to hold it nor to be free of a Deny of it (theirs through the
+    same chain, as for a workspace's people policy given on by one of them)."""
+    query = "triple_store:Query"
+    every_graph = [_grant([query], ["${scope}/triple_store:graph/*"])]
+    no_hr = [
+        _grant([query], ["${scope}/triple_store:graph/*"]),
+        _grant([query], ["${scope}/triple_store:graph/hr"], effect="Deny"),
+    ]
+    held = Holdings(
+        [_side(READER, _deny([query], [f"{W}/triple_store:graph/hr"], "pol_ws"))],
+        _registry(),
+    )
+    found = held.first_uncovered(every_graph, W)
+    assert found is not None and "pol_ws" in found.reason
+    assert held.first_uncovered(every_graph, W, parents=[no_hr]) is None
+    # A grandparent's Deny takes it too; one of another action does not.
+    assert held.first_uncovered(every_graph, W, parents=[every_graph, no_hr]) is None
+    other = [
+        every_graph[0],
+        _grant(["triple_store:Insert"], ["${scope}/triple_store:graph/hr"], "Deny"),
+    ]
+    assert held.first_uncovered(every_graph, W, parents=[other]) is not None
+    # A Deny of the giver beyond what the chain takes still refuses.
+    wider = Holdings(
+        [_side(READER, _deny([query], [f"{W}/triple_store:graph/h*"], "pol_ws"))],
+        _registry(),
+    )
+    found = wider.first_uncovered(every_graph, W, parents=[no_hr])
+    assert found is not None and "pol_ws" in found.reason
+    # What the chain takes needs no cover: a chain of sales and hr, hr denied,
+    # given by whoever holds sales alone.
+    two = [
+        _grant(
+            [query],
+            ["${scope}/triple_store:graph/sales", "${scope}/triple_store:graph/hr"],
+        )
+    ]
+    two_no_hr = [*two, no_hr[1]]
+    sales = Holdings(
+        [_side(_allow([query], [f"{W}/triple_store:graph/sales"]))], _registry()
+    )
+    found = sales.first_uncovered(every_graph, W, parents=[two])
+    assert found is not None and found.reason == "you do not hold it"
+    assert sales.first_uncovered(every_graph, W, parents=[two_no_hr]) is None
+
+
 def test_what_a_sub_policy_of_the_giver_holds_is_bounded_by_its_chain():
     """Its patterns within the chain's, as far as one embeds the other."""
     child = _grant(["triple_store:*"], ["${scope}/triple_store:graph/*"])
