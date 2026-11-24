@@ -137,6 +137,9 @@ export function useListControls<T>(
     toggleSort,
     clear,
     filtered: search.trim() !== '' || filtering,
+    /** What the rows shown are made of: a table paged over them goes back to its first page
+     *  when it changes (`usePagedRows`). */
+    pageKey: JSON.stringify([search, filters, sortKey, sortDir]),
   };
 }
 

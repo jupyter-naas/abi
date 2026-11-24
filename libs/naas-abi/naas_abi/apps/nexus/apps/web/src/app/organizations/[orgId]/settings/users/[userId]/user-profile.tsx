@@ -277,16 +277,7 @@ export default function OrgUserProfilePage() {
         </SettingsNotice>
       )}
 
-      {!isSelf && (
-        <MemberRoleSection
-          scope={{ kind: 'organization', id: orgId }}
-          userId={member.user_id}
-          nonce={nonce}
-          onChanged={() => void load({ resetForm: false })}
-        />
-      )}
-
-      {/* Their profile in this organization, folded: the page is about where they work. */}
+      {/* Their profile in this organization first, folded; then where they work. */}
       <details className="group border border-border bg-card" data-section="profile">
         <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
           <div className="min-w-0">
@@ -462,6 +453,15 @@ export default function OrgUserProfilePage() {
           </div>
         </div>
       </details>
+
+      {!isSelf && (
+        <MemberRoleSection
+          scope={{ kind: 'organization', id: orgId }}
+          userId={member.user_id}
+          nonce={nonce}
+          onChanged={() => void load({ resetForm: false })}
+        />
+      )}
       {confirmDialog}
     </div>
   );

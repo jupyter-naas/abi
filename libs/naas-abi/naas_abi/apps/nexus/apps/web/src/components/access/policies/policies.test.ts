@@ -125,6 +125,27 @@ describe('PoliciesView', () => {
     expect(api.publishers).not.toHaveBeenCalled();
   });
 
+  it('reads every page of policies without Load more, and shows 20 rows a page', async () => {
+    const many = Array.from({ length: 130 }, (_, i) => ({
+      ...readerPolicy,
+      id: `pol_${String(i).padStart(3, '0')}`,
+      name: `Policy ${String(i).padStart(3, '0')}`,
+    }));
+    const listPolicies = vi.fn(async (after?: string) =>
+      after ? { items: many.slice(100), next_after: null } : { items: many.slice(0, 100), next_after: 'pol_099' }
+    );
+    await open(() => true, { listPolicies });
+    await mounted!.flush();
+    expect(listPolicies).toHaveBeenCalledTimes(2);
+    expect(button('Load more')).toBeUndefined();
+    expect(document.querySelectorAll('[data-policy]').length).toBe(20);
+    expect(document.querySelector('[data-field="rows-shown"]')?.textContent).toBe('Rows 1–20 of 130');
+    expect(document.querySelector('[data-field="policies-loading"]')).toBeNull();
+    // The search reaches a policy of the second API page.
+    await mounted!.type(document.querySelector('input[aria-label="Search policies"]'), 'Policy 125');
+    expect([...document.querySelectorAll('[data-policy]')].map((r) => r.getAttribute('data-policy'))).toEqual(['pol_125']);
+  });
+
   it('says why the list could not load', async () => {
     await open(() => true, { listPolicies: vi.fn().mockRejectedValue(new Error('You do not have permission')) });
     expect(mounted!.host.textContent).toContain('You do not have permission');

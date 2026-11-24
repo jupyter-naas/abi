@@ -32,7 +32,6 @@ import { isOrgAdminRole } from '../lib/nav';
 import { readOrganization } from '@/lib/organization-resource';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
-import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
 import { ColumnResizeHandle } from '@/components/shell/column-resize-handle';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
@@ -853,7 +852,6 @@ export default function OrgUsersPage() {
           canManage={canManage}
         />
 
-        <IdpGroupBindings scope="organizations" id={orgId} canManage={canManage} />
       </div>
 
       {openPickerUserId &&

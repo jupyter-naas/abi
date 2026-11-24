@@ -18,6 +18,7 @@ import {
   useListControls,
   type ListColumn,
 } from '../access-list';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 import { PLATFORM, ownedHere, ownerOf } from '../access-scope';
 import { AttachForm } from '../attachments/attach-form';
 import { scopeLabel } from '../attachments/attachments-model';
@@ -130,6 +131,7 @@ export function GroupsView({
     initialSort: 'kind',
   });
   useAccessBadge(groups?.length ?? null, 'group');
+  const paged = usePagedRows(list.visible, list.pageKey);
 
   if (selected) {
     // Listed here, or reached by a link from another page (a person's, a policy's): a group
@@ -229,7 +231,7 @@ export function GroupsView({
         <table className="org-settings-users-table" aria-label="Groups">
           <ListHead columns={columns} controls={list} />
           <tbody>
-            {list.visible.map((group) => (
+            {paged.pageRows.map((group) => (
               <tr
                 key={group.id}
                 data-group={group.id}
@@ -284,6 +286,7 @@ export function GroupsView({
           </tbody>
         </table>
       </div>
+      <TablePager total={list.visible.length} paged={paged} />
       {deleting && (
         <div className="access-group-confirm platform-users-deletion" role="dialog" aria-label="Delete group">
           <p>
