@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { Search, UsersRound, X, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ModalBackdrop } from '@/components/ui/dialogs';
@@ -33,9 +33,12 @@ export function AttachDialog({
   typed,
   onClose,
   onAttach,
+  description,
 }: {
   open: boolean;
   title: string;
+  /** What a pick does; by default, the policy attached at `where`. */
+  description?: ReactNode;
   /** Where it is attached: the page's level, named. */
   where: string;
   candidates: AttachCandidate[];
@@ -90,7 +93,7 @@ export function AttachDialog({
               {title}
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Type a name, an email or an id. The policy is attached to whom you pick, at {where}.
+              {description ?? <>Type a name, an email or an id. The policy is attached to whom you pick, at {where}.</>}
             </p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close" data-action="close">

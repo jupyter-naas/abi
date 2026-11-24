@@ -11,6 +11,7 @@ export function ConfirmDetach({
   onAsk,
   onKeep,
   onConfirm,
+  verb = 'Detach',
 }: {
   /** What the Detach button says to assistive technology: what, from whom, where. */
   label: string;
@@ -18,18 +19,20 @@ export function ConfirmDetach({
   onAsk: () => void;
   onKeep: () => void;
   onConfirm: () => void;
+  /** The action said on the button: Detach, or Remove (a member from a group). */
+  verb?: string;
 }) {
   if (!confirming) {
     return (
       <button type="button" className="access-button" aria-label={label} onClick={onAsk}>
-        Detach
+        {verb}
       </button>
     );
   }
   return (
     <span className="access-holding-confirm">
       <button type="button" className="access-button access-holding-danger" onClick={onConfirm}>
-        Confirm detach
+        Confirm {verb.toLowerCase()}
       </button>
       <button type="button" className="access-button" onClick={onKeep}>
         Keep

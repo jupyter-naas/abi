@@ -7,6 +7,8 @@ import { listAllGroups } from '@/lib/iam-admin/batched';
 import type { AttachmentView, GroupView, PrincipalView } from '@/lib/iam-admin/types';
 import { NO_PROVIDERS, fetchInviteProviders, type InviteProviders } from '@/lib/invitations';
 import type { AccessViewProps } from '../access-props';
+import { NEW_GROUP } from '../access-paths';
+import { GroupPage } from './group-page';
 import {
   AccessHeaderAction,
   ListHead,
@@ -68,7 +70,6 @@ export function GroupsView({
     setSelectedState(id);
     onFocus?.(id);
   };
-  const [name, setName] = useState('');
   const [deleting, setDeleting] = useState<PrincipalView | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
 
@@ -101,7 +102,6 @@ export function GroupsView({
     }
   };
 
-  const [creating, setCreating] = useState(false);
   const kindOf = (g: PrincipalView) => GROUP_KIND_LABELS[groupKind(g)];
   const columns: ListColumn<PrincipalView>[] = [
     { id: 'name', label: 'Group', sortBy: (g) => (g.name ?? g.id).toLowerCase(), values: (g) => [g.name ?? g.id] },
@@ -133,7 +133,33 @@ export function GroupsView({
   useAccessBadge(groups?.length ?? null, 'group');
   const paged = usePagedRows(list.visible, list.pageKey);
 
-  if (selected) {
+  if (selected === NEW_GROUP && can('iam:CreateGroup')) {
+    return (
+      <div className="access-group org-settings-users-main">
+        <button type="button" className="access-person-back" onClick={() => setSelected(null)}>
+          <ArrowLeft size={14} /> Groups
+        </button>
+        <GroupPage
+          key={NEW_GROUP}
+          api={api}
+          can={can}
+          scope={scope}
+          directory={directory}
+          nonce={nonce}
+          open={open}
+          groupId={null}
+          owned
+          loadProviders={loadProviders}
+          onChanged={load}
+          // Made: its page opens, where it is changed as any group.
+          onCreated={(id) => setSelected(id)}
+        />
+      </div>
+    );
+  }
+
+  // A new group waits for IAM to let the caller create (its rights are read a moment later).
+  if (selected && selected !== NEW_GROUP) {
     // Listed here, or reached by a link from another page (a person's, a policy's): a group
     // owned elsewhere is shown as IAM lets the caller read it, never changed here. The page
     // needs only the group and its attachments: it opens whether the list was read or not.
@@ -143,7 +169,7 @@ export function GroupsView({
         <button type="button" className="access-person-back" onClick={() => setSelected(null)}>
           <ArrowLeft size={14} /> Groups
         </button>
-        <GroupDetail
+        <GroupPage
           key={selected}
           api={api}
           can={can}
@@ -164,37 +190,6 @@ export function GroupsView({
     return error ? <p className="access-source-note" role="alert">{error}</p> : <p className="access-empty">Loading…</p>;
   }
 
-  const create = (
-    <form
-      className="access-group-create platform-users-inline"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const value = name.trim();
-        if (!value) return;
-        void act(async () => {
-          await api.createGroup(scope.value ? { name: value, scope: scope.value } : { name: value });
-          setName('');
-          setCreating(false);
-        });
-      }}
-    >
-      <input
-        className="platform-users-input access-input-grow"
-        aria-label="Group name"
-        placeholder="New group name"
-        value={name}
-        autoFocus
-        onChange={(e) => setName(e.target.value)}
-      />
-      <button type="submit" className="platform-users-button platform-users-button-primary" disabled={!name.trim()}>
-        Create group
-      </button>
-      <button type="button" className="platform-users-button" onClick={() => setCreating(false)}>
-        Cancel
-      </button>
-    </form>
-  );
-
   return (
     <div className="access-group org-settings-users-main">
       {can('iam:CreateGroup') && (
@@ -203,7 +198,7 @@ export function GroupsView({
             type="button"
             className="org-settings-primary-button"
             data-action="create-group"
-            onClick={() => setCreating(true)}
+            onClick={() => setSelected(NEW_GROUP)}
           >
             <Plus size={16} />
             Create group
@@ -215,7 +210,6 @@ export function GroupsView({
           <span>{error}</span>
         </div>
       )}
-      {creating && create}
       <ListSearch
         value={list.search}
         onChange={list.setSearch}
@@ -309,266 +303,6 @@ export function GroupsView({
             </button>
           </div>
         </div>
-      )}
-    </div>
-  );
-}
-
-type Candidate = { id: string; label: string };
-
-function GroupDetail({
-  api,
-  can,
-  scope,
-  directory,
-  nonce = 0,
-  open,
-  groupId,
-  owned,
-  loadProviders,
-  onChanged,
-}: AccessViewProps & {
-  groupId: string;
-  /** Owned by this scope: its members change here. One owned above is only attached to. */
-  owned: boolean;
-  loadProviders: () => Promise<InviteProviders>;
-  onChanged: () => Promise<void>;
-}) {
-  const [group, setGroup] = useState<GroupView | null>(null);
-  const [held, setHeld] = useState<AttachmentView[] | null>(null);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [providers, setProviders] = useState<InviteProviders>(NO_PROVIDERS);
-  const [error, setError] = useState<string | null>(null);
-  const [member, setMember] = useState('');
-  const [provider, setProvider] = useState('');
-  const [claim, setClaim] = useState('');
-  const [renaming, setRenaming] = useState<string | null>(null);
-  const mapsIdp = can('iam:MapIdpGroup') || can('iam:UnmapIdpGroup');
-
-  // Every attachment of the group, at every level: IAM lists those the caller may (an
-  // empty list when none), whatever the level of this page.
-  const loadHeld = useCallback(async () => {
-    try {
-      const found = await api.listAttachments({ principal_id: groupId });
-      setHeld(found.items);
-    } catch (e) {
-      setHeld([]);
-      setError(message(e));
-    }
-  }, [api, groupId]);
-  const rows = useMemo(() => holdingRows(held ?? [], []), [held]);
-  const scopes = useMemo(() => [...scopesOf(rows), group?.owner_scope ?? PLATFORM], [rows, group]);
-  const here = ownerOf(scope);
-  const names = useContainerNames(api, scopes, nonce);
-  const actionsAt = useActionsAt(api, scopes, here, can, nonce);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.getGroup(groupId).then((g) => !cancelled && setGroup(g)).catch((e) => !cancelled && setError(message(e)));
-    void loadHeld();
-    // Candidates for the member picker: the scope's people, or, at the platform, every user
-    // and service account for whoever may list them. Anyone else types an id.
-    const people: Promise<Candidate[]> = scope.value
-      ? directory.members(scope).then((ms) => ms.map((m) => ({ id: m.userId, label: m.name || m.email || m.userId })))
-      : can('iam:ListPrincipals')
-        ? Promise.all([api.listPrincipals('user'), api.listPrincipals('service_account')]).then(([users, accounts]) =>
-            [...users.items, ...accounts.items].map((p) => ({ id: p.id, label: principalLabel(p) })),
-          )
-        : Promise.resolve([]);
-    people.then((found) => !cancelled && setCandidates(found)).catch(() => undefined);
-    if (mapsIdp) {
-      loadProviders()
-        .then((found) => {
-          if (cancelled) return;
-          setProviders(found);
-          setProvider((current) => current || found.providers[0]?.name || '');
-        })
-        .catch(() => undefined);
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [api, can, directory, scope, groupId, loadHeld, loadProviders, mapsIdp, nonce]);
-
-  const rename = async (value: string) => {
-    try {
-      setGroup(await api.renameGroup(groupId, value));
-      setRenaming(null);
-      setError(null);
-      await onChanged();
-    } catch (e) {
-      setError(message(e));
-    }
-  };
-
-  const run = async (call: () => Promise<GroupView>) => {
-    try {
-      setGroup(await call());
-      setError(null);
-      await onChanged();
-    } catch (e) {
-      setError(message(e));
-    }
-  };
-
-  const detach = async (a: AttachmentView) => {
-    try {
-      await api.detach({ policy_id: a.policy_id, principal_id: a.principal_id, scope: a.scope });
-      setError(null);
-      await loadHeld();
-    } catch (e) {
-      setError(message(e));
-    }
-  };
-
-  if (!group) return <div className="access-group-detail">{error ? <p className="access-source-note" role="alert">{error}</p> : <p className="access-empty">Loading…</p>}</div>;
-
-  const inGroup = new Set(group.members.map((m) => m.id));
-  const addable = candidates.filter((c) => !inGroup.has(c.id));
-
-  return (
-    <div className="access-group-detail" data-group-detail={group.id}>
-      <header className="access-person-header">
-        {renaming === null ? (
-          <h3 className="access-person-name">{group.name ?? group.id}</h3>
-        ) : (
-          <form
-            className="access-group-create"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const value = renaming.trim();
-              if (!value) return;
-              if (value === group.name) setRenaming(null);
-              else void rename(value);
-            }}
-          >
-            <input className="access-input access-input-grow" aria-label="New group name" maxLength={128} value={renaming} onChange={(e) => setRenaming(e.target.value)} />
-            <button type="submit" className="access-button access-button-primary" disabled={!renaming.trim()}>
-              Save name
-            </button>
-            <button type="button" className="access-button" onClick={() => setRenaming(null)}>
-              Cancel
-            </button>
-          </form>
-        )}
-        <span className="access-people-sub" data-group-owner="">
-          Owned by {levelLabel(group.owner_scope ?? PLATFORM, names)}
-        </span>
-        <code className="access-mono">{group.id}</code>
-        {owned && can('iam:UpdateGroup') && renaming === null && (
-          <button type="button" className="access-button" aria-label={`Rename ${group.name ?? group.id}`} onClick={() => setRenaming(group.name ?? '')}>
-            Rename
-          </button>
-        )}
-      </header>
-      {error && <p className="access-source-note" role="alert">{error}</p>}
-
-      <section className="access-group-section">
-        <h4 className="access-group-heading">Members</h4>
-        <ul className="access-group-list">
-          {group.members.map((m) => (
-            <li key={m.id} className="access-group-item" data-member={m.id}>
-              <span>
-                {open?.person && m.kind !== 'group' ? (
-                  <button type="button" className="access-holding-link" aria-label={`Open ${principalLabel(m)}`} onClick={() => open.person?.(m.id, principalLabel(m))}>
-                    {principalLabel(m)}
-                  </button>
-                ) : (
-                  principalLabel(m)
-                )}{' '}
-                <span className="access-mono">{m.kind === 'service_account' ? 'service account' : m.id}</span>
-              </span>
-              {owned && can('iam:RemoveGroupMember') && (
-                <button type="button" className="access-button" aria-label={`Remove ${principalLabel(m)}`} onClick={() => void run(() => api.removeMember(group.id, m.id))}>
-                  Remove
-                </button>
-              )}
-            </li>
-          ))}
-          {group.members.length === 0 && <li className="access-empty">No members.</li>}
-        </ul>
-        {owned && can('iam:AddGroupMember') && (
-          <form
-            className="access-group-create"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const id = member.trim();
-              if (!id) return;
-              void run(() => api.addMember(group.id, id)).then(() => setMember(''));
-            }}
-          >
-            <input className="access-input access-input-grow" aria-label="Member id" list={`members-${group.id}`} placeholder="Pick a person, or type an id" value={member} onChange={(e) => setMember(e.target.value)} />
-            <datalist id={`members-${group.id}`}>
-              {addable.map((c) => (
-                <option key={c.id} value={c.id}>{c.label}</option>
-              ))}
-            </datalist>
-            <button type="submit" className="access-button access-button-primary" disabled={!member.trim()}>
-              Add member
-            </button>
-          </form>
-        )}
-      </section>
-
-      {held !== null && (
-        <section className="access-group-section" aria-label="Policies of the group">
-          <h4 className="access-group-heading">Policies, at every level</h4>
-          <HoldingsTable
-            rows={rows}
-            names={names}
-            actionsAt={actionsAt}
-            here={here}
-            onDetach={(a) => void detach(a)}
-            empty="Nothing you may list is attached to this group."
-          />
-          {can('iam:AttachPolicy') && (
-            <AttachForm api={api} scope={scope.value} principals={[]} principalId={group.id} onAttached={() => void loadHeld()} />
-          )}
-        </section>
-      )}
-
-      {mapsIdp && (
-        <section className="access-group-section">
-          <h4 className="access-group-heading">IdP group claims</h4>
-          <p className="access-group-hint">People whose identity provider sends one of these group claims join this group when they sign in.</p>
-          <ul className="access-group-list">
-            {group.idp_mappings.map((m) => (
-              <li key={`${m.provider}/${m.claim_value}`} className="access-group-item" data-mapping={`${m.provider}/${m.claim_value}`}>
-                <span>
-                  <span className="access-mono">{m.claim_value}</span> from {m.provider}
-                </span>
-                {can('iam:UnmapIdpGroup') && (
-                  <button type="button" className="access-button" aria-label={`Unmap ${m.claim_value}`} onClick={() => void run(() => api.unmapIdpGroup(group.id, m))}>
-                    Remove
-                  </button>
-                )}
-              </li>
-            ))}
-            {group.idp_mappings.length === 0 && <li className="access-empty">No mapping.</li>}
-          </ul>
-          {can('iam:MapIdpGroup') && (
-            <form
-              className="access-group-create"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const value = claim.trim();
-                if (!value || !provider) return;
-                void run(() => api.mapIdpGroup(group.id, { provider, claim_value: value })).then(() => setClaim(''));
-              }}
-            >
-              <select className="access-input" aria-label="Identity provider" value={provider} onChange={(e) => setProvider(e.target.value)}>
-                {providers.providers.length === 0 && <option value="">No provider configured</option>}
-                {providers.providers.map((p) => (
-                  <option key={p.name} value={p.name}>{p.display_name || p.name}</option>
-                ))}
-              </select>
-              <input className="access-input access-input-grow" aria-label="Group claim value" placeholder="Value of the group claim" value={claim} onChange={(e) => setClaim(e.target.value)} />
-              <button type="submit" className="access-button access-button-primary" disabled={!claim.trim() || !provider}>
-                Map group
-              </button>
-            </form>
-          )}
-        </section>
       )}
     </div>
   );

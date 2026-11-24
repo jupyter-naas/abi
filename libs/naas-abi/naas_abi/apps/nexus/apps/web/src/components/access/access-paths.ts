@@ -24,6 +24,9 @@ export const PLATFORM_ACCESS_PATH = '/settings/access';
 /** The page that creates a policy, in place of a policy's id. */
 export const NEW_POLICY = 'new';
 
+/** The page that creates a group, in place of a group's id. */
+export const NEW_GROUP = 'new';
+
 const tail = (id?: string | null) => (id ? `/${encodeURIComponent(id)}` : '');
 
 export function platformAccessPath(page: AccessPage, id?: string | null): string {

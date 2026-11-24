@@ -1,0 +1,523 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Plus } from 'lucide-react';
+import { SettingsSection } from '@/components/settings/settings-ui';
+import { RolePickerDialog } from '@/components/people/role-picker-dialog';
+import { IamAdminError } from '@/lib/iam-admin/api';
+import type { AttachablePolicy, AttachmentView, GroupView, PrincipalKind, PrincipalView } from '@/lib/iam-admin/types';
+import { NO_PROVIDERS, type InviteProviders } from '@/lib/invitations';
+import { GROUP_KIND_LABELS, groupKind } from '@/lib/access-model/levels';
+import type { AccessViewProps } from '../access-props';
+import { PLATFORM, ownerOf } from '../access-scope';
+import { offeredTo } from '../attachments/attach-form';
+import { holdingRows, levelLabel, scopesOf } from '../holdings/holdings-model';
+import { HoldingsTable } from '../holdings/holdings-table';
+import { ConfirmDetach } from '../holdings/confirm-detach';
+import { AttachDialog, type AttachCandidate } from '../policies/attach-dialog';
+import { useActionsAt, useContainerNames } from '../policies/policy-owners';
+import '../holdings/holdings.css';
+
+const message = (e: unknown) => (e instanceof IamAdminError || e instanceof Error ? e.message : String(e));
+
+const memberLabel = (p: PrincipalView) => p.display_name || p.email || p.name || p.id;
+
+const KIND_LABEL: Record<string, string> = { user: 'Person', service_account: 'Service account', group: 'Group' };
+
+// An IAM id typed for a member: a person's or a service account's.
+const MEMBER_ID = /^(usr|sa)_[A-Za-z0-9]+$/;
+
+type Member = { id: string; label: string; email?: string | null; kind?: PrincipalKind };
+
+/**
+ * A group's page in Access › Groups, or the page of a group to be (`groupId` null, Create group):
+ * its Info, its Members and its Policies (those it holds), as a person's page shows hers.
+ * Members are added from a search (name and email shown) and removed after a confirmation;
+ * policies are picked from a search of those IAM lets the caller attach here, several at once.
+ * A group to be keeps what is picked until Create group: then it is made, its members join it
+ * and its policies are attached at this level. A group owned elsewhere is shown as IAM lets the
+ * caller read it, its members never changed here.
+ */
+export function GroupPage({
+  api,
+  can,
+  scope,
+  directory,
+  nonce = 0,
+  open,
+  groupId,
+  owned,
+  loadProviders,
+  onChanged,
+  onCreated,
+}: AccessViewProps & {
+  /** Null: a group to be. */
+  groupId: string | null;
+  /** Owned by this scope: its members change here. One owned above is only attached to. */
+  owned: boolean;
+  loadProviders: () => Promise<InviteProviders>;
+  onChanged: () => Promise<void>;
+  /** A group to be, made: its page opens. */
+  onCreated?: (id: string) => void;
+}) {
+  const isNew = groupId === null;
+  const [group, setGroup] = useState<GroupView | null>(null);
+  const [held, setHeld] = useState<AttachmentView[] | null>(isNew ? [] : null);
+  const [candidates, setCandidates] = useState<Member[]>([]);
+  const [attachable, setAttachable] = useState<AttachablePolicy[]>([]);
+  const [providers, setProviders] = useState<InviteProviders>(NO_PROVIDERS);
+  const [provider, setProvider] = useState('');
+  const [claim, setClaim] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  // Which member's Remove asks for a confirmation now.
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [draftMembers, setDraftMembers] = useState<Member[]>([]);
+  const [draftPolicies, setDraftPolicies] = useState<AttachablePolicy[]>([]);
+  const [dialog, setDialog] = useState<'members' | 'policies' | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [madeId, setMadeId] = useState<string | null>(null);
+  const mapsIdp = !isNew && (can('iam:MapIdpGroup') || can('iam:UnmapIdpGroup'));
+  const changesMembers = isNew ? can('iam:CreateGroup') : owned;
+
+  // Every attachment of the group, at every level: IAM lists those the caller may.
+  const loadHeld = useCallback(async () => {
+    if (!groupId) return;
+    try {
+      setHeld((await api.listAttachments({ principal_id: groupId })).items);
+    } catch (e) {
+      setHeld([]);
+      setError(message(e));
+    }
+  }, [api, groupId]);
+  const rows = useMemo(() => holdingRows(held ?? [], []), [held]);
+  const scopes = useMemo(() => [...scopesOf(rows), group?.owner_scope ?? PLATFORM], [rows, group]);
+  const here = ownerOf(scope);
+  const names = useContainerNames(api, scopes, nonce);
+  const actionsAt = useActionsAt(api, scopes, here, can, nonce);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (groupId) {
+      api
+        .getGroup(groupId)
+        .then((g) => {
+          if (cancelled) return;
+          setGroup(g);
+          setName(g.name ?? '');
+        })
+        .catch((e) => !cancelled && setError(message(e)));
+      void loadHeld();
+    }
+    // Whom the group may take: the scope's people, or, at the platform, every user and service
+    // account for whoever may list them. Anyone else types an id.
+    const people: Promise<Member[]> = scope.value
+      ? directory
+          .members(scope)
+          .then((ms) => ms.map((m) => ({ id: m.userId, label: m.name || m.email || m.userId, email: m.email || null, kind: 'user' as const })))
+      : can('iam:ListPrincipals')
+        ? Promise.all([api.listPrincipals('user'), api.listPrincipals('service_account')]).then(([users, accounts]) =>
+            [...users.items, ...accounts.items].map((p) => ({ id: p.id, label: memberLabel(p), email: p.email ?? null, kind: p.kind })),
+          )
+        : Promise.resolve([]);
+    people.then((found) => !cancelled && setCandidates(found)).catch(() => undefined);
+    // The policies it may hold here: those IAM lets the caller attach at this level.
+    if (can('iam:AttachPolicy')) {
+      api
+        .attachable(scope.value ?? '')
+        .then((found) => !cancelled && setAttachable(found.items.filter((p) => offeredTo(p, { id: groupId ?? 'grp_new', label: '', kind: 'group' }))))
+        .catch(() => undefined);
+    }
+    if (mapsIdp) {
+      loadProviders()
+        .then((found) => {
+          if (cancelled) return;
+          setProviders(found);
+          setProvider((current) => current || found.providers[0]?.name || '');
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [api, can, directory, scope, groupId, loadHeld, loadProviders, mapsIdp, nonce]);
+
+  const run = async (call: () => Promise<GroupView>, done?: string) => {
+    try {
+      setGroup(await call());
+      setError(null);
+      setNotice(done ?? null);
+      await onChanged();
+    } catch (e) {
+      setError(message(e));
+    }
+  };
+
+  const detach = async (a: AttachmentView) => {
+    try {
+      await api.detach({ policy_id: a.policy_id, principal_id: a.principal_id, scope: a.scope });
+      setError(null);
+      await loadHeld();
+    } catch (e) {
+      setError(message(e));
+    }
+  };
+
+  if (!isNew && !group) {
+    return (
+      <div className="access-group-detail">
+        {error ? <p className="access-source-note" role="alert">{error}</p> : <p className="access-empty">Loading…</p>}
+      </div>
+    );
+  }
+
+  const members: Member[] = isNew
+    ? draftMembers
+    : group!.members.map((m) => ({ id: m.id, label: memberLabel(m), email: m.email ?? null, kind: m.kind }));
+  const inGroup = new Set(members.map((m) => m.id));
+  const addable = candidates.filter((c) => !inGroup.has(c.id));
+  const heldHere = new Set(
+    isNew ? draftPolicies.map((p) => p.id) : (held ?? []).filter((a) => (a.scope ?? null) === (scope.value ?? null)).map((a) => a.policy_id),
+  );
+  const morePolicies = attachable.filter((p) => !heldHere.has(p.id));
+  const kind = group ? GROUP_KIND_LABELS[groupKind(group)] : GROUP_KIND_LABELS.custom;
+
+  const addMember = async (member: AttachCandidate) => {
+    if (isNew) {
+      setDraftMembers((current) => [...current, { id: member.id, label: member.label, email: member.email, kind: member.kind }]);
+      setDialog(null);
+      return;
+    }
+    const next = await api.addMember(group!.id, member.id);
+    setGroup(next);
+    setDialog(null);
+    setError(null);
+    setNotice(`${member.label} added to the group.`);
+    await onChanged();
+  };
+
+  const removeMember = async (member: Member) => {
+    setConfirming(null);
+    if (isNew) {
+      setDraftMembers((current) => current.filter((m) => m.id !== member.id));
+      return;
+    }
+    await run(() => api.removeMember(group!.id, member.id), `${member.label} removed from the group.`);
+  };
+
+  const addPolicies = async (picked: { id: string }[]) => {
+    const policies = attachable.filter((p) => picked.some((q) => q.id === p.id));
+    if (isNew) {
+      setDraftPolicies((current) => [...current, ...policies]);
+      setDialog(null);
+      return;
+    }
+    for (const policy of policies) {
+      await api.attach({ policy_id: policy.id, principal_id: group!.id, scope: scope.value });
+    }
+    setDialog(null);
+    setError(null);
+    setNotice(policies.length === 1 ? `${policies[0].name} attached at ${scope.label}.` : `${policies.length} policies attached at ${scope.label}.`);
+    await loadHeld();
+  };
+
+  const create = async () => {
+    const value = name.trim();
+    if (!value) return;
+    setCreating(true);
+    setError(null);
+    let made: string | null = madeId;
+    try {
+      if (!made) {
+        made = (await api.createGroup(scope.value ? { name: value, scope: scope.value } : { name: value })).id;
+        setMadeId(made);
+      }
+      for (const m of draftMembers) await api.addMember(made, m.id);
+      for (const p of draftPolicies) await api.attach({ policy_id: p.id, principal_id: made, scope: scope.value });
+      await onChanged();
+      onCreated?.(made);
+    } catch (e) {
+      // Made, but a member or a policy was refused: said here, its page a click away.
+      setError(made ? `The group was created, but: ${message(e)}` : message(e));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // Its name is what a group's Info changes (IAM keeps its owner, its kind and its id).
+  const renames = !isNew && owned && can('iam:UpdateGroup');
+  const nameChanged = !isNew && name.trim() !== '' && name.trim() !== (group!.name ?? '');
+  const save = async () => {
+    setSaving(true);
+    try {
+      const renamed = await api.renameGroup(group!.id, name.trim());
+      setGroup(renamed);
+      setName(renamed.name ?? '');
+      setError(null);
+      setNotice('Saved.');
+      await onChanged();
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addButton = (label: string, action: string, onClick: () => void, disabled: boolean) => (
+    <button type="button" className="org-settings-primary-button" onClick={onClick} disabled={disabled} data-action={action}>
+      <Plus size={16} />
+      {label}
+    </button>
+  );
+
+  const field = (label: string, value: string, help?: string) => (
+    <label className="access-policy-field access-policy-field-grow">
+      <span>{label}</span>
+      <input className="access-input w-full" aria-label={label} value={value} disabled readOnly title={help} />
+    </label>
+  );
+
+  return (
+    <div className="space-y-4" data-group-detail={group?.id ?? undefined} data-group-new={isNew ? '' : undefined}>
+      {error && (
+        <p className="access-source-note" role="alert">
+          {error}{' '}
+          {madeId && (
+            <button type="button" className="access-holding-link" onClick={() => onCreated?.(madeId)}>
+              Open the group
+            </button>
+          )}
+        </p>
+      )}
+      {notice && (
+        <p className="access-people-sub" role="status" data-group-notice="">
+          {notice}
+        </p>
+      )}
+
+      <SettingsSection
+        title="Info"
+        description={
+          isNew
+            ? 'Name the group, then add its members and its policies below.'
+            : 'A group keeps its owner, its kind and its id: its name changes here.'
+        }
+        actions={
+          isNew ? (
+            <button type="button" className="org-settings-primary-button" onClick={() => void create()} disabled={creating || !name.trim()} data-action="create">
+              {creating ? 'Creating…' : 'Create group'}
+            </button>
+          ) : renames ? (
+            <button type="button" className="org-settings-primary-button" onClick={() => void save()} disabled={saving || !nameChanged} data-action="save">
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          ) : undefined
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="access-policy-field access-policy-field-grow">
+            <span>Name</span>
+            <input
+              className="access-input w-full"
+              aria-label="Group name"
+              placeholder="Its name, e.g. Analysts"
+              maxLength={128}
+              value={name}
+              autoFocus={isNew}
+              disabled={!isNew && !renames}
+              onChange={(e) => {
+                setName(e.target.value);
+                setNotice(null);
+              }}
+            />
+          </label>
+          {field('Owned by', isNew ? scope.label : levelLabel(group!.owner_scope ?? PLATFORM, names), 'The level that owns it: set when it is made')}
+          {field('Kind', kind, 'What the access model makes of it')}
+          {field('ID', isNew ? 'Given when it is made' : group!.id, 'IAM’s id of the group')}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Members"
+        description={owned || isNew ? 'Who is in the group: each holds what it holds.' : 'Owned elsewhere: its members change at its level.'}
+        actions={
+          changesMembers && can('iam:AddGroupMember')
+            ? addButton('Add member', 'add-members', () => setDialog('members'), creating)
+            : undefined
+        }
+      >
+        {members.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No members{isNew ? ' yet' : ''}.</p>
+        ) : (
+          <div className="access-table-wrap">
+            <table className="access-table" aria-label="Members">
+              <thead>
+                <tr>
+                  <th>Member</th>
+                  <th>Kind</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {members.map((m) => (
+                  <tr key={m.id} data-member={m.id}>
+                    <td>
+                      {open?.person && m.kind !== 'group' && !isNew ? (
+                        <button type="button" className="access-holding-link" aria-label={`Open ${m.label}`} onClick={() => open.person?.(m.id, m.label)}>
+                          {m.label}
+                        </button>
+                      ) : (
+                        <span>{m.label}</span>
+                      )}
+                      <span className="block text-xs text-muted-foreground">{m.email || m.id}</span>
+                    </td>
+                    <td>{KIND_LABEL[m.kind ?? 'user'] ?? m.kind}</td>
+                    <td className="text-right">
+                      {changesMembers && (isNew || can('iam:RemoveGroupMember')) &&
+                        (isNew ? (
+                          <button type="button" className="access-button" aria-label={`Remove ${m.label}`} disabled={creating} onClick={() => void removeMember(m)}>
+                            Remove
+                          </button>
+                        ) : (
+                          <ConfirmDetach
+                            verb="Remove"
+                            label={`Remove ${m.label}`}
+                            confirming={confirming === m.id}
+                            onAsk={() => setConfirming(m.id)}
+                            onKeep={() => setConfirming(null)}
+                            onConfirm={() => void removeMember(m)}
+                          />
+                        ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {mapsIdp && (
+          <div className="mt-4 space-y-2" data-idp-mappings="">
+            <p className="text-xs text-muted-foreground">
+              Identity provider group claims: people whose provider sends one of them join this group when they sign in.
+            </p>
+            <ul className="access-group-list">
+              {group!.idp_mappings.map((m) => (
+                <li key={`${m.provider}/${m.claim_value}`} className="access-group-item" data-mapping={`${m.provider}/${m.claim_value}`}>
+                  <span>
+                    <span className="access-mono">{m.claim_value}</span> from {m.provider}
+                  </span>
+                  {can('iam:UnmapIdpGroup') && (
+                    <button type="button" className="access-button" aria-label={`Unmap ${m.claim_value}`} onClick={() => void run(() => api.unmapIdpGroup(group!.id, m))}>
+                      Remove
+                    </button>
+                  )}
+                </li>
+              ))}
+              {group!.idp_mappings.length === 0 && <li className="access-empty">No mapping.</li>}
+            </ul>
+            {can('iam:MapIdpGroup') && (
+              <form
+                className="access-group-create"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const value = claim.trim();
+                  if (!value || !provider) return;
+                  void run(() => api.mapIdpGroup(group!.id, { provider, claim_value: value })).then(() => setClaim(''));
+                }}
+              >
+                <select className="access-input" aria-label="Identity provider" value={provider} onChange={(e) => setProvider(e.target.value)}>
+                  {providers.providers.length === 0 && <option value="">No provider configured</option>}
+                  {providers.providers.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      {p.display_name || p.name}
+                    </option>
+                  ))}
+                </select>
+                <input className="access-input access-input-grow" aria-label="Group claim value" placeholder="Value of the group claim" value={claim} onChange={(e) => setClaim(e.target.value)} />
+                <button type="submit" className="access-button access-button-primary" disabled={!claim.trim() || !provider}>
+                  Map group
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+      </SettingsSection>
+
+      <SettingsSection
+        title="Policies"
+        description={isNew ? `The policies it will hold, at ${scope.label}.` : 'The policies it holds, at every level you may list.'}
+        actions={can('iam:AttachPolicy') ? addButton('Attach policies', 'add-policies', () => setDialog('policies'), creating || morePolicies.length === 0) : undefined}
+      >
+        {isNew ? (
+          draftPolicies.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No policy yet.</p>
+          ) : (
+            <div className="access-table-wrap">
+              <table className="access-table" aria-label="Policies">
+                <thead>
+                  <tr>
+                    <th>Policy</th>
+                    <th>Level</th>
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {draftPolicies.map((p) => (
+                    <tr key={p.id} data-policy={p.id}>
+                      <td>{p.name}</td>
+                      <td>{scope.label}</td>
+                      <td className="text-right">
+                        <button
+                          type="button"
+                          className="access-button"
+                          aria-label={`Remove ${p.name}`}
+                          onClick={() => setDraftPolicies((current) => current.filter((q) => q.id !== p.id))}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : held === null ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : (
+          <HoldingsTable
+            rows={rows}
+            names={names}
+            actionsAt={actionsAt}
+            here={here}
+            onDetach={(a) => void detach(a)}
+            empty="Nothing you may list is attached to this group."
+          />
+        )}
+      </SettingsSection>
+
+      <AttachDialog
+        open={dialog === 'members'}
+        title="Add members"
+        where={isNew ? 'the new group' : (group?.name ?? '')}
+        description="Type a name, an email or an id: whom you pick joins the group."
+        candidates={addable}
+        typed={(id) => (MEMBER_ID.test(id) && !inGroup.has(id) ? { id, label: id, kind: id.startsWith('sa_') ? 'service_account' : 'user' } : null)}
+        onClose={() => setDialog(null)}
+        onAttach={addMember}
+      />
+      {dialog === 'policies' && (
+        <RolePickerDialog
+          open
+          title="Attach policies"
+          options={morePolicies.map((p) => ({ kind: 'policy' as const, id: p.id, name: p.name }))}
+          onClose={() => setDialog(null)}
+          onAdd={addPolicies}
+        />
+      )}
+    </div>
+  );
+}
