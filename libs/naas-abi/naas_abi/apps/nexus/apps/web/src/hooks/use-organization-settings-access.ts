@@ -2,15 +2,16 @@
 
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import { authFetch, useAuthStore } from '@/stores/auth';
-import { opensRolesAndPermissions } from '@/components/access/access-sections';
+import { authFetch } from '@/stores/auth';
+import { usePermissionRevision, usePermissionSessionKey } from '@/lib/permission-cache';
+import { opensAccess } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
 import type { AccessView } from '@/lib/iam-admin/types';
 import { viewFlagActive } from '@/lib/view-flag';
 
 export type OrganizationSettingsAccessStatus = 'checking' | 'ready' | 'error';
 
-type Fetcher = (url: string) => Promise<Response>;
+type Fetcher = (url: string, options?: RequestInit) => Promise<Response>;
 
 /** What decides, for one organization the caller lists: their role there (an IAM role
  *  attachment) and, when it is no admin's, what `GET /access` answers at its container. */
@@ -21,11 +22,11 @@ export const ACCESS_BATCH = 8;
 
 /**
  * Whether Organization settings opens for the caller in one organization: they are its
- * owner or admin there, or IAM shows them a Roles & permissions section at its scope.
+ * owner or admin there, or IAM shows them a page of its Access (Policies, Groups) at its scope.
  * The organization settings pages decide with it too.
  */
 export function opensOrganization({ role, access }: OrganizationAccess): boolean {
-  return role === 'owner' || role === 'admin' || opensRolesAndPermissions(access);
+  return role === 'owner' || role === 'admin' || opensAccess(access, 'organization');
 }
 
 /**
@@ -37,7 +38,8 @@ export function opensOrganizationSettings(orgs: OrganizationAccess[]): boolean {
 }
 
 async function json<T>(fetcher: Fetcher, url: string): Promise<T | null> {
-  const response = await fetcher(url);
+  const response = await (fetcher === authFetch && url === '/api/organizations'
+    ? fetcher(url, { cache: 'force-cache' }) : fetcher(url));
   // 401, 403, 404: nothing there for the caller.
   if (response.status === 401 || response.status === 403 || response.status === 404) return null;
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -65,9 +67,15 @@ export async function fetchOrganizationSettingsAccess(fetcher: Fetcher = authFet
   for (let start = 0; start < orgs.length; start += ACCESS_BATCH) {
     const batch = orgs.slice(start, start + ACCESS_BATCH);
     const accesses = await Promise.all(batch.map((org) => fetchOrganizationAccess(org.id, fetcher)));
-    if (accesses.some((access) => opensRolesAndPermissions(access))) return true;
+    if (accesses.some((access) => opensAccess(access, 'organization'))) return true;
   }
   return false;
+}
+
+/** The organizations the role itself opens (owner or admin), before any access is read. */
+export function organizationsOpenedByRole<T extends { id: string; currentUserRole?: string | null }>(orgs: T[]): T[] {
+  if (viewFlagActive()) return [];
+  return orgs.filter((org) => opensOrganization({ role: org.currentUserRole ?? null, access: null }));
 }
 
 /** The organizations whose settings open for the caller, in the order given: owners' and
@@ -89,7 +97,7 @@ export async function openableOrganizations<T extends { id: string; currentUserR
     const batch = rest.slice(start, start + ACCESS_BATCH);
     const accesses = await Promise.all(batch.map((org) => fetchOrganizationAccess(org.id, fetcher)));
     batch.forEach((org, i) => {
-      if (opensRolesAndPermissions(accesses[i])) opens.add(org.id);
+      if (opensAccess(accesses[i], 'organization')) opens.add(org.id);
     });
   }
   return orgs.filter((org) => opens.has(org.id));
@@ -119,9 +127,9 @@ export function createOrganizationSettingsAccessStore(fetcher: Fetcher = authFet
       call.promise = (async () => {
         try {
           const opens = await fetchOrganizationSettingsAccess(fetcher);
-          if (get().userId === userId) set({ status: 'ready', opens });
+          if (get().pending === call && get().userId === userId) set({ status: 'ready', opens });
         } catch {
-          if (get().userId === userId) {
+          if (get().pending === call && get().userId === userId) {
             const kept = get().opens;
             set({ status: kept === null ? 'error' : 'ready', opens: kept });
           }
@@ -137,18 +145,18 @@ export function createOrganizationSettingsAccessStore(fetcher: Fetcher = authFet
 
 const useOrganizationSettingsAccessStore = createOrganizationSettingsAccessStore();
 
-/** Whether the account menu shows Organization Settings: false while checking. Asked
+/** Whether Organization settings open for the caller somewhere: false while checking. Asked
  *  again when the user changes or the last read failed. */
 export function useOrganizationSettingsAccess(): boolean {
-  const userId = useAuthStore((s) => s.user?.id ?? 'session');
+  const userId = usePermissionSessionKey();
+  const revision = usePermissionRevision();
   const opens = useOrganizationSettingsAccessStore((s) => s.opens);
   const knownUser = useOrganizationSettingsAccessStore((s) => s.userId);
   const load = useOrganizationSettingsAccessStore((s) => s.load);
 
   useEffect(() => {
-    const state = useOrganizationSettingsAccessStore.getState();
-    if (state.userId !== userId || state.status === 'error') void load(userId);
-  }, [userId, load]);
+    void load(userId);
+  }, [userId, load, revision]);
 
   return knownUser === userId && opens === true;
 }

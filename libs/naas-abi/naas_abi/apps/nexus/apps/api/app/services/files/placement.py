@@ -1,16 +1,16 @@
 """The object storage a workspace or an organization owns, placed in it.
 
-A workspace owns one tree of the object storage: its drive,
+A workspace owns one tree of the object storage: its Workspace Files,
 ``naas_abi/workspace-drive/<workspace_id>/``. IAM places that key (and everything
 below it) in the workspace, so the workspace's roles reach it and nothing a
 sibling workspace names can: a prefix placement ends at a ``/``, and the kernel
 refuses ``.`` and ``..`` segments, so ``<ws>-2`` and ``<ws>/../<other>`` are
-never inside ``<ws>``. An organization owns its drive the same way,
+never inside ``<ws>``. An organization owns its Organization Files the same way,
 ``naas_abi/organization-drive/<organization_id>/``, placed in the organization's
 own container: the roles held at the organization reach it, a role held only in
-one of its workspaces does not. Every other tree (the platform drive, the migration and
-scaffolding markers, the analytics) belongs to the platform, and a user's own
-drives are reached through the rows of the roles' platform companions: the
+one of its workspaces does not. Every other tree (Platform Files, the migration and
+scaffolding markers, the analytics) belongs to the platform, and a user's My Files
+and storage are reached through the rows of the roles' platform companions: the
 kernel's (``roles.PLATFORM_TYPES``) and the ``nexus`` catalog's ``PLATFORM_ACCESS``.
 
 Placed at startup for the workspaces and organizations that exist
@@ -109,11 +109,11 @@ def place_workspace_drive_sync(workspace_id: str) -> bool:
     return True
 
 
-# -- the organization drive ----------------------------------------------------
+# -- Organization Files --------------------------------------------------------
 
 
 def organization_drive_placements(organization_id: str) -> list[Placement]:
-    """The organization drive's root folder, and everything below it, in the
+    """Organization Files' root folder, and everything below it, in the
     organization's own container."""
     _check_id(organization_id, "organization")
     parts = tuple(organization_drive_root(organization_id).split("/"))

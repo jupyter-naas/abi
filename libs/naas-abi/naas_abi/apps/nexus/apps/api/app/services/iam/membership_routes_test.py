@@ -41,6 +41,10 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary impor
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary.workspaces__primary_adapter__FastAPI import (  # noqa: E501
     router as workspaces_router,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_testing import (
+    installed,
+    team_people,
+)
 from naas_abi_core.engine.call_context import (
     CallContext,
     Principal,
@@ -82,12 +86,10 @@ async def api(team, nexus_db, monkeypatch):
         )
         await db.commit()
 
-    # Rate limits and the notice mail live elsewhere: out of scope here.
+    # Rate limits live elsewhere: out of scope here. The people service (accounts,
+    # mail) is the in-memory one, which grants through IAM as the caller.
     async def no_limit(*_args, **_kwargs) -> None:
         return None
-
-    async def no_mail(*_args, **_kwargs) -> bool:
-        return False
 
     async def no_seeding(**_kwargs) -> None:
         return None
@@ -95,7 +97,7 @@ async def api(team, nexus_db, monkeypatch):
     monkeypatch.setattr(workspaces_module, "seed_workspace_agents", no_seeding)
     for module in (workspaces_module, organizations_module):
         monkeypatch.setattr(module, "check_rate_limit", no_limit)
-        monkeypatch.setattr(module, "send_added_notice", no_mail)
+        monkeypatch.setattr(module, "check_invitation_mail_quota", no_limit)
 
     app = FastAPI()
     register_service_exception_handlers(app)  # as main.py does
@@ -122,6 +124,7 @@ async def api(team, nexus_db, monkeypatch):
             await db.commit()
 
     app.dependency_overrides[get_db] = session
+    people = team_people(USERS)
     app.dependency_overrides[workspaces_module.get_service_registry] = lambda: SimpleNamespace(
         agents=None
     )
@@ -135,7 +138,8 @@ async def api(team, nexus_db, monkeypatch):
         current["id"], current["scope"] = user, scope
         return AsyncClient(transport=ASGITransport(app=app), base_url="http://t")
 
-    return as_
+    with installed(people):
+        yield as_
 
 
 async def role(user: str, scope: str) -> str | None:
@@ -201,8 +205,11 @@ async def test_members_and_admins_hold_their_own_level(api) -> None:
             await http.patch("/api/workspaces/ws-1", json={"name": "Renamed"})
         ).status_code == 200
         assert (await http.get("/api/workspaces/ws-1/servers")).status_code == 200
-        assert (await http.delete("/api/workspaces/ws-1")).status_code == 403  # the owner's
-    async with api("owner") as http:
+    # Deleting a workspace of an organization is its org admins' (#1585): the team's
+    # admin is one (an admin of org-1 too), the workspace's member is not.
+    async with api("member") as http:
+        assert (await http.delete("/api/workspaces/ws-1")).status_code == 403
+    async with api("admin") as http:
         assert (await http.delete("/api/workspaces/ws-1")).status_code == 200
         assert await role("owner", WS) is None  # the scope's roles went with it
 
@@ -227,15 +234,118 @@ async def test_a_workspace_is_created_only_in_an_organization_the_caller_may(api
         assert made.status_code == 200, made.text
         created = made.json()
         assert created["organization_id"] == "org-1"
-        assert created["current_user_role"] == "owner"
-    # The creator owns it, nobody else holds a role there.
+        assert created["current_user_role"] == "admin"
+    # The creator is its admin (owner is no longer assigned), nobody else holds a role there.
     scope = workspace_container("org-1", created["id"])
-    assert await role("admin", scope) == "owner"
+    assert await role("admin", scope) == "admin"
     assert await role("owner", scope) is None
 
 
 @pytest.mark.asyncio
-async def test_a_workspace_without_an_organization_is_the_callers_own(api) -> None:
+async def test_a_workspace_is_created_with_an_admin_the_creator_by_default(api) -> None:
+    """#1585: the create takes ``admin_id`` (a person of the organization), else the
+    creator; the admin joins "<W> admins" and "<W> workspace", nothing attached."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
+    from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+        CONTAINER_DEFAULTS,
+    )
+
+    async def groups_of(user: str, scope: str) -> tuple[set[str], list]:
+        record = await CONTAINER_DEFAULTS.record_of(scope)
+        assert record is not None
+        iam = runtime.iam()
+        principal = await MEMBERSHIPS.principal_id(user)
+        with as_service_account("api"):
+            names = {
+                name
+                for group_id, name in (
+                    (record.members_group_id, "workspace"),
+                    (record.admins_group_id, "admins"),
+                )
+                if principal in iam.list_group_members(group_id)
+            }
+            held = [
+                (a.policy_id, a.scope)
+                for a in iam.list_attachments(principal_id=principal)
+                if a.scope == scope
+            ]
+        return names, held
+
+    async with api("admin") as http:
+        mine = await http.post(
+            "/api/workspaces", json={"name": "Mine", "slug": "mine", "organization_id": "org-1"}
+        )
+        assert mine.status_code == 200, mine.text
+        theirs = await http.post(
+            "/api/workspaces",
+            json={
+                "name": "Theirs",
+                "slug": "theirs",
+                "organization_id": "org-1",
+                "admin_id": "member",
+            },
+        )
+        assert theirs.status_code == 200, theirs.text
+        # Someone of no organization's directory is refused.
+        outside = await http.post(
+            "/api/workspaces",
+            json={"name": "Out", "slug": "out", "organization_id": "org-1", "admin_id": "bob"},
+        )
+        assert outside.status_code == 400
+        assert "person of the organization" in outside.json()["detail"]
+    mine_scope = workspace_container("org-1", mine.json()["id"])
+    theirs_scope = workspace_container("org-1", theirs.json()["id"])
+    assert await groups_of("admin", mine_scope) == ({"workspace", "admins"}, [])
+    assert await groups_of("member", theirs_scope) == ({"workspace", "admins"}, [])
+    assert await role("member", theirs_scope) == "admin"
+    # The creator administers the organization (a role of before here): not a member of
+    # the one made for someone else, but reaching it from the organization.
+    assert (await groups_of("admin", theirs_scope))[0] == set()
+
+
+@pytest.mark.asyncio
+async def test_the_create_page_s_body_makes_the_picked_person_its_admin(api) -> None:
+    """The body Organization settings › Workspaces › Create sends (web
+    ``lib/access-model/workspace-create.ts``, #1588): ``admin_id``, no ``owner_id``,
+    empty fields as null; one outside the organization is a 400 the form shows."""
+
+    def body(slug: str, admin: str) -> dict[str, Any]:
+        return {
+            "name": slug.title(),
+            "slug": slug,
+            "organization_id": "org-1",
+            "admin_id": admin,
+            "workspace_group": None,
+            "description": None,
+            "primary_color": "#22c55e",
+            "accent_color": None,
+            "catalog_seed": None,
+        }
+
+    async with api("admin") as http:
+        made = await http.post("/api/workspaces", json=body("picked", "member"))
+        assert made.status_code == 200, made.text
+        refused = await http.post("/api/workspaces", json=body("nobody", "bob"))
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == "The workspace admin must be a person of the organization"
+    scope = workspace_container("org-1", made.json()["id"])
+    assert await role("member", scope) == "admin"
+    assert await role("admin", scope) != "owner"
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_without_an_organization_is_the_callers_own(
+    api, team, monkeypatch
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+    from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import apply_access_settings
+
+    # No user creates a personal workspace unless the deployment allows it.
+    async with api("stranger") as http:
+        refused = await http.post("/api/workspaces", json={"name": "Solo", "slug": "solo"})
+        assert refused.status_code == 403, refused.text
+    monkeypatch.setattr(live_settings(), "personal_workspaces", True, raising=False)
+    apply_access_settings(team.iam)
     async with api("stranger") as http:
         made = await http.post("/api/workspaces", json={"name": "Solo", "slug": "solo"})
         assert made.status_code == 200, made.text
@@ -252,19 +362,19 @@ async def test_a_workspace_without_an_organization_is_the_callers_own(api) -> No
 @pytest.mark.asyncio
 async def test_an_admin_cannot_grant_demote_or_remove_a_workspace_owner(api) -> None:
     async with api("admin") as http:
+        # Owner is no longer assigned (#1589).
         grant = await http.post(
             "/api/workspaces/ws-1/members/invite",
             json={"email": "bob@example.com", "role": "owner"},
         )
-        assert grant.status_code == 403
-        assert "owners" in grant.json()["detail"]
+        assert grant.status_code == 400
         assert await role("bob", WS) is None
         demote = await http.patch("/api/workspaces/ws-1/members/owner", json={"role": "member"})
         assert demote.status_code == 403
         remove = await http.delete("/api/workspaces/ws-1/members/owner")
         assert remove.status_code == 403
         promote = await http.patch("/api/workspaces/ws-1/members/member", json={"role": "owner"})
-        assert promote.status_code == 403
+        assert promote.status_code in (400, 403)
     assert await role("owner", WS) == "owner"
     assert await role("member", WS) == "member"
     # An admin still runs the roles below owner.
@@ -408,14 +518,15 @@ async def test_the_org_directory_is_for_owners_and_admins(api) -> None:
 @pytest.mark.asyncio
 async def test_an_org_admin_cannot_make_demote_or_remove_an_org_owner(api) -> None:
     async with api("admin") as http:
+        # Owner is no longer assigned (#1589); an owner of before stays one.
         invited = await http.post(
             "/api/organizations/org-1/members/invite",
             json={"email": "bob@example.com", "role": "owner"},
         )
-        assert invited.status_code == 403
+        assert invited.status_code == 400
         assert await role("bob", ORG) is None
         assert (
-            await http.patch("/api/organizations/org-1/members/owner", json={"role": "member"})
+            await http.patch("/api/organizations/org-1/members/owner", json={"org_admin": False})
         ).status_code == 403
         assert (await http.delete("/api/organizations/org-1/members/owner")).status_code == 400
         # Members below owner are the admin's to manage.
@@ -432,8 +543,8 @@ async def test_an_org_admin_cannot_make_demote_or_remove_an_org_owner(api) -> No
     async with api("owner") as http:
         assert (
             await http.patch("/api/organizations/org-1/members/admin", json={"role": "owner"})
-        ).status_code == 200
-        assert await role("admin", ORG) == "owner"
+        ).status_code == 400
+        assert await role("admin", ORG) == "admin"
 
 
 @pytest.mark.asyncio
@@ -576,7 +687,7 @@ async def test_assigning_workspaces_is_checked_at_each_workspace(api, team, nexu
         assert refused.status_code == 403, refused.text
         detail = refused.json()["detail"]
         assert detail.startswith("You cannot grant what you do not hold"), detail
-        assert "builtin.admin" in detail, detail
+        assert "builtin." in detail, detail
     assert await role("member", ws2) is None
     # An org admin assigns through the org-wide role.
     async with api("admin") as http:
@@ -596,3 +707,19 @@ async def test_the_member_lists_name_each_members_iam_principal(api, team) -> No
     assert members and org_members
     for row in [*members, *org_members]:
         assert row["principal_id"] == team.principal(row["user_id"]) != row["user_id"]
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_admin_searches_people_but_never_lists_the_org(api, team) -> None:
+    """The org's directory stays its admins' (``ListOrganizationMembers``); a
+    workspace admin only finds people of it to add (``InviteWorkspaceMember``)."""
+    team.grant("bob", "admin", WS)
+    async with api("bob") as http:
+        assert (await http.get("/api/organizations/org-1/members")).status_code == 403
+        found = await http.get("/api/workspaces/ws-1/members/candidates", params={"q": "st"})
+        assert found.status_code == 200, found.text
+    for user in ("member", "viewer", "stranger"):
+        async with api(user) as http:
+            refused = await http.get("/api/workspaces/ws-1/members/candidates", params={"q": "st"})
+            assert refused.status_code in (403, 404), user
+            assert (await http.get("/api/organizations/org-1/members")).status_code == 403, user

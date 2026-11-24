@@ -110,3 +110,9 @@
   font-size: var(--font-size-sm);
   color: #b91c1c;
 }
+
+.access-att-scope {
+  align-self: center;
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+}

@@ -25,7 +25,7 @@ export function panelSectionOnPage(
 /**
  * What the dock should do with the feature column when the path changes.
  * `'keep'` leaves the stored column: a refresh must not reopen one the user
- * closed. Later navigations open the section of the new path.
+ * closed. An open one follows the page, on a refresh as on later navigations.
  */
 export type PanelFromPathChange = 'keep' | SidebarSection | null;
 
@@ -39,9 +39,6 @@ export function panelFromPathChange(input: {
   const { previousPath, pathname, urlSection, keepPanelClosed, currentPanel } = input;
   if (previousPath === pathname) return 'keep';
   if (keepPanelClosed) return null;
-  if (pathname.endsWith('/settings/infrastructure')) {
-    return previousPath === null ? 'keep' : 'infrastructure';
-  }
   if (urlSection === null) {
     if (pathname.includes('/admin/')) return null;
     return 'keep';
@@ -49,6 +46,6 @@ export function panelFromPathChange(input: {
   if (urlSection === 'home') {
     return currentPanel === 'workspaces' ? 'keep' : null;
   }
-  if (previousPath === null) return 'keep';
+  if (previousPath === null && currentPanel === null) return 'keep';
   return urlSection;
 }

@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { APP_MENU_ROW, APP_MENU_SURFACE, APP_MENU_TRIGGER } from '@/components/shell/app-menu-classes';
 import { mapsDeploymentRestrictsLayerCatalog } from '@/app/workspace/[workspaceId]/maps/lib/maps-deployment';
 import { mapsSettingsPath } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
-import { useWorkspaceStore } from '@/stores/workspace';
 
 /**
  * The Maps section's app menu bar, sitting in the topnav through
@@ -24,7 +23,6 @@ export function MapsMenuBar({
   onGeoJsonLayers: () => void;
 }) {
   const router = useRouter();
-  const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
   const catalogRestricted = mapsDeploymentRestrictsLayerCatalog();
 
   return (
@@ -81,7 +79,6 @@ export function MapsMenuBar({
               title={workspaceId ? undefined : 'Open Maps inside a workspace'}
               onSelect={() => {
                 if (!workspaceId) return;
-                setActivePanelSection('settings');
                 router.push(mapsSettingsPath(workspaceId));
               }}
               data-testid="maps-menuitem-settings"

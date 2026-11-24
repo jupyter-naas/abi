@@ -52,6 +52,8 @@ export function platformRowPath(table: string, rowId: string): string {
  */
 export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   'general',
+  // Workspace settings › Users, once Members: the old link goes to the workspace, then to Users.
+  // Users itself is no legacy link: bare `/settings/users` was and is Platform › Users.
   'members',
   'servers',
   'services',
@@ -65,11 +67,17 @@ export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   'skills',
   'apps',
   'models',
+  // Workspace settings › Drives, gone: its page redirects (Platform Settings' own is /settings/drives).
   'drives',
   'infrastructure',
   'workflows',
-  // Roles & permissions of the workspace (Platform Settings' own is /settings/roles).
+  // Roles & permissions of the workspace, gone: its page redirects to Policies.
   'permissions',
+  // Analytics of the workspace (new, but `getWorkspacePath(null, ...)` yields it too).
+  'analytics',
+  // Access of the workspace (Platform Settings' own is /settings/access).
+  'policies',
+  'groups',
 ];
 
 /**

@@ -23,7 +23,7 @@
  * SSR) the call is a no-op.
  */
 
-import type { AnalyticsEvent, EventName } from '@/app/analytics/lib/types';
+import type { AnalyticsEvent, EventName } from '@/components/analytics/types';
 import { getApiUrl } from '@/lib/config';
 import { viewFlagActive } from '@/lib/view-flag';
 import { authCredentials, getAuthHeader, useAuthStore } from '@/stores/auth';

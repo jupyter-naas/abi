@@ -83,6 +83,24 @@ def effective_seed_apps(slug: str | None, catalog_seed: dict[str, Any] | None) -
     return set()
 
 
+def effective_seed_modules(slug: str | None, catalog_seed: dict[str, Any] | None) -> set[str]:
+    """The shared modules a workspace's seed offers whole: its stored
+    ``catalog_seed`` first, then the config's ``modules``."""
+    if catalog_seed is not None and "modules" in catalog_seed:
+        modules = catalog_seed.get("modules") or []
+        return {str(m).strip() for m in modules if str(m).strip()}
+    yaml_ws = _yaml_seed(slug)
+    if yaml_ws is not None and getattr(yaml_ws, "modules", None):
+        return {str(m).strip() for m in yaml_ws.modules if str(m).strip()}
+    return set()
+
+
+def has_seed(slug: str | None, catalog_seed: dict[str, Any] | None) -> bool:
+    """Whether the workspace has a seed at all (a stored ``catalog_seed`` or a
+    configured entry): only those get an offer from it."""
+    return catalog_seed is not None or _yaml_seed(slug) is not None
+
+
 def workspace_seed_apps(workspace: Any) -> set[str]:
     """The apps a workspace record's seed turns on (``effective_seed_apps``: its
     stored ``catalog_seed`` first, then the config's), as the catalog and the

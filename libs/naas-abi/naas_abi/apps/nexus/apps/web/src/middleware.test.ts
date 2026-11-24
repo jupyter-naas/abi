@@ -59,7 +59,9 @@ describe('middleware auth redirects', () => {
       '/settings/system',
       '/settings/activity/events',
       '/settings/data/documents',
-      '/settings/roles',
+      '/settings/access/policies',
+      '/settings/access/policies/builtin.owner',
+      '/settings/users/usr_1',
     ]) {
       const response = middleware(requestFor(path, { 'nexus-auth-flag': 'true' }));
       expect(response.headers.get('location')).toBeNull();
@@ -82,13 +84,31 @@ describe('middleware auth redirects', () => {
     expect(users.headers.get('location')).toBe(
       'https://nexus.example.com/settings/tables/workspace_members',
     );
-    const userRow = middleware(requestFor('/settings/users/usr_1', cookies));
-    expect(userRow.headers.get('location')).toBe('https://nexus.example.com/settings/tables/users/usr_1');
+    const userRow = middleware(requestFor('/settings/users/user-1', cookies));
+    expect(userRow.headers.get('location')).toBe('https://nexus.example.com/settings/tables/users/user-1');
     // The Users page itself: no redirect.
     expect(middleware(requestFor('/settings/users', cookies)).headers.get('location')).toBeNull();
     const secrets = middleware(requestFor('/settings/secrets_table/s-1', cookies));
     expect(secrets.headers.get('location')).toBe(
       'https://nexus.example.com/settings/tables/secrets/s-1',
+    );
+  });
+
+  it('redirects the old Roles & permissions pages to the Access page or the person they opened', () => {
+    process.env.NODE_ENV = 'production';
+
+    const cookies = { 'nexus-auth-flag': 'true' };
+    const at = (path: string) => middleware(requestFor(path, cookies)).headers.get('location');
+    expect(at('/settings/roles?section=policies')).toBe('https://nexus.example.com/settings/access/policies');
+    expect(at('/settings/roles?section=people&person=usr_1')).toBe('https://nexus.example.com/settings/users/usr_1');
+    expect(at('/organizations/org-1/settings/roles?section=groups')).toBe(
+      'https://nexus.example.com/organizations/org-1/settings/groups',
+    );
+    expect(at('/workspace/ws-1/settings/permissions?section=policies&policy=pol_1')).toBe(
+      'https://nexus.example.com/workspace/ws-1/settings/policies/pol_1',
+    );
+    expect(at('/org/acme/workspace/ws-1/settings/permissions?section=people')).toBe(
+      'https://nexus.example.com/org/acme/workspace/ws-1/settings/users',
     );
   });
 
@@ -103,7 +123,7 @@ describe('middleware auth redirects', () => {
       'https://nexus.example.com/settings/activity/traces?trace=abc',
     );
     const access = middleware(requestFor('/org/acme/workspace/ws-1/admin/system?tab=access', cookies));
-    expect(access.headers.get('location')).toBe('https://nexus.example.com/settings/roles');
+    expect(access.headers.get('location')).toBe('https://nexus.example.com/settings/access');
     const events = middleware(requestFor('/workspace/ws-1/admin/events', cookies));
     expect(events.headers.get('location')).toBe('https://nexus.example.com/settings/activity/events');
     const data = middleware(requestFor('/settings/system/data?service=cache', cookies));
@@ -116,7 +136,19 @@ describe('middleware auth redirects', () => {
     const response = middleware(
       requestFor('/settings/members', { 'nexus-auth-flag': 'true' }),
     );
-    expect(response.headers.get('location')).toMatch(/\/workspace\/.+\/settings\/members$/);
+    expect(response.headers.get('location')).toMatch(/\/workspace\/.+\/settings\/users$/);
+  });
+
+  it("sends a workspace's old Members address to Users, a person's page and the query kept", () => {
+    process.env.NODE_ENV = 'production';
+    const cookies = { 'nexus-auth-flag': 'true' };
+
+    const list = middleware(requestFor('/workspace/ws-1/settings/members?added=1', cookies));
+    expect(list.headers.get('location')).toBe('https://nexus.example.com/workspace/ws-1/settings/users?added=1');
+    const person = middleware(requestFor('/workspace/ws-1/settings/members/usr_1', cookies));
+    expect(person.headers.get('location')).toBe('https://nexus.example.com/workspace/ws-1/settings/users/usr_1');
+    const org = middleware(requestFor('/org/acme/workspace/ws-1/settings/members/new', cookies));
+    expect(org.headers.get('location')).toBe('https://nexus.example.com/org/acme/workspace/ws-1/settings/users/new');
   });
 
   it('redirects every legacy workspace settings link, even where a table shares the name', () => {
@@ -127,8 +159,9 @@ describe('middleware auth redirects', () => {
       const response = middleware(
         requestFor(`/settings/${slug}`, { 'nexus-auth-flag': 'true' }),
       );
+      // Members became Users.
       expect(response.headers.get('location')).toMatch(
-        new RegExp(`/workspace/.+/settings/${slug}$`),
+        new RegExp(`/workspace/.+/settings/${slug === 'members' ? 'users' : slug}$`),
       );
     }
   });
@@ -137,6 +170,13 @@ describe('middleware auth redirects', () => {
     process.env.NODE_ENV = 'production';
 
     const response = middleware(requestFor('/settings/general', { 'nexus-auth-flag': 'true' }));
+    expect(response.headers.get('location')).toBeNull();
+  });
+
+  it('serves Platform Settings › Drives at /settings/drives, no longer a workspace link', () => {
+    process.env.NODE_ENV = 'production';
+
+    const response = middleware(requestFor('/settings/drives', { 'nexus-auth-flag': 'true' }));
     expect(response.headers.get('location')).toBeNull();
   });
 });

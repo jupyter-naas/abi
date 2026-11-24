@@ -19,7 +19,7 @@ import { getApiUrl } from '@/lib/config';
 import { ontologyApiQuery } from '@/lib/ontology-query';
 import { authFetch } from '@/stores/auth';
 import { useOntologyStore } from '@/stores/ontology';
-import { KpiCard } from '@/app/analytics/components/kpi-card';
+import { KpiCard } from '@/components/ui/kpi-card';
 
 interface OntologyFileApiItem {
   name?: string;

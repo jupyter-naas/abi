@@ -1,14 +1,7 @@
 from __future__ import annotations
 
-from uuid import uuid4
-
 from fastapi import Depends, HTTPException, Request
-from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-from naas_abi.apps.nexus.apps.api.app.core.postgres_session_registry import (
-    PostgresSessionRegistry,
-)
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
-from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 
 
@@ -37,20 +30,12 @@ def get_files_service(
     return FilesService(storage=storage)
 
 
-async def workspace_setting(workspace_id: str, setting: str) -> bool:
-    """Whether the workspace row has ``setting`` (``platform_drive_enabled``,
-    ``system_drive_enabled``) switched on. That is a domain rule of Nexus; who
-    may use the drive is IAM's."""
-    async with AsyncSessionLocal() as db:
-        session_registry = PostgresSessionRegistry.instance()
-        session_id = f"sess-{uuid4().hex}"
-        session_registry.bind(session_id=session_id, db=db)
-        token = session_registry.set_current_session(session_id)
-        try:
-            workspace = await ServiceRegistry.instance().workspaces.get_workspace(
-                workspace_id=workspace_id
-            )
-        finally:
-            session_registry.reset_current_session(token)
-            session_registry.unbind(session_id)
-    return workspace is not None and bool(getattr(workspace, setting, False))
+async def may_use_platform_files(user_id: str) -> bool:
+    """Whether ``user_id`` may open Platform Files: IAM's ``nexus:ListPlatformFiles``
+    at the platform, decided as ``GET /api/files/views`` decides it. A workspace gives
+    it to its people (Workspace settings > General › Platform Files, #1590). The
+    supported check for a module that lets a user reach the platform drive with their
+    own token; it replaces ``workspace_setting(..., "platform_drive_enabled")``."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+
+    return await authz.allowed("ListPlatformFiles", user=user_id, id=("platform",))

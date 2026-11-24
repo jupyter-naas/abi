@@ -1,6 +1,6 @@
 /**
- * Last page visited in each settings scope (sessionStorage), so switching scopes
- * reopens where the caller left off.
+ * The last Settings page visited (sessionStorage), and the last one of each level, so the
+ * dock's Settings reopens where the caller left off, and each tab its level.
  */
 
 export type SettingsScopeKey =
@@ -9,61 +9,65 @@ export type SettingsScopeKey =
   | { kind: 'organization'; orgId: string }
   | { kind: 'workspace'; workspaceId: string };
 
-const PREFIX = 'nexus-settings-scope-path';
+/** A level of Settings, one tab each. */
+export type SettingsLevelId = SettingsScopeKey['kind'];
 
-function storageKey(scope: SettingsScopeKey): string {
-  switch (scope.kind) {
-    case 'account':
-      return `${PREFIX}:account`;
-    case 'platform':
-      return `${PREFIX}:platform`;
-    case 'organization':
-      return `${PREFIX}:org:${scope.orgId}`;
-    case 'workspace':
-      return `${PREFIX}:workspace:${scope.workspaceId}`;
-  }
+const PREFIX = 'nexus-settings-return-path';
+const LAST_KEY = `${PREFIX}:settings`;
+const LEVELS: readonly SettingsLevelId[] = ['platform', 'organization', 'workspace', 'account'];
+// Written while the Console was an area of its own: still cleared at sign-out.
+const CONSOLE_KEY = `${PREFIX}:console`;
+
+function levelKey(level: SettingsLevelId): string {
+  return `${PREFIX}:level:${level}`;
 }
 
-function isValidScopePath(scope: SettingsScopeKey, path: string): boolean {
-  if (!path.startsWith('/') || path.startsWith('//')) return false;
-  switch (scope.kind) {
-    case 'account':
-      return /^\/account(?:\/|$|\?|#)/.test(path);
-    case 'platform':
-      return /^\/settings(?:\/|$|\?|#)/.test(path);
-    case 'organization':
-      return new RegExp(`^/organizations/${escapeRegExp(scope.orgId)}/settings(?:/|$|\\?|#)`).test(
-        path
-      );
-    case 'workspace':
-      return new RegExp(`^/workspace/${escapeRegExp(scope.workspaceId)}/settings(?:/|$|\\?|#)`).test(
-        path
-      );
-  }
+function settingsLevelOfPath(path: string): SettingsLevelId | null {
+  if (!path.startsWith('/') || path.startsWith('//')) return null;
+  return settingsScopeFromPathname(path)?.kind ?? null;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-export function rememberSettingsScopePath(scope: SettingsScopeKey, path: string): void {
-  if (!isValidScopePath(scope, path)) return;
+function readPath(key: string): string | null {
   try {
-    window.sessionStorage.setItem(storageKey(scope), path);
+    const path = window.sessionStorage.getItem(key);
+    return path && settingsLevelOfPath(path) ? path : null;
+  } catch {
+    // Storage blocked.
+    return null;
+  }
+}
+
+export function rememberSettingsPath(path: string): void {
+  const level = settingsLevelOfPath(path);
+  if (!level) return;
+  try {
+    window.sessionStorage.setItem(LAST_KEY, path);
+    window.sessionStorage.setItem(levelKey(level), path);
   } catch {
     // Storage blocked.
   }
 }
 
-/** Remembered path for ``scope``, else ``fallback``. */
-export function settingsScopeReturnPath(scope: SettingsScopeKey, fallback: string): string {
+/** The last Settings page visited, at any level, else ``fallback``. */
+export function settingsReturnPath(fallback: string): string {
+  return readPath(LAST_KEY) ?? fallback;
+}
+
+/** The last page visited at ``level``, or null. */
+export function settingsLevelReturnPath(level: SettingsLevelId): string | null {
+  const path = readPath(levelKey(level));
+  return path && settingsLevelOfPath(path) === level ? path : null;
+}
+
+/** At sign-out: the next person to sign in on this tab starts from their own landing. */
+export function forgetSettingsPaths(): void {
   try {
-    const path = window.sessionStorage.getItem(storageKey(scope));
-    if (path && isValidScopePath(scope, path)) return path;
+    for (const key of [LAST_KEY, CONSOLE_KEY, ...LEVELS.map(levelKey)]) {
+      window.sessionStorage.removeItem(key);
+    }
   } catch {
     // Storage blocked.
   }
-  return fallback;
 }
 
 const ACCOUNT_PATH = /^\/account(?:\/([^/?#]+))?/;
@@ -82,15 +86,7 @@ export function settingsScopeFromPathname(pathname: string | null | undefined): 
   return null;
 }
 
-export function scopeKeysEqual(a: SettingsScopeKey, b: SettingsScopeKey): boolean {
-  if (a.kind !== b.kind) return false;
-  switch (a.kind) {
-    case 'account':
-    case 'platform':
-      return true;
-    case 'organization':
-      return a.orgId === (b as { kind: 'organization'; orgId: string }).orgId;
-    case 'workspace':
-      return a.workspaceId === (b as { kind: 'workspace'; workspaceId: string }).workspaceId;
-  }
+/** Whether ``pathname`` is a workspace's settings page (they leave the workspace's chrome). */
+export function isWorkspaceSettingsPath(pathname: string | null | undefined): boolean {
+  return !!pathname && WORKSPACE_SETTINGS_PATH.test(pathname);
 }

@@ -24,7 +24,7 @@ interface PlatformTableRow {
   row: Record<string, CellValue>;
 }
 
-/** Grant or remove platform superadmin access from a users row. */
+/** Grant or remove platform admin access from a users row (`is_superadmin`). */
 function SuperadminAction({
   row,
   onChange,
@@ -45,7 +45,7 @@ function SuperadminAction({
     const who = String(row.name || row.email || userId);
     if (
       isSuperadmin &&
-      !(await confirm({ title: `Remove superadmin access from ${who}?`, confirmLabel: 'Remove' }))
+      !(await confirm({ title: `Remove platform admin access from ${who}?`, confirmLabel: 'Remove' }))
     ) {
       return;
     }
@@ -73,11 +73,11 @@ function SuperadminAction({
         type="button"
         className="org-settings-users-secondary-button"
         disabled={pending || (isSuperadmin && isSelf)}
-        title={isSuperadmin && isSelf ? 'You cannot remove your own superadmin access' : undefined}
+        title={isSuperadmin && isSelf ? 'You cannot remove your own platform admin access' : undefined}
         onClick={() => void toggle()}
       >
         {isSuperadmin ? <ShieldOff size={16} /> : <ShieldCheck size={16} />}
-        {isSuperadmin ? 'Remove superadmin' : 'Make superadmin'}
+        {isSuperadmin ? 'Remove platform admin' : 'Make platform admin'}
       </button>
       {dialog}
     </>
@@ -86,7 +86,7 @@ function SuperadminAction({
 
 /**
  * One row of a table, field by field. Rows are read-only, except users rows,
- * which can grant or remove platform superadmin access.
+ * which can grant or remove platform admin access.
  */
 export default function PlatformTableRowPage() {
   const params = useParams<{ table: string; rowId: string }>();
@@ -201,7 +201,7 @@ export default function PlatformTableRowPage() {
 
         {tableName === 'users' && (
           <p className="org-settings-footnote">
-            Superadmins reach Platform Settings, platform services and the live event stream.
+            Platform admins reach Platform Settings, platform services and the live event stream.
             Accounts listed under <code>users:</code> in the config are promoted again on every
             boot.
           </p>

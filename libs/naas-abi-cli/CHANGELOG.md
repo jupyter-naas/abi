@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v5.2.0 (2026-11-23)
+
+### Features
+
+- **nexus**: Move per-person attachments to the groups model at start
+  ([#1587](https://github.com/jupyter-naas/abi/pull/1587),
+  [`d04e52f`](https://github.com/jupyter-naas/abi/commit/d04e52f634b2d0c9404d27bd413491fc7fab56de))
+
+- **nexus**: The access move applies at start and reports after
+  ([`109d384`](https://github.com/jupyter-naas/abi/commit/109d38497dbfdf072e2ebdd543c69f17b0e97d35))
+
+- **nexus-api**: People flows give a level and groups at the platform, org and workspace
+  ([#1589](https://github.com/jupyter-naas/abi/pull/1589),
+  [`48da1d2`](https://github.com/jupyter-naas/abi/commit/48da1d27c18f90a76098a0dc2fb0c67abed515ac))
+
+
+## v5.1.0 (2026-11-20)
+
+### Bug Fixes
+
+- **tools,cli**: Agent admin invite tools and the CLI on the people routes
+  ([`ed60399`](https://github.com/jupyter-naas/abi/commit/ed60399ef1810a5662999922243ca2ec2f460032))
+
+### Features
+
+- **nexus**: Configured users are invited people of their provider
+  ([#1570](https://github.com/jupyter-naas/abi/pull/1570),
+  [`ed6a47d`](https://github.com/jupyter-naas/abi/commit/ed6a47db2f75ae30f918a880c0e45674b2ce5afc))
+
+- **nexus**: Pending invitations become invited users
+  ([#1570](https://github.com/jupyter-naas/abi/pull/1570),
+  [`6ec2bd5`](https://github.com/jupyter-naas/abi/commit/6ec2bd50163bbb4f55784577c234072d4ba864de))
+
+
 ## v5.0.1 (2026-11-19)
 
 ### Bug Fixes

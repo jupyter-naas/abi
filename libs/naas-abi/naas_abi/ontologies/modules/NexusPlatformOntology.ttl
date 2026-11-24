@@ -2522,8 +2522,6 @@ nexus:show_powered_by a owl:DatatypeProperty ; rdfs:label "show powered by"@en ;
 nexus:show_logo_separator a owl:DatatypeProperty ; rdfs:label "show logo separator"@en ; rdfs:domain nexus:OrganizationProfile ; rdfs:range xsd:boolean .
 
 # Workspace settings (workspaces table, workspace seed config)
-nexus:platform_drive_enabled a owl:DatatypeProperty ; rdfs:label "platform drive enabled"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:boolean .
-nexus:system_drive_enabled a owl:DatatypeProperty ; rdfs:label "system drive enabled"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:boolean .
 nexus:coding_default_repo_id a owl:DatatypeProperty ; rdfs:label "coding default repo id"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:string .
 nexus:default_agent a owl:DatatypeProperty ; rdfs:label "default agent"@en ; rdfs:domain nexus:Workspace ; rdfs:range xsd:string ;
     skos:example "bob BobAgent" .

@@ -10,6 +10,13 @@
 
 export const VIEW_FLAG_COOKIE = 'nexus-view-as';
 
+const listeners = new Set<() => void>();
+/** In-memory consumers forget the viewer's answers before a view transition/reload. */
+export function onViewFlagChange(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
+
 export type ViewFlag = {
   workspaceId: string;
   /** A path of this app, the person's page the view was started from. */
@@ -86,9 +93,12 @@ export function setViewFlag(flag: ViewFlag, endsAt: string | number | Date, now:
   const seconds = Math.max(1, Math.ceil((new Date(endsAt).getTime() - now) / 1000)) + FLAG_MARGIN_SECONDS;
   const value = encodeURIComponent(JSON.stringify(flag));
   document.cookie = `${VIEW_FLAG_COOKIE}=${value}; path=/; max-age=${Number.isFinite(seconds) ? seconds : 900}; SameSite=Lax`;
+  listeners.forEach((listener) => listener());
 }
 
 export function clearViewFlag(): void {
   if (typeof document === 'undefined') return;
+  const active = viewFlagActive();
   document.cookie = `${VIEW_FLAG_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+  if (active) listeners.forEach((listener) => listener());
 }

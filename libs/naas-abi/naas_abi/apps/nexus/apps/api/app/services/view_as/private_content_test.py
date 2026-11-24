@@ -1,4 +1,4 @@
-"""What is private to the person stays private in a view: their conversations, My Drive,
+"""What is private to the person stays private in a view: their conversations, My Files,
 coding environments, workflow runs, the workspace's secrets and their personal API keys
 answer empty (or "not found" for one item) in a view, and answer as usual outside one.
 
@@ -16,9 +16,6 @@ from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.prima
     coding_environment__primary_adapter__FastAPI as coding_api,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files import placement
-from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary import (
-    files__primary_adapter__FastAPI as files_api,
-)
 from naas_abi.apps.nexus.apps.api.app.services.view_as.full_app_testing import (
     bind_database,
     build_full_app,
@@ -34,6 +31,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workflows import factory as workf
 from naas_abi.apps.nexus.apps.api.app.services.workflows.adapters.primary import (
     workflows__primary_adapter__FastAPI as workflows_api,
 )
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (  # noqa: E501
     ObjectStorageSecondaryAdapterFS,
 )
@@ -92,10 +90,6 @@ async def full(world, tmp_path, monkeypatch):
     app.dependency_overrides[workflows_api.get_workflows_service] = lambda: workflows
     placement._PLACED.clear()
 
-    async def drive_on(workspace_id: str, setting: str) -> bool:
-        return True  # the workspace switched the system drive on
-
-    monkeypatch.setattr(files_api, "workspace_setting", drive_on)
     world.app = app
     world.coding, world.workflows = coding, workflows
     everything = list(KNOWN_FEATURE_KEYS)
@@ -158,7 +152,7 @@ async def test_a_persons_my_drive_is_private_to_them(full) -> None:
     for suffix in ("diary.md", "raw/diary.md", "preview/pdf/diary.md", "archive/diary.md"):
         route = f"/api/files/{suffix}?workspace_id={ALPHA}&scope=my_drive"
         assert (await root.get(route)).status_code == 404, suffix
-    # The workspace's own drive, shared with the person, is shown.
+    # The workspace's Workspace Files, shared with the person, is shown.
     shared = await root.get(f"/api/files/?workspace_id={ALPHA}")
     assert shared.status_code == 200
     assert "shared.md" in [f["name"] for f in shared.json()["files"]]
@@ -233,8 +227,24 @@ async def test_a_persons_personal_api_keys_are_private_to_them(full) -> None:
 
 @pytest.mark.asyncio
 async def test_the_system_drive_does_not_show_the_persons_my_drive_either(full) -> None:
-    """The system drive is the whole storage tree, My Drive and ``users/<id>`` included: an
-    admin viewed as another admin must not read it there."""
+    """System Files is the whole storage tree, My Files and ``users/<id>`` included:
+    someone a policy gave System Files, viewed by a platform admin, must not have it
+    read there."""
+    with as_service_account("engine"):
+        granted = full.iam.create_policy(
+            "carol system files",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Allow",
+                        "actions": ["nexus:ListObjectStoreFiles", "nexus:GetObjectStoreFile"],
+                        "resources": ["abi:nexus:system_file/*"],
+                    }
+                ],
+            },
+        )
+        full.iam.attach_policy(granted.id, full.principals["carol"])
     carol = await full.sign_in("carol")
     base = f"workspace_id={ALPHA}&scope=system_drive"
     mine = await carol.get(f"/api/files/?{base}&path=naas_abi/my-drive/carol")

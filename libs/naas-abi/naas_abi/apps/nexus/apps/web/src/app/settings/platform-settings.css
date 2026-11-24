@@ -7,26 +7,6 @@
   color: var(--muted-foreground-hex);
 }
 
-.platform-settings-nav-group + .platform-settings-nav-group {
-  margin-top: var(--space-4);
-}
-
-.platform-settings-nav-group-title {
-  margin: 0 0 var(--space-2);
-  padding: 0 var(--space-3);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--muted-foreground-hex);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.platform-settings-nav-group .org-settings-nav-item-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Raw table pages: one cell per value, so keep rows compact and readable. */
 .platform-table-page .org-settings-users-table td {
   max-width: 320px;
@@ -52,7 +32,7 @@
   color: var(--muted-foreground-hex);
 }
 
-/* Table pages drop the 896px content cap and use the full page width. */
+/* Table pages use the full page width. */
 .org-settings-layout-content.platform-settings-content-wide {
   max-width: none;
 }

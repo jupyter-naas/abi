@@ -129,7 +129,7 @@ describe('PeopleView', () => {
     const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [recruiters, roleRow, companion] }) });
     mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), changeRole: vi.fn() });
     await mounted.flush();
-    expect(row('usr_bob')?.querySelector('[data-with-role]')?.textContent).toContain('Platform member');
+    expect(row('usr_bob')?.querySelector('[data-with-role]')?.textContent).toContain('Platform access (automatic)');
     expect(document.querySelector('[data-held="builtin.platform.member"]')).toBeNull();
     expect(field('Detach Platform member from Bob')).toBeNull();
     expect(field('Detach Recruiters from Bob')).not.toBeNull();
@@ -197,23 +197,6 @@ describe('PeopleView', () => {
     });
     await mounted.flush();
     expect(field('Open Xavier')).toBeNull();
-  });
-
-  it('shows the person’s page in place of the table', async () => {
-    const api = peopleApi({
-      principalGroups: vi.fn().mockResolvedValue({ items: [] }),
-      listAttachments: vi.fn().mockResolvedValue({ items: [recruiters] }),
-      resources: vi.fn().mockResolvedValue({ items: [] }),
-      access: vi.fn().mockResolvedValue({ actions: {} }),
-    });
-    const onClosePerson = vi.fn();
-    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), person: { id: 'usr_bob', label: 'Bob' }, onClosePerson });
-    await mounted.flush();
-    await mounted.flush();
-    expect(document.querySelector('[data-person-page="usr_bob"]')).not.toBeNull();
-    expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'usr_bob' });
-    await mounted.click(button('People & roles') ?? null);
-    expect(onClosePerson).toHaveBeenCalled();
   });
 
   it('finds anyone at the platform, by a search IAM answers, not only those holding something there', async () => {

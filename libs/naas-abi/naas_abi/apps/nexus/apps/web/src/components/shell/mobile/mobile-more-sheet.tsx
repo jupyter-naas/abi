@@ -2,7 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import {
-  Search, BrainCircuit, Waypoints, Database, Map, Presentation, Store, Settings, X, Home, Blocks,
+  Search, BrainCircuit, Waypoints, Database, Map, Presentation, Store, Settings, X, Home,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -11,7 +11,6 @@ import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { getWorkspacePath } from '../sidebar/utils';
 import { shellTokens } from '../tokens';
-import { useOpensWorkspaceSettings } from '@/hooks/use-workspace-settings-access';
 
 type MoreItem = {
   id: string;
@@ -19,7 +18,7 @@ type MoreItem = {
   icon: React.ReactNode;
   href: string;
   section?: SidebarSection | null;
-  feature?: 'maps' | 'search' | 'ontology' | 'graph' | 'datasets' | 'slides' | 'marketplace' | 'settings.workspace';
+  feature?: 'maps' | 'search' | 'ontology' | 'graph' | 'datasets' | 'slides' | 'marketplace';
 };
 
 const MORE_ITEMS: MoreItem[] = [
@@ -31,8 +30,8 @@ const MORE_ITEMS: MoreItem[] = [
   { id: 'datasets', label: 'Datasets', icon: <Database size={18} />, href: '/datasets', section: 'datasets', feature: 'datasets' },
   { id: 'slides', label: 'Slides', icon: <Presentation size={18} />, href: '/slides', section: 'slides', feature: 'slides' },
   { id: 'marketplace', label: 'Marketplace', icon: <Store size={18} />, href: '/marketplace', section: 'marketplace', feature: 'marketplace' },
-  { id: 'settings', label: 'Settings', icon: <Settings size={18} />, href: '/settings', section: 'settings', feature: 'settings.workspace' },
-  { id: 'infrastructure', label: 'Infrastructure', icon: <Blocks size={18} />, href: '/settings/infrastructure', section: 'infrastructure', feature: 'settings.workspace' },
+  // The list of Settings, every level the caller may open (Account at least): no column.
+  { id: 'settings', label: 'Settings', icon: <Settings size={18} />, href: '/settings' },
 ];
 
 interface MobileMoreSheetProps {
@@ -53,7 +52,6 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
   const canDatasets = useFeature('datasets');
   const canSlides = useFeature('slides');
   const canMarketplace = useFeature('marketplace');
-  const canSettings = useOpensWorkspaceSettings();
 
   useEffect(() => setMounted(true), []);
 
@@ -77,7 +75,6 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
     if (item.feature === 'datasets') return !!canDatasets;
     if (item.feature === 'slides') return !!canSlides;
     if (item.feature === 'marketplace') return !!canMarketplace;
-    if (item.feature === 'settings.workspace') return !!canSettings;
     return true;
   };
 

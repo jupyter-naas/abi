@@ -1,0 +1,19 @@
+/* Access list pages (Policies, Groups, Service accounts), as Platform › Users lays them out. */
+
+/* The page's own action where it has no header to sit in (a page shown alone). */
+.access-list-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+/* Create forms open above the list, in one row. */
+.access-group-create.platform-users-inline,
+.access-sa-create.platform-users-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+

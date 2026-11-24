@@ -113,52 +113,201 @@ def org_members_list(
     if not isinstance(rows, list):
         print_json(rows)
         return
-    print_table(rows, ["user_id", "email", "name", "role"], title=f"Members of {org_id}")
+    # The directory: org members, and people of its workspaces only (role empty).
+    print_table(
+        rows,
+        ["user_id", "email", "name", "role", "source", "status"],
+        title=f"Members of {org_id}",
+    )
+
+
+def legacy_access(
+    level: str | None,
+    org_admin: bool,
+    workspace_admin: bool,
+    *,
+    role: str | None,
+    workspace_role: str | None,
+) -> tuple[str | None, bool, bool]:
+    """The level, org admin and workspace admin the options of before ask for:
+    ``--role admin`` is ``--org-admin``, ``--workspace-role admin`` is ``--admin``
+    and ``viewer`` or ``member`` the level. Owner is no longer given."""
+    if "owner" in ((role or "").lower(), (workspace_role or "").lower()):
+        raise click.ClickException(
+            "Owner is no longer given: use --org-admin or --admin."
+        )
+    org_admin = org_admin or (role or "").lower() == "admin"
+    ws_role = (workspace_role or "").lower()
+    workspace_admin = workspace_admin or ws_role == "admin"
+    if level is None and ws_role in ("viewer", "member"):
+        level = ws_role
+    return (level.lower() if level else None), org_admin, workspace_admin
+
+
+def invite_body(
+    email: str,
+    name: str | None,
+    *,
+    level: str | None,
+    org_admin: bool,
+    workspace_id: str | None,
+    workspace_admin: bool,
+    capabilities: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """The organization invite's body (#1589): the level (absent: theirs, Member
+    for someone new), org admin, the workspace with whether they administer it,
+    and capability groups."""
+    if workspace_admin and not workspace_id:
+        raise click.ClickException("--admin needs --workspace.")
+    body: dict[str, Any] = {"email": email}
+    if name:
+        body["name"] = name
+    if level:
+        body["level"] = level
+    if org_admin:
+        body["org_admin"] = True
+    if workspace_id:
+        body["workspaces"] = [{"id": workspace_id, "admin": workspace_admin}]
+    if capabilities:
+        body["capabilities"] = list(capabilities)
+    return body
+
+
+def workspace_access_body(
+    level: str | None, admin: bool, capabilities: tuple[str, ...] = ()
+) -> dict[str, Any]:
+    """What a workspace add or invite gives (#1589): the level (absent: theirs,
+    Member for someone new), whether they administer it, capability groups."""
+    body: dict[str, Any] = {"admin": admin}
+    if level:
+        body["level"] = level
+    if capabilities:
+        body["capabilities"] = list(capabilities)
+    return body
+
+
+def access_options(command: Any) -> Any:
+    """The options of an invite (#1589), and the ones of before, still read."""
+    for option in reversed(
+        (
+            click.option(
+                "--level",
+                default=None,
+                type=click.Choice(["viewer", "member"], case_sensitive=False),
+                help="Their level, in all their workspaces (default: theirs; Member if new).",
+            ),
+            click.option("--org-admin", is_flag=True, default=False, help="Org admin."),
+            click.option(
+                "--admin",
+                "workspace_admin",
+                is_flag=True,
+                default=False,
+                help="They administer the workspace (--workspace).",
+            ),
+            click.option(
+                "--capability",
+                "capabilities",
+                multiple=True,
+                help="A capability group id (repeat for several).",
+            ),
+            click.option(
+                "--role",
+                default=None,
+                type=click.Choice(
+                    ["owner", "admin", "member", "viewer"], case_sensitive=False
+                ),
+                help="Deprecated: admin is --org-admin.",
+            ),
+            click.option(
+                "--workspace-role",
+                default=None,
+                type=click.Choice(["admin", "member", "viewer"], case_sensitive=False),
+                help="Deprecated: admin is --admin, viewer or member the --level.",
+            ),
+            click.option("--no-org-role", is_flag=True, default=False, hidden=True),
+        )
+    ):
+        command = option(command)
+    return command
 
 
 @org_members.command("invite")
 @click.option("--org", "org_id", required=True, help="Organization id (org-...).")
-@click.option("--email", "member_email", required=True, help="Invitee email (created if missing).")
-@click.option("--name", "member_name", default=None, help="Display name when creating the user.")
-@click.option("--workspace", "workspace_id", default=None, help="Optional workspace to add as well.")
 @click.option(
-    "--workspace-role",
-    default="member",
-    show_default=True,
-    type=click.Choice(["admin", "member", "viewer"], case_sensitive=False),
+    "--email", "member_email", required=True, help="Invitee email (created if missing)."
 )
 @click.option(
-    "--role",
-    default="member",
-    show_default=True,
-    type=click.Choice(["owner", "admin", "member"], case_sensitive=False),
+    "--name", "member_name", default=None, help="Display name when creating the user."
 )
+@click.option(
+    "--workspace",
+    "workspace_id",
+    default=None,
+    help="Optional workspace to add as well.",
+)
+@access_options
 @common_api_options
 def org_members_invite(
     org_id: str,
     member_email: str,
     member_name: str | None,
     workspace_id: str | None,
-    workspace_role: str,
-    role: str,
+    level: str | None,
+    org_admin: bool,
+    workspace_admin: bool,
+    capabilities: tuple[str, ...],
+    role: str | None,
+    workspace_role: str | None,
+    no_org_role: bool,
     api_url: str,
     token: str | None,
     dry_run: bool,
 ) -> None:
-    """Invite a user into an organization (create-on-invite + sign-in email)."""
+    """Add a user to an organization: their account is created, or the one of
+    this email linked, and they are mailed. With no workspace and not an org admin,
+    they join the organization's people."""
     path = f"/api/organizations/{org_id}/members/invite"
-    body: dict[str, Any] = {"email": member_email, "role": role.lower()}
-    if member_name:
-        body["name"] = member_name
-    if workspace_id:
-        body["workspace_id"] = workspace_id
-        body["workspace_role"] = workspace_role.lower()
+    level, org_admin, workspace_admin = legacy_access(
+        level, org_admin, workspace_admin, role=role, workspace_role=workspace_role
+    )
+    body = invite_body(
+        member_email,
+        member_name,
+        level=level,
+        org_admin=org_admin,
+        workspace_id=workspace_id,
+        workspace_admin=workspace_admin,
+        capabilities=capabilities,
+    )
     if dry_run:
         print_json({"method": "POST", "path": path, "body": body})
         return
     client = build_client(api_url=api_url, token=token)
     try:
         print_json(client.post(path, body))
+    except NexusApiError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+@org_members.command("resend")
+@click.option("--org", "org_id", required=True, help="Organization id (org-...).")
+@click.option("--user-id", required=True, help="An invited member's user id.")
+@common_api_options
+def org_members_resend(
+    org_id: str,
+    user_id: str,
+    api_url: str,
+    token: str | None,
+    dry_run: bool,
+) -> None:
+    """Send an invited member their sign-in mail again."""
+    path = f"/api/organizations/{org_id}/members/{user_id}/resend"
+    if dry_run:
+        print_json({"method": "POST", "path": path})
+        return
+    client = build_client(api_url=api_url, token=token)
+    try:
+        print_json(client.post(path))
     except NexusApiError as exc:
         raise click.ClickException(str(exc)) from exc
 

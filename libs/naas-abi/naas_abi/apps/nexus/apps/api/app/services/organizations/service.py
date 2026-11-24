@@ -14,16 +14,23 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
     defaults_store_of,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
+    ADMINS,
+    CAPABILITY,
+    MEMBERSHIP,
     MEMBERSHIPS,
     ROLE_NAMES,
-    Member,
+    DirectoryEntry,
     Memberships,
+    Seat,
     best,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    is_workspace_container,
     nexus_resource,
+    org_below,
     org_container,
     workspace_container,
+    workspace_of,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.domain_proof import (
     domain_token,
@@ -126,6 +133,18 @@ class LastOwnerError(ValueError):
         return "last_owner"
 
 
+@dataclass
+class OrganizationOwnerRemovalError(ValueError):
+    """An org owner is not removed from the organization: demoted first, by an owner
+    (so the last owner never leaves)."""
+
+    org_id: str
+    user_id: str
+
+    def __str__(self) -> str:
+        return "owner_removal"
+
+
 def new_org_id() -> str:
     return f"org-{uuid4().hex[:12]}"
 
@@ -136,7 +155,7 @@ def _member_id(org_id: str, user_id: str) -> str:
 
 def _member_record(
     org_id: str,
-    member: Member,
+    member: DirectoryEntry,
     user: UserRecord,
     profile: OrganizationMemberProfileRecord | None,
 ) -> OrganizationMemberRecord:
@@ -150,10 +169,13 @@ def _member_record(
         organization_id=org_id,
         user_id=member.user_id,
         role=member.role,
+        source=member.source,
+        status=user.status,
         email=user.email,
         name=user.name,
         created_at=member.since,
         principal_id=member.principal_id,
+        level=member.level,
         bio=profile.bio if profile.bio is not None else user.bio,
         avatar=profile.avatar,
         organization=profile.organization,
@@ -322,10 +344,11 @@ class OrganizationService:
         # failure undoes what was done (the compensation of create_workspace).
         try:
             scope = await self.memberships.register_org(record.id)
-            await self.memberships.grant(owner_id, "owner", scope)
             # Its access policy (nothing, the platform admin widens it) and its
-            # members and admins groups, the owner in both.
+            # groups first; its creator is its first admin (owner is no longer
+            # assigned, #1585).
             await self.defaults.org_created(defaults_store_of(self.adapter), record.id, name)
+            await self.memberships.grant(owner_id, "admin", scope)
         except Exception:
             await self._undo_create(record.id)
             raise
@@ -371,9 +394,13 @@ class OrganizationService:
         updates: OrganizationUpdateInput,
     ) -> OrganizationRecord | None:
         """A new slug is refused when another organization holds it or the
-        configuration names it (``OrganizationSlugAlreadyExistsError``)."""
+        configuration names it (``OrganizationSlugAlreadyExistsError``). A new name
+        renames its access policy and default groups (``ContainerDefaults.renamed``)."""
+        before = None
+        if updates.name is not None:
+            before = await self.adapter.get_organization_by_id(org_id=org_id)
         if "slug" in (updates.set_fields or ()) or updates.slug is not None:
-            current = await self.adapter.get_organization_by_id(org_id=org_id)
+            current = before or await self.adapter.get_organization_by_id(org_id=org_id)
             if current is None:
                 return None
             slug = updates.slug
@@ -384,7 +411,15 @@ class OrganizationService:
                 or await self.adapter.organization_slug_exists(slug=slug)
             ):
                 raise OrganizationSlugAlreadyExistsError(slug=slug)
-        return await self.adapter.update_organization(org_id=org_id, updates=updates)
+        updated = await self.adapter.update_organization(org_id=org_id, updates=updates)
+        if updated is not None and before is not None and updated.name != before.name:
+            await self.defaults.renamed(
+                defaults_store_of(self.adapter),
+                org_container(org_id),
+                updated.name,
+                previous=before.name,
+            )
+        return updated
 
     async def list_workspaces(self, org_id: str, user_id: str) -> list[OrganizationWorkspaceRecord]:
         """The org's workspaces the user may list (``nexus:ListWorkspaces``)."""
@@ -404,19 +439,23 @@ class OrganizationService:
     async def list_workspace_memberships(
         self, org_id: str
     ) -> list[OrganizationWorkspaceMembershipRecord]:
-        found: list[OrganizationWorkspaceMembershipRecord] = []
-        for workspace in await self.adapter.list_workspaces_for_org(org_id=org_id):
-            members = await self.memberships.members(workspace_container(org_id, workspace.id))
-            found += [
-                OrganizationWorkspaceMembershipRecord(
-                    user_id=member.user_id, workspace_id=workspace.id, role=member.role
-                )
-                for member in members
-            ]
-        return found
+        """Who holds a role in each of the org's workspaces, workspace by workspace: read
+        in one pass over IAM's role attachments (``members_of``), not one per workspace."""
+        workspaces = await self.adapter.list_workspaces_for_org(org_id=org_id)
+        scopes = {ws.id: workspace_container(org_id, ws.id) for ws in workspaces}
+        held = await self.memberships.members_of(list(scopes.values())) if scopes else {}
+        return [
+            OrganizationWorkspaceMembershipRecord(
+                user_id=member.user_id, workspace_id=workspace.id, role=member.role
+            )
+            for workspace in workspaces
+            for member in held.get(scopes[workspace.id], [])
+        ]
 
     async def list_all_memberships(self) -> list[UserOrganizationMembershipRecord]:
-        """Every user's organizations across the platform (Platform Settings), from IAM."""
+        """Every user's organizations across the platform (Platform Settings), from
+        IAM: their org role, or None when a workspace of the org is all they hold."""
+        directories = await self.memberships.org_directories()
         found = [
             UserOrganizationMembershipRecord(
                 user_id=member.user_id,
@@ -425,12 +464,20 @@ class OrganizationService:
                 role=member.role,
             )
             for org in await self.adapter.list_all_organizations()
-            for member in await self.memberships.members(org_container(org.id))
+            for member in directories.get(org.id, [])
         ]
         return sorted(found, key=lambda m: (m.user_id, m.organization_name))
 
+    async def in_directory(self, org_id: str, user_id: str) -> bool:
+        """Whether the user is in the organization's directory: a role in it or in
+        one of its workspaces."""
+        return any(e.user_id == user_id for e in await self.memberships.org_directory(org_id))
+
     async def list_members(self, org_id: str) -> list[OrganizationMemberRecord]:
-        members = await self.memberships.members(org_container(org_id))
+        """The organization's directory (``Memberships.org_directory``): its members,
+        then whoever holds a role only in one of its workspaces (``role`` None,
+        ``source`` "workspace")."""
+        members = await self.memberships.org_directory(org_id)
         users = await self.adapter.get_users_by_ids([m.user_id for m in members])
         profiles = await self.adapter.list_organization_member_profiles(org_id)
         return [
@@ -442,38 +489,19 @@ class OrganizationService:
     async def get_organization_member(
         self, org_id: str, user_id: str
     ) -> OrganizationMemberRecord | None:
-        return next((m for m in await self.list_members(org_id) if m.user_id == user_id), None)
-
-    async def invite_member(
-        self,
-        org_id: str,
-        email: str,
-        role: str,
-        now: datetime,
-        *,
-        by: Any,
-    ) -> OrganizationMemberRecord | None:
-        """Give an existing user by email a role. Someone with no account is
-        invited through an identity provider instead (``services/invites``).
-        ``MembershipDenied`` when IAM
-        refuses ``by`` this role (granting ``owner`` is the owner's)."""
-        normalized_email = email.lower().strip()
-        user = await self.adapter.get_user_by_email(email=normalized_email)
+        """One member of the directory, as ``list_members`` shows them: their entry, then
+        their account and their profile alone, never every member's (#1608)."""
+        entry = next(
+            (e for e in await self.memberships.org_directory(org_id) if e.user_id == user_id),
+            None,
+        )
+        if entry is None:
+            return None
+        user = (await self.adapter.get_users_by_ids([user_id])).get(user_id)
         if user is None:
             return None
-        scope = org_container(org_id)
-        if await self.memberships.role_at(user.id, scope) is not None:
-            raise OrganizationMemberAlreadyExistsError(org_id=org_id, user_id=user.id)
-        await self.memberships.grant(user.id, role, scope, by=by)
-        return OrganizationMemberRecord(
-            id=_member_id(org_id, user.id),
-            organization_id=org_id,
-            user_id=user.id,
-            role=role,
-            email=user.email,
-            name=user.name,
-            created_at=now,
-        )
+        profile = await self.adapter.get_organization_member_profile(org_id, user_id)
+        return _member_record(org_id, entry, user, profile)
 
     async def update_member_role(
         self,
@@ -487,7 +515,8 @@ class OrganizationService:
             return None
         scope = org_container(org_id)
         held = await self.memberships.role_at(user_id, scope)
-        if held is None:
+        # Someone with workspace access only is given their first org role here.
+        if held is None and not await self.in_directory(org_id, user_id):
             return None
         if held == "owner" and role != "owner":
             await self.memberships.check(user_id, role, scope, by=by)
@@ -533,7 +562,7 @@ class OrganizationService:
         interest: str | None = None,
     ) -> OrganizationMemberRecord | None:
         """Edit the member's profile in this organization only (never the account)."""
-        if await self.memberships.role_at(user_id, org_container(org_id)) is None:
+        if not await self.in_directory(org_id, user_id):
             return None
         await self.adapter.update_organization_member_profile(
             org_id=org_id,
@@ -550,7 +579,7 @@ class OrganizationService:
 
     async def set_member_avatar(self, org_id: str, user_id: str, avatar: str | None) -> str | None:
         """Set or clear the org avatar; returns the previous org avatar to clean up."""
-        if await self.memberships.role_at(user_id, org_container(org_id)) is None:
+        if not await self.in_directory(org_id, user_id):
             return None
         return await self.adapter.set_organization_member_avatar(
             org_id=org_id, user_id=user_id, avatar=avatar
@@ -563,6 +592,60 @@ class OrganizationService:
         if held is None or held == "owner":
             return False
         return await self.memberships.revoke(user_id, scope, by=by)
+
+    async def remove_from_organization(
+        self, org_id: str, user_id: str, *, by: Any
+    ) -> list[str] | None:
+        """Take the person out of the organization in one step (#1589): every group
+        of it they are in ("<O> admins", "<O> people", the organization's capability
+        groups, and each of its workspaces' "<W> admins" and "<W> workspace"), on
+        behalf of ``by`` (IAM decides each). In a container recorded before #1585,
+        the role held there. Their account, their level and what they hold in other
+        organizations stay. Returns the workspaces they left; None when they are not
+        in the organization's directory.
+
+        The organization's last admin is ``LastOrgAdminError`` (409); an org owner of
+        before is refused (``OrganizationOwnerRemovalError``), a workspace's last
+        owner of before is ``LastOwnerError``. Every change is checked before the
+        first is made, so a refusal leaves everything as it was."""
+        if not await self.in_directory(org_id, user_id):
+            return None
+        org_scope, below = org_container(org_id), org_below(org_id)
+        roles = await self.memberships.roles_of(user_id)
+        if "owner" in (roles.get(org_scope), roles.get(below)):
+            raise OrganizationOwnerRemovalError(org_id=org_id, user_id=user_id)
+        workspaces = [
+            c for c in await self.memberships.containers_in(org_id) if is_workspace_container(c)
+        ]
+        capabilities = [
+            Seat(org_scope, CAPABILITY, str(g.id))
+            for g in await self.memberships.capability_groups(org_id)
+            if g.owner_scope == org_scope
+        ]
+        # What they administer first, then the capabilities, then where they work.
+        seats = (
+            [Seat(org_scope, ADMINS), *(Seat(w, ADMINS) for w in workspaces)]
+            + capabilities
+            + [*(Seat(w, MEMBERSHIP) for w in workspaces), Seat(org_scope, MEMBERSHIP)]
+        )
+        held = await self.memberships.held_seats(user_id, seats)
+        leaving = [s for s in seats if s in held]
+        await self.memberships.check_leaving(user_id, leaving, by=by)
+        for scope in workspaces:
+            if roles.get(scope) == "owner":
+                await self._keep_an_owner(scope, user_id)
+        for seat in leaving:
+            await self.memberships.leave_seat(user_id, seat, by=by)
+        if below in roles and org_scope not in roles:
+            # A role below the organization with none at it (attached by hand): taken
+            # as ``api``, on the authority the route checked (RemoveOrganizationMember
+            # at the organization); an org admin holds nothing below it to detach.
+            await self.memberships.revoke(user_id, below)
+        return sorted(
+            workspace_of(s.container) or s.container
+            for s in leaving
+            if s.kind == MEMBERSHIP and s.container != org_scope
+        )
 
     async def _keep_an_owner(self, scope: str, leaving: str) -> None:
         owners = [m for m in await self.memberships.members(scope) if m.role == "owner"]

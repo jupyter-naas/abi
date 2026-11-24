@@ -268,6 +268,91 @@ async def test_update_message_metadata_merges_into_existing_payload() -> None:
     }
 
 
+def _feedback_service(metadata_: str | None) -> tuple[ChatService, SimpleNamespace]:
+    now = datetime.now()
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        list_messages_by_conversation=AsyncMock(
+            return_value=[_message("msg-1", "assistant", metadata_=metadata_)]
+        ),
+        update_message_metadata=AsyncMock(return_value=True),
+    )
+    return ChatService(adapter=adapter), adapter
+
+
+def _written(adapter: SimpleNamespace) -> dict:
+    return json.loads(adapter.update_message_metadata.await_args.kwargs["metadata"])
+
+
+@pytest.mark.asyncio
+async def test_a_dislike_keeps_its_details_and_the_rest_of_the_metadata() -> None:
+    service, adapter = _feedback_service('{"steps": [], "feedback": "like"}')
+
+    stored = await service.set_message_feedback(
+        user_id="user-1",
+        conversation_id="conv-1",
+        message_id="msg-1",
+        feedback="dislike",
+        details={"feedback_type": "wrong", "feedback_detail": "", "feedback_severity": 0},
+    )
+
+    assert _written(adapter) == {
+        "steps": [],
+        "feedback": "dislike",
+        "feedback_type": "wrong",
+        "feedback_severity": 0,
+    }
+    assert stored == {
+        "feedback": "dislike",
+        "feedback_type": "wrong",
+        "feedback_detail": None,
+        "feedback_severity": 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_like_or_a_cleared_feedback_drops_the_dislike_s_details() -> None:
+    disliked = '{"steps": [], "feedback": "dislike", "feedback_type": "wrong"}'
+    service, adapter = _feedback_service(disliked)
+    await service.set_message_feedback(
+        user_id="user-1",
+        conversation_id="conv-1",
+        message_id="msg-1",
+        feedback="like",
+        details={"feedback_type": "ignored"},
+    )
+    assert _written(adapter) == {"steps": [], "feedback": "like"}
+
+    service, adapter = _feedback_service(disliked)
+    await service.set_message_feedback(
+        user_id="user-1", conversation_id="conv-1", message_id="msg-1", feedback=None
+    )
+    assert _written(adapter) == {"steps": []}
+
+
+@pytest.mark.asyncio
+async def test_feedback_on_a_message_the_conversation_lacks_is_not_found() -> None:
+    service, adapter = _feedback_service(None)
+    assert (
+        await service.set_message_feedback(
+            user_id="user-1", conversation_id="conv-1", message_id="nope", feedback="like"
+        )
+        is None
+    )
+    adapter.update_message_metadata.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_feedback_on_another_user_s_conversation_is_refused() -> None:
+    service, adapter = _feedback_service(None)
+    adapter.get_conversation_by_id_for_user = AsyncMock(return_value=None)
+    with pytest.raises(PermissionError):
+        await service.set_message_feedback(
+            user_id="user-2", conversation_id="conv-1", message_id="msg-1", feedback="like"
+        )
+    adapter.update_message_metadata.assert_not_awaited()
+
+
 @pytest.mark.asyncio
 async def test_build_provider_messages_skips_regenerated_turns() -> None:
     now = datetime.now()

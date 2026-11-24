@@ -87,10 +87,8 @@
   overflow: auto;
 }
 
-.org-settings-layout-content {
-  max-width: 896px;
-  margin: 0 auto;
-}
+/* The centered 896px column is retired: every settings page fills the shell's
+   width, like the System pages (their own panes keep their padding). */
 
 .org-settings-nav-item {
   display: flex;

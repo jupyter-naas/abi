@@ -1,50 +1,55 @@
 import type { AccessView } from '@/lib/iam-admin/types';
+import type { AccessLevel } from './access-scope';
+import type { AccessPage } from './access-paths';
 
-export type AccessSection =
-  | 'people'
-  | 'groups'
-  | 'policies'
-  | 'service-accounts'
-  | 'approvals'
-  | 'simulator'
-  | 'audit';
+export type AccessSection = AccessPage;
 
 /**
- * A section opens with the action that lists what it shows, as `GET /access?scope=` answers
- * it (any of ``needs``); the API refuses the section's calls otherwise. Policies open to whoever
- * may create one too: they build it without the list. Nothing here depends on the level: the
- * API answers the platform-only actions (service accounts, approvals, the simulator, the
- * audit) false at an org or a workspace.
+ * Each Access page opens with the action that lists what it shows, as `GET /access?scope=`
+ * answers it (any of ``needs``); the API refuses the page's calls otherwise. Policies open to
+ * whoever may create one too (they build it without the list), and to whoever may list the
+ * attachments (they see the policies held here and who holds each: rights come from
+ * policies). Nothing here depends on the level: the API answers the platform-only actions
+ * (service accounts, approvals, the simulator, the audit) false at an org or a workspace.
  */
 export const ACCESS_SECTIONS: { id: AccessSection; label: string; needs: string[] }[] = [
-  { id: 'people', label: 'People & roles', needs: ['iam:ListAttachments'] },
+  // Groups first: a person's access is the groups they are in (their workspaces, their level);
+  // the policies are what each group holds.
   { id: 'groups', label: 'Groups', needs: ['iam:ListGroups'] },
-  { id: 'policies', label: 'Policies', needs: ['iam:ListPolicies', 'iam:CreatePolicy'] },
+  { id: 'policies', label: 'Policies', needs: ['iam:ListPolicies', 'iam:CreatePolicy', 'iam:ListAttachments'] },
   { id: 'service-accounts', label: 'Service accounts', needs: ['iam:ListPrincipals'] },
   { id: 'approvals', label: 'Module approvals', needs: ['iam:ListManifests'] },
   { id: 'simulator', label: 'Simulator', needs: ['iam:Explain'] },
   { id: 'audit', label: 'Audit', needs: ['nexus:ReadSystem'] },
 ];
 
+/** The pages of each level's Access: an organization and a workspace have Groups and Policies. */
+export const LEVEL_SECTIONS: Record<AccessLevel, readonly AccessSection[]> = {
+  platform: ACCESS_SECTIONS.map((s) => s.id),
+  organization: ['groups', 'policies'],
+  workspace: ['groups', 'policies'],
+};
+
 export function canDo(access: AccessView | null, action: string): boolean {
   return access?.actions[action] === true;
 }
 
-/** The sections the caller may open, in order. */
-export function visibleSections(access: AccessView | null) {
-  return ACCESS_SECTIONS.filter((section) => section.needs.some((action) => canDo(access, action)));
+export function accessSection(id: AccessSection) {
+  return ACCESS_SECTIONS.find((s) => s.id === id) ?? ACCESS_SECTIONS[0];
 }
 
-export function parseAccessSection(
-  value: string | null | undefined,
-  access: AccessView | null,
-): AccessSection | null {
-  const visible = visibleSections(access);
-  return visible.find((section) => section.id === value)?.id ?? visible[0]?.id ?? null;
+/** Whether ``access`` opens the page: any of its actions. */
+export function opensSection(access: AccessView | null, id: AccessSection): boolean {
+  return accessSection(id).needs.some((action) => canDo(access, action));
 }
 
-/** Whether the page would show the caller a section: the settings menus show Roles &
- *  permissions on exactly that, so the menu and the page never disagree. */
-export function opensRolesAndPermissions(access: AccessView | null): boolean {
-  return visibleSections(access).length > 0;
+/** The pages of ``level`` the caller may open, in order. */
+export function visibleSections(access: AccessView | null, level: AccessLevel = 'platform') {
+  return ACCESS_SECTIONS.filter((s) => LEVEL_SECTIONS[level].includes(s.id) && opensSection(access, s.id));
+}
+
+/** Whether the caller would see a page of ``level``'s Access: the settings menus show the
+ *  level's Access on exactly that, so the menu and the pages never disagree. */
+export function opensAccess(access: AccessView | null, level: AccessLevel): boolean {
+  return visibleSections(access, level).length > 0;
 }

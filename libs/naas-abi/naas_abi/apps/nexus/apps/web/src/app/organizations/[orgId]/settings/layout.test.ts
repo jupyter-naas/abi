@@ -6,6 +6,9 @@ const state = vi.hoisted(() => ({
   role: 'member' as string | null,
   access: null as null | { actions: Record<string, boolean> },
   replaced: [] as string[],
+  readsAnalytics: false,
+  primary: '#112233',
+  organizationReads: 0,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -22,28 +25,60 @@ vi.mock('next/link', async () => {
 });
 vi.mock('@/hooks/use-is-mobile', () => ({ useIsMobile: () => false }));
 vi.mock('@/hooks/use-dev-route-warmup', () => ({ useDevRouteWarmup: () => undefined }));
-vi.mock('@/hooks/use-remember-settings-scope', () => ({ useRememberSettingsScope: () => undefined }));
 vi.mock('@/hooks/use-platform-settings-access', () => ({
   usePlatformSettingsAccess: () => ({ status: 'ready', actions: {}, retry: () => undefined }),
 }));
-vi.mock('@/components/settings/settings-scope-switcher', () => ({
-  SettingsScopeSwitcher: ({ title }: { title: string }) => title,
-}));
+// The column: this organization's level, as the layout has read it (role, IAM access).
+vi.mock('@/hooks/use-settings-levels', async () => {
+  const { currentSettingsLevel, settingsLevels } = await import('@/components/settings/settings-levels');
+  return {
+    useSettingsTabs: ({ organization }: { organization?: { id: string; items: never[] } }) => ({
+      tabs: [],
+      pagesReady: true,
+      level: currentSettingsLevel(
+        settingsLevels({
+          account: [],
+          workspace: null,
+          organization: organization ? { ...organization, name: 'Acme', current: true } : null,
+          otherOrganizations: [],
+          platform: [],
+        }),
+        '/organizations/acme/settings/general'
+      ),
+    }),
+  };
+});
 vi.mock('@/lib/iam-admin/use-access', () => ({
   useIamAccess: () => ({ access: state.access, loading: false, error: null, can: () => false }),
+}));
+vi.mock('@/hooks/use-analytics-access', () => ({
+  useReadsAnalytics: () => state.readsAnalytics,
+  useAnalyticsAccess: () => ({
+    status: 'ready' as const,
+    access: { can_read: state.readsAnalytics, timezone: 'UTC' },
+  }),
 }));
 vi.mock('@/stores/workspace', () => {
   const store = { currentWorkspaceId: 'ws-1' };
   return { useWorkspaceStore: (select: (s: typeof store) => unknown) => select(store) };
 });
 vi.mock('@/stores/auth', () => ({
-  authFetch: async (url: string) =>
-    url === '/api/organizations/acme'
-      ? new Response(JSON.stringify({ name: 'Acme', current_user_role: state.role }), { status: 200 })
-      : new Response(JSON.stringify([{ id: 'acme' }, { id: 'beta' }]), { status: 200 }),
+  useAuthStore: (select: (s: unknown) => unknown) => select({ logout: () => undefined }),
+  authFetch: async (url: string) => {
+    if (url !== '/api/organizations/acme') {
+      return new Response(JSON.stringify([{ id: 'acme' }, { id: 'beta' }]), { status: 200 });
+    }
+    state.organizationReads += 1;
+    return new Response(
+      JSON.stringify({ name: 'Acme', current_user_role: state.role, primary_color: state.primary }),
+      { status: 200 }
+    );
+  },
 }));
 
-import { createElement } from 'react';
+import { createElement, useEffect, useState } from 'react';
+import { act } from 'react';
+import { settingsLevelReturnPath, settingsReturnPath } from '@/lib/settings-scope-path';
 import OrganizationSettingsLayout from './layout';
 
 let mounted: Mounted | null = null;
@@ -51,6 +86,8 @@ afterEach(async () => {
   await mounted?.unmount();
   mounted = null;
   state.replaced = [];
+  state.readsAnalytics = false;
+  window.sessionStorage.clear();
 });
 
 async function render(): Promise<string> {
@@ -66,6 +103,10 @@ describe('organization settings by URL (UJ-O1)', () => {
     const text = await render();
     expect(text).toContain('GENERAL PAGE');
     expect(text).toContain('Users');
+    expect(text).toContain('Policies');
+    expect(text).not.toContain('Roles & permissions');
+    expect(mounted?.host.querySelector('header [aria-label="Help"]')).not.toBeNull();
+    expect(mounted?.host.querySelector('header [aria-label="Log out"]')).not.toBeNull();
   });
 
   it('refuse an organization member with no iam: right there (Eve, Bob)', async () => {
@@ -77,10 +118,70 @@ describe('organization settings by URL (UJ-O1)', () => {
     expect(text).toContain('You have no access to these settings');
   });
 
-  it('send a member holding iam: rights there to Roles & permissions', async () => {
+  it('send a member holding iam: rights there to the first Access page they hold', async () => {
     state.role = 'member';
     state.access = { actions: { 'iam:ListPolicies': true } };
     await render();
-    expect(state.replaced).toEqual(['/organizations/acme/settings/roles']);
+    expect(state.replaced).toEqual(['/organizations/acme/settings/policies']);
+  });
+
+  it('show Analytics to an organization admin the analytics API lets read', async () => {
+    state.role = 'admin';
+    state.access = null;
+    expect(await render()).not.toContain('Analytics');
+    await mounted?.unmount();
+    state.readsAnalytics = true;
+    expect(await render()).toContain('Analytics');
+  });
+
+  it('remember a section once it opens, never a refused one or one that sends the caller elsewhere', async () => {
+    state.role = 'member';
+    state.access = { actions: { 'iam:ListPolicies': false } };
+    expect(await render()).toContain('You have no access to these settings');
+    expect(settingsReturnPath('nothing')).toBe('nothing');
+
+    await mounted?.unmount();
+    state.access = { actions: { 'iam:ListPolicies': true } };
+    await render();
+    expect(state.replaced).toEqual(['/organizations/acme/settings/policies']);
+    expect(settingsReturnPath('nothing')).toBe('nothing');
+
+    await mounted?.unmount();
+    state.role = 'admin';
+    expect(await render()).toContain('GENERAL PAGE');
+    expect(settingsReturnPath('nothing')).toBe('/organizations/acme/settings/general');
+    expect(settingsLevelReturnPath('organization')).toBe('/organizations/acme/settings/general');
+  });
+
+  it('restyle on a branding update without remounting the page (#1607)', async () => {
+    state.role = 'admin';
+    state.access = { actions: { 'iam:ListPolicies': true } };
+    let pageMounts = 0;
+    function Page() {
+      const [typed, setTyped] = useState('');
+      useEffect(() => {
+        pageMounts += 1;
+      }, []);
+      return createElement('input', {
+        'data-page': '',
+        value: typed,
+        onChange: (event: { target: { value: string } }) => setTyped(event.target.value),
+      });
+    }
+    mounted = await mount(OrganizationSettingsLayout, { children: createElement(Page) });
+    for (let i = 0; i < 4; i += 1) await mounted.flush();
+    await mounted.type(mounted.host.querySelector('[data-page]'), 'unsaved');
+    const reads = state.organizationReads;
+    const styleBefore = mounted.host.querySelector('[data-org-settings-root]')!.getAttribute('style');
+
+    state.primary = '#445566';
+    await act(async () => window.dispatchEvent(new CustomEvent('org-branding-updated')));
+    for (let i = 0; i < 4; i += 1) await mounted.flush();
+
+    expect(state.organizationReads).toBe(reads + 1);
+    expect(pageMounts).toBe(1);
+    expect(mounted.host.querySelector<HTMLInputElement>('[data-page]')!.value).toBe('unsaved');
+    const root = mounted.host.querySelector<HTMLElement>('[data-org-settings-root]')!;
+    expect(root.getAttribute('style')).not.toBe(styleBefore);
   });
 });

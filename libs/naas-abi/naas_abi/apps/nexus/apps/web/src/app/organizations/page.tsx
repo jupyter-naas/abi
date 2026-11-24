@@ -12,7 +12,7 @@ export default function OrganizationsPage() {
   const router = useRouter();
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const fetchOrganizations = useOrganizationStore((state) => state.fetchOrganizations);
-  // Only the organizations whose settings open for the caller (the account menu's rule).
+  // Only the organizations whose settings open for the caller (`opensOrganization`).
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
 

@@ -51,7 +51,10 @@ CATALOG = ActionCatalog(
     # rewrite of the names before them (RewriteNames); PutScope and
     # DeleteScope authorize nothing but the reading of the legacy sets.
     # 9: viewing as a principal (``view_as``, ViewAs), in process only.
-    version=9,
+    # 10: renaming a group (UpdateGroup).
+    # 11: membership and level groups: marking one (mark_group, UpdateGroup),
+    # a principal's memberships and a container's members (GetGroup).
+    version=11,
     resource_types=(
         ResourceType("principal", id="opaque", placement="platform"),
         ResourceType(
@@ -114,7 +117,15 @@ CATALOG = ActionCatalog(
         _action("ListManifests", "list", ("manifest",), "list_manifests"),
         _action("ListPlacements", "list", ("placement",), "list_placements"),
         _action("GetPrincipal", "read", ("principal",), "get_principal"),
-        _action("GetGroup", "read", ("group",), "get_group", "list_principal_groups"),
+        _action(
+            "GetGroup",
+            "read",
+            ("group",),
+            "get_group",
+            "list_principal_groups",
+            "list_memberships",
+            "list_container_members",
+        ),
         _action("GetPolicy", "read", ("policy",), "get_policy"),
         _action("GetManifest", "read", ("manifest",), "get_manifest"),
         _action("Explain", "read", ("principal",), "explain"),
@@ -138,6 +149,7 @@ CATALOG = ActionCatalog(
         # more than the viewer. In process only: no subject.
         _action("ViewAs", "admin", ("view_as",)),
         _action("CreateGroup", "admin", ("group",), "create_group", creates=True),
+        _action("UpdateGroup", "admin", ("group",), "update_group", "mark_group"),
         _action("DeleteGroup", "admin", ("group",), "delete_group"),
         _action("AddGroupMember", "admin", ("group",), "add_group_member"),
         _action("RemoveGroupMember", "admin", ("group",), "remove_group_member"),

@@ -1,5 +1,102 @@
 # CHANGELOG
 
+## Upgrade notes (next release): one people directory
+
+- **Pending invitations become invited users.** Nexus creates a user for every person
+  from the moment they are invited: status `invited`, and `active` after their first
+  sign-in. At the first start after the upgrade, Nexus moves each pending invitation
+  into such a user, in the background:
+  - the user has the same roles and policies the invitation held;
+  - the invitation's pending grants are withdrawn;
+  - the invitation is marked `migrated`.
+
+  The person shows as an Invited member in Org settings › Users and in Workspace ›
+  Members, where it can be resent or removed like any member. The pending-invitations
+  list empties.
+
+  If an identity provider does not answer during the start, its invitations stay
+  pending and keep working; the next start moves them. You can also move them by hand:
+  run `abi user migrate-invitations` for a dry run, then add `--apply`.
+
+  Revoked and accepted invitations are not changed. ADR:
+  `docs/adr/20261119_platform_user_directory.md`.
+- **Adding someone to a workspace no longer makes them an organization member.**
+  - Before, adding someone who had an account to a workspace also gave them the
+    organization `member` role, with the organization's drive and its "members" group.
+    Now they get only the workspace role and the policies the workspace admin picks.
+  - They are still listed in the organization's users as "Workspace access only".
+  - **People who got the organization `member` role that way keep it.** Remove it in
+    Org settings › Users if it was not meant.
+- **Workspace › Members › Add searches the organization's people** by name or email.
+  "Create user" makes a new person, or links the platform account that the email
+  already has. It never makes a duplicate. Linking someone from another organization
+  shows their name and email to your organization's admins.
+- **Configured users (`users:` in the configuration, `config.users.yaml`) are invited
+  users of their identity provider.**
+  - Each one signs in through the provider named by `provider:` (new, optional), else
+    the default provider, else the built-in one.
+  - At start, Nexus creates their account at that provider when it can (`builtin`,
+    `zitadel`, `keycloak`).
+  - Their first sign-in there, with the email verified, opens their account and keeps
+    the configured roles.
+  - This also works through Zitadel or Keycloak. Before, a configured user who signed
+    in through them was refused ("email already in use").
+- **API changes** (for scripts and integrations calling Nexus):
+  - `POST /api/workspaces/{id}/members/invite` and `POST /api/organizations/{id}/members/invite`
+    now answer the person added, the same way whether their account was created or linked:
+    `{status: "added", user: {id, email, name, status}, member, provider, sign_in_email_sent,
+    warning}`. They no longer answer an invitation. `sign_in_email_sent` is true only when a
+    mail was sent.
+  - Inviting someone who already holds a role there answers **409**. It used to resend
+    their invitation: use `POST .../members/{user_id}/resend` instead.
+  - **New routes:**
+    - `GET /api/workspaces/{id}/members/candidates?q=` (the organization's people,
+      at least 2 characters, at most 10 results);
+    - `POST /api/workspaces/{id}/members` (add someone who exists);
+    - `POST /api/workspaces/{id}/members/{user_id}/resend` and its organization
+      counterpart;
+    - `DELETE /api/organizations/{id}/members/{user_id}/access` (remove someone
+      with workspace access only, from every workspace of the organization).
+  - Linking an existing account writes their organization profile (job title, bio, ...)
+    only with an organization role granted in the same call. A workspace grant alone
+    leaves it as it is.
+  - **Organization settings › Analytics** count the organization's people as its
+    directory lists them, including people with a role in one of its workspaces only.
+
+## Upgrade notes (next release): Nexus Analytics in settings
+
+- **The Analytics app is removed.** Analytics are read in Organization settings ›
+  Analytics (its owners and admins, `ReadOrganizationAnalytics`) and Workspace settings ›
+  Analytics (its admins, `ReadWorkspaceAnalytics`), each limited to its own members and
+  workspaces, for Today, Yesterday, This week or This month in the organization's time
+  zone (Organization settings › General › Timezone, `UTC` by default). The app leaves
+  the Apps catalog, and `/analytics` leads to the current organization's section.
+- The platform-wide `GET /api/analytics/*` routes (and `POST /api/analytics/rebuild`)
+  are gone. `POST /api/analytics/events` stays, open to every signed-in user. It now
+  answers 422 to an event whose `timestamp` is not an ISO-8601 date within the last 45
+  days and at most one day ahead of the server's clock (a client whose clock is off by
+  more than a day is not recorded), and it removes control characters (NUL included)
+  from every string of the event.
+- A conversation's messages in the analytics need `ReadAnalyticsConversation`, which no
+  role holds: grant it with a policy.
+- `ReadAnalytics` and `WriteAnalytics` are deprecated and authorize nothing; policies
+  that name them can drop them.
+- The chat's like and dislike are saved through
+  `PATCH /api/chat/conversations/{id}/messages/{id}/feedback`, by the conversation's
+  owner (members and up), instead of the platform admin's analytics route.
+- On first start, **every** legacy event under `naas_abi/nexus/analytics/events/` in
+  object storage, whatever its age, is replayed into the new SQL rollups (kept forever;
+  only events of the last 45 days also get a raw row), with the event log's last 45
+  days. Thirty minutes later the legacy events are replayed again (idempotent, so what
+  old processes of a rolling deploy wrote meanwhile is counted), then the old aggregates
+  and each replayed event file are deleted. A file that cannot be replayed (unreadable,
+  not an event) is never deleted: it is moved to `naas_abi/nexus/analytics/unreadable/`
+  and logged. Nothing is deleted if the storage or the database cannot be read. See
+  `docs/adr/20261119_analytics_scoped_rollups.md`.
+- The migrations no longer re-run an `ALTER TABLE ... ADD COLUMN` whose columns all
+  exist: a start no longer takes an exclusive lock on those tables (`messages`
+  included), so it never waits behind a long transaction on them.
+
 ## Upgrade notes (next release): module scopes
 
 - **Workspace members and viewers need a grant to use what modules expose.** Every
@@ -23,6 +120,446 @@
   `services/iam/AGENTS.md`, "Module scopes".
 
 <!-- version list -->
+
+## v7.3.1 (2026-11-23)
+
+### Bug Fixes
+
+- **nexus-web**: Bind Settings resources as soon as the session is confirmed
+  ([#1606](https://github.com/jupyter-naas/abi/pull/1606),
+  [`ffc15b2`](https://github.com/jupyter-naas/abi/commit/ffc15b279580da35112093119fb69c0e9c9fe4b5))
+
+- **nexus-web**: Keep page state across the session read of a page load
+  ([#1607](https://github.com/jupyter-naas/abi/pull/1607),
+  [`aca927d`](https://github.com/jupyter-naas/abi/commit/aca927de2162e28cc5370716897465b5f7c52856))
+
+- **nexus-web**: Keep permission reads across the session read of a page load
+  ([#1605](https://github.com/jupyter-naas/abi/pull/1605),
+  [`d5f6995`](https://github.com/jupyter-naas/abi/commit/d5f699502043cc96b5d7670d4ec80eb7bf408976))
+
+- **nexus-web**: Keep Settings resources once the session is confirmed
+  ([#1606](https://github.com/jupyter-naas/abi/pull/1606),
+  [`2b49538`](https://github.com/jupyter-naas/abi/commit/2b49538c6928ae3c20ef0967d127932d2d33aea7))
+
+- **nexus-web**: Keep unknown service names on the generic data view
+  ([#1609](https://github.com/jupyter-naas/abi/pull/1609),
+  [`132919c`](https://github.com/jupyter-naas/abi/commit/132919c62bf5ec252188f989987156b40533ff10))
+
+### Performance Improvements
+
+- **nexus**: Batch Settings access summaries and bound lists
+  ([#1608](https://github.com/jupyter-naas/abi/pull/1608),
+  [`9e098dc`](https://github.com/jupyter-naas/abi/commit/9e098dca5f22fd79859faa444b2b2c0afc7df569))
+
+- **nexus-web**: Defer inactive Settings views and bound polling
+  ([#1609](https://github.com/jupyter-naas/abi/pull/1609),
+  [`2180252`](https://github.com/jupyter-naas/abi/commit/21802527b4816fd8d5843fafd83f83e15bc4709c))
+
+- **nexus-web**: Keep Settings page state across navigation
+  ([#1607](https://github.com/jupyter-naas/abi/pull/1607),
+  [`e69e64b`](https://github.com/jupyter-naas/abi/commit/e69e64b50448fd1900260d94668e1103fb87a749))
+
+- **nexus-web**: Share permission reads by session and scope
+  ([#1605](https://github.com/jupyter-naas/abi/pull/1605),
+  [`21702b8`](https://github.com/jupyter-naas/abi/commit/21702b8db3e0536e8b8deb20537c5a7d97f0de5f))
+
+- **nexus-web**: Share Settings resource reads by explicit policy
+  ([#1606](https://github.com/jupyter-naas/abi/pull/1606),
+  [`d5d6209`](https://github.com/jupyter-naas/abi/commit/d5d62098d82cf4b51f9564dbdec3fa51cb4df00c))
+
+
+## v7.3.0 (2026-11-23)
+
+### Bug Fixes
+
+- **nexus**: Config.yaml's level_features reaches the Nexus settings
+  ([`5b7a2fb`](https://github.com/jupyter-naas/abi/commit/5b7a2fbfda46670705af0afccfdf0c9c9a2bb5cb))
+
+### Features
+
+- **nexus**: A deployment sets the features of the Viewer and Member levels
+  ([`413a249`](https://github.com/jupyter-naas/abi/commit/413a2491cf6bc1792b81ce54f1483cf7df942f8e))
+
+
+## v7.2.0 (2026-11-23)
+
+### Bug Fixes
+
+- **nexus**: The role features move skips scopes of the new model
+  ([`b427bc9`](https://github.com/jupyter-naas/abi/commit/b427bc9fe8016e6023cfedab90fd76f6098ee590))
+
+- **nexus**: The sets' move skips grants at ${my workspaces}; a new install's first start records
+  every move
+  ([`44eecff`](https://github.com/jupyter-naas/abi/commit/44eecffbc3bac5dc946b915d5ea129c0974b8c61))
+
+- **nexus**: The Settings measure script is executable; a view answers capabilities by scope
+  ([`4395b3a`](https://github.com/jupyter-naas/abi/commit/4395b3a2e2f0c6ab575fbdc4c382b69e79035802))
+
+- **nexus-api**: Keep Settings cache authorization fresh (#1604)
+  ([#1612](https://github.com/jupyter-naas/abi/pull/1612),
+  [`d4dcbc3`](https://github.com/jupyter-naas/abi/commit/d4dcbc370900a6313d58ed65bc976dd4ef88f35d))
+
+- **nexus-api**: Write an offer section past 100 items in parts
+  ([#1587](https://github.com/jupyter-naas/abi/pull/1587),
+  [`edaaff3`](https://github.com/jupyter-naas/abi/commit/edaaff330ec7990c5b5cdabd3e68b2bf4b940140))
+
+### Features
+
+- **nexus**: A workspace's lists show what it offers, for everyone
+  ([`d12dc91`](https://github.com/jupyter-naas/abi/commit/d12dc91e4e5ad0e3fb628ed2940e57582b32de8c))
+
+- **nexus**: Convert the legacy drive flags in the access move
+  ([#1587](https://github.com/jupyter-naas/abi/pull/1587),
+  [`0f0317f`](https://github.com/jupyter-naas/abi/commit/0f0317f1258e40b7a272c7280eaec51f148ff57c))
+
+- **nexus**: Move per-person attachments to the groups model at start
+  ([#1587](https://github.com/jupyter-naas/abi/pull/1587),
+  [`d04e52f`](https://github.com/jupyter-naas/abi/commit/d04e52f634b2d0c9404d27bd413491fc7fab56de))
+
+- **nexus**: Platform Files setting per workspace, routes, web control and module check
+  ([#1590](https://github.com/jupyter-naas/abi/pull/1590),
+  [`ce0a034`](https://github.com/jupyter-naas/abi/commit/ce0a034ffefc02462d92c4db739844dfcddd3453))
+
+- **nexus**: The access move applies at start and reports after
+  ([`109d384`](https://github.com/jupyter-naas/abi/commit/109d38497dbfdf072e2ebdd543c69f17b0e97d35))
+
+- **nexus-api**: Ceilings as allow-lists, model sets, capability groups, no self-made organizations
+  ([#1586](https://github.com/jupyter-naas/abi/pull/1586),
+  [`de93749`](https://github.com/jupyter-naas/abi/commit/de93749842279f497a762f1568d6e2f3ba04b130))
+
+- **nexus-api**: Levels as groups, generic level policies, no Owner
+  ([#1585](https://github.com/jupyter-naas/abi/pull/1585),
+  [`2b3658c`](https://github.com/jupyter-naas/abi/commit/2b3658c8b9fbf91bc0e0643b3b48864d861a9e54))
+
+- **nexus-api**: People flows give a level and groups at the platform, org and workspace
+  ([#1589](https://github.com/jupyter-naas/abi/pull/1589),
+  [`48da1d2`](https://github.com/jupyter-naas/abi/commit/48da1d27c18f90a76098a0dc2fb0c67abed515ac))
+
+- **nexus-api**: Platform Files given with the workspace, legacy drive flags kept for conversion
+  ([#1590](https://github.com/jupyter-naas/abi/pull/1590),
+  [`6733917`](https://github.com/jupyter-naas/abi/commit/6733917a810a77e73f9ac2e483974d7ff369fbfc))
+
+- **nexus-api**: Workflow runners attached at ${my workspaces}
+  ([#1586](https://github.com/jupyter-naas/abi/pull/1586),
+  [`451d1c2`](https://github.com/jupyter-naas/abi/commit/451d1c28927157968eafd6e6c41ef6b69230aa21))
+
+- **nexus-web**: Align the access model with S2's groups, admin refusal at the picker
+  ([#1588](https://github.com/jupyter-naas/abi/pull/1588),
+  [`bf68dab`](https://github.com/jupyter-naas/abi/commit/bf68dabf88d8a492f2ebf5ea1438d90e302fb9ff))
+
+- **nexus-web**: Groups-first access, workspace offer editor, built-ins hidden, Platform admin
+  ([#1588](https://github.com/jupyter-naas/abi/pull/1588),
+  [`be7050b`](https://github.com/jupyter-naas/abi/commit/be7050bdbc6f557af13811d481ffb240ae9ab193))
+
+- **nexus-web**: People forms give a level, admin toggles and capability groups
+  ([#1589](https://github.com/jupyter-naas/abi/pull/1589),
+  [`4de8713`](https://github.com/jupyter-naas/abi/commit/4de87138416d65989106ba18c2bf9e0d17e7dc1d))
+
+- **nexus-web**: Show settings pages while their permission reads answer
+  ([`e777cf5`](https://github.com/jupyter-naas/abi/commit/e777cf5a98067c90e4d2c3299bffb9560162df21))
+
+### Testing
+
+- **nexus-api**: Give the twin-merge tests a store clock that only moves forward
+  ([#1589](https://github.com/jupyter-naas/abi/pull/1589),
+  [`02ccb65`](https://github.com/jupyter-naas/abi/commit/02ccb655ed8347033fba0b693835185f56e76762))
+
+- **nexus-web**: Add a Settings navigation baseline (#1603)
+  ([#1611](https://github.com/jupyter-naas/abi/pull/1611),
+  [`d5ca24c`](https://github.com/jupyter-naas/abi/commit/d5ca24c7f3f25328fd49e5021c8e1ef5cef7d1a5))
+
+
+## v7.1.0 (2026-11-20)
+
+### Bug Fixes
+
+- **nexus**: Seeds make only the configured people no provider signs in yet
+  ([#1570](https://github.com/jupyter-naas/abi/pull/1570),
+  [`b29a328`](https://github.com/jupyter-naas/abi/commit/b29a328c01462b050025c6ad3a94611c6674b00e))
+
+- **nexus**: Settings scopes go by what they are
+  ([`a93ed89`](https://github.com/jupyter-naas/abi/commit/a93ed8902e7150a4021dbbb117fe3adba6ed6456))
+
+- **nexus-web**: Add people keeps focus after a pick, aria-controls only while open
+  ([#1569](https://github.com/jupyter-naas/abi/pull/1569),
+  [`d0d178b`](https://github.com/jupyter-naas/abi/commit/d0d178b5f5c6357f16cf231b007fcaf344d86e08))
+
+- **nexus-web**: Drives sits under Resources in Platform Settings
+  ([`9819e8c`](https://github.com/jupyter-naas/abi/commit/9819e8c2d2eea2655a700392d93c4dc118d3bc42))
+
+- **nexus-web**: Help opens to every workspace member, whatever features they hold
+  ([`ba23bf8`](https://github.com/jupyter-naas/abi/commit/ba23bf80efc8d3958128ef5c1a2930dac1ccda11))
+
+- **nexus-web**: Platform Settings > Users shows no IAM ID column
+  ([`6d9ea32`](https://github.com/jupyter-naas/abi/commit/6d9ea321e332ef476331ab2b5e1a830304f917c5))
+
+- **nexus-web**: The avatar opens Account settings, as #1581 has it
+  ([`59d8c3c`](https://github.com/jupyter-naas/abi/commit/59d8c3ccf05b000ace6eba46d10268831b4a8032))
+
+- **nexus-web**: The settings refactor of #1581 beside the account menu and Analytics
+  ([`034e404`](https://github.com/jupyter-naas/abi/commit/034e40414cc504c21008d042057761904caea68e))
+
+- **people**: A link keeps the person's org profile; the identity graph sync holds no connection
+  while IAM answers
+  ([`75f2b36`](https://github.com/jupyter-naas/abi/commit/75f2b36db8ef8be72c7cf1e786111413ecd8039c))
+
+- **people**: Count an address once whatever the case of its stored email
+  ([#1566](https://github.com/jupyter-naas/abi/pull/1566),
+  [`274dea9`](https://github.com/jupyter-naas/abi/commit/274dea9781dcdf4138d7b64d8e9ee7f3c89455d1))
+
+- **people**: Link the person a creation collides with; ADR for invited rows
+  ([`d2db0f3`](https://github.com/jupyter-naas/abi/commit/d2db0f3b49e130a41aa82b8997c28feadd5f9cb9))
+
+- **tools,cli**: Agent admin invite tools and the CLI on the people routes
+  ([`ed60399`](https://github.com/jupyter-naas/abi/commit/ed60399ef1810a5662999922243ca2ec2f460032))
+
+### Features
+
+- **accounts**: The platform invite makes a real invited account
+  ([`5b441d6`](https://github.com/jupyter-naas/abi/commit/5b441d69868fff19dabf9b3bcbc1fdbd3d65e4e7))
+
+- **iam**: Derive each organization's directory from role attachments
+  ([`90425a7`](https://github.com/jupyter-naas/abi/commit/90425a784b8e5ed0799f996390d0e77005d54d3b))
+
+- **nexus**: Configured users are invited people of their provider
+  ([#1570](https://github.com/jupyter-naas/abi/pull/1570),
+  [`ed6a47d`](https://github.com/jupyter-naas/abi/commit/ed6a47db2f75ae30f918a880c0e45674b2ce5afc))
+
+- **nexus**: Infrastructure is a Settings category, Layers and Diagrams
+  ([`75c5eef`](https://github.com/jupyter-naas/abi/commit/75c5eef707f668b1adf4b151f32f29a9b8fef4f8))
+
+- **nexus**: Org directory in member lists, workspace member search and add, invites on the people
+  service
+  ([`ef998cf`](https://github.com/jupyter-naas/abi/commit/ef998cf6406e6c37d51c7ebb71ce7b262107b958))
+
+- **nexus**: Pending invitations become invited users
+  ([#1570](https://github.com/jupyter-naas/abi/pull/1570),
+  [`6ec2bd5`](https://github.com/jupyter-naas/abi/commit/6ec2bd50163bbb4f55784577c234072d4ba864de))
+
+- **nexus-web**: Access lists look like Platform Settings > Users
+  ([`386498f`](https://github.com/jupyter-naas/abi/commit/386498f8009c0c3fdbaeb7c173b37cc2866c81c5))
+
+- **nexus-web**: Add people by search, shared create-user form, Invited status
+  ([#1569](https://github.com/jupyter-naas/abi/pull/1569),
+  [`29aa4f0`](https://github.com/jupyter-naas/abi/commit/29aa4f05b93b00c5c9f9166395bab6eaa0246221))
+
+- **nexus-web**: Switch organization and workspace atop the Settings column
+  ([`4e2ae51`](https://github.com/jupyter-naas/abi/commit/4e2ae51e4c42d5598f5afe45945368c1c57f553e))
+
+- **nexus-web**: Workspace and organization Members become Users
+  ([`54f1778`](https://github.com/jupyter-naas/abi/commit/54f177832994dbadc6d901ad28cc85bd063765a6))
+
+- **org**: Remove someone with workspace access only from the organization
+  ([#1566](https://github.com/jupyter-naas/abi/pull/1566),
+  [`fe2fc4b`](https://github.com/jupyter-naas/abi/commit/fe2fc4bfe5a3bc426a4afcdff6b63e51243d3166))
+
+- **people**: PeopleService creates or links platform users
+  ([`255501b`](https://github.com/jupyter-naas/abi/commit/255501b13dd96d9bac2050c780f6d013c651ed98))
+
+- **people**: Users.status invited → active, activated at the first sign-in
+  ([`b960aaa`](https://github.com/jupyter-naas/abi/commit/b960aaa6062a226805bbbc35ea943f42873eb21a))
+
+- **people**: Wire the people service into the member routes and tools
+  ([#1566](https://github.com/jupyter-naas/abi/pull/1566),
+  [`0bbb838`](https://github.com/jupyter-naas/abi/commit/0bbb83866653b76bdc39a4038186e0cb68739bcb))
+
+### Performance Improvements
+
+- **iam**: One org's directory names only that org's people
+  ([`4d01695`](https://github.com/jupyter-naas/abi/commit/4d016955cfc35861cd77eb2e458707d3f9b47a2d))
+
+### Refactoring
+
+- **nexus-web**: One search picker for Files and the Settings switchers
+  ([`598b614`](https://github.com/jupyter-naas/abi/commit/598b614e237c5bb0ea391f9054ca9a91bd037f1c))
+
+### Testing
+
+- **nexus-web**: Platform Settings lists Drives under Resources
+  ([`67d7615`](https://github.com/jupyter-naas/abi/commit/67d7615dc4f32b563771b155b2b559b8169c9315))
+
+
+## v7.0.0 (2026-11-20)
+
+### Bug Fixes
+
+- **analytics**: A database fault skips no event; the cursor never moves forward on a rewind
+  ([`c2f587c`](https://github.com/jupyter-naas/abi/commit/c2f587ccdb9b121cdea93d93ad6dcca986f1e3f7))
+
+- **analytics**: A workspace pick lets go of a user who is not in it; filter menus close on Escape
+  or Tab with focus back on their button, and are labelled
+  ([`a27a014`](https://github.com/jupyter-naas/abi/commit/a27a0148afd8874a13083febc26fdfd8a299cb4e))
+
+- **analytics**: Clean the legacy files only once a rolling deploy is over
+  ([`78b97a0`](https://github.com/jupyter-naas/abi/commit/78b97a0a4a000f7040d86416cc08c059726e0e73))
+
+- **analytics**: Filters read workspaces, users, then periods; the workspace filter is searchable
+  like the user one
+  ([`cddc02f`](https://github.com/jupyter-naas/abi/commit/cddc02fa3eceac66729f28c8a8c4476b5371d842))
+
+- **analytics**: Hand a failed batch back off the event loop
+  ([`8cd2572`](https://github.com/jupyter-naas/abi/commit/8cd25723eeb0b966d0ca02774d462ea0cebb1c1d))
+
+- **analytics**: Heal lost batches, bound the ingest, register the tables
+  ([`449328d`](https://github.com/jupyter-naas/abi/commit/449328d666c1e67ce43a1923b73909e0382c6cc7))
+
+- **analytics**: No event stalls the rollups; every legacy event is replayed before deletion
+  ([`7a736f9`](https://github.com/jupyter-naas/abi/commit/7a736f994d080d81915fac9ead4f5d254cce5c9a))
+
+- **analytics**: One IAM pass per scope under concurrent cold reads; right 404 detail
+  ([`3702388`](https://github.com/jupyter-naas/abi/commit/370238876181963408e426f384662b08629394ef))
+
+- **analytics**: Retry a failed backfill at upkeep, not at the next process start
+  ([`4d6cce6`](https://github.com/jupyter-naas/abi/commit/4d6cce6064aa21d428bde8ffc764b827197f8241))
+
+- **analytics**: The user filter sits before the period buttons
+  ([`0ff1eb5`](https://github.com/jupyter-naas/abi/commit/0ff1eb5310bed0b2dfcbb861bb7b8f07586c5b6c))
+
+- **files**: The Files URL no longer drops a navigation or swallows Back
+  ([#1576](https://github.com/jupyter-naas/abi/pull/1576),
+  [`f43da5b`](https://github.com/jupyter-naas/abi/commit/f43da5bef3a080d5246bd9b21de2a8bbeb8ef902))
+
+- **nexus**: Skip an ADD COLUMN migration once its columns exist
+  ([`3891b69`](https://github.com/jupyter-naas/abi/commit/3891b691928f82d9d89b1f722d0329d03e4af200))
+
+- **nexus-web**: Analytics data hook never shows another resource's data
+  ([`9209252`](https://github.com/jupyter-naas/abi/commit/92092529b01250b4220de64f1f4037840c86bfa2))
+
+### Chores
+
+- **nexus-web**: Remove the Analytics app; /analytics leads to the organization's section
+  ([`ba94100`](https://github.com/jupyter-naas/abi/commit/ba94100b8c17b47dc88bf2241ce6aad9a90db0b3))
+
+### Documentation
+
+- **analytics**: The app's removal in the ADR, the release notes and the IAM guide
+  ([`2b5a617`](https://github.com/jupyter-naas/abi/commit/2b5a617cc5d711dd1b632fc236948e789064e337))
+
+### Features
+
+- **analytics**: Delete the legacy object-storage files once the backfill is done
+  ([`41ebec8`](https://github.com/jupyter-naas/abi/commit/41ebec8b8cce00aab56c3489617f144d6c11ead3))
+
+- **analytics**: Every member's events are recorded and rolled up
+  ([`2fca15b`](https://github.com/jupyter-naas/abi/commit/2fca15b510e50ae670ce903418598c101084cc68))
+
+- **analytics**: Organization and workspace analytics, scoped by IAM
+  ([`439fb8a`](https://github.com/jupyter-naas/abi/commit/439fb8a196c9c4f29499d27c17d027e6e6c52143))
+
+- **analytics**: SQL rollups and scoped reads behind two ports
+  ([`060dc58`](https://github.com/jupyter-naas/abi/commit/060dc58788a83486670c2495ba5835c36e657659))
+
+- **chat**: Keep a message's feedback and tools beside it
+  ([`8e282f6`](https://github.com/jupyter-naas/abi/commit/8e282f6b9815ada299f22cc1138345debdc4513e))
+
+- **chat**: Save a like or dislike through the chat's own route
+  ([`0b266ae`](https://github.com/jupyter-naas/abi/commit/0b266ae7f3d31a825ef6358b602a49f3ca22453c))
+
+- **nexus-web**: Analytics sections in Organization and Workspace settings
+  ([`424513b`](https://github.com/jupyter-naas/abi/commit/424513b27ec8cde90d5d3316b2b680c9f1de4eea))
+
+- **nexus-web**: Organization timezone in Organization settings › General
+  ([`670c639`](https://github.com/jupyter-naas/abi/commit/670c639fa787c3a076f7597108867923ab74b525))
+
+- **nexus-web**: Scoped analytics components and data hook
+  ([`f87ba2a`](https://github.com/jupyter-naas/abi/commit/f87ba2a7cef22c18b4c009ccd58ea95e45b4171d))
+
+- **organizations**: An organization has a time zone
+  ([`e1c0e1f`](https://github.com/jupyter-naas/abi/commit/e1c0e1ff102486645f3caaa836c15542c4269c97))
+
+### Performance Improvements
+
+- **analytics**: The message facts pass is set-based and keeps its claim while it runs
+  ([`62304e6`](https://github.com/jupyter-naas/abi/commit/62304e649552af0b8a2ea4ad085936896ce33ae7))
+
+- **analytics**: The overview reads its five figures at the same time; pages count users per page
+  from per-user sums
+  ([`02205f5`](https://github.com/jupyter-naas/abi/commit/02205f5580af818c224462bb7e4a99e941b59d84))
+
+### Refactoring
+
+- **analytics**: Remove the platform-wide reads, the rebuild and the JSON store
+  ([`1f2db1e`](https://github.com/jupyter-naas/abi/commit/1f2db1e6f4ddfce745dc7a62b322e55106d6d06b))
+
+### Breaking Changes
+
+- **analytics**: The platform-wide GET /api/analytics/* routes are removed; analytics are read under
+  /api/organizations/{org_id}/analytics and /api/workspaces/{workspace_id}/analytics.
+
+
+## v6.0.0 (2026-11-19)
+
+### Bug Fixes
+
+- **files**: A navigation into the open view keeps its folder when the page mounts
+  ([`e54d26e`](https://github.com/jupyter-naas/abi/commit/e54d26ec0587ed03856ec281d62f170992a21fa4))
+
+- **files**: Back keeps the folder; URL follows Back/Forward, View-as and dotted folders
+  ([`65117ad`](https://github.com/jupyter-naas/abi/commit/65117ad82c05b1e40aaa7cd18e97f2312ddcd279))
+
+- **files**: Dropping a file uploads it instead of opening it; empty-state buttons follow the accent
+  ([`f80dc5c`](https://github.com/jupyter-naas/abi/commit/f80dc5c59a246664d5e20bd4866eb62d693d1be3))
+
+- **files**: Switching view after a tree, starred or link navigation lists the new view
+  ([`d3b0c1f`](https://github.com/jupyter-naas/abi/commit/d3b0c1fbe38c6b0d3f8debadc08d97603f512f3c))
+
+- **files**: The sidebar tree asks for a folder once, not once per effect
+  ([`0da2518`](https://github.com/jupyter-naas/abi/commit/0da2518d96dd19c891a248f8ecfa440d7d3fe511))
+
+- **files**: The sidebar tree drops its cache on a workspace switch only
+  ([`95d915a`](https://github.com/jupyter-naas/abi/commit/95d915ac4e7ab8f6baa552f4fbe89b2627176cac))
+
+### Chores
+
+- **web**: Restore runtime-config.js, committed by mistake in f80dc5c59
+  ([`c1c9d3b`](https://github.com/jupyter-naas/abi/commit/c1c9d3b32b1ec94d27b4685b80e5f6b702b1da83))
+
+### Documentation
+
+- **files**: Name the views My Files, Workspace Files... in agent text and docstrings
+  ([#1530](https://github.com/jupyter-naas/abi/pull/1530),
+  [`3354156`](https://github.com/jupyter-naas/abi/commit/3354156156cc0d5677dfd91d391a129c00ead965))
+
+### Features
+
+- **files**: Drive and View dropdowns, views renamed, synced folders removed
+  ([#1530](https://github.com/jupyter-naas/abi/pull/1530),
+  [`8c89e5b`](https://github.com/jupyter-naas/abi/commit/8c89e5b6e9537d5f82a2fca7779afd6adb13e0f7))
+
+- **files**: Drive and View pickers are the ontology picker, in the sidebar only
+  ([`8b6a06c`](https://github.com/jupyter-naas/abi/commit/8b6a06c6a8326df4124fc5fa134d50773866f3d5))
+
+- **files**: Starred above the tree; Files opens on All Views
+  ([`3d3ea47`](https://github.com/jupyter-naas/abi/commit/3d3ea471af484b2d66bf11d91ea9d855883e842e))
+
+- **files**: The dock and Home open Files on Workspace Files
+  ([#1530](https://github.com/jupyter-naas/abi/pull/1530),
+  [`8627979`](https://github.com/jupyter-naas/abi/commit/86279799c45eb8e199fafc6b6188db470525acf0))
+
+- **files**: The Files page keeps its state in the URL
+  ([`6502ca8`](https://github.com/jupyter-naas/abi/commit/6502ca838763f0a1dd00932909794866fd683076))
+
+- **files**: Views opened by IAM alone, workspace drive flags removed
+  ([#1529](https://github.com/jupyter-naas/abi/pull/1529),
+  [`fc44726`](https://github.com/jupyter-naas/abi/commit/fc44726a1f693c577a965d67b3c1377f10b4c672))
+
+- **settings**: Drives sits in Platform Settings › Administration
+  ([#1531](https://github.com/jupyter-naas/abi/pull/1531),
+  [`d65d546`](https://github.com/jupyter-naas/abi/commit/d65d546e5dfc1aa7010ca9c03c1321f5b7f3a1c3))
+
+- **settings**: Platform settings › Drives lists the storage backends
+  ([#1531](https://github.com/jupyter-naas/abi/pull/1531),
+  [`04fc0e2`](https://github.com/jupyter-naas/abi/commit/04fc0e266d6cf4dc1fa23b6df3e64a0b4b261670))
+
+- **workspaces**: /api/workspaces no longer answers organization_drive
+  ([#1530](https://github.com/jupyter-naas/abi/pull/1530),
+  [`47298ba`](https://github.com/jupyter-naas/abi/commit/47298ba3c01c260771834fe21befc3e06f80981a))
+
+### Testing
+
+- **files**: Generated canaries for the drives tests; views hook test mocks hasSession
+  ([`a01076e`](https://github.com/jupyter-naas/abi/commit/a01076e18c503d704c14d159e9fd8c9f5427f680))
+
 
 ## v5.0.2 (2026-11-19)
 

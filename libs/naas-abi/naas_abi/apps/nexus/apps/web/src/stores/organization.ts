@@ -7,7 +7,16 @@ import { create } from 'zustand';
 import { getApiUrl } from '@/lib/config';
 import { invalidateOrgBranding } from '@/lib/org-branding';
 import { authFetch } from './auth';
-import { classifyInviteAnswer, policyIdsToSend, type InviteAnswer } from '@/lib/invitations';
+import { classifyInviteAnswer, type InviteAnswer } from '@/lib/invitations';
+import {
+  memberStatus,
+  organizationCreateBody,
+  readCreatedPerson,
+  readLevel,
+  type Level,
+  type MemberStatus,
+  type WorkspaceAccess,
+} from '@/lib/people';
 
 const getApiBase = () => getApiUrl();
 const normalize = (url?: string | null) =>
@@ -68,6 +77,8 @@ export interface Organization {
   secondaryLogoUrl?: string;
   showLogoSeparator?: boolean;
   defaultTheme?: string;
+  /** IANA name the organization's analytics periods follow (`UTC` by default). */
+  timezone?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -76,7 +87,19 @@ export interface OrganizationMember {
   id: string;
   organizationId: string;
   userId: string;
-  role: 'owner' | 'admin' | 'member';
+  /**
+   * "admin" for an org admin, else their level at the organization ("member", "viewer"); null:
+   * linked through some of its workspaces only (`source: "workspace"`).
+   */
+  role: 'admin' | 'member' | 'viewer' | null;
+  /** An admin of the organization ("<O> admins"): reaches every workspace of it. */
+  orgAdmin: boolean;
+  /** Their level, in all their workspaces; null for a role of before held directly. */
+  level: Level | null;
+  /** Where they are linked to the organization from: the organization itself, or a workspace only. */
+  source: 'organization' | 'workspace';
+  /** Invited: created, has not signed in yet. */
+  status: MemberStatus;
   email?: string;
   name?: string;
   createdAt?: string;
@@ -102,7 +125,6 @@ export type OrganizationMemberCreateProfile = {
 
 /** No name: a member's full name is always their account name (users.name). */
 export type OrganizationMemberProfileUpdate = {
-  role?: 'admin' | 'member';
   organization?: string;
   job_title?: string;
   bio?: string;
@@ -116,7 +138,13 @@ function mapMember(m: any): OrganizationMember {
     id: m.id,
     organizationId: m.organization_id,
     userId: m.user_id,
-    role: m.role,
+    // An owner of before administers the organization: Owner is no longer assigned.
+    role: m.role === 'owner' || m.role === 'admin' ? 'admin' : m.role === 'member' || m.role === 'viewer' ? m.role : null,
+    orgAdmin: m.org_admin === true || m.role === 'admin' || m.role === 'owner',
+    level: readLevel(m.level),
+    // An older row has no source: it holds an org role.
+    source: m.source === 'workspace' ? 'workspace' : 'organization',
+    status: memberStatus(m.status),
     email: m.email,
     name: m.name,
     createdAt: m.created_at,
@@ -128,6 +156,14 @@ function mapMember(m: any): OrganizationMember {
     country: m.country,
     interest: m.interest,
   };
+}
+
+/** The profile fields of a create request (the name goes on its own). */
+function profileFields(profile: OrganizationMemberCreateProfile | undefined) {
+  if (!profile) return undefined;
+  const { name: _name, ...rest } = profile;
+  void _name;
+  return rest;
 }
 
 function cacheMember(
@@ -177,7 +213,7 @@ interface OrganizationState {
   inviteMember: (
     orgId: string,
     email: string,
-    role: 'admin' | 'member',
+    orgAdmin: boolean,
     profile?: OrganizationMemberCreateProfile
   ) => Promise<OrganizationMember | null>;
   inviteToOrganization: (
@@ -196,19 +232,26 @@ interface OrganizationState {
   ) => Promise<OrganizationMember | null>;
   removeMemberAvatar: (orgId: string, userId: string) => Promise<OrganizationMember | null>;
   removeMember: (orgId: string, userId: string) => Promise<boolean>;
+  /**
+   * Remove someone from the organization in one step: every workspace of it and any org role
+   * (their account stays). Returns the workspaces they left.
+   */
+  removeFromOrganization: (orgId: string, userId: string) => Promise<string[]>;
 }
 
 export interface OrganizationInvite {
   email: string;
-  role: 'admin' | 'member';
+  /** Their level, in all their workspaces; none keeps an existing person's. */
+  level?: Level | null;
+  /** An admin of the organization. */
+  orgAdmin?: boolean;
   // The identity provider to invite through (only named when there is a choice).
   provider?: string;
-  // A workspace of the organization to add them to, with the role they get there.
-  workspaceId?: string;
-  workspaceRole?: 'admin' | 'member' | 'viewer';
-  // Customer policies (`pol_…`) attached with the role: at the workspace's scope when one is
-  // named, else at the organization's. Pending grants until someone with no account signs in.
-  policyIds?: string[];
+  // Workspaces of the organization they join, each with "admin"; none (and no org admin): they
+  // are one of the organization's people.
+  workspaces?: WorkspaceAccess[];
+  // Capability groups they are put in (`grp_…`).
+  capabilities?: string[];
   // The member's organization profile, set when the person is created.
   profile?: OrganizationMemberCreateProfile;
 }
@@ -325,6 +368,7 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         secondaryLogoUrl: normalize(org.secondary_logo_url) || undefined,
         showLogoSeparator: org.show_logo_separator ?? false,
         defaultTheme: org.default_theme || undefined,
+        timezone: org.timezone || 'UTC',
         createdAt: org.created_at,
         updatedAt: org.updated_at,
         currentUserRole: org.current_user_role ?? null,
@@ -350,7 +394,7 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         loginBgImageUrl: 'login_bg_image_url', showTermsFooter: 'show_terms_footer',
         showPoweredBy: 'show_powered_by', loginFooterText: 'login_footer_text',
         secondaryLogoUrl: 'secondary_logo_url', showLogoSeparator: 'show_logo_separator',
-        defaultTheme: 'default_theme',
+        defaultTheme: 'default_theme', timezone: 'timezone',
       };
       for (const [key, value] of Object.entries(updates)) {
         const apiKey = keyMap[key];
@@ -383,6 +427,7 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         secondaryLogoUrl: normalize(org.secondary_logo_url) || undefined,
         showLogoSeparator: org.show_logo_separator ?? false,
         defaultTheme: org.default_theme || undefined,
+        timezone: org.timezone || 'UTC',
         createdAt: org.created_at, updatedAt: org.updated_at,
       };
 
@@ -437,10 +482,10 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
   inviteMember: async (
     orgId: string,
     email: string,
-    role: 'admin' | 'member',
+    orgAdmin: boolean,
     profile: OrganizationMemberCreateProfile = {}
   ): Promise<OrganizationMember | null> => {
-    const { member } = await get().inviteToOrganization(orgId, { email, role, profile });
+    const { member } = await get().inviteToOrganization(orgId, { email, orgAdmin, profile });
     return member;
   },
 
@@ -449,15 +494,19 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
       const response = await authFetch(`/api/organizations/${orgId}/members/invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: invite.email,
-          role: invite.role,
-          provider: invite.provider,
-          workspace_id: invite.workspaceId,
-          workspace_role: invite.workspaceRole,
-          ...policyIdsToSend(invite.policyIds),
-          ...invite.profile,
-        }),
+        // One request with every workspace (POST /api/organizations/{org}/members/invite).
+        body: JSON.stringify(
+          organizationCreateBody({
+            email: invite.email,
+            name: invite.profile?.name,
+            level: invite.level,
+            orgAdmin: invite.orgAdmin,
+            workspaces: invite.workspaces ?? [],
+            capabilities: invite.capabilities,
+            provider: invite.provider,
+            profile: profileFields(invite.profile),
+          })
+        ),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -472,14 +521,17 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
       }
       const data = await response.json();
 
-      // Someone with no account yet is invited, not added: there is no member
-      // to show until they sign in.
+      // An older answer: someone with no account yet is invited, not added.
       const answer = classifyInviteAnswer(data);
       if (answer.kind === 'invited') {
         return { member: null, answer };
       }
 
-      const member = mapMember(data);
+      // The created-or-linked answer: the org member, or none (workspace access only).
+      const created = readCreatedPerson(data);
+      const raw = created ? created.member : data;
+      if (!raw) return { member: null, answer };
+      const member = mapMember(raw);
 
       // Update cache. Inviting an existing member resends their sign-in email
       // and returns that same membership, so replace rather than append.
@@ -594,5 +646,23 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
       console.error('Failed to remove member:', error);
       throw error;
     }
+  },
+
+  removeFromOrganization: async (orgId: string, userId: string): Promise<string[]> => {
+    const response = await authFetch(
+      `/api/organizations/${orgId}/members/${encodeURIComponent(userId)}/access`,
+      { method: 'DELETE' }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to remove this user from the organization');
+    }
+    set((state) => ({
+      membersCache: {
+        ...state.membersCache,
+        [orgId]: (state.membersCache[orgId] || []).filter((m) => m.userId !== userId),
+      },
+    }));
+    return Array.isArray(data.workspace_ids) ? data.workspace_ids : [];
   },
 }));

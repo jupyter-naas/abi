@@ -29,7 +29,8 @@ Nexus adds no role check of its own.
   at `scope`; at a scope, what the platform alone administers is false; no role feature defaults exist to
   report: no role brings a feature, a policy does; at the platform also `nexus:ReadSystem` and the accounts'
   `nexus:ListUsers`, `InviteUser`, `UpdateUser`, `SuspendUser`, `ResumeUser`, `DeleteUser`, on
-  `abi:nexus:user/-` as their routes ask them, false at a scope: `services/accounts`);
+  `abi:nexus:user/-` as their routes ask them, false at a scope: `services/accounts`; and the drives'
+  `nexus:ListDrives` on `abi:nexus:drive/-`, likewise: `services/drives`);
   `GET /catalogs?scope=&parent=` (only the actions the caller may grant
   at `scope`, the platform by default, and the types they name: a catalog with none is left out; with `parent`,
   within that policy, as `/grantable`)
@@ -57,7 +58,9 @@ Nexus adds no role check of its own.
   it the caller may list, IAM's `list_sub_policies`). `PUT` takes `parent`: absent keeps it, `null` or `""`
   removes it, an id sets it. Deleting a parent that has sub-policies is a 409 naming them
 - `GET|POST|DELETE /attachments` (`?scope=`, `?principal_id=`, `?policy_id=`; without `scope`, at every level, each
-  attachment kept by IAM where the caller may `iam:ListAttachments` it), `GET /attachable-policies?scope=`.
+  attachment kept by IAM where the caller may `iam:ListAttachments` it; `GET` takes `principal_id` repeated, at most
+  `MAX_PRINCIPALS_PER_READ` (100, else 422): each one's rows in the order named, as one request each would answer
+  them, each policy and principal named once: a person's groups in one read, #1608), `GET /attachable-policies?scope=`.
   `POST` at a container attaches to a user only once related to its top container (an attachment of their own within
   it: a membership, an accepted invitation; `IamGateway.belongs`), unless the caller may attach the policy unscoped
   (the platform admin): anyone else is invited, and an unrelated user is answered 404, as an unknown one, with no
@@ -68,8 +71,22 @@ Nexus adds no role check of its own.
   `GET /principals/{id}/groups` (IAM's `list_principal_groups`: the groups of the principal the caller may
   `iam:GetGroup`, at every level; empty, not a 403, for a principal they see nothing of),
   `POST /principals/{id}/suspend|resume`
-- `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, which names that organization's container, is the owner), `GET|DELETE /groups/{id}`, `PUT|DELETE /groups/{id}/members/{member}`,
-  `PUT|DELETE /groups/{id}/idp-mappings`
+- `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, which names that organization's container, is the owner;
+  `GET` is a page in IAM's order, `?after=&limit=` (1 to `GROUPS_PAGE_MAX`, 500; IAM's 100 by default) with `next_after`,
+  and `?member_counts=true` adds each group's `member_count`: decided in one `filter("iam:GetGroup", …)` as
+  `GET /groups/{id}` decides each, null where that detail would be refused, a view's outside included; no member is
+  named, so the Groups list reads no detail per group, #1608), `GET|DELETE /groups/{id}`, `PATCH /groups/{id}` (`{name}`: a rename, IAM's `update_group`, `iam:UpdateGroup`), `PUT|DELETE /groups/{id}/members/{member}`,
+  `PUT|DELETE /groups/{id}/idp-mappings`. After a member is added or removed, `follow_member` (`runtime.py`:
+  `iam/platform_files.follow`, as `api`) puts the person's Platform Files groups back in step with their
+  workspaces (#1590); a failure is logged, the change stands. A group's view carries its markers (core #1584): `membership_of`
+  (the container its members are members of, "<W> workspace") and `level_group` ("Viewers", "Members").
+- `GET /capabilities?scope=` (`iam:ListGroups` at the level) and `POST /capabilities` (`{capability, scope}`,
+  `iam:CreateGroup`): the capability groups (`../iam/capabilities.py`) of a level, an organization's "Workflow
+  runners" (a workspace's scope names its organization's) and the platform's "Models · all"; each
+  `{capability, name, owner_scope, group_id, policy_id, can_create}`. POST makes one on demand, idempotent, as
+  `api` (`IamGateway.capability`) once the caller is checked: `iam:CreateGroup` there, plus `iam:CreatePolicy`
+  there (Workflow runners) or `iam:AttachPolicy` at the platform (Models · all). Workflow runners is bounded by
+  "<O> access" (`org_access_of`, `container_defaults`); an organization without one is refused (422).
 - `GET|POST /service-accounts`, `DELETE /service-accounts/{id}`, `GET|POST /service-accounts/{id}/keys`,
   `DELETE …/keys/{key}`, `POST …/keys/{key}/rotate`
 - `GET /manifests?status=`, `POST /manifests/{principal}/{sha256}/approve` (optional narrowed `document`) and `/reject`
@@ -136,17 +153,17 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   anyone but the platform admin, as IAM refuses it; a right to attach without one to list still offers the
   level's own), and `GET /access?scope=`, `/catalogs?scope=`,
   `/grantable?scope=` and `/policies/validate?scope=` answer for that level (a scope below a container, in these
-  and in the lists, answers for that container). One web module serves every level (Nexus `AGENTS.md`, "Roles & permissions
-  UI module"): Platform settings, Organization settings and Workspace settings › Roles & permissions mount it
-  with their scope, and `GET /access?scope=` alone decides its sections and buttons. Consequences: an org or
+  and in the lists, answers for that container). One web module serves every level (Nexus `AGENTS.md`, "Access
+  UI module"): the pages of Platform settings, Organization settings and Workspace settings › Access mount it
+  with their scope, and `GET /access?scope=` alone decides its pages and buttons. Consequences: an org or
   workspace admin holds, at their scope, the attachment actions and that level's policies and groups, and
   nothing else of IAM; members and viewers hold none of it. Service accounts and keys, module approvals, the
   simulator, IdP mappings and the audit are the platform's: `access` answers their actions (`_PLATFORM_ONLY`,
   `nexus:ReadSystem`) false at any scope, the platform admin's included, so only the platform's page shows them.
-  The Platform Settings sidebar shows Roles & permissions for any
-  platform-level `iam:` action `GET /access` grants, and the tables and System only with `nexus:ReadSystem`:
-  a delegated IAM admin without it sees Roles & permissions alone, a stranger a 403; Organization and Workspace
-  settings show it for any `iam:` action at their scope.
+  The Platform Settings sidebar shows each page of Access for an action of it `GET /access` grants (Policies:
+  `iam:ListPolicies`, `iam:CreatePolicy` or `iam:ListAttachments`; Groups: `iam:ListGroups`; and so on), and the
+  tables and System only with `nexus:ReadSystem`: a delegated IAM admin without it sees those pages alone, a
+  stranger a 403; Organization and Workspace settings show their Policies and Groups on the same rule at their scope.
 - **Every change is audited, fail-closed.** The System app's `run_audited` and `audit_logs` table are reused: a
   `requested` record is written first and nothing changes if it cannot be (503); `succeeded` or `failed` (the
   exception type only) follows. IAM's records are the rows `iam.<operation>` (`SqlAdminAuditLog` takes the action
@@ -199,7 +216,7 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   on save (it leaves `parent` out of the `PUT`); choosing a parent and the tree of policies are the builder's
   (a later change).
 - **A workspace's admins edit its access policy at the workspace.** *Decision:* "<W> access" is owned by the workspace
-  (`../iam/AGENTS.md`, "Access policies and default groups"), so Workspace settings › Roles & permissions › Policies
+  (`../iam/AGENTS.md`, "Access policies and default groups"), so Workspace settings › Access › Policies
   lists it as the workspace's own, with its sub-policies below it, and opens it in the editor with the builder within
   "<O> access": `/publishers?scope=<W>&parent=<O access>` answers its editors (core's `grantable` for whoever may update
   a sub-policy of the parent at the scope), though they may neither read "<O> access" nor derive from it.
@@ -208,7 +225,7 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   words ("… which pol_… (Acme access), above it, does not allow …: it would grant nothing"), never a policy that grants
   less than it says; a widening beyond what the editor holds is a 403 (`GRANT_NOT_HELD`).
 - **A principal's and a policy's access at every level are IAM's lists.** *Decision:* the person's page, the group's page
-  and a policy's attachments (Nexus `AGENTS.md`, "Roles & permissions UI module") read `/attachments?principal_id=` and
+  and a policy's attachments (Nexus `AGENTS.md`, "Access UI module") read `/attachments?principal_id=` and
   `?policy_id=` without a scope, `/principals/{id}/groups` and, at the platform, `/principals?q=`; the filtering is
   IAM's (`list_attachments`, `list_principal_groups`, `list_principals(text=)`, in process, over NATS and in the
   SDK), Nexus adds none. *Consequences:* the platform admin sees everything a person holds, an organization's admin
@@ -240,3 +257,12 @@ unattached one and a person holding nothing as empty lists to ws-2's and org-1's
 narrowed `/catalogs` on the same world, with listers registered for graphs, workspaces and features (`listed`
 fixture): a workspace admin's graphs, a stranger's empty pages, a disabled feature listed nowhere, and a user
 holding only agent A and `iam:CreatePolicy`.
+
+`adapters/primary/iam_admin__primary_adapter__FastAPI_batched_reads_test.py` runs the batched reads (#1608): each
+group's count equals its detail's members for the platform admin, an org admin and a workspace admin at each scope,
+none where the detail is refused or outside a view, 500 groups paged, no member named for a count (a counting
+gateway), several principals' attachments equal to one request each per viewer, the level rule at a scope, the bound.
+
+`adapters/primary/iam_admin__primary_adapter__FastAPI_capabilities_test.py` runs `/capabilities`: an org admin makes
+Workflow runners once (bounded by "<O> access"), a workspace page reads its organization's, a member and a
+stranger are refused, Models · all is the platform admin's, and a group's view carries its markers.

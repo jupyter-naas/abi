@@ -3,7 +3,7 @@ import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { ORG, WS, attachment, fakeApi, readerPolicy, wsScope } from '../access-fixtures';
+import { ORG, WS, attachment, fakeApi, fakeDirectory, member, readerPolicy, wsScope } from '../access-fixtures';
 import { principal } from '../service-fixtures';
 import { PolicyAttachments } from './policy-attachments';
 import { PolicyEditor } from './policy-editor';
@@ -61,6 +61,39 @@ describe('Where a policy is attached', () => {
     expect(client.detach).toHaveBeenCalledWith({ policy_id: 'pol_w', principal_id: 'grp_g', scope: WS });
   });
 
+  it('attaches the policy at the page’s scope, to a member offered there, where IAM lets the caller', async () => {
+    const attachable = vi.fn().mockResolvedValue({ items: [{ id: 'pol_w', name: 'Writer', description: '', managed: false }] });
+    const attach = vi.fn().mockResolvedValue(undefined);
+    const client = api({ attachable, attach, listGroups: vi.fn().mockResolvedValue({ items: [] }) });
+    const directory = fakeDirectory([member({ userId: 'usr_carol', name: 'Carol' })]);
+    const can = (action: string) => action === 'iam:AttachPolicy';
+    mounted = await mount(PolicyAttachments, { api: client, policyId: 'pol_w', here: WS, can, scope: wsScope, directory });
+    await mounted.flush();
+    await mounted.flush();
+
+    expect(attachable).toHaveBeenCalledWith(WS);
+    expect([...document.querySelectorAll('datalist option')].map((o) => o.getAttribute('value'))).toEqual(['usr_carol']);
+    await mounted.type(field('Attach to'), 'usr_carol');
+    await mounted.click(button('Attach') ?? null);
+    await mounted.flush();
+    expect(attach).toHaveBeenCalledWith({ policy_id: 'pol_w', principal_id: 'usr_carol', scope: WS });
+  });
+
+  it('offers no attach without iam:AttachPolicy, nor for a policy IAM does not let the caller attach here', async () => {
+    const attachable = vi.fn().mockResolvedValue({ items: [] });
+    const scoped = { scope: wsScope, directory: fakeDirectory() };
+    mounted = await mount(PolicyAttachments, { api: api({ attachable }), policyId: 'pol_w', here: WS, can: () => false, ...scoped });
+    await mounted.flush();
+    expect(field('Attach this policy')).toBeNull();
+    expect(attachable).not.toHaveBeenCalled();
+    await mounted.unmount();
+    mounted = await mount(PolicyAttachments, { api: api({ attachable }), policyId: 'pol_w', here: WS, can: () => true, ...scoped });
+    await mounted.flush();
+    await mounted.flush();
+    expect(attachable).toHaveBeenCalledWith(WS);
+    expect(field('Attach this policy')).toBeNull();
+  });
+
   it('says so when IAM lets the caller list none of it', async () => {
     // Across levels IAM answers what the caller may list: here, nothing.
     const client = api({ listAttachments: vi.fn().mockResolvedValue({ items: [] }) });
@@ -109,7 +142,7 @@ describe('Where a policy is attached', () => {
     });
     await mounted.flush();
     await mounted.flush();
-    expect(document.querySelector('[aria-label="Where it is attached"]')).not.toBeNull();
+    expect(document.querySelector('[aria-label="Who holds it"]')).not.toBeNull();
     expect(client.listAttachments).toHaveBeenCalledWith({ policy_id: 'pol_1' });
   });
 

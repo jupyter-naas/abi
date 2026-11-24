@@ -31,6 +31,8 @@ def _user(model: UserModel) -> OidcUser:
         principal_id=model.principal_id,
         idp_issuer=model.idp_issuer,
         idp_subject=model.idp_subject,
+        status=model.status or "active",
+        idp_provider=model.idp_provider,
     )
 
 
@@ -133,6 +135,8 @@ class OidcSessionSecondaryAdapterPostgres(OidcSessionPersistencePort):
             idp_provider=provider,
             idp_issuer=issuer,
             idp_subject=subject,
+            status="active",
+            activated_at=now,
             created_at=now,
             updated_at=now,
         )
@@ -159,6 +163,15 @@ class OidcSessionSecondaryAdapterPostgres(OidcSessionPersistencePort):
             values["name"] = name
         await self.db.execute(update(UserModel).where(UserModel.id == user_id).values(**values))
 
+    async def activate_user(self, user_id: str, *, now: datetime) -> bool:
+        result = await self.db.execute(
+            update(UserModel)
+            .where(UserModel.id == user_id, UserModel.status == "invited")
+            .values(status="active", activated_at=now, updated_at=now)
+            .execution_options(synchronize_session=False)
+        )
+        return bool(result.rowcount)  # type: ignore[attr-defined]
+
     async def legacy_user_by_email(self, email: str) -> OidcUser | None:
         model = (
             await self.db.execute(
@@ -181,6 +194,7 @@ class OidcSessionSecondaryAdapterPostgres(OidcSessionPersistencePort):
                         UserModel.principal_id.is_(None),
                         UserModel.idp_issuer.is_(None),
                         UserModel.deleted_at.is_(None),
+                        UserModel.status != "invited",
                     )
                     .order_by(UserModel.email)
                 )

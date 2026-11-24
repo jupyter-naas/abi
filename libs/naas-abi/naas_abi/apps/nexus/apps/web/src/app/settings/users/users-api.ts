@@ -5,6 +5,7 @@ import {
   type Deletion,
   type InvitationProviders,
   type InviteOutcome,
+  type UserAccess,
 } from './users-model';
 
 export const USERS_API = '/api/admin/users';
@@ -45,7 +46,7 @@ export function listUsers(fetcher: Fetcher = authFetch) {
 }
 
 export function inviteUser(
-  invite: { email: string; name?: string; provider?: string },
+  invite: { email: string; name?: string; provider?: string; platform_admin?: boolean },
   fetcher: Fetcher = authFetch
 ) {
   return call<InviteOutcome>(fetcher, `${USERS_API}/invite`, json('POST', invite));
@@ -57,6 +58,12 @@ export function updateUser(
   fetcher: Fetcher = authFetch
 ) {
   return call<AdminUser>(fetcher, userUrl(id), json('PATCH', change));
+}
+
+/** Where they work and what they do, read from their groups (`GET …/{id}/access`): `id` is
+ *  their account id or their IAM id; 404 when no account of the directory is theirs. */
+export function userAccess(id: string, fetcher: Fetcher = authFetch) {
+  return call<UserAccess>(fetcher, `${userUrl(id)}/access`);
 }
 
 export function deactivateUser(id: string, fetcher: Fetcher = authFetch) {

@@ -19,6 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
     chat,
     code,
     datasets,
+    drives,
     features,
     files,
     knowledge,
@@ -46,7 +47,24 @@ SERVICE = "nexus"
 # 9: published by naas_abi (``publisher``).
 # 10: the platform's accounts (``user``: Platform Settings > Users).
 # 11: the organization drive (``ListOrgFiles``, ``GetOrgFile``, ``PutOrgFile``, ``DeleteOrgFile``).
-VERSION = 11
+# 12: Platform Files (``platform_file``: ``ListPlatformFiles``, ``GetPlatformFile``,
+#     ``PutPlatformFile``, ``DeletePlatformFile``) and System Files (``system_file``:
+#     ``ListObjectStoreFiles``, ``GetObjectStoreFile``, ``PutObjectStoreFile``,
+#     ``DeleteObjectStoreFile``), platform-level, no role's; ``*SystemFile`` deprecated.
+# 13: the platform's drives (``drive``: Platform Settings > Drives, ``ListDrives``).
+# 14: scoped analytics (``ReadOrganizationAnalytics``, ``ReadWorkspaceAnalytics``,
+#     ``ReadAnalyticsConversation`` on ``analytics_conversation``).
+# 15: the platform analytics app removed: ``ReadAnalytics``, ``WriteAnalytics`` (and
+#     the ``analytics`` singleton) deprecated, authorizing nothing.
+# 16: ``builtin.self`` loses ``CreateOrganization`` and the personal ``CreateWorkspace``
+#     (no ``self_`` platform access row any more; ``nexus_config.personal_workspaces``
+#     gives the latter back as a self grant).
+# 17: Owner no longer assigned (#1585): deleting a workspace of an organization is
+#     ``DeleteOrganizationWorkspace`` (admin, on the organization: its admins), deleting
+#     an organization ``DeletePlatformOrganization`` (on the platform-level
+#     ``organization_record``: no role's, the platform admin's); ``DeleteOrganization``
+#     deprecated (kept for ``delete_container``, which Nexus calls as ``api``).
+VERSION = 17
 
 _MODULES = (
     organizations,
@@ -66,6 +84,7 @@ _MODULES = (
     settings,
     platform,
     users,
+    drives,
     realtime,
 )
 

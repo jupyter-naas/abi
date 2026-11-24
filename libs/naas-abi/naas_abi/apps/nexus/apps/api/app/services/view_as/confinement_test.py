@@ -176,6 +176,7 @@ IAM_SCOPED_READS = {
     "/api/iam/admin/attachments",
     "/api/iam/admin/attachable-policies",
     "/api/iam/admin/groups",
+    "/api/iam/admin/capabilities",
 }
 
 

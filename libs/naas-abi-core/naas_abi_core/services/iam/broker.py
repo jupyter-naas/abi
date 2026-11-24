@@ -136,8 +136,10 @@ IAM_OPERATIONS = (
     "list_groups",
     "list_idp_bindings",
     "list_idp_group_mappings",
+    "list_container_members",
     "list_keys",
     "list_manifests",
+    "list_memberships",
     "list_pending_grants",
     "list_placements",
     "list_policies",
@@ -146,6 +148,7 @@ IAM_OPERATIONS = (
     "list_resources",
     "list_sub_policies",
     "map_idp_group",
+    "mark_group",
     "put_placement",
     "register_catalog",
     "register_container",
@@ -160,6 +163,7 @@ IAM_OPERATIONS = (
     "token",
     "unbind_idp_group",
     "unmap_idp_group",
+    "update_group",
     "update_policy",
 )
 # naas_abi_sdk.broker_control.OPERATIONS (a test keeps them in step).

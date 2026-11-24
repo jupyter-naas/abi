@@ -19,6 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import SqlDefaultsStore
+from naas_abi.apps.nexus.apps.api.app.services.people.port import status_of_row
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     InferenceServerCreateInput,
     InferenceServerRecord,
@@ -68,7 +69,13 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             return {}
         result = await self.db.execute(select(UserModel).where(UserModel.id.in_(user_ids)))
         return {
-            user.id: UserRecord(id=user.id, email=user.email, name=user.name)
+            user.id: UserRecord(
+                id=user.id,
+                email=user.email,
+                name=user.name,
+                avatar=user.avatar,
+                status=status_of_row(user),
+            )
             for user in result.scalars().all()
         }
 
@@ -91,8 +98,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             description=model.description,
             workspace_group=model.workspace_group,
             catalog_seed=parse_catalog_seed(getattr(model, "catalog_seed", None)),
-            platform_drive_enabled=bool(model.platform_drive_enabled),
-            system_drive_enabled=bool(model.system_drive_enabled),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -226,8 +231,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             "font_family": updates.font_family,
             "description": updates.description,
             "workspace_group": updates.workspace_group,
-            "platform_drive_enabled": updates.platform_drive_enabled,
-            "system_drive_enabled": updates.system_drive_enabled,
         }
         for field, value in update_data.items():
             if value is not None:

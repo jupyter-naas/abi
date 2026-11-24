@@ -1,5 +1,6 @@
 import { authFetch, hasSession, useAuthStore } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
+import { readOrganization } from '@/lib/organization-resource';
 
 /** The slice of organization branding the workspace shell applies. */
 export interface OrgShellBranding {
@@ -77,7 +78,8 @@ async function fetchOrgBranding(
   started: number,
 ): Promise<OrgShellBranding | null> {
   try {
-    const response = await authFetch(`/api/organizations/${orgId}`);
+    // Shared with the Organization settings reading the same organization.
+    const response = await readOrganization(orgId);
     if (!response.ok) return null;
     const branding = parseOrgShellBranding(await response.json());
     if (generation === started) cache.set(key, branding);

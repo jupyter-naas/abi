@@ -49,20 +49,30 @@ import { CsvPreview } from '@/components/files/csv-preview';
 import { FilesAddSheet } from '../components/files-add-sheet';
 import { FilesMenuBar } from '../components/files-menu-bar';
 import { requestFilesExplorerRefresh } from '../lib/explorer-refresh';
+import { carriesExternalFiles, leavesDropZone } from '../lib/drop-zone';
+import { listOnSourceChange, startNavigation, type PendingNavigation } from '../lib/files-navigation';
+import { createFilesUrlSync, expectFilesUrl, filesUrlWrite, takeFilesUrl } from '../lib/files-url-sync';
+import { routerNavigationPending } from '@/lib/router-navigation';
 import { isSystemPath, withoutSystemFiles } from '@/lib/system-files';
 import { FilesMobileRow } from '../components/files-mobile-row';
 import { FilesMobileToolbar } from '../components/files-mobile-toolbar';
 import '../components/files-components.css';
 import {
-  driveLabelForSource,
+  ALL_VIEWS,
   driveRootForSource,
   filesScopeForSource,
+  isFileViewSource,
   relativeDrivePath,
+  viewLabel,
 } from '../lib/drive-label';
+import { DRIVE_SETTINGS_PATH, driveSettingsShown } from '../lib/drive-settings';
+import { FilesViewsRoot } from '../components/files-views-root';
+import { useFileViewsStore, useOfferedFileViews } from '@/hooks/use-file-views';
+import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
 import {
-  filesDeepLinkFolderAndPreview,
   matchListedFile,
-  parseFilesDeepLink,
+  filesNavigationFromUrl,
+  filesUrlSearch,
 } from '../lib/files-route';
 import {
   ontologySpacing,
@@ -112,41 +122,21 @@ async function collectEntries(
   return out;
 }
 
-// Client-side sort for local synced folders (loaded whole in the browser).
-// Mirrors the server ordering: case-insensitive name, numeric size, timestamp
-// modified — with missing size/modified sorting first on ascending order.
-function sortFiles(
-  files: FileInfo[],
-  sortBy: FileSortKey,
-  sortDir: SortDirection,
-): FileInfo[] {
-  const dir = sortDir === 'desc' ? -1 : 1;
-  return [...files].sort((a, b) => {
-    let cmp: number;
-    if (sortBy === 'size') {
-      cmp = (a.size ?? -1) - (b.size ?? -1);
-    } else if (sortBy === 'modified') {
-      const am = a.modified ? Date.parse(a.modified) : Number.NEGATIVE_INFINITY;
-      const bm = b.modified ? Date.parse(b.modified) : Number.NEGATIVE_INFINITY;
-      cmp = am - bm;
-    } else {
-      cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-    }
-    // Stable tiebreak by name so equal sizes/dates keep a predictable order.
-    if (cmp === 0 && sortBy !== 'name') {
-      cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-    }
-    return cmp * dir;
-  });
-}
-
 const SYSTEM_FILES_READ_ONLY = 'System files (names starting with ".") are read-only.';
 
-/** My Drive is the person's own: in a view it is private, and nothing is asked for. */
+/** My Files is the person's own: in a view it is private, and nothing is asked for. */
+/**
+ * The Files URL the page last applied or wrote, and the URL a navigation that pushes its own
+ * (tree, starred item, search, Home) waits for, for this page load (`files-url-sync`).
+ */
+const filesUrl = createFilesUrlSync();
+
+const currentFilesSearch = (): string => window.location.search.replace(/^\?/, '');
+
 export default function FilesPage() {
   const activeSource = useFilesStore((s) => s.activeSource);
   const privateTo = usePrivateTo();
-  if (privateTo && activeSource === 'my-drive') return <PrivateToPerson what="My Drive" />;
+  if (privateTo && activeSource === 'my-files') return <PrivateToPerson what="My Files" />;
   return <FilesBrowser />;
 }
 
@@ -187,9 +177,11 @@ function FilesBrowser() {
     refreshFiles,
     openFile,
     activeSource,
+    listedSource,
     setActiveSource,
-    syncedFolders,
-    fetchLocalFiles,
+    restoreFilesState,
+    viewChoice,
+    activeDrive,
     setError,
     uploadProgress,
     starredItems,
@@ -201,9 +193,9 @@ function FilesBrowser() {
   const activeFile = useFilesStore((s) => s.activeFile);
 
   // The open file (else folder) rides into the right chat pane so the Files
-  // agent's tools default to it. Only the drives its tools can reach.
+  // agent's tools default to it. Only the views its tools can reach.
   const paneDrive =
-    activeSource === 'my-drive' ? 'my_drive:' : activeSource === 'workspace' ? '' : null;
+    activeSource === 'my-files' ? 'my_drive:' : activeSource === 'workspace-files' ? '' : null;
   usePublishFeatureResource(
     paneDrive === null
       ? null
@@ -264,10 +256,10 @@ function FilesBrowser() {
   const [textViewerError, setTextViewerError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // When a starred navigation is pending, skip the regular fetch triggered by activeSource change
-  const skipRegularFetchRef = useRef(false);
+  // A folder a navigation (tree, starred item, deep link) still has to list, in its view.
+  const pendingNavRef = useRef<PendingNavigation | null>(null);
   // Local path of the file to auto-preview once files finish loading
   const [localPendingPreview, setLocalPendingPreview] = useState<string | null>(null);
-  const deepLinkConsumedRef = useRef(false);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -352,58 +344,93 @@ function FilesBrowser() {
     };
   }, [imageViewerUrl]);
 
-  // Handle navigation triggered by clicking a starred item in the sidebar.
-  // Setting skipRegularFetchRef prevents the activeSource-change effect from
-  // overriding the path we set here.
+  // Handle navigation triggered by a sidebar tree folder or a starred item. Its folder is
+  // listed now (same view) or by the source-change effect once its view is rendered
+  // (`startNavigation`), never left to a flag a later view change would consume.
   useEffect(() => {
     if (!starredNavigation) return;
-    skipRegularFetchRef.current = true;
+    // The navigation opens its folder; the URL its caller pushes is taken as applied once it lands.
+    expectFilesUrl(filesUrl, starredNavigation.url, currentFilesSearch());
     clearPdfViewerState();
     clearImageViewerState();
     clearTextViewerState();
+    const before = useFilesStore.getState().activeSource;
     setActiveSource(starredNavigation.source);
+    const nav = startNavigation(before, useFilesStore.getState().activeSource, starredNavigation.path);
+    pendingNavRef.current = nav.pending;
     setSearchQuery('');
     setDebouncedSearch('');
     lastSearchRef.current = '';
     setCurrentPage(1);
-    fetchFiles(starredNavigation.path, {
-      limit: pageSizeRef.current,
-      offset: 0,
-      search: '',
-      workspaceId,
-    });
+    if (nav.listNow !== null) {
+      fetchFiles(nav.listNow, {
+        limit: pageSizeRef.current,
+        offset: 0,
+        search: '',
+        workspaceId,
+      });
+    }
     if (starredNavigation.previewPath) {
       setLocalPendingPreview(starredNavigation.previewPath);
     }
     setStarredNavigation(null);
   }, [starredNavigation, setActiveSource, fetchFiles, setStarredNavigation, workspaceId]);
 
-  // Session-authenticated deep link: /workspace/:id/files?source=platform-drive&path=...
-  // (or source=organization-drive, the workspace's organization's drive)
-  // Storage keys are not HTTP routes; stay inside the Files UI.
+  // The URL opens what it names (`filesNavigationFromUrl`): a page load, a link, browser
+  // Back/Forward inside Files. A bare /files opens "All Views / Workspace Files"; an old
+  // ?source=&path= link opens the view it became. A URL already applied or written in this
+  // page load (Back from another page, a remount), the URL a navigation pushed, or one whose
+  // change is not the Files keys (`spacing`) is not applied (`takeFilesUrl`). While a router
+  // navigation is in flight, its URL is taken once it lands. Storage keys are not HTTP routes;
+  // stay inside the Files UI.
   useEffect(() => {
-    if (deepLinkConsumedRef.current || starredNavigation) return;
-    const deepLink = parseFilesDeepLink(searchParams?.toString() ?? '');
-    if (!deepLink.source && !deepLink.path) return;
-    deepLinkConsumedRef.current = true;
-    skipRegularFetchRef.current = true;
+    if (starredNavigation) return;
+    if (routerNavigationPending()) return;
+    const search = currentFilesSearch();
+    if (!takeFilesUrl(filesUrl, search)) return;
+    const { state: urlState, folderPath, previewPath } = filesNavigationFromUrl(search);
     clearPdfViewerState();
     clearImageViewerState();
     clearTextViewerState();
-    if (deepLink.source) setActiveSource(deepLink.source);
+    const before = useFilesStore.getState().activeSource;
+    restoreFilesState(urlState);
+    const nav = startNavigation(before, useFilesStore.getState().activeSource, folderPath);
+    pendingNavRef.current = nav.pending;
     setSearchQuery('');
     setDebouncedSearch('');
     lastSearchRef.current = '';
     setCurrentPage(1);
-    const { folderPath, previewPath } = filesDeepLinkFolderAndPreview(deepLink.path || '');
-    fetchFiles(folderPath, {
-      limit: pageSizeRef.current,
-      offset: 0,
-      search: '',
-      workspaceId,
-    });
+    if (nav.listNow !== null) {
+      fetchFiles(nav.listNow, {
+        limit: pageSizeRef.current,
+        offset: 0,
+        search: '',
+        workspaceId,
+      });
+    }
     if (previewPath) setLocalPendingPreview(previewPath);
-  }, [searchParams, starredNavigation, setActiveSource, fetchFiles, workspaceId]);
+  }, [searchParams, starredNavigation, restoreFilesState, fetchFiles, workspaceId]);
+
+  // The URL keeps the page's state (drive, View picker, open view, folder), so a reload, a
+  // shared link or Back opens the same place. Only a settled state is written: the listing
+  // shown belongs to the open view (`listedSource`), nothing loads, no error, no navigation
+  // waiting for its view (`listedSource` is a dependency: All Views lists nothing, so only
+  // it changes there). Nothing is written while a router navigation is in flight: Next would
+  // drop it (`filesUrlWrite`); its landing re-runs this. `replaceState(null, …)` keeps Next's
+  // search params in sync; other parameters (`spacing`) are kept, a stale `preview` dropped.
+  useEffect(() => {
+    if (pendingNavRef.current && !pendingNavRef.current.listed) return;
+    const state = useFilesStore.getState();
+    if (state.loading || state.error || state.listedSource !== state.activeSource) return;
+    const search = filesUrlSearch(window.location.search, {
+      drive: state.activeDrive,
+      view: state.viewChoice,
+      source: state.activeSource,
+      path: state.currentPath,
+    });
+    if (!filesUrlWrite(filesUrl, search, window.location.search, routerNavigationPending())) return;
+    window.history.replaceState(null, '', `${window.location.pathname}${search}`);
+  }, [activeDrive, viewChoice, activeSource, currentPath, listedSource, loading, error, searchParams]);
 
   // Once the files list loads, open the pending preview (if any).
   useEffect(() => {
@@ -419,11 +446,21 @@ function FilesBrowser() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localPendingPreview, files, loading]);
   
-  // Check if we're viewing a synced local folder
-  const activeSyncedFolder = syncedFolders.find((f) => f.id === activeSource);
-  const isLocalFolder = !!activeSyncedFolder;
+  // All Views: one folder per view the caller may open; nothing is listed from the API.
+  const isViewsRoot = activeSource === ALL_VIEWS;
   const filesScope = filesScopeForSource(activeSource);
-  const fileQueryParams = `workspace_id=${encodeURIComponent(workspaceId)}&scope=${filesScope}`;
+  const fileQueryParams = `workspace_id=${encodeURIComponent(workspaceId)}&scope=${filesScope ?? ''}`;
+  const {
+    status: viewsStatus,
+    folders: allowedViewFolders,
+  } = useOfferedFileViews(workspaceId);
+  // "Drive settings…" opens Platform settings › Drives: shown to who may open it.
+  const { actions: platformActions } = usePlatformSettingsAccess();
+  const showDriveSettings = driveSettingsShown(platformActions);
+  // All Views' search filters its folders by name (a view lists from the API).
+  const shownViewFolders = allowedViewFolders.filter((folder) =>
+    folder.label.toLowerCase().includes(searchQuery.trim().toLowerCase()),
+  );
 
   const authUserId = useAuthStore((state) => state.user?.id);
   const workspaceRow = useWorkspaceStore((state) =>
@@ -435,43 +472,48 @@ function FilesBrowser() {
     authUserId,
     workspaceRow?.organizationId,
   );
-  const driveLabel = driveLabelForSource(
-    activeSource,
-    activeSyncedFolder,
-    isLocalFolder,
-    workspaceRow?.organizationName,
-  );
+  const driveLabel = viewLabel(activeSource);
+  // Under All Views, an open view's breadcrumb starts at All Views.
+  const showAllViewsCrumb = viewChoice === ALL_VIEWS && !isViewsRoot;
   const relativePath = relativeDrivePath(currentPath, driveRoot, activeSource, workspaceId);
 
+  const sourceRunRef = useRef<string | null>(null);
   useEffect(() => {
-    // Skip if a starred nav or deep link just set the path; it already called fetchFiles.
-    if (skipRegularFetchRef.current) {
-      skipRegularFetchRef.current = false;
-      return;
-    }
-
     if (!workspaceId) return;
+    // Once per (workspace, view): StrictMode's second mount run, or a run for another
+    // dependency, must not list again (it would replace a navigation's folder with the root).
+    const runKey = `${workspaceId}::${activeSource}`;
+    if (sourceRunRef.current === runKey) return;
+    const mountRun = sourceRunRef.current === null;
+    sourceRunRef.current = runKey;
+    // A pending navigation lists its folder once its view is the rendered one; a render
+    // behind the store waits; otherwise the open view's root, or on mount the folder the
+    // store already shows for it (Back from another page, a remount).
+    const store = useFilesStore.getState();
+    const next = listOnSourceChange(
+      pendingNavRef.current,
+      activeSource,
+      store.activeSource,
+      mountRun && store.listedSource === activeSource ? store.currentPath : '',
+    );
+    pendingNavRef.current = next.pending;
+    if (next.list === null) return;
 
     // Clear any previous errors
     setError(null);
 
-    // Fetch files based on active source. Remote drives fetch the first page;
-    // local synced folders load fully and paginate client-side.
-    if (isLocalFolder && activeSyncedFolder) {
-      fetchLocalFiles(activeSyncedFolder.id);
-    } else {
-      setSearchQuery('');
-      setDebouncedSearch('');
-      lastSearchRef.current = '';
-      setCurrentPage(1);
-      fetchFiles('', {
-        limit: pageSizeRef.current,
-        offset: 0,
-        search: '',
-        workspaceId,
-      });
-    }
-  }, [fetchFiles, fetchLocalFiles, isLocalFolder, activeSyncedFolder, activeSource, setError, workspaceId]);
+    // Fetch the first page of the open view (All Views lists nothing from the API).
+    setSearchQuery('');
+    setDebouncedSearch('');
+    lastSearchRef.current = '';
+    setCurrentPage(1);
+    fetchFiles(next.list, {
+      limit: pageSizeRef.current,
+      offset: 0,
+      search: '',
+      workspaceId,
+    });
+  }, [fetchFiles, activeSource, setError, workspaceId]);
 
   // Drop selections that no longer exist (after navigation or deletion).
   useEffect(() => {
@@ -506,7 +548,31 @@ function FilesBrowser() {
     if (isInternalDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
+    // Moving between the zone's own children (rows, the overlay) is no leave: hiding
+    // the overlay there made it flicker, and a drop on it then opened the file.
+    if (!leavesDropZone(e.currentTarget, e.relatedTarget)) return;
     setIsDragging(false);
+  }, []);
+
+  // Files dropped anywhere else on the page are not opened by the browser.
+  useEffect(() => {
+    const keepFilesInPage = (event: DragEvent) => {
+      // The drop zone handles its own drags (and marks them handled).
+      if (event.defaultPrevented || !event.dataTransfer) return;
+      if (!carriesExternalFiles(Array.from(event.dataTransfer.types))) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'none';
+    };
+    const endDrag = (event: DragEvent) => {
+      keepFilesInPage(event);
+      setIsDragging(false);
+    };
+    window.addEventListener('dragover', keepFilesInPage);
+    window.addEventListener('drop', endDrag);
+    return () => {
+      window.removeEventListener('dragover', keepFilesInPage);
+      window.removeEventListener('drop', endDrag);
+    };
   }, []);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
@@ -729,71 +795,44 @@ function FilesBrowser() {
     setSelectedFiles([]);
   };
 
-  // Remote drives paginate on the server (the store fetches one page at a time),
-  // so `files` already holds just the current page. Local synced folders are read
-  // entirely in the browser via the File System Access API, so they paginate
-  // client-side by slicing the loaded list.
-  const isServerPaginated = !isLocalFolder;
-
-  // Remote search + sort are applied by the server, so `files` is already the
-  // filtered, sorted page — use it as-is. Local folders are loaded whole in the
-  // browser, so we filter and sort them client-side to match.
-  const filteredFiles = isServerPaginated
-    ? files
-    : sortFiles(
-        withoutSystemFiles(files, showSystemFiles).filter((file) =>
-          file.name.toLowerCase().includes(searchQuery.toLowerCase())
-        ),
-        filesSortBy,
-        filesSortDir,
-      );
-  const pageCount = isServerPaginated ? filesTotal : filteredFiles.length;
+  // Views paginate on the server (the store fetches one page at a time), and
+  // search + sort are applied there too, so `files` is already the filtered,
+  // sorted current page.
+  const filteredFiles = files;
+  const pageCount = filesTotal;
   const totalPages = Math.max(1, Math.ceil(pageCount / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const pageStart = (safePage - 1) * pageSize;
-  const pagedFiles = isServerPaginated
-    ? filteredFiles
-    : filteredFiles.slice(pageStart, pageStart + pageSize);
+  const pagedFiles = filteredFiles;
   // Range shown in the pagination footer ("X–Y of N").
   const rangeStart = pageCount === 0 ? 0 : pageStart + 1;
-  const rangeEnd = isServerPaginated
-    ? pageStart + pagedFiles.length
-    : Math.min(pageStart + pageSize, filteredFiles.length);
+  const rangeEnd = pageStart + pagedFiles.length;
 
-  // Fetch a page from the server (remote drives only). Local folders just move
-  // the client-side window via setCurrentPage.
   const goToPage = useCallback(
     (page: number) => {
       const clamped = Math.max(1, page);
       setCurrentPage(clamped);
-      if (isServerPaginated) {
-        fetchFiles(currentPath, {
-          limit: pageSize,
-          offset: (clamped - 1) * pageSize,
-          search: debouncedSearch,
-        });
-      }
+      fetchFiles(currentPath, {
+        limit: pageSize,
+        offset: (clamped - 1) * pageSize,
+        search: debouncedSearch,
+      });
     },
-    [isServerPaginated, fetchFiles, currentPath, pageSize, debouncedSearch],
+    [fetchFiles, currentPath, pageSize, debouncedSearch],
   );
 
   const changePageSize = (size: number) => {
     setPageSize(size);
     setCurrentPage(1);
-    if (isServerPaginated) {
-      fetchFiles(currentPath, { limit: size, offset: 0, search: debouncedSearch });
-    }
+    fetchFiles(currentPath, { limit: size, offset: 0, search: debouncedSearch });
   };
 
   // Sort a column. setFilesSort updates the persisted preference synchronously,
   // so the follow-up fetch (which reads sort from the store) uses the new order.
-  // Local folders re-sort on render, no fetch needed.
   const handleSort = (column: FileSortKey) => {
     setFilesSort(column);
     setCurrentPage(1);
-    if (isServerPaginated) {
-      fetchFiles(currentPath, { limit: pageSize, offset: 0, search: debouncedSearch });
-    }
+    fetchFiles(currentPath, { limit: pageSize, offset: 0, search: debouncedSearch });
   };
 
   // Header cell that sorts its column, with an active-direction arrow.
@@ -856,7 +895,6 @@ function FilesBrowser() {
   // Guarded against the last-fetched term so navigation/mount fetches (which
   // already carry the right search) don't trigger a redundant round-trip.
   useEffect(() => {
-    if (!isServerPaginated) return;
     if (debouncedSearch === lastSearchRef.current) return;
     lastSearchRef.current = debouncedSearch;
     setCurrentPage(1);
@@ -865,9 +903,8 @@ function FilesBrowser() {
   }, [debouncedSearch]);
 
   // After the total shrinks (e.g. deleting the last item on the last page), pull
-  // the current page back into range and reload it. Server-paginated only.
+  // the current page back into range and reload it.
   useEffect(() => {
-    if (!isServerPaginated) return;
     const maxPage = Math.max(1, Math.ceil(filesTotal / pageSize));
     if (currentPage > maxPage) {
       setCurrentPage(maxPage);
@@ -1329,11 +1366,9 @@ function FilesBrowser() {
   };
 
   const handleRefresh = () => {
-    if (isLocalFolder && activeSyncedFolder) {
-      fetchLocalFiles(activeSyncedFolder.id, currentPath);
-    } else {
-      refreshFiles();
-    }
+    // All Views asks again which views are open; a view reloads its folder.
+    if (isViewsRoot) void useFileViewsStore.getState().load(workspaceId, { force: true });
+    else refreshFiles();
   };
 
   const openFileItem = (file: FileInfo) => {
@@ -1341,11 +1376,7 @@ function FilesBrowser() {
       clearPdfViewerState();
       clearImageViewerState();
       clearTextViewerState();
-      if (isLocalFolder && activeSyncedFolder) {
-        fetchLocalFiles(activeSyncedFolder.id, file.path);
-      } else {
-        navigateToPath(file.path);
-      }
+      navigateToPath(file.path);
     } else if (isOfficeFile(file)) {
       openOfficePreview(file);
     } else if (isImageFile(file)) {
@@ -1357,6 +1388,12 @@ function FilesBrowser() {
     } else {
       openFile(file.path);
     }
+  };
+
+  // A file is starred with the view it is in (never All Views, which lists views).
+  const starFile = (file: FileInfo) => {
+    if (!isFileViewSource(activeSource)) return;
+    starItem({ path: file.path, name: file.name, type: file.type, source: activeSource, workspaceId });
   };
 
   const renderFileContextMenu = (file: FileInfo, menuClassName?: string) => {
@@ -1375,13 +1412,7 @@ function FilesBrowser() {
             if (starred) {
               unstarItem(file.path, workspaceId);
             } else {
-              starItem({
-                path: file.path,
-                name: file.name,
-                type: file.type,
-                source: activeSource,
-                workspaceId,
-              });
+              starFile(file);
             }
           }}
           className={cn(
@@ -1511,13 +1542,7 @@ function FilesBrowser() {
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveContextMenu(null);
-                  starItem({
-                    path: file.path,
-                    name: file.name,
-                    type: file.type,
-                    source: activeSource,
-                    workspaceId,
-                  });
+                  starFile(file);
                 }}
                 className="files-browse-row-context-item"
               >
@@ -1610,10 +1635,9 @@ function FilesBrowser() {
     <div className="files-browse-root" data-spacing={spacing.value}>
       <Header
         title={driveLabel}
-        subtitle={isLocalFolder ? 'Synced from your machine' : undefined}
         nav={
           <FilesMenuBar
-            isLocalFolder={isLocalFolder}
+            isViewsRoot={isViewsRoot}
             loading={loading}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
@@ -1626,15 +1650,14 @@ function FilesBrowser() {
               handleRefresh();
               requestFilesExplorerRefresh();
             }}
-            onOpenDriveSettings={() =>
-              router.push(`/workspace/${encodeURIComponent(workspaceId)}/settings/drives`)
-            }
+            onOpenDriveSettings={() => router.push(DRIVE_SETTINGS_PATH)}
+            showDriveSettings={showDriveSettings}
             isSystemFolder={isSystemPath(currentPath)}
             showSystemFiles={showSystemFiles}
             onShowSystemFilesChange={(show) => {
               setShowSystemFiles(show);
-              // Remote drives filter on the server; local folders re-filter on render.
-              if (!isLocalFolder) goToPage(1);
+              // Views filter on the server.
+              if (!isViewsRoot) goToPage(1);
               requestFilesExplorerRefresh();
             }}
           />
@@ -1667,7 +1690,7 @@ function FilesBrowser() {
         {/* Mobile chrome (TopNav app menu is desktop-only) */}
         <div className="files-browse-toolbar-wrap files-browse-toolbar-wrap-mobile">
           <FilesMobileToolbar
-            isLocalFolder={isLocalFolder}
+            isViewsRoot={isViewsRoot}
             loading={loading}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
@@ -1755,14 +1778,23 @@ function FilesBrowser() {
             <>
           {(!isMobile || relativePath) && (
             <div className="files-browse-breadcrumb" aria-label="Current folder">
+              {showAllViewsCrumb && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSource(ALL_VIEWS)}
+                    className="files-browse-breadcrumb-link"
+                    data-testid="files-breadcrumb-all-views"
+                  >
+                    {viewLabel(ALL_VIEWS)}
+                  </button>
+                  <span className="files-browse-breadcrumb-separator">/</span>
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => {
-                  if (isLocalFolder && activeSyncedFolder) {
-                    fetchLocalFiles(activeSyncedFolder.id, '');
-                  } else {
-                    navigateToPath('');
-                  }
+                  if (!isViewsRoot) navigateToPath('');
                 }}
                 className={cn(
                   'files-browse-breadcrumb-link',
@@ -1778,14 +1810,10 @@ function FilesBrowser() {
                     type="button"
                     onClick={() => {
                       const sub = arr.slice(0, i + 1).join('/');
-                      if (isLocalFolder && activeSyncedFolder) {
-                        fetchLocalFiles(activeSyncedFolder.id, sub);
-                      } else {
-                        // Send the storage-relative path so the API resolver anchors it
-                        // under the drive root (server normalizes a leading drive root).
-                        const fullPath = driveRoot ? `${driveRoot}/${sub}` : sub;
-                        navigateToPath(fullPath);
-                      }
+                      // Send the storage-relative path so the API resolver anchors it
+                      // under the view's root (server normalizes a leading root).
+                      const fullPath = driveRoot ? `${driveRoot}/${sub}` : sub;
+                      navigateToPath(fullPath);
                     }}
                     className={cn(
                       'files-browse-breadcrumb-link',
@@ -1801,9 +1829,11 @@ function FilesBrowser() {
 
           <div className="files-browse-toolbar-desktop">
             <p className="files-browse-canvas-meta">
-              {loading && filteredFiles.length === 0
-                ? 'Loading…'
-                : `${pageCount} item${pageCount === 1 ? '' : 's'}`}
+              {isViewsRoot
+                ? `${shownViewFolders.length} view${shownViewFolders.length === 1 ? '' : 's'}`
+                : loading && filteredFiles.length === 0
+                  ? 'Loading…'
+                  : `${pageCount} item${pageCount === 1 ? '' : 's'}`}
             </p>
             <div className="files-browse-toolbar-search-wrap">
               <div className="files-browse-toolbar-search">
@@ -1824,7 +1854,7 @@ function FilesBrowser() {
         </div>
 
         {/* Selection action bar (list view, desktop only — mobile has no row checkboxes) */}
-        {!isPreviewOpen && viewMode === 'list' && !isLocalFolder && !isMobile && selectedFiles.length > 0 && (
+        {!isPreviewOpen && viewMode === 'list' && !isViewsRoot && !isMobile && selectedFiles.length > 0 && (
           <div className="files-browse-selection-bar">
             <span className="files-browse-selection-count">
               {selectedFiles.length} selected
@@ -1856,9 +1886,9 @@ function FilesBrowser() {
             isPreviewOpen && 'files-browse-content-preview',
             isDragging && 'is-dragging',
           )}
-          onDragOver={isPreviewOpen ? undefined : handleDragOver}
-          onDragLeave={isPreviewOpen ? undefined : handleDragLeave}
-          onDrop={isPreviewOpen ? undefined : handleDrop}
+          onDragOver={isPreviewOpen || isViewsRoot ? undefined : handleDragOver}
+          onDragLeave={isPreviewOpen || isViewsRoot ? undefined : handleDragLeave}
+          onDrop={isPreviewOpen || isViewsRoot ? undefined : handleDrop}
         >
           {isPreviewOpen ? (
             <div className="files-browse-preview">
@@ -2017,23 +2047,27 @@ function FilesBrowser() {
             </div>
           )}
 
-          {loading && filteredFiles.length === 0 ? (
+          {isViewsRoot ? (
+            <FilesViewsRoot
+              folders={shownViewFolders}
+              loading={viewsStatus === 'loading'}
+              onOpen={(source) => setActiveSource(source)}
+            />
+          ) : loading && filteredFiles.length === 0 ? (
             <div className="files-browse-empty">
               <p className="files-browse-empty-state">Loading files…</p>
             </div>
           ) : filteredFiles.length === 0 ? (
             <div className="files-browse-empty">
               <h3 className="files-browse-empty-title">
-                {searchQuery ? 'No files found' : isLocalFolder ? 'Folder is empty' : 'No files yet'}
+                {searchQuery ? 'No files found' : 'No files yet'}
               </h3>
               <p className="files-browse-empty-text">
                 {searchQuery
                   ? 'Try a different search term'
-                  : isLocalFolder
-                    ? 'This folder has no files or subfolders'
-                    : 'Create a file, make a folder, or upload from File in the app menu. You can also drop files here.'}
+                  : 'Create a file, make a folder, or upload from File in the app menu. You can also drop files here.'}
               </p>
-              {!searchQuery && !isLocalFolder && (
+              {!searchQuery && (
                 <div className="files-browse-empty-actions">
                   <div className="files-browse-empty-btn-row">
                     <button
@@ -2070,20 +2104,18 @@ function FilesBrowser() {
             <table className="files-browse-table">
               <thead>
                 <tr className="files-browse-table-head-row">
-                  {!isLocalFolder && (
-                    <th className="files-browse-table-head-cell files-browse-table-head-cell-checkbox">
-                      <input
-                        type="checkbox"
-                        aria-label="Select all"
-                        checked={allSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = someSelected;
-                        }}
-                        onChange={toggleSelectAll}
-                        className="files-browse-table-checkbox"
-                      />
-                    </th>
-                  )}
+                  <th className="files-browse-table-head-cell files-browse-table-head-cell-checkbox">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all"
+                      checked={allSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = someSelected;
+                      }}
+                      onChange={toggleSelectAll}
+                      className="files-browse-table-checkbox"
+                    />
+                  </th>
                   <th className="files-browse-table-head-cell">
                     <SortHeader column="name" label="Name" />
                   </th>
@@ -2100,28 +2132,26 @@ function FilesBrowser() {
                 {pagedFiles.map((file) => (
                   <tr
                     key={file.path}
-                    draggable={!isLocalFolder}
+                    draggable
                     onDragStart={(e) => handleRowDragStart(e, file)}
-                    onDragOver={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDragOver(e, file) : undefined}
-                    onDragLeave={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDragLeave(e, file) : undefined}
-                    onDrop={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDrop(e, file) : undefined}
+                    onDragOver={file.type === 'folder' ? (e) => handleFolderDragOver(e, file) : undefined}
+                    onDragLeave={file.type === 'folder' ? (e) => handleFolderDragLeave(e, file) : undefined}
+                    onDrop={file.type === 'folder' ? (e) => handleFolderDrop(e, file) : undefined}
                     className={cn(
                       'files-browse-table-row',
                       selectedFiles.includes(file.path) && 'is-selected',
                       dropTargetPath === file.path && 'is-drop-target',
                     )}
                   >
-                    {!isLocalFolder && (
-                      <td className="files-browse-table-cell files-browse-table-cell-checkbox">
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${file.name}`}
-                          checked={selectedFiles.includes(file.path)}
-                          onChange={() => toggleSelectFile(file.path)}
-                          className="files-browse-table-checkbox"
-                        />
-                      </td>
-                    )}
+                    <td className="files-browse-table-cell files-browse-table-cell-checkbox">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${file.name}`}
+                        checked={selectedFiles.includes(file.path)}
+                        onChange={() => toggleSelectFile(file.path)}
+                        className="files-browse-table-checkbox"
+                      />
+                    </td>
                     <td className="files-browse-table-cell">
                       <button
                         type="button"
@@ -2156,19 +2186,19 @@ function FilesBrowser() {
                   sizeLabel={formatSize(file.size)}
                   dateLabel={formatDate(file.modified)}
                   onOpen={() => openFileItem(file)}
-                  onDragStart={!isLocalFolder ? (e) => handleRowDragStart(e, file) : undefined}
+                  onDragStart={(e) => handleRowDragStart(e, file)}
                   onDragOver={
-                    file.type === 'folder' && !isLocalFolder
+                    file.type === 'folder'
                       ? (e) => handleFolderDragOver(e, file)
                       : undefined
                   }
                   onDragLeave={
-                    file.type === 'folder' && !isLocalFolder
+                    file.type === 'folder'
                       ? (e) => handleFolderDragLeave(e, file)
                       : undefined
                   }
                   onDrop={
-                    file.type === 'folder' && !isLocalFolder
+                    file.type === 'folder'
                       ? (e) => handleFolderDrop(e, file)
                       : undefined
                   }
@@ -2183,11 +2213,11 @@ function FilesBrowser() {
               {pagedFiles.map((file) => (
                 <div
                   key={file.path}
-                  draggable={!isLocalFolder}
+                  draggable
                   onDragStart={(e) => handleRowDragStart(e, file)}
-                  onDragOver={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDragOver(e, file) : undefined}
-                  onDragLeave={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDragLeave(e, file) : undefined}
-                  onDrop={file.type === 'folder' && !isLocalFolder ? (e) => handleFolderDrop(e, file) : undefined}
+                  onDragOver={file.type === 'folder' ? (e) => handleFolderDragOver(e, file) : undefined}
+                  onDragLeave={file.type === 'folder' ? (e) => handleFolderDragLeave(e, file) : undefined}
+                  onDrop={file.type === 'folder' ? (e) => handleFolderDrop(e, file) : undefined}
                   className={cn(
                     'files-browse-grid-item',
                     dropTargetPath === file.path && 'is-drop-target',
@@ -2214,13 +2244,7 @@ function FilesBrowser() {
                           if (starred) {
                             unstarItem(file.path, workspaceId);
                           } else {
-                            starItem({
-                              path: file.path,
-                              name: file.name,
-                              type: file.type,
-                              source: activeSource,
-                              workspaceId,
-                            });
+                            starFile(file);
                           }
                         }}
                         className={cn(

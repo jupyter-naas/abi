@@ -9,6 +9,9 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     MessageModel,
     SecretModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.secondary.message_facts import (
+    write_message_facts,
+)
 from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
     ChatAgentRecord,
     ChatConversationRecord,
@@ -263,18 +266,21 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
         agent: str | None = None,
         metadata_: str | None = None,
     ) -> None:
-        self.db.add(
-            MessageModel(
-                id=message_id,
-                conversation_id=conversation_id,
-                role=role,
-                content=content,
-                agent=agent,
-                created_at=created_at,
-                metadata_=metadata_,
-            )
+        message = MessageModel(
+            id=message_id,
+            conversation_id=conversation_id,
+            role=role,
+            content=content,
+            agent=agent,
+            created_at=created_at,
+            metadata_=metadata_,
         )
+        self.db.add(message)
         await self.db.flush()
+        # Feedback and tools, for analytics to count in SQL (``message_facts``).
+        if metadata_:
+            await write_message_facts(self.db, message, metadata_, replace=False)
+            await self.db.flush()
 
     async def delete_messages_by_conversation(self, conversation_id: str) -> None:
         await self.db.execute(
@@ -296,6 +302,7 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
         if row is None:
             return False
         row.metadata_ = metadata
+        await write_message_facts(self.db, row, metadata, replace=True)
         await self.db.flush()
         return True
 

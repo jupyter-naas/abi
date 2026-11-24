@@ -3,8 +3,9 @@
 * **list**: every Nexus account, and everyone invited who has none yet (their
   pending invitations, by email), with their IAM id, whether they signed in, whether
   they are deactivated, whether they are a platform admin and their organizations;
-* **invite** through Nexus's invitations (``services/invites``), the one way
-  someone is invited: the identity provider makes the person exist;
+* **invite** through the platform's people (``services/people``), the one way
+  someone is invited: the identity provider makes the person exist, and their
+  account is ``invited`` until they sign in;
 * **rename**, and make a platform admin or not;
 * **deactivate** and **reactivate**: IAM suspends the user (no sign-in, no API
   call, no key) and the provider disables the account; data and memberships stay;
@@ -44,6 +45,7 @@ from naas_abi.apps.nexus.apps.api.app.services.accounts.port import (
     NexusUser,
     OrganizationRole,
     PendingInvitation,
+    PeopleGateway,
     Principal,
     Provider,
     ProviderAccount,
@@ -98,12 +100,14 @@ class AccountService:
         invitations: InvitationsGateway,
         audit: AdminAuditLog,
         *,
+        people: PeopleGateway,
         clock: Clock,
     ) -> None:
         self.store = store
         self.access = access
         self.identity = identity
         self.invitations = invitations
+        self.people = people
         self.audit = audit
         self._clock = clock
 
@@ -225,44 +229,31 @@ class AccountService:
         name: str | None,
         provider: str | None,
     ) -> Invited:
+        """Make the person's account, ``invited`` until they sign in, with no role
+        (``services/people``). An address that has an account is refused."""
         email = email.lower().strip()
         if await self.store.user_by_email(email) is not None:
             raise AccountExistsError(f"{email} already has an account")
         await self._not_a_retired_identity(email, provider, actor=actor)
-        outcome = await self._audited(
+        created = await self._audited(
             actor,
             "invite_user",
             invited_id(email),
             f"invited {email}",
-            lambda: self.invitations.invite(
+            lambda: self.people.create(
                 email=email, name=name, provider=provider, by=actor, inviter_name=actor_name
             ),
         )
-        rows = [i for i in await self.invitations.pending() if i.email.lower() == email]
-        warning = _text(outcome.get("warning"))
-        account = (
-            await self._invited(email, rows, actor=actor, warning=warning)
-            if rows
-            else Account(
-                id=invited_id(email),
-                kind="invitation",
-                email=email,
-                name=name or email.split("@", 1)[0],
-                status="invited",
-                created_at=self._clock(),
-                provider=_text(outcome.get("provider")),
-                warning=warning,
-            )
-        )
-        if name and account.name != name:
-            account = replace(account, name=name)
+        user = await self.store.get_user(created.user_id)
+        if user is None:
+            raise AccountNotFoundError(created.user_id)
         return Invited(
-            account=account,
-            user_created=bool(outcome.get("user_created")),
-            sign_in_email_sent=bool(outcome.get("sign_in_email_sent")),
-            provisioning_skipped=bool(outcome.get("provisioning_skipped")),
-            renewed=bool(outcome.get("renewed")),
-            warning=warning,
+            account=await self._account_of(user, warning=created.warning),
+            user_created=created.user_created,
+            sign_in_email_sent=created.sign_in_email_sent,
+            provisioning_skipped=created.provisioning_skipped,
+            renewed=False,
+            warning=created.warning,
         )
 
     # =========================================================================
@@ -504,11 +495,11 @@ class AccountService:
             else _provider(found, user.idp_provider, providers)
         )
         warning = None
-        if user.signed_in and provider_account is not None and provider_account.managed_in_provider:
+        if user.bound and provider_account is not None and provider_account.managed_in_provider:
             warning = _kept_identity(provider_account.display_name)
         if theirs:
             warning = _joined(
-                [warning or "", *(_theirs_stays(a.provider, bound=user.signed_in) for a in theirs)]
+                [warning or "", *(_theirs_stays(a.provider, bound=user.bound) for a in theirs)]
             )
         return DeletionPlan(
             account=account,
@@ -569,11 +560,11 @@ class AccountService:
                 found, lambda a: self.identity.delete(a.provider, a.subject, by=actor)
             )
             kept = plan.warning or (
-                _kept_identity("Their identity provider") if problems and user.signed_in else None
+                _kept_identity("Their identity provider") if problems and user.bound else None
             )
             if theirs and not plan.warning:
                 kept = _joined(
-                    [kept or "", *(_theirs_stays(a.provider, bound=user.signed_in) for a in theirs)]
+                    [kept or "", *(_theirs_stays(a.provider, bound=user.bound) for a in theirs)]
                 )
             return _joined([*lookups, problems or "", kept or ""])
 
@@ -782,10 +773,6 @@ def _provider(
     if name is None:
         return None
     return providers.get(name) or Provider(name, name, managed_in_provider=False)
-
-
-def _text(value: object) -> str | None:
-    return str(value) if value else None
 
 
 def _valid_name(name: str) -> str:

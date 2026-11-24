@@ -1,14 +1,15 @@
 """FilesAgent tools for Nexus Files (workspace object storage browser).
 
-Same operations as ``/api/files`` for the two personal-scope drives:
-``workspace`` (``naas_abi/workspace-drive/<workspace_id>/...``, membership
-checked) and ``my_drive`` (``naas_abi/my-drive/<user_id>/...``). Paths go
-through the adapter's own scoping helpers, so a tool cannot step outside the
-caller's drive. Platform and system drives need extra per-workspace flags and
-are left to the UI.
+Same operations as ``/api/files`` for two of the File System's views:
+Workspace Files (``workspace``, ``naas_abi/workspace-drive/<workspace_id>/...``,
+membership checked) and My Files (``my_drive``,
+``naas_abi/my-drive/<user_id>/...``). Paths go through the adapter's own
+scoping helpers, so a tool cannot step outside the caller's view. Organization
+Files, Platform Files and System Files are left to the UI, where IAM decides
+who may open each.
 
 The file or folder open in the Files browser arrives as the open feature
-resource (kind ``file`` or ``folder``; My drive items are prefixed
+resource (kind ``file`` or ``folder``; My Files items are prefixed
 ``my_drive:``), so tools default to it.
 """
 
@@ -61,7 +62,7 @@ def _scoped(
     except HTTPException as exc:
         return {"error": str(exc.detail)}
     if resolved_workspace != workspace_id:
-        return {"error": "Path is outside this workspace's drive."}
+        return {"error": "Path is outside Workspace Files."}
     return scoped
 
 
@@ -69,8 +70,8 @@ _MY_DRIVE_PREFIX = "my_drive:"
 
 
 def _split_drive(value: str, drive: str = "") -> tuple[str, str]:
-    """(drive, path). The pane sends My drive items as ``my_drive:<path>``;
-    a full ``naas_abi/my-drive/...`` key also means My drive."""
+    """(drive, path). The pane sends My Files items as ``my_drive:<path>``;
+    a full ``naas_abi/my-drive/...`` key also means My Files."""
     text = (value or "").strip()
     if text.startswith(_MY_DRIVE_PREFIX):
         return "my_drive", text[len(_MY_DRIVE_PREFIX) :]
@@ -92,9 +93,9 @@ def _domain_error(exc: Exception) -> dict[str, str] | None:
 def files_tools() -> list[BaseTool]:
     @tool
     def list_files(path: str = "", drive: str = "", query: str = "") -> Any:
-        """List a folder in the workspace drive (default) or my_drive.
+        """List a folder in Workspace Files (default) or My Files (drive="my_drive").
 
-        Omit path to list the folder open in the Files browser, else the drive
+        Omit path to list the folder open in the Files browser, else the view's
         root. query filters names in this folder. Rows: name, path (full
         storage key), type, size, modified.
         """
@@ -142,7 +143,7 @@ def files_tools() -> list[BaseTool]:
 
     @tool
     def read_text_file(path: str = "") -> Any:
-        """Read a text file (UTF-8) from the workspace drive or my_drive.
+        """Read a text file (UTF-8) from Workspace Files or My Files (my_drive:).
 
         Omit path to read the file open in the Files browser. Binary files
         are refused; long files are truncated.
@@ -183,8 +184,8 @@ def files_tools() -> list[BaseTool]:
 
     @tool
     def write_text_file(path: str, content: str, overwrite: bool = False) -> Any:
-        """Create a text file in the workspace drive (prefix the path with
-        my_drive: for My drive). Set overwrite=True to replace an existing file.
+        """Create a text file in Workspace Files (prefix the path with
+        my_drive: for My Files). Set overwrite=True to replace an existing file.
 
         A bare name lands in the folder open in the Files browser.
         """

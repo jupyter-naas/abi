@@ -71,6 +71,7 @@ side is [`services/iam/AGENTS.md`](../naas-abi-core/naas_abi_core/services/iam/A
 | `invite EMAIL [--org O --org-role R] [--workspace W --role R] [--provider P] [--name N] [--no-provision]` | Pending grants (`builtin.<role>` at the org or workspace scope) that attach at the person's first sign-in with that address verified, and an account made at the provider (`identity.provision_user`). With a provider that manages its own people (`provisioning: none`) only the grants are kept. A failure takes back the grants this call created |
 | `invitation list [--email] [--provider]`, `invitation revoke GRANT_ID` | The pending grants; withdrawing one does not undo a membership already made |
 | `group bind PROVIDER GROUP --role R (--org O \| --workspace W [--org O])`, `unbind`, `list [--provider]` | Give the members of an identity provider's group (a claim value) a role at an org or workspace |
+| `migrate-access --dry-run [--database-url URL] [--json]` | The report of Nexus's access move (`access_model_v1`, #1587: per-person attachments become groups) on a copy of the project's IAM (read from its store, as the other `abi iam` commands: a client of IAM over NATS does not list everything the copy holds), with Nexus's database (`DATABASE_URL`, else the project's `nexus_config`) and the project's `nexus_config` (`migration.default_workspace_admin`); writes nothing. Without `--dry-run` it refuses: the move runs at Nexus's start |
 
 - Roles are `owner`, `admin`, `member`, `viewer`; `--org` / `--workspace` take the ids
   Nexus shows, turned into the containers Nexus registers in IAM:
@@ -129,6 +130,15 @@ match it fails and says to ask the login page for a code first. Per-project secr
 auth-callout seed) are generated into `.env` once and never defaulted
 (`admin_credentials.py`); `abi deploy local --regenerate` drops the keys of the old
 password login.
+
+### Pending invitations become invited users (`abi user migrate-invitations`)
+
+Nexus moves every pending invitation into an invited user once, at the start after the upgrade
+(`services/invites/migration.py` of the Nexus API, ADR `docs/adr/20261119_platform_user_directory.md`).
+`abi user migrate-invitations` lists those still pending (a dry run); `--apply` moves them, whatever the
+start recorded (a provider that did not answer then). Same `--database-url` as below; it opens the engine's
+IAM and identity like `abi user migrate`. Running it twice changes nothing; exit is an error while some
+failed or wait for their provider.
 
 ### Upgrading a project from the old login (`abi user migrate`)
 

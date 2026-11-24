@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from naas_abi_core.services.agent.context import agent_container, agent_user_id
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
+from naas_abi.apps.nexus.apps.api.app.services.people.port import Grant, WorkspaceAccess
 from naas_abi.tools import nexus_admin_tools as mod
 
 
@@ -97,7 +99,6 @@ def test_update_my_profile_writes_organization_and_job_title() -> None:
         id="user-1",
         email="a@b.c",
         name="Alice",
-        hashed_password="x",
         created_at=datetime(2026, 1, 1),
         organization="Acme",
         job_title="CTO",
@@ -124,8 +125,222 @@ def test_update_my_profile_writes_organization_and_job_title() -> None:
     auth.update_profile.assert_awaited_once_with(
         user_id="user-1",
         name=None,
-        email=None,
         organization="Acme",
         job_title="CTO",
         bio=None,
     )
+
+
+class _People:
+    """The people service the tools call: records what it was asked."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.asked: list[dict[str, Any]] = []
+        self.error = error
+
+    async def create_or_link(self, **kwargs: Any) -> Any:
+        from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+            CreateOrLinkResult,
+            PlatformUser,
+            UserStatus,
+        )
+
+        self.asked.append(kwargs)
+        if self.error is not None:
+            raise self.error
+        return CreateOrLinkResult(
+            user=PlatformUser(
+                "usr-9", kwargs["email"], None, UserStatus.ACTIVE, "builtin"
+            ),
+            created=False,
+            provisioned=False,
+            sign_in_email_sent=True,
+            warning=None,
+        )
+
+
+def _invoke_with(
+    people: Any,
+    tool: str,
+    args: dict[str, Any],
+    *,
+    limited: Any = None,
+    **services: Any,
+) -> Any:
+    async def fake_with_db(fn):  # type: ignore[no-untyped-def]
+        return await fn(MagicMock())
+
+    limits = AsyncMock(return_value=limited)
+
+    auth = MagicMock()
+    auth.get_user = AsyncMock(return_value=MagicMock(email="me@naas.ai", name="Me"))
+    token = agent_user_id.set("user-admin")
+    try:
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch.object(mod, "_people_service", return_value=people)
+            )
+            stack.enter_context(patch.object(mod, "_auth_service", return_value=auth))
+            stack.enter_context(patch.object(mod, "_with_db", side_effect=fake_with_db))
+            stack.enter_context(patch.object(mod, "_invite_limits", limits))
+            for name, service in services.items():
+                stack.enter_context(patch.object(mod, name, return_value=service))
+            return _tools_by_name()[tool].invoke(args)
+    finally:
+        agent_user_id.reset(token)
+
+
+def _workspaces(role: str = "admin") -> MagicMock:
+    ws = MagicMock()
+    ws.get_workspace_role = AsyncMock(return_value=role)
+    ws.get_workspace = AsyncMock(
+        return_value=MagicMock(id="ws-1", organization_id="org-1")
+    )
+    return ws
+
+
+def test_invite_workspace_member_links_or_creates_with_the_workspace_role_only() -> (
+    None
+):
+    people = _People()
+
+    out = _invoke_with(
+        people,
+        "invite_workspace_member",
+        {"email": "Flo@Naas.ai", "workspace_id": "ws-1", "role": "viewer"},
+        _workspace_service=_workspaces(),
+    )
+
+    assert out["status"] == "added"
+    assert out["user"] == {
+        "id": "usr-9",
+        "email": "flo@naas.ai",
+        "name": None,
+        "status": "active",
+    }
+    assert "user_created" not in out and "created" not in out
+    (asked,) = people.asked
+    assert asked["grant"] == Grant(
+        "org-1", level="viewer", workspaces=(WorkspaceAccess("ws-1", False),)
+    )
+    assert asked["by"].id == "user-admin"
+    assert asked["organization_id"] == "org-1"
+
+
+def test_invite_organization_member_gives_the_level_and_workspace() -> None:
+    people = _People()
+    org = MagicMock()
+    org.get_organization_role = AsyncMock(return_value="admin")
+    org.list_all_workspaces = AsyncMock(return_value=[MagicMock(id="ws-1")])
+    org.get_organization_member = AsyncMock(return_value=None)
+
+    out = _invoke_with(
+        people,
+        "invite_organization_member",
+        {
+            "organization_id": "org-1",
+            "email": "a@naas.ai",
+            "workspace_id": "ws-1",
+            "workspace_role": "viewer",
+        },
+        _organization_service=org,
+    )
+
+    assert out["status"] == "added", out
+    (asked,) = people.asked
+    assert asked["grant"] == Grant(
+        "org-1", level="viewer", workspaces=(WorkspaceAccess("ws-1", False),)
+    )
+
+
+def test_invite_organization_member_makes_an_org_admin_never_an_owner() -> None:
+    people = _People()
+    org = MagicMock()
+    org.get_organization_role = AsyncMock(return_value="admin")
+    org.list_all_workspaces = AsyncMock(return_value=[])
+    org.get_organization_member = AsyncMock(return_value=None)
+
+    admin = _invoke_with(
+        people,
+        "invite_organization_member",
+        {"organization_id": "org-1", "email": "alice@example.com", "org_admin": True},
+        _organization_service=org,
+    )
+    owner = _invoke_with(
+        people,
+        "invite_organization_member",
+        {"organization_id": "org-1", "email": "bob@example.com", "role": "owner"},
+        _organization_service=org,
+    )
+
+    assert admin["status"] == "added", admin
+    (asked,) = people.asked
+    assert asked["grant"] == Grant("org-1", org_admin=True)
+    assert "no longer" in owner["error"]
+
+
+def test_a_refusal_of_the_people_service_is_reported_not_raised() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.people.port import AlreadyMemberError
+
+    out = _invoke_with(
+        _People(AlreadyMemberError("usr-9", "already")),
+        "invite_workspace_member",
+        {"email": "a@naas.ai", "workspace_id": "ws-1"},
+        _workspace_service=_workspaces(),
+    )
+
+    assert out == {"error": "Already a member", "email": "a@naas.ai"}
+
+
+def test_an_invitation_past_the_invite_limits_is_reported_and_nobody_is_asked() -> None:
+    people = _People()
+
+    out = _invoke_with(
+        people,
+        "invite_workspace_member",
+        {"email": "a@naas.ai", "workspace_id": "ws-1"},
+        limited={
+            "error": "Too many attempts. Please try again in 5 minutes.",
+            "email": "a@naas.ai",
+        },
+        _workspace_service=_workspaces(),
+    )
+
+    assert out["error"].startswith("Too many attempts")
+    assert people.asked == []
+
+
+def test_the_invite_limits_are_the_routes_own(monkeypatch) -> None:
+    """The asking user's and the address's counters of the invite route, and the
+    organization's day of invitation mail."""
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services import rate_limit
+
+    seen: list[tuple[Any, ...]] = []
+
+    async def counted(identifier, endpoint, *_args, **_kwargs):
+        seen.append((identifier, endpoint))
+
+    async def quota(organization_id, workspace_id):
+        seen.append(("quota", organization_id, workspace_id))
+
+    monkeypatch.setattr(rate_limit, "check_rate_limit", counted)
+    monkeypatch.setattr(rate_limit, "check_invitation_mail_quota", quota)
+
+    out = asyncio.run(
+        mod._invite_limits(
+            "user-admin",
+            "a@naas.ai",
+            endpoint="/api/workspaces/members/invite",
+            organization_id="org-1",
+            workspace_id="ws-1",
+        )
+    )
+
+    assert out is None
+    assert seen == [
+        ("user:user-admin", "/api/workspaces/members/invite"),
+        ("email:a@naas.ai", "/api/workspaces/members/invite"),
+        ("quota", "org-1", "ws-1"),
+    ]

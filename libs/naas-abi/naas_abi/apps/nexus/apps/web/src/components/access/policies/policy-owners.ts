@@ -1,11 +1,14 @@
 /**
- * Who owns a policy listed on a Roles & permissions page, as the page shows it: the owner's
- * name (its containers named as the caller may list them, `GET /resources`), what the caller
- * may do with the owner's policies (`GET /access?scope=<owner>`), and the owner's own Roles &
- * permissions page, opened on the policy. A policy is edited at its owner, wherever it is listed.
+ * Who owns a policy listed on a Policies page, as the page shows it: the owner's name (its
+ * containers named as the caller may list them, `GET /resources`), what the caller may do with
+ * the owner's policies (`GET /access?scope=<owner>`), and the policy's page at its owner. A
+ * policy is edited at its owner, wherever it is listed.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { IamAdminApi } from '@/lib/iam-admin/api';
+import { readIamAccess } from '@/lib/iam-admin/use-access';
+import { usePermissionRevision, usePermissionSessionKey } from '@/lib/permission-cache';
+import { accessPathAt } from '../access-paths';
 import { PLATFORM, parseScope, type ContainerStep } from '../access-scope';
 import { viewFlagActive } from '@/lib/view-flag';
 
@@ -15,7 +18,7 @@ export type PolicyOwner = {
   /** "Workspace Alpha (Acme)", "Organization Acme", "Platform": the ids while names are not
    *  known, or when the caller may not list them. */
   label: string;
-  /** Whether the owner's Roles & permissions page is linked (``ownerHref``): another level's,
+  /** Whether the policy's page at its owner is linked (``ownerHref``): another level's,
    *  where the caller may manage something. */
   opens: boolean;
   /** At the owner: IAM's answer, false until known. */
@@ -62,24 +65,10 @@ export function ownedBy(label: string): string {
   return label === 'Platform' ? 'Owned by the platform' : `Owned by ${label[0].toLowerCase()}${label.slice(1)}`;
 }
 
-/** The owner's Roles & permissions page, on its Policies opened at ``policyId``: the platform's,
- *  an organization's or a workspace's; none for a container another module declares. */
+/** The owner's Policies, on the page of ``policyId``: the platform's, an organization's or a
+ *  workspace's; none for a container another module declares. */
 export function ownerHref(scope: string | null | undefined, policyId?: string): string | null {
-  const owner = scope ?? PLATFORM;
-  const parsed = parseScope(owner);
-  if (!parsed || parsed.below) return null;
-  const last = parsed.containers[parsed.containers.length - 1];
-  let path: string | null = null;
-  if (!last) path = '/settings/roles';
-  else if (last.service === 'nexus' && last.type === 'organization') {
-    path = `/organizations/${encodeURIComponent(last.id)}/settings/roles`;
-  } else if (last.service === 'nexus' && last.type === 'workspace') {
-    path = `/workspace/${encodeURIComponent(last.id)}/settings/permissions`;
-  }
-  if (!path) return null;
-  const query = new URLSearchParams({ section: 'policies' });
-  if (policyId) query.set('policy', policyId);
-  return `${path}?${query.toString()}`;
+  return accessPathAt(scope, 'policies', policyId);
 }
 
 /** The containers to name for ``scopes``: each step of each, once (a scope below a container,
@@ -112,9 +101,9 @@ export function actionsKey(scope: string | null | undefined): string {
 }
 
 /** IAM's answer at a scope, or null when it could not be read (asked again later). */
-async function actionsAt(api: IamAdminApi, scope: string): Promise<Record<string, boolean> | null> {
+async function actionsAt(api: IamAdminApi, scope: string, refresh = false): Promise<Record<string, boolean> | null> {
   try {
-    const view = await api.access(scope === PLATFORM ? undefined : scope);
+    const view = await readIamAccess(api, scope === PLATFORM ? undefined : scope, refresh);
     return view?.actions ?? {};
   } catch {
     return null;
@@ -131,13 +120,15 @@ const sorted = (scopes: (string | null | undefined)[]) => [...new Set(scopes.map
  */
 function useAnswers<T>(
   keys: string[],
-  fetch: (key: string) => Promise<T | null>,
+  fetch: (key: string, refresh: boolean) => Promise<T | null>,
   reload: number,
-  deps: unknown[],
+  api: IamAdminApi,
 ): Record<string, T> {
-  const [found, setFound] = useState<Record<string, T>>({});
+  const session = usePermissionSessionKey();
+  const revision = usePermissionRevision();
+  const [answer, setAnswer] = useState<{ session: string; api: IamAdminApi; found: Record<string, T> }>({ session, api, found: {} });
   const asked = useRef(new Set<string>());
-  const round = useRef(reload);
+  const round = useRef({ reload, session, revision, api });
   const mounted = useRef(true);
   useEffect(
     () => () => {
@@ -147,8 +138,9 @@ function useAnswers<T>(
   );
   useEffect(() => {
     mounted.current = true;
-    if (round.current !== reload) {
-      round.current = reload;
+    const refresh = round.current.reload !== reload;
+    if (refresh || round.current.session !== session || round.current.revision !== revision || round.current.api !== api) {
+      round.current = { reload, session, revision, api };
       asked.current.clear();
     }
     for (const key of keys) {
@@ -156,19 +148,19 @@ function useAnswers<T>(
       asked.current.add(key);
       // An answer from before a reload never overwrites a newer one.
       const asking = round.current;
-      void fetch(key).then((answer) => {
+      void fetch(key, refresh).then((value) => {
         if (!mounted.current || round.current !== asking) return;
-        if (answer === null) {
+        if (value === null) {
           asked.current.delete(key);
           return;
         }
-        setFound((current) => ({ ...current, [key]: answer }));
+        setAnswer((current) => ({ session, api, found: { ...(current.session === session && current.api === api ? current.found : {}), [key]: value } }));
       });
     }
     // Asked again only for a key not asked yet, or on a reload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keys.join('\n'), reload, ...deps]);
-  return found;
+  }, [keys.join('\n'), reload, session, revision, api]);
+  return answer.session === session && answer.api === api ? answer.found : {};
 }
 
 /**
@@ -184,7 +176,7 @@ export function useContainerNames(
   const containers = useMemo(() => new Map(containersOf(sorted(scopes)).map((c) => [c.container, c.step])), [scopes]);
   // A view is one workspace: the containers above it are outside it, and their names are not read.
   const keys = useMemo(() => (viewFlagActive() ? [] : [...containers.keys()]), [containers]);
-  const found = useAnswers(keys, (container) => nameOf(api, container, containers.get(container)!), reload, [api]);
+  const found = useAnswers(keys, (container) => nameOf(api, container, containers.get(container)!), reload, api);
   // A container the caller may not list keeps its id: no name for it.
   return useMemo(() => Object.fromEntries(Object.entries(found).filter(([, name]) => name)), [found]);
 }
@@ -211,7 +203,7 @@ export function useActionsAt(
       ),
     [scopes, here],
   );
-  const found = useAnswers(keys, (scope) => actionsAt(api, scope), reload, [api]);
+  const found = useAnswers(keys, (scope, refresh) => actionsAt(api, scope, refresh), reload, api);
   return useCallback(
     (scope: string | null | undefined) => {
       const at = actionsKey(scope);

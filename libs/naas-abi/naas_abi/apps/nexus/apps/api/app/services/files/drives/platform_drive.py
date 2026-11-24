@@ -1,6 +1,6 @@
-"""Set up the platform drive's staff system folders.
+"""Set up Platform Files' staff system folders.
 
-``naas_abi/platform-drive/`` gets the same nine folders as a workspace drive
+``naas_abi/platform-drive/`` gets the same nine folders as Workspace Files
 (``personnel/``, ``intelligence/``, ... ``external/``), each with its
 ``README.md``. They are created once, on API boot. A marker under
 ``naas_abi/.scaffolded/platform-drive/`` records it, so a folder someone
@@ -31,13 +31,13 @@ def has_platform_staff_folders(storage: ObjectStorageService) -> bool:
 
 
 def create_platform_staff_folders(storage: ObjectStorageService) -> None:
-    """Create the nine staff folders on the platform drive, keeping anything already there."""
+    """Create the nine staff folders in Platform Files, keeping anything already there."""
     write_staff_folders(storage, platform_drive_root())
     storage.put_object(PLATFORM_STAFF_MARKER_ROOT, PLATFORM_STAFF_MARKER, b"")
 
 
 def ensure_platform_staff_folders(storage: ObjectStorageService) -> bool:
-    """Write the platform drive's staff folders if they were never created.
+    """Write Platform Files' staff folders if they were never created.
 
     Returns True when this call created them.
     """
@@ -48,7 +48,7 @@ def ensure_platform_staff_folders(storage: ObjectStorageService) -> bool:
 
 
 async def backfill_platform_drive(storage: ObjectStorageService) -> dict[str, int]:
-    """Create the platform drive's staff folders the first time this runs."""
+    """Create Platform Files' staff folders the first time this runs."""
 
     def _write() -> dict[str, int]:
         try:

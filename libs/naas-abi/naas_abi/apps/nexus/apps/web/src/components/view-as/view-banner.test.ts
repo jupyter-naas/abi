@@ -120,7 +120,7 @@ describe('the banner', () => {
 
   it('Stop ends the view and loads the page it was started from', async () => {
     useAuthStore.setState({ view: view() });
-    setViewFlag({ workspaceId: 'ws-alpha', returnTo: '/settings/roles?section=people&person=iam_dave' }, view().ends_at);
+    setViewFlag({ workspaceId: 'ws-alpha', returnTo: '/settings/users/iam_dave' }, view().ends_at);
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ stopped: true }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     mounted = await mount(ViewBanner, {});
@@ -131,7 +131,7 @@ describe('the banner', () => {
     expect(fetchMock.mock.calls[0][1].method).toBe('DELETE');
     expect(new Headers(fetchMock.mock.calls[0][1].headers).get('X-CSRF-Token')).toBe('csrf');
     expect(readViewFlag()).toBeNull();
-    expect(go).toHaveBeenCalledWith('/settings/roles?section=people&person=iam_dave');
+    expect(go).toHaveBeenCalledWith('/settings/users/iam_dave');
   });
 
   it('Stop falls back to the person’s page in the viewed workspace', async () => {
@@ -143,7 +143,7 @@ describe('the banner', () => {
     await mounted.click(mounted.host.querySelector('.view-banner-stop'));
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await settle();
-    expect(go).toHaveBeenCalledWith('/workspace/ws-alpha/settings/permissions?section=people&person=iam_dave');
+    expect(go).toHaveBeenCalledWith('/workspace/ws-alpha/settings/users/iam_dave');
   });
 
   it('stays in the view and says why when Stop fails', async () => {

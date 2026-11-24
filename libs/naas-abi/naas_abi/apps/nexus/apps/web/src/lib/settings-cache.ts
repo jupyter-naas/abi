@@ -1,8 +1,10 @@
 /**
  * The Components settings pages (agents, skills, models...) and Members read their API
  * data through the backend's 24h settings cache and show a Reload button to bypass it. The backend only
- * caches GET requests that carry this header, and the web app only sends it from those
- * pages, so every other page always reads live data.
+ * caches GET requests that carry this header. A read declared as a resource
+ * (`lib/resource-cache.ts`) states whether it sends it, whatever page is open; any other
+ * read sends it only from those pages (`shouldUseSettingsCache`), so every other page
+ * reads live data.
  */
 export const SETTINGS_CACHE_HEADER = 'X-Nexus-Cache';
 export const SETTINGS_CACHE_REFRESH_PATH = '/api/settings-cache/refresh';
@@ -16,7 +18,7 @@ export function isSettingsRoute(pathname: string): boolean {
 // The "Components" group of the workspace settings nav (components/shell/settings-nav.tsx),
 // plus Members.
 const CACHED_SETTINGS_ROUTE =
-  /^\/workspace\/[^/]+\/settings\/(?:agents|ontologies|graphs|search|skills|apps|models|drives|members)(?:\/|$)/;
+  /^\/workspace\/[^/]+\/settings\/(?:agents|ontologies|graphs|search|skills|apps|models|users)(?:\/|$)/;
 
 /** Settings pages (and their detail pages) that are cached and have a Reload button. */
 export function isCachedSettingsRoute(pathname: string): boolean {

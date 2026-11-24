@@ -268,8 +268,36 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     # -- groups ---------------------------------------------------------------------
 
     def _call_create_group(self, req: pb.CreateGroupRequest) -> pb.CreateGroupResponse:
-        record = self._iam.create_group(req.name, scope=_opt(req, "scope"))
+        record = self._iam.create_group(
+            req.name,
+            scope=_opt(req, "scope"),
+            membership_of=_opt(req, "membership_of"),
+            level=req.level,
+        )
         return pb.CreateGroupResponse(group=codec.principal_to_pb(record))
+
+    def _call_mark_group(self, req: pb.MarkGroupRequest) -> pb.MarkGroupResponse:
+        record = self._iam.mark_group(
+            req.group_id, membership_of=_opt(req, "membership_of"), level=req.level
+        )
+        return pb.MarkGroupResponse(group=codec.principal_to_pb(record))
+
+    def _call_list_memberships(
+        self, req: pb.ListMembershipsRequest
+    ) -> pb.ListMembershipsResponse:
+        return pb.ListMembershipsResponse(
+            memberships=[
+                codec.membership_to_pb(m)
+                for m in self._iam.list_memberships(req.principal_id)
+            ]
+        )
+
+    def _call_list_container_members(
+        self, req: pb.ListContainerMembersRequest
+    ) -> pb.ListContainerMembersResponse:
+        return pb.ListContainerMembersResponse(
+            principal_ids=self._iam.list_container_members(req.container)
+        )
 
     def _call_get_group(self, req: pb.GetGroupRequest) -> pb.GetGroupResponse:
         return pb.GetGroupResponse(
@@ -284,6 +312,10 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             groups=[codec.principal_to_pb(g) for g in page.items],
             next_after=page.next_after,
         )
+
+    def _call_update_group(self, req: pb.UpdateGroupRequest) -> pb.UpdateGroupResponse:
+        record = self._iam.update_group(req.group_id, name=req.name)
+        return pb.UpdateGroupResponse(group=codec.principal_to_pb(record))
 
     def _call_delete_group(self, req: pb.DeleteGroupRequest) -> pb.DeleteGroupResponse:
         return pb.DeleteGroupResponse(

@@ -17,6 +17,7 @@ from httpx import ASGITransport, AsyncClient
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.models import (
     AuthSessionModel,
+    InvitationModel,
     OrganizationModel,
     UserModel,
     WorkspaceModel,
@@ -26,10 +27,13 @@ from naas_abi.apps.nexus.apps.api.app.services.accounts.adapters.primary.account
     router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.accounts.adapters.secondary.engine import (
-    EngineAccessGateway,
+    EngineAccessGateway as AccountsAccessGateway,
 )
 from naas_abi.apps.nexus.apps.api.app.services.accounts.adapters.secondary.invitations import (
     InvitationsAdapter,
+)
+from naas_abi.apps.nexus.apps.api.app.services.accounts.adapters.secondary.people import (
+    PeopleAdapter,
 )
 from naas_abi.apps.nexus.apps.api.app.services.accounts.adapters.secondary.postgres import (
     AccountStorePostgres,
@@ -60,6 +64,26 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
 from naas_abi.apps.nexus.apps.api.app.services.invites.service_test import Mailer
+from naas_abi.apps.nexus.apps.api.app.services.people.adapters.secondary.engine import (
+    EngineAccessGateway,
+)
+from naas_abi.apps.nexus.apps.api.app.services.people.adapters.secondary.postgres import (
+    PeopleSecondaryAdapterPostgres,
+)
+from naas_abi.apps.nexus.apps.api.app.services.people.port import (
+    IdentityGateway as PeopleIdentityGateway,
+)
+from naas_abi.apps.nexus.apps.api.app.services.people.port import (
+    ProviderInfo,
+    ProvisioningFailedError,
+)
+from naas_abi.apps.nexus.apps.api.app.services.people.port import (
+    Provisioned as PeopleProvisioned,
+)
+from naas_abi.apps.nexus.apps.api.app.services.people.service import PeopleService
+from naas_abi.apps.nexus.apps.api.app.services.people.service_test import (
+    Mailer as PeopleMailer,
+)
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
 from naas_abi_core.services.identity.IdentityPorts import (
@@ -147,6 +171,30 @@ class Idp(DirectoryGateway, IdentityGateway):
         return True
 
 
+class PeopleIdp(PeopleIdentityGateway):
+    """The same provider, as the people service asks it."""
+
+    def __init__(self, idp: Idp) -> None:
+        self.idp = idp
+
+    async def providers(self):
+        provisioning = "none" if self.idp.managed else "builtin"
+        return [ProviderInfo("builtin", "Built-in", "https://idp", provisioning)], "builtin"
+
+    async def provision(self, provider, email, name, *, by=None):
+        if provider.managed_in_provider:
+            return None
+        try:
+            made = await self.idp.provision(provider, email, name, by=by)
+        except (ProviderUnavailableError, ProvisioningError) as exc:
+            # As the engine's adapter answers them.
+            raise ProvisioningFailedError(str(exc)) from exc
+        return PeopleProvisioned(subject=made.subject, created=made.created)
+
+    async def delete(self, provider, subject):
+        await self.idp.delete(provider, subject, by="api")
+
+
 USERS = ("root", "owner", "admin", "member", "viewer", "stranger", "operator")
 
 
@@ -221,7 +269,7 @@ async def api(team, nexus_db):
         if user != "viewer":
             idp.people[f"{user}@example.com"] = Person(f"sub-{user}", user.title())
     audit = MemoryAudit()
-    access = EngineAccessGateway()
+    access = AccountsAccessGateway()
 
     def service(db) -> AccountService:
         # As in production: the accounts and the invitations share the request's session.
@@ -233,12 +281,20 @@ async def api(team, nexus_db):
             sign_in_url=lambda email, provider: f"https://web/login?email={email}",
             clock=lambda: NOW,
         )
+        people = PeopleService(
+            PeopleSecondaryAdapterPostgres(db),
+            PeopleIdp(idp),
+            EngineAccessGateway(lambda: team.iam),
+            PeopleMailer(),
+            clock=lambda: NOW,
+        )
         return AccountService(
             AccountStorePostgres(db),
             access,
             idp,
             InvitationsAdapter(invitations),
             audit,
+            people=PeopleAdapter(people),
             clock=lambda: NOW,
         )
 
@@ -329,24 +385,94 @@ async def test_nobody_else_sees_the_directory(api, user):
         assert (await http.delete("/api/admin/users/member?confirm=x")).status_code == 403
 
 
+@pytest.mark.asyncio
+async def test_a_persons_access_is_read_from_their_groups(api, team):
+    """Platform › Users › person: "Platform access (automatic)" (#1589)."""
+    team.grant("member", "member", "abi:nexus:organization/org-1/nexus:workspace/ws-1")
+    async with api.as_("root") as http:
+        access = await http.get("/api/admin/users/member/access")
+        root = await http.get("/api/admin/users/root/access")
+        unknown = await http.get("/api/admin/users/nobody/access")
+    async with api.as_("member") as http:
+        refused = await http.get("/api/admin/users/member/access")
+    assert access.status_code == 200, access.text
+    body = access.json()
+    assert body["user_id"] == "member" and body["platform_admin"] is False
+    assert {"id": "ws-1", "name": "Research", "organization_id": "org-1", "admin": False} in (
+        body["workspaces"]
+    )
+    assert root.json()["platform_admin"] is True
+    assert unknown.status_code == 404
+    assert refused.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_persons_access_is_read_by_their_iam_id_without_the_directory(api, team):
+    """The person's page is opened by their IAM id (#1608): their access is read with
+    it, one request, never the whole directory to find their account first."""
+    team.grant("member", "member", "abi:nexus:organization/org-1/nexus:workspace/ws-1")
+    principal = team.principal("member")
+    assert principal != "member"  # an account linked from the old login
+    async with api.as_("root") as http:
+        by_account = await http.get("/api/admin/users/member/access")
+        by_principal = await http.get(f"/api/admin/users/{quote(principal)}/access")
+        unknown = await http.get("/api/admin/users/usr_00000000000000000000000000/access")
+    async with api.as_("member") as http:
+        refused = await http.get(f"/api/admin/users/{quote(principal)}/access")
+    assert by_principal.status_code == 200, by_principal.text
+    assert by_principal.json() == by_account.json()
+    assert by_principal.json()["user_id"] == "member"
+    assert by_principal.json()["principal_id"] == principal
+    assert unknown.status_code == 404
+    assert refused.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_account_has_no_access_page(api, team):
+    """As it is not in the directory the page used to search: "no account yet"."""
+    principal = team.principal("member")
+    async with api.as_("root") as http:
+        deleted = await http.delete("/api/admin/users/member?confirm=member@example.com")
+        assert deleted.status_code == 200, deleted.text
+        assert (await http.get("/api/admin/users/member/access")).status_code == 404
+        assert (await http.get(f"/api/admin/users/{quote(principal)}/access")).status_code == 404
+
+
 # -- invitations ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_an_invitation_is_listed_and_deactivated_at_the_provider(api):
+async def test_an_invitation_may_make_a_platform_admin(api):
+    async with api.as_("root") as http:
+        invited = await http.post(
+            "/api/admin/users/invite",
+            json={"email": "dana@example.com", "platform_admin": True},
+        )
+        plain = await http.post("/api/admin/users/invite", json={"email": "eve@example.com"})
+    assert invited.status_code == plain.status_code == 200, (invited.text, plain.text)
+    assert invited.json()["user"]["is_superadmin"] is True
+    assert plain.json()["user"]["is_superadmin"] is False
+
+
+@pytest.mark.asyncio
+async def test_an_invitation_makes_an_invited_account_deactivated_at_the_provider(api, team):
+    """The account exists from the invitation (its IAM user, its row, ``invited``),
+    before any sign-in."""
     async with api.as_("root") as http:
         invited = await http.post(
             "/api/admin/users/invite", json={"email": "Carl@Example.com", "name": "Carl"}
         )
         assert invited.status_code == 200, invited.text
         body = invited.json()
-        assert body["user_created"] and body["user"]["kind"] == "invitation"
-        assert body["user"]["id"] == "invited:carl@example.com"
-        assert body["user"]["status"] == "invited" and body["user"]["principal_id"] is None
+        user = body["user"]
+        assert body["user_created"] and user["kind"] == "account"
+        assert user["id"].startswith("usr_") and user["principal_id"] == user["id"]
+        assert user["status"] == "invited" and user["email"] == "carl@example.com"
         rows = {row["id"]: row for row in (await http.get("/api/admin/users")).json()}
-        assert rows["invited:carl@example.com"]["name"] == "Carl"
+        assert rows[user["id"]]["name"] == "Carl" and rows[user["id"]]["status"] == "invited"
+        assert not any(row["id"].startswith("invited:") for row in rows.values())
 
-        account = quote("invited:carl@example.com", safe="")
+        account = quote(user["id"], safe="")
         off = await http.post(f"/api/admin/users/{account}/deactivate")
         assert off.status_code == 200, off.text
         assert off.json()["deactivated"] is True
@@ -367,18 +493,42 @@ async def test_an_address_with_an_account_is_not_invited_again(api):
 
 
 @pytest.mark.asyncio
-async def test_an_invitation_is_deleted_with_its_account_at_the_provider(api):
+async def test_an_invited_account_is_deleted_with_its_account_at_the_provider(api):
     async with api.as_("root") as http:
-        await http.post("/api/admin/users/invite", json={"email": "dana@example.com"})
-        account = quote("invited:dana@example.com", safe="")
+        made = await http.post("/api/admin/users/invite", json={"email": "dana@example.com"})
+        user_id = made.json()["user"]["id"]
+        account = quote(user_id, safe="")
         plan = (await http.get(f"/api/admin/users/{account}/deletion")).json()
-        assert plan["blocked"] is None and plan["goes"]["invitations"] == 1
+        assert plan["blocked"] is None and plan["goes"]["invitations"] == 0
         assert plan["goes"]["provider_account"]["provider"] == "builtin"
         gone = await http.delete(f"/api/admin/users/{account}?confirm=dana@example.com")
         assert gone.status_code == 200, gone.text
         ids = {row["id"] for row in (await http.get("/api/admin/users")).json()}
-    assert "invited:dana@example.com" not in ids
+    assert user_id not in ids
     assert "dana@example.com" not in api.idp.people
+
+
+@pytest.mark.asyncio
+async def test_a_pending_invitation_of_before_is_still_listed_as_one(api, team):
+    """Invitations made before the account was (``services/invites``) stay listed,
+    by email, until they are moved (#1570)."""
+    async with api.db() as db:
+        db.add(
+            InvitationModel(
+                id="inv-1",
+                email="old@example.com",
+                provider="builtin",
+                status="pending",
+                grant_ids="[]",
+                created_at=NOW,
+                updated_at=NOW,
+            )
+        )
+        await db.commit()
+    async with api.as_("root") as http:
+        rows = {row["id"]: row for row in (await http.get("/api/admin/users")).json()}
+    assert rows["invited:old@example.com"]["kind"] == "invitation"
+    assert rows["invited:old@example.com"]["status"] == "invited"
 
 
 # -- deactivating and reactivating ------------------------------------------------------------
@@ -547,22 +697,27 @@ async def test_a_provider_failing_the_invitation_is_answered_not_a_500(api, fail
         response = await http.post("/api/admin/users/invite", json={"email": "fay@example.com"})
         ids = {row["id"] for row in (await http.get("/api/admin/users")).json()}
     assert response.status_code == status, response.text
-    assert "invited:fay@example.com" not in ids
+    assert ids == set(USERS)  # nothing was made
 
 
 @pytest.mark.asyncio
 async def test_an_invitee_at_a_provider_that_manages_its_people_is_deleted(api):
-    """Nothing to delete at the provider: the invitations go, as asked."""
+    """No account is made there: the row waits, unbound, for their first sign-in;
+    deleting it has nothing to delete at the provider."""
+    api.idp.managed = True
     async with api.as_("root") as http:
-        await http.post("/api/admin/users/invite", json={"email": "gus@example.com"})
-        api.idp.managed = True
-        account = quote("invited:gus@example.com", safe="")
+        made = await http.post("/api/admin/users/invite", json={"email": "gus@example.com"})
+        assert made.status_code == 200, made.text
+        user = made.json()["user"]
+        assert user["status"] == "invited" and not user["id"].startswith("usr_")
+        assert "gus@example.com" not in api.idp.people
+        account = quote(user["id"], safe="")
         plan = await http.get(f"/api/admin/users/{account}/deletion")
         assert plan.status_code == 200 and plan.json()["blocked"] is None
         gone = await http.delete(f"/api/admin/users/{account}?confirm=gus@example.com")
         assert gone.status_code == 200, gone.text
         ids = {row["id"] for row in (await http.get("/api/admin/users")).json()}
-    assert "invited:gus@example.com" not in ids
+    assert user["id"] not in ids
 
 
 @pytest.mark.asyncio
@@ -617,23 +772,24 @@ async def test_a_refused_superadmin_change_leaves_the_name_as_it_was(api, team):
 @pytest.mark.asyncio
 async def test_at_a_shared_realm_an_account_abi_did_not_make_stays_the_persons(api, team):
     """Eve's account existed in the realm when she was invited (the provider found it,
-    created nothing): deleting her invitation, or refusing to deactivate it, never
-    touches it. Member signed in with an account ABI never made: deactivating and
-    deleting end their access to ABI and leave that account as it is."""
+    created nothing): deactivating or deleting her invited account ends her access to
+    ABI and never touches it. Member signed in with an account ABI never made: the
+    same."""
     api.idp.own = False
     api.idp.people["eve@example.com"] = Person("sub-eve", "Eve")
     async with api.as_("root") as http:
         invited = await http.post("/api/admin/users/invite", json={"email": "eve@example.com"})
         assert invited.status_code == 200, invited.text
         assert invited.json()["user_created"] is False
-        eve = quote("invited:eve@example.com", safe="")
-        refused = await http.post(f"/api/admin/users/{eve}/deactivate")
-        assert refused.status_code == 400
-        assert "theirs, not ABI's" in refused.json()["detail"]
+        eve_id = invited.json()["user"]["id"]
+        eve = quote(eve_id, safe="")
+        off = await http.post(f"/api/admin/users/{eve}/deactivate")
+        assert off.status_code == 200, off.text
+        assert off.json()["deactivated"] is True and _status(team, eve_id) == "suspended"
+        assert "theirs, not ABI's" in off.json()["warning"]
         assert not api.idp.people["eve@example.com"].disabled
         plan = (await http.get(f"/api/admin/users/{eve}/deletion")).json()
         assert plan["goes"]["provider_account"] is None
-        assert "stays as it is" in plan["warning"]
         gone = await http.delete(f"/api/admin/users/{eve}?confirm=eve@example.com")
         assert gone.status_code == 200, gone.text
         assert "eve@example.com" in api.idp.people
@@ -661,7 +817,7 @@ async def test_at_a_shared_realm_an_account_abi_made_is_disabled_and_deleted(api
     async with api.as_("root") as http:
         invited = await http.post("/api/admin/users/invite", json={"email": "carl@example.com"})
         assert invited.json()["user_created"] is True
-        carl = quote("invited:carl@example.com", safe="")
+        carl = quote(invited.json()["user"]["id"], safe="")
         off = await http.post(f"/api/admin/users/{carl}/deactivate")
         assert off.status_code == 200, off.text
         assert api.idp.people["carl@example.com"].disabled

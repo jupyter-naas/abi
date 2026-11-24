@@ -367,6 +367,28 @@ def test_group_mappings_and_members_are_listed(h):
     assert h.iam.resolve_idp_groups("acme", ["Sales"]) == []
 
 
+def test_a_group_is_renamed_and_keeps_its_members(h):
+    sales = h.group("sales")
+    bob = h.user()
+    h.admin("add_group_member", sales.id, bob.id)
+    renamed = h.admin("update_group", sales.id, name="revenue")
+    assert (renamed.id, renamed.name, renamed.owner_scope) == (
+        sales.id,
+        "revenue",
+        sales.owner_scope,
+    )
+    assert h.admin("get_group", sales.id).name == "revenue"
+    assert h.admin("list_group_members", sales.id) == [bob.id]
+    assert h.admin("update_group", sales.id, name="revenue") == renamed
+    with pytest.raises(ValueError):
+        h.admin("update_group", sales.id, name="  ")
+    with pytest.raises(IAMNotFoundError):
+        h.admin("update_group", bob.id, name="x")
+    h.admin("delete_group", sales.id)
+    with pytest.raises(IAMNotFoundError):
+        h.admin("update_group", sales.id, name="again")
+
+
 # -- policies ---------------------------------------------------------------------------------
 
 

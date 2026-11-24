@@ -104,13 +104,11 @@ class _PlatformRow:
     self_: tuple[str, ...] = ()
 
 
+# No row of ``model_registry``: being a workspace's viewer or member reaches no
+# model. A model is a model set's (a policy on ``model/<canonical id>``, Nexus's
+# "Models · <set>"), and an agent's own model is decided by the agent's scope
+# (``model_registry/agent_models.py``).
 PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
-    _PlatformRow(
-        "model_registry",
-        ("model/*",),
-        viewer=("ListModels", "Resolve"),
-        member=("Chat", "ChatStream", "Embed"),
-    ),
     _PlatformRow(
         "discovery",
         ("module/*", "agent/*", "app/*"),
@@ -161,8 +159,8 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
             "object/naas_abi/my-drive/${principal.id}/*",
             "object/users/${principal.id}",
             "object/users/${principal.id}/*",
-            "object/naas_abi/platform-drive",
-            "object/naas_abi/platform-drive/*",
+            # ``naas_abi/platform-drive`` (Nexus's Platform Files) is no role's: a
+            # policy at the platform grants it, ``*Object`` there with Nexus's own.
         ),
         viewer=(
             "ListObjects",
@@ -454,6 +452,47 @@ def stored_platform_grants(
     ]
 
 
+@dataclass(frozen=True)
+class SelfGrant:
+    """A platform-level grant the deployment gives every user, beyond the
+    catalogs' ``self_`` rows: ``action`` (qualified) on ``resources`` (canonical
+    names). A first-party module's deployment setting gives them (creating a
+    personal workspace, when its configuration allows it)."""
+
+    action: str
+    resources: tuple[str, ...]
+
+
+def _self_grant_statements(
+    registry: CatalogRegistry, grants: Sequence[SelfGrant]
+) -> list[Statement]:
+    return [
+        Statement(
+            effect="Allow",
+            actions=(grant.action,),
+            resources=tuple(grant.resources),
+            sid=_sid("grantSelf", str(index)),
+        )
+        for index, grant in enumerate(grants)
+        if grant.resources and registry.is_registered(grant.action)
+    ]
+
+
+def stored_self_grants(self_policy: Policy | None) -> list[SelfGrant]:
+    """The ``SelfGrant`` list the stored ``builtin.self`` was generated from (its
+    ``GrantSelf…`` statements), so any IAM instance regenerating the managed
+    policies keeps them, as ``stored_platform_grants`` does for the platform's."""
+    if self_policy is None:
+        return []
+    prefix = _sid("grantSelf")
+    return [
+        SelfGrant(action, tuple(statement.resources))
+        for statement in self_policy.document.statements
+        if statement.effect == "Allow" and (statement.sid or "").startswith(prefix)
+        for action in statement.actions
+    ]
+
+
 # The built-in identity provider's admin app edits who a ``sub`` is (a user's
 # email, for one), which is who becomes the platform admin: only the engine
 # opens it. ``discovery:OpenApp`` on ``app/*`` comes with every workspace
@@ -654,6 +693,7 @@ def api_policy(registry: CatalogRegistry | None = None) -> Policy:
                 "iam:CreateGroup",
                 "iam:GetGroup",
                 "iam:ListGroups",
+                "iam:UpdateGroup",
                 "iam:DeleteGroup",
                 "iam:AddGroupMember",
                 "iam:RemoveGroupMember",
@@ -873,10 +913,13 @@ def module_bootstrap_policy() -> Policy:
 
 
 def builtin_policies(
-    registry: CatalogRegistry, platform_grants: Sequence[PlatformGrant] = ()
+    registry: CatalogRegistry,
+    platform_grants: Sequence[PlatformGrant] = (),
+    self_grants: Sequence[SelfGrant] = (),
 ) -> list[Policy]:
     """Every managed policy, generated from ``registry``; ``platform_grants`` add
-    the deployment's own platform-level resources to the platform policies."""
+    the deployment's own platform-level resources to the platform policies, and
+    ``self_grants`` what it gives every user to ``builtin.self``."""
     return [
         *(role_policy(role, registry) for role in ROLES),
         _managed(
@@ -896,7 +939,10 @@ def builtin_policies(
             SELF,
             "Self",
             "What every user may do on their own principal, keys and records.",
-            _platform_statements(registry, "self", "self"),
+            [
+                *_platform_statements(registry, "self", "self"),
+                *_self_grant_statements(registry, self_grants),
+            ],
         ),
         _managed(
             PLATFORM_VIEWER,

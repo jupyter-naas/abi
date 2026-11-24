@@ -1,6 +1,6 @@
-"""Account avatars in the user's own drive (see ``drive_settings``).
+"""Account avatars in the user's My Files (see ``drive_settings``).
 
-Layout (``naas_abi/my-drive/<user_id>/`` is the personal drive, see
+Layout (``naas_abi/my-drive/<user_id>/`` is the user's My Files, see
 ``files.drives.utils.drive_roots``)::
 
     .settings/avatar/avatar.<ext>                      the account picture

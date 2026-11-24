@@ -2,9 +2,9 @@ import type { IamAdminApi } from '@/lib/iam-admin/api';
 import type { AccessDirectory } from './access-directory';
 import type { AccessScope } from './access-scope';
 
-/** Opens a person's or a group's page (`?section=people&person=<id>`,
- *  `?section=groups&group=<id>`), from wherever a section names them. Each is absent where the
- *  caller is not shown its section (People & roles, Groups): a name is then not a link. */
+/** Opens a person's or a group's page (`access-paths.ts`), from wherever a page names them.
+ *  Each is absent where the caller opens no such page at the level (a person's under Users or
+ *  Members, Groups): a name is then not a link. */
 export type AccessNavigation = {
   person?: (id: string, label?: string) => void;
   group?: (id: string, label?: string) => void;

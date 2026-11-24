@@ -5,7 +5,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -42,26 +52,15 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MembershipDenied,
     UnknownUserError,
 )
-from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
-from naas_abi.apps.nexus.apps.api.app.services.invites.mail import send_added_notice
-from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
-    NoProviderError,
-    OrgInvitationExistsError,
-)
-from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
-from naas_abi.apps.nexus.apps.api.app.services.invites.views import (
-    PROVIDER_FAILURES,
-    invite_result,
-    provider_failure,
-)
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_of
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
-    OrganizationMemberAlreadyExistsError,
     OrganizationService,
 )
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+    RESEND_LIMIT,
     check_invitation_mail_quota,
     check_rate_limit,
     get_rate_limit_identifier,
@@ -86,6 +85,16 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.background_image impor
     background_image_url,
     fetch_image_url,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+    PeopleServicePort,
+    UserStatus,
+    added_result,
+    capability_group_items,
+    get_people_service,
+    people_errors,
+    people_status,
+    workspace_grant,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceCreateInput,
     WorkspaceMemberRecord,
@@ -95,7 +104,6 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     LastOwnerError,
-    WorkspaceMemberAlreadyExistsError,
     WorkspaceService,
     WorkspaceSlugAlreadyExistsError,
 )
@@ -103,13 +111,16 @@ from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
     resolve_stored_asset_url,
 )
 from naas_abi_core import logger
-from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 router.include_router(resource_access_router)
+
+
+# The workspace invite routes' counters (per inviting user, per address).
+_INVITE_LIMIT = "/api/workspaces/members/invite"
 
 
 def _member_denied(role: str) -> HTTPException:
@@ -129,20 +140,6 @@ def get_organization_service(db: AsyncSession = Depends(get_db)) -> Organization
     return OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
 
 
-def _get_email_service(request: Request) -> EmailService | None:
-    service = getattr(request.app.state, "email_service", None)
-    if service is not None:
-        return service
-    try:
-        from naas_abi import ABIModule
-
-        service = ABIModule.get_instance().engine.services.email
-        request.app.state.email_service = service
-        return service
-    except Exception:
-        return None
-
-
 class Workspace(BaseModel):
     id: str
     name: str
@@ -159,17 +156,12 @@ class Workspace(BaseModel):
     font_family: str | None = None
     description: str | None = None
     workspace_group: str | None = None
-    platform_drive_enabled: bool = False
-    system_drive_enabled: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
     organization_name: str | None = None
     organization_slug: str | None = None
     organization_logo_url: str | None = None
     organization_logo_rectangle_url: str | None = None
-    # Whether the caller may open the organization's drive (IAM's ``ListOrgFiles``
-    # there): the Files sidebar shows it only then; the files API decides each call.
-    organization_drive: bool = False
     current_user_role: str | None = None
     feature_flags: dict[str, bool] = Field(default_factory=dict)
 
@@ -186,6 +178,11 @@ class WorkspaceCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     slug: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$")
     organization_id: str | None = None
+    # The workspace's first admin (#1585): joins "<W> admins" and "<W> workspace".
+    # Defaults to the creator; in an organization, one of its people.
+    admin_id: str | None = None
+    # Deprecated: read as ``admin_id`` when that is not given (owner is no longer
+    # assigned).
     owner_id: str | None = None
     catalog_seed: WorkspaceCatalogSeedInput | None = None
     logo_url: str | None = None
@@ -213,8 +210,6 @@ class WorkspaceUpdate(BaseModel):
     font_family: str | None = None
     description: str | None = Field(default=None, max_length=200)
     workspace_group: str | None = Field(default=None, max_length=100)
-    platform_drive_enabled: bool | None = None
-    system_drive_enabled: bool | None = None
 
 
 class WorkspaceMember(BaseModel):
@@ -229,18 +224,74 @@ class WorkspaceMember(BaseModel):
     # Their IAM principal, which the access pages link to (an account linked from
     # the old login has another id there).
     principal_id: str | None = None
+    # "invited" until their first sign-in, then "active".
+    status: str = "active"
+    # Workspace · Level (#1585): their level ("member", "viewer"), one choice for every
+    # workspace; ``role`` "admin" when they administer this one. None: a role of
+    # before, held directly.
+    level: str | None = None
 
 
-class WorkspaceMemberInvite(BaseModel):
+class MemberProfileInput(BaseModel):
+    """What the invite sets about the person in the workspace's organization."""
+
+    organization: str | None = Field(default=None, max_length=200)
+    job_title: str | None = Field(default=None, max_length=100)
+    bio: str | None = Field(default=None, max_length=2000)
+    service_line: str | None = Field(default=None, max_length=200)
+    country: str | None = Field(default=None, max_length=100)
+    interest: str | None = Field(default=None, max_length=1000)
+
+
+class WorkspaceAccessInput(BaseModel):
+    """What a person is given in the workspace (#1589): their level (None: keep
+    theirs; someone with none is a Member), whether they administer it, and the
+    capability groups (ids) they join. ``role`` is the body of before, read when
+    ``level`` and ``admin`` are absent (owner is refused)."""
+
+    level: str | None = Field(default=None, pattern=r"^(viewer|member)$")
+    admin: bool | None = None
+    capabilities: list[str] = Field(default_factory=list, max_length=20)
+    role: str | None = Field(default=None, pattern=r"^(owner|admin|member|viewer)$")
+    # Customer policies are no longer attached to a person (#1589): refused.
+    policy_ids: list[str] = Field(default_factory=list, max_length=20)
+
+
+class WorkspaceMemberInvite(WorkspaceAccessInput):
     email: str = Field(..., min_length=3, max_length=255)
-    role: str = Field(default="member", pattern=r"^(owner|admin|member|viewer)$")
     name: str | None = Field(default=None, min_length=1, max_length=120)
     # The identity provider to invite through; by default the one the email's
     # domain routes to, else the default provider.
     provider: str | None = Field(default=None, min_length=1, max_length=32)
-    # Customer policies the new member gets at this workspace beside the role
-    # (no role brings a feature: "Features of member", say).
-    policy_ids: list[str] = Field(default_factory=list, max_length=20)
+    profile: MemberProfileInput | None = None
+
+
+class WorkspaceMemberAdd(WorkspaceAccessInput):
+    """Someone of the organization's directory, added to the workspace."""
+
+    user_id: str = Field(..., min_length=1, max_length=255)
+
+
+class WorkspaceMemberChange(BaseModel):
+    """A member's level (it applies in every workspace they work in) and whether
+    they administer this workspace; ``role``, the body of before."""
+
+    level: str | None = Field(default=None, pattern=r"^(viewer|member)$")
+    admin: bool | None = None
+    role: str | None = None
+
+
+class WorkspaceMemberCandidate(BaseModel):
+    user_id: str
+    name: str | None = None
+    email: str
+    avatar: str | None = None
+    status: str
+    org_role: str | None = None
+
+
+class WorkspaceMemberCandidates(BaseModel):
+    items: list[WorkspaceMemberCandidate]
 
 
 class InferenceServer(BaseModel):
@@ -296,19 +347,11 @@ async def _feature_flags(
     )
 
 
-async def _organization_drives(user: Any, records: list[WorkspaceRecord]) -> set[str]:
-    """The organizations of ``records`` whose drive the user may open."""
-    return await user_features.organization_drives(
-        user, {r.organization_id for r in records if r.organization_id}
-    )
-
-
 def _to_schema(
     record: WorkspaceRecord,
     current_user_role: str | None,
     *,
     feature_flags: dict[str, bool] | None = None,
-    organization_drives: set[str] | None = None,
 ) -> Workspace:
     return Workspace(
         id=record.id,
@@ -326,15 +369,12 @@ def _to_schema(
         font_family=record.font_family,
         description=record.description,
         workspace_group=record.workspace_group,
-        platform_drive_enabled=record.platform_drive_enabled,
-        system_drive_enabled=record.system_drive_enabled,
         created_at=record.created_at,
         updated_at=record.updated_at,
         organization_name=record.organization_name,
         organization_slug=record.organization_slug,
         organization_logo_url=record.organization_logo_url,
         organization_logo_rectangle_url=record.organization_logo_rectangle_url,
-        organization_drive=record.organization_id in (organization_drives or set()),
         current_user_role=current_user_role,
         # No role brings a feature: without IAM's answer, none is shown.
         feature_flags=feature_flags
@@ -357,14 +397,8 @@ async def list_workspaces(
         rows = [row for row in rows if row.id == view.workspace_id]
     roles = await service.effective_roles(current_user.id, rows)
     flags = await _feature_flags(current_user, list(rows)) or {}
-    drives = await _organization_drives(current_user, list(rows))
     return [
-        _to_schema(
-            row,
-            role,
-            feature_flags=flags.get(row.id),
-            organization_drives=drives,
-        )
+        _to_schema(row, role, feature_flags=flags.get(row.id))
         for row, role in zip(rows, roles, strict=False)
     ]
 
@@ -381,12 +415,7 @@ async def get_workspace(
     if row is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
     flags = await _feature_flags(current_user, [row]) or {}
-    return _to_schema(
-        row,
-        role,
-        feature_flags=flags.get(row.id),
-        organization_drives=await _organization_drives(current_user, [row]),
-    )
+    return _to_schema(row, role, feature_flags=flags.get(row.id))
 
 
 @router.get("/slug/{slug}", dependencies=[declares("GetWorkspace")])
@@ -406,12 +435,7 @@ async def get_workspace_by_slug(
     await authz.require("GetWorkspace", user=current_user, workspace=row.id)
     role = await service.get_workspace_role(current_user.id, row.id)
     flags = await _feature_flags(current_user, [row]) or {}
-    return _to_schema(
-        row,
-        role,
-        feature_flags=flags.get(row.id),
-        organization_drives=await _organization_drives(current_user, [row]),
-    )
+    return _to_schema(row, role, feature_flags=flags.get(row.id))
 
 
 async def _undo_create(service: WorkspaceService, record: WorkspaceRecord) -> None:
@@ -447,19 +471,19 @@ async def create_workspace(
         id=workspace_id,
         denied="Only organization owners and admins can create workspaces",
     )
-    owner_id = workspace.owner_id or current_user.id
-    if not workspace.organization_id and owner_id != current_user.id:
+    # A workspace is created with an admin (#1585): the one named, else the creator.
+    admin_id = workspace.admin_id or workspace.owner_id or current_user.id
+    if not workspace.organization_id and admin_id != current_user.id:
         raise HTTPException(
             status_code=400, detail="A personal workspace belongs to the user who creates it"
         )
-    if workspace.organization_id and owner_id != current_user.id:
-        member_role = await org_service.get_organization_role(
-            user_id=owner_id, org_id=workspace.organization_id
-        )
-        if member_role is None:
+    if workspace.organization_id and admin_id != current_user.id:
+        # One of the organization's people (its directory: its members and those
+        # of its workspaces), never anyone of the platform.
+        if not await org_service.in_directory(workspace.organization_id, admin_id):
             raise HTTPException(
                 status_code=400,
-                detail="Workspace owner must be a member of the organization",
+                detail="The workspace admin must be a person of the organization",
             )
     catalog_seed = (
         workspace.catalog_seed.model_dump(exclude_none=True)
@@ -471,7 +495,7 @@ async def create_workspace(
             WorkspaceCreateInput(
                 name=workspace.name,
                 slug=workspace.slug,
-                owner_id=owner_id,
+                owner_id=admin_id,
                 organization_id=workspace.organization_id,
                 logo_url=workspace.logo_url,
                 logo_emoji=workspace.logo_emoji,
@@ -490,7 +514,7 @@ async def create_workspace(
     except WorkspaceSlugAlreadyExistsError as exc:
         raise HTTPException(status_code=400, detail="Slug already exists") from exc
     except UnknownUserError as exc:
-        raise HTTPException(status_code=400, detail="Workspace owner is not a known user") from exc
+        raise HTTPException(status_code=400, detail="Workspace admin is not a known user") from exc
     # What IAM derives from the new workspace: the kernel resources its roles
     # reach (drives, caches, drafts). Failing undoes the workspace: never
     # placements without it. Its catalog seed installs; it grants nothing.
@@ -508,34 +532,52 @@ async def create_workspace(
         agent_service=registry.agents,
     )
     flags = await _feature_flags(current_user, [record]) or {}
+    role = (
+        "admin"
+        if admin_id == current_user.id
+        else await service.get_workspace_role(current_user.id, record.id)
+    )
     return _to_schema(
         record,
-        "owner",
+        role,
         feature_flags=flags.get(record.id),
     )
 
 
 @router.delete(
     "/{workspace_id}",
-    dependencies=[
-        guard("DeleteWorkspace", denied="Only the workspace owner can delete the workspace")
-    ],
+    dependencies=[declares("DeleteOrganizationWorkspace"), declares("DeleteWorkspace")],
 )
 async def delete_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> dict[str, str]:
+    # Owner is no longer assigned (#1585): a workspace of an organization is deleted
+    # by the organization's admins (DeleteOrganizationWorkspace, on the organization);
+    # one in none by the platform admin (DeleteWorkspace, which no role holds).
+    container = await authz.AUTHZ.container_of(workspace_id)
+    if container is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    org_id = org_of(container)
+    if org_id:
+        await authz.require(
+            "DeleteOrganizationWorkspace",
+            user=current_user,
+            org=org_id,
+            denied="Only the organization's admins can delete its workspaces",
+        )
+    else:
+        await authz.require(
+            "DeleteWorkspace",
+            user=current_user,
+            workspace=workspace_id,
+            denied="Only the platform administrators can delete this workspace",
+        )
     deleted = await service.delete_workspace(workspace_id=workspace_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Workspace not found")
     return {"status": "deleted"}
-
-
-# Drives reach beyond the workspace: the system drive is the whole object store
-# and the platform drive is shared by every workspace. Anyone can create and own
-# a workspace, so only a platform superadmin may flip these.
-_DRIVE_FLAGS = frozenset({"platform_drive_enabled", "system_drive_enabled"})
 
 
 @router.patch(
@@ -549,12 +591,9 @@ async def update_workspace(
     service: WorkspaceService = Depends(get_workspace_service),
     org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
+    # The drive flags of earlier versions are gone: Platform Files and System Files are
+    # IAM's (``GET /api/files/views``). An older client sending them is ignored.
     changes = updates.model_dump(exclude_unset=True)
-    if changes.keys() & _DRIVE_FLAGS and not current_user.is_superadmin:
-        raise HTTPException(
-            status_code=403,
-            detail="Only a platform superadmin can enable or disable workspace drives",
-        )
     role = await service.get_workspace_role(current_user.id, workspace_id)
 
     if "owner_id" in changes:
@@ -611,7 +650,7 @@ async def get_workspace_configuration(
     ``seeds`` lists what ``nexus_config.organizations[].workspaces[]`` preloads
     for this workspace slug, read from the loaded config on each call.
     ``features`` are the deployment's enabled ones; who uses each is a policy's
-    (Roles & permissions).
+    (General › Features writes one per feature, ``/feature-access``; Access › Policies).
     """
     record = await service.get_workspace(workspace_id=workspace_id)
     if record is None:
@@ -703,28 +742,168 @@ async def list_workspace_members(
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> list[WorkspaceMember]:
     rows = await service.list_workspace_members(workspace_id=workspace_id)
-    return [
-        WorkspaceMember(
-            id=row.id,
-            workspace_id=row.workspace_id,
-            user_id=row.user_id,
-            role=row.role,
-            email=row.email,
-            name=row.name,
-            created_at=row.created_at,
-            source=row.source,
-            principal_id=row.principal_id,
-        )
-        for row in rows
-    ]
+    return [_member_view(row) for row in rows]
+
+
+def _member_view(row: WorkspaceMemberRecord) -> WorkspaceMember:
+    return WorkspaceMember(
+        id=row.id,
+        workspace_id=row.workspace_id,
+        user_id=row.user_id,
+        role=row.role,
+        email=row.email,
+        name=row.name,
+        created_at=row.created_at,
+        source=row.source,
+        principal_id=row.principal_id,
+        status=row.status,
+        level=row.level,
+    )
 
 
 async def _find_workspace_member(
     service: WorkspaceService, *, workspace_id: str, user_id: str
 ) -> WorkspaceMemberRecord | None:
-    """Existing membership row, for resending an invite to a current member."""
     members = await service.list_workspace_members(workspace_id=workspace_id)
-    return next((m for m in members if m.user_id == user_id), None)
+    return next((m for m in members if m.user_id == user_id and m.source == "workspace"), None)
+
+
+async def _added_member(
+    service: WorkspaceService, *, workspace_id: str, user: Any, role: str
+) -> WorkspaceMember:
+    """The member just added, as the members list shows them."""
+    row = await _find_workspace_member(service, workspace_id=workspace_id, user_id=user.id)
+    if row is not None:
+        return _member_view(row)
+    return WorkspaceMember(
+        id=f"member-{workspace_id}-{user.id}",
+        workspace_id=workspace_id,
+        user_id=user.id,
+        role=role,
+        email=user.email,
+        name=user.name,
+        status=people_status(user.status),
+    )
+
+
+def _grant_of(organization_id: str | None, workspace_id: str, body: WorkspaceAccessInput) -> Any:
+    if body.policy_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Policies are no longer attached to a person: name capability groups",
+        )
+    try:
+        return workspace_grant(
+            organization_id,
+            workspace_id,
+            level=body.level,
+            admin=body.admin,
+            role=body.role,
+            capabilities=body.capabilities,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _role_shown(grant: Any) -> str:
+    """The role the members list shows for someone just given ``grant``."""
+    if grant.workspaces and grant.workspaces[0].admin:
+        return "admin"
+    return grant.level or "member"
+
+
+@router.get(
+    "/{workspace_id}/capability-groups",
+    dependencies=[
+        guard("InviteWorkspaceMember", literal="-", denied="Only admins can add members")
+    ],
+)
+async def list_workspace_capability_groups(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict[str, object]:
+    """The capability groups a person may join from this workspace: its
+    organization's, then the platform's (the platform's alone for a workspace in no
+    organization). The model's own groups are not listed."""
+    workspace = await service.get_workspace(workspace_id)
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return {"items": await capability_group_items(workspace.organization_id)}
+
+
+@router.get(
+    "/{workspace_id}/members/candidates",
+    dependencies=[
+        guard("InviteWorkspaceMember", literal="-", denied="Only admins can add members")
+    ],
+)
+async def list_workspace_member_candidates(
+    workspace_id: str,
+    q: str = Query(default="", max_length=200),
+    limit: int = Query(default=10, ge=1),
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+    people: PeopleServicePort = Depends(get_people_service),
+) -> WorkspaceMemberCandidates:
+    """People of the workspace's organization to add, by name or email: at least
+    two characters, at most twenty answers, never anyone outside the organization's
+    directory nor already in the workspace (nothing for a workspace in none)."""
+    found = await service.member_candidates(workspace_id, q, people=people, limit=limit)
+    return WorkspaceMemberCandidates(
+        items=[WorkspaceMemberCandidate(**candidate.__dict__) for candidate in found]
+    )
+
+
+@router.post(
+    "/{workspace_id}/members",
+    status_code=201,
+    dependencies=[
+        guard("InviteWorkspaceMember", literal="-", denied="Only admins can add members")
+    ],
+)
+async def add_workspace_member(
+    workspace_id: str,
+    body: WorkspaceMemberAdd,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+    people: PeopleServicePort = Depends(get_people_service),
+) -> dict[str, object]:
+    """Add someone of the organization's directory to the workspace ("<W>
+    workspace"), with their level, whether they administer it and capability
+    groups, now, and notify them. Nobody outside the directory is found (404, as
+    for an unknown id); someone already in the workspace is a 409. No org role is
+    granted. The notice counts as an invitation mail: the inviting user's, the
+    address's and the organization's day limits apply."""
+    await check_rate_limit(get_rate_limit_identifier(request, current_user.id), _INVITE_LIMIT)
+    entry = await service.directory_entry(workspace_id, body.user_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if workspace_id in entry.workspace_ids or entry.org_wide:
+        raise HTTPException(status_code=409, detail="Already a member of this workspace")
+    person = await people.get(body.user_id)
+    if person is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    workspace = await service.get_workspace(workspace_id)
+    await check_rate_limit(f"email:{person.email.lower()}", _INVITE_LIMIT)
+    await check_invitation_mail_quota(
+        workspace.organization_id if workspace else None, workspace_id
+    )
+    grant = _grant_of(workspace.organization_id if workspace else None, workspace_id, body)
+    with people_errors(_member_denied):
+        user = await people.add_existing(user_id=body.user_id, grant=grant, by=current_user)
+    member = await _added_member(
+        service, workspace_id=workspace_id, user=user, role=_role_shown(grant)
+    )
+    # Whether the notice (or, to someone who never signed in, the invitation) went.
+    return {"member": member.model_dump(mode="json"), "sign_in_email_sent": user.sign_in_email_sent}
+
+
+def _profile_of(profile: Any) -> dict[str, str]:
+    if profile is None:
+        return {}
+    return {key: value for key, value in profile.model_dump().items() if value is not None}
 
 
 @router.post(
@@ -739,145 +918,70 @@ async def invite_workspace_member(
     request: Request,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
-    org_service: OrganizationService = Depends(get_organization_service),
-    email_service: EmailService | None = Depends(_get_email_service),
-    invites: InvitationService = Depends(invites_runtime.get_invitation_service),
-    db: AsyncSession = Depends(get_db),
+    people: PeopleServicePort = Depends(get_people_service),
 ) -> dict[str, object]:
+    """Create the person's platform account, or link the one their email has, and
+    put them in this workspace only (level, admin, capability groups): no org role.
+    The answer is the same either way."""
     email = invite.email.lower().strip()
-    await check_rate_limit(
-        get_rate_limit_identifier(request, current_user.id),
-        "/api/workspaces/members/invite",
-    )
-    await check_rate_limit(f"email:{email}", "/api/workspaces/members/invite")
-
-    # Someone with no account yet is invited through an identity provider (see
-    # the organization invite); someone who has one is added directly.
-    existing_user = await invites.persistence.user_id_by_email(email)
-    if existing_user is None:
-        workspace = await service.get_workspace(workspace_id)
-        await check_invitation_mail_quota(
-            workspace.organization_id if workspace else None, workspace_id
-        )
-        organization = (
-            await get_organization_service(db).get_organization(workspace.organization_id)
-            if workspace is not None and workspace.organization_id
-            else None
-        )
-        try:
-            outcome = await invites.invite(
-                email=email,
-                name=invite.name,
-                provider=invite.provider,
-                organization_id=workspace.organization_id if workspace else None,
-                org_role=None,
-                workspace_id=workspace_id,
-                workspace_role=invite.role,
-                invited_by=current_user.id,
-                inviter_name=current_user.name,
-                organization_name=organization.name if organization else None,
-                workspace_name=workspace.name if workspace else None,
-                policy_ids=invite.policy_ids,
-                may_renew_org_invitation=bool(
-                    workspace is not None
-                    and workspace.organization_id
-                    and await authz.allowed(
-                        "InviteOrganizationMember",
-                        user=current_user,
-                        org=workspace.organization_id,
-                        id="-",
-                    )
-                ),
-            )
-        except OrgInvitationExistsError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except NoProviderError as exc:
-            # Nobody is signed up here: without an identity provider there is
-            # nowhere for the person to sign in.
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except PROVIDER_FAILURES as exc:
-            raise provider_failure(exc) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return invite_result(outcome)
-
+    await check_rate_limit(get_rate_limit_identifier(request, current_user.id), _INVITE_LIMIT)
+    await check_rate_limit(f"email:{email}", _INVITE_LIMIT)
     workspace = await service.get_workspace(workspace_id)
-    # The policies the invitation carries, checked and attached as the inviting
-    # person before anything is made (IAM refuses one they may not attach or do
-    # not hold): a refusal leaves no membership behind.
-    carried: tuple[str, ...] = ()
-    if invite.policy_ids:
-        try:
-            carried = await invites.attach_policies(
-                user_id=existing_user,
-                organization_id=workspace.organization_id if workspace else None,
-                workspace_id=workspace_id,
-                policy_ids=invite.policy_ids,
-                by=current_user.id,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    already_member = False
-    try:
-        member = await service.invite_workspace_member(
-            workspace_id=workspace_id,
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    grant = _grant_of(workspace.organization_id, workspace_id, invite)
+    await check_invitation_mail_quota(workspace.organization_id, workspace_id)
+    with people_errors(_member_denied):
+        result = await people.create_or_link(
             email=email,
-            role=invite.role,
+            name=invite.name,
+            provider=invite.provider,
+            grant=grant,
             by=current_user,
+            profile=_profile_of(invite.profile),
+            organization_id=workspace.organization_id,
         )
-    except MembershipDenied as exc:
-        if carried:
-            await invites.detach_policies(
-                user_id=existing_user,
-                organization_id=workspace.organization_id if workspace else None,
-                workspace_id=workspace_id,
-                policy_ids=carried,
-            )
-        raise _member_denied(str(exc)) from exc
-    except WorkspaceMemberAlreadyExistsError as exc:
-        # Re-inviting is how an admin resends the notice that never arrived, so
-        # keep the membership as-is and send it again rather than rejecting the
-        # only retry path they have.
-        member = await _find_workspace_member(
-            service, workspace_id=workspace_id, user_id=exc.user_id
-        )
-        if member is None:
-            raise HTTPException(status_code=400, detail="User is already a member") from exc
-        already_member = True
-
-    if member is None:
-        raise HTTPException(status_code=500, detail="Failed to create or find user for invite")
-
-    # The organization is the people directory (Org > Users): someone added
-    # straight into a workspace shows up there too, as a member. Done as ``api``
-    # for no user, after the workspace-level check above.
-    if workspace is not None and workspace.organization_id:
-        try:
-            await org_service.invite_member(
-                org_id=workspace.organization_id,
-                email=email,
-                role="member",
-                now=datetime.now(UTC).replace(tzinfo=None),
-                by=None,
-            )
-        except OrganizationMemberAlreadyExistsError:
-            pass
-
-    sign_in_email_sent = await send_added_notice(
-        email,
-        inviter_name=current_user.name,
-        workspace_name=workspace.name if workspace else None,
-        workspace_role=invite.role,
-        email_service=email_service or _get_email_service(request),
+    member = await _added_member(
+        service, workspace_id=workspace_id, user=result.user, role=_role_shown(grant)
     )
+    return added_result(result, member)
 
-    return {
-        "status": "already_member" if already_member else "invited",
-        "member_id": member.id,
-        "user_created": False,
-        "sign_in_email_sent": sign_in_email_sent,
-    }
+
+@router.post(
+    "/{workspace_id}/members/{user_id}/resend",
+    dependencies=[
+        guard("InviteWorkspaceMember", literal="-", denied="Only admins can invite members")
+    ],
+)
+async def resend_workspace_member_invite(
+    workspace_id: str,
+    user_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+    people: PeopleServicePort = Depends(get_people_service),
+) -> dict[str, bool]:
+    """Send an invited member their sign-in mail again; 409 once they signed in.
+    Once a window for one person, then the invite limits (inviting user, address,
+    the organization's day of mail)."""
+    if await _find_workspace_member(service, workspace_id=workspace_id, user_id=user_id) is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    workspace = await service.get_workspace(workspace_id)
+    user = await people.get(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if people_status(user.status) != UserStatus.INVITED:
+        raise HTTPException(status_code=409, detail="This member has already signed in")
+    # The person's own limit first: a refused resend spends nothing else.
+    await check_rate_limit(f"invitation:{user_id}", RESEND_LIMIT, limit=1)
+    await check_rate_limit(get_rate_limit_identifier(request, current_user.id), _INVITE_LIMIT)
+    await check_rate_limit(f"email:{user.email.lower()}", _INVITE_LIMIT)
+    await check_invitation_mail_quota(
+        workspace.organization_id if workspace else None, workspace_id
+    )
+    with people_errors(_member_denied):
+        sent = await people.resend(user_id=user_id, by=current_user)
+    return {"sign_in_email_sent": sent}
 
 
 @router.delete(
@@ -917,10 +1021,51 @@ async def remove_workspace_member(
 async def update_workspace_member(
     workspace_id: str,
     user_id: str,
-    updates: dict,
+    body: WorkspaceMemberChange,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
-) -> dict[str, str]:
+    people: PeopleServicePort = Depends(get_people_service),
+) -> dict[str, object]:
+    """Change a member's level (#1589: one choice, applying in every workspace they
+    work in; this workspace's admins may change it, audited) and whether they
+    administer this workspace. ``{role}``, the body of before, is still read."""
+    if body.level is not None or body.admin is not None:
+        if user_id == current_user.id:
+            raise HTTPException(status_code=400, detail="Cannot change your own access")
+        if (
+            await _find_workspace_member(service, workspace_id=workspace_id, user_id=user_id)
+            is None
+        ):
+            raise HTTPException(status_code=404, detail="Member not found")
+        if body.level == "viewer" and body.admin:
+            raise HTTPException(
+                status_code=400,
+                detail="A workspace admin is a Member: a Viewer administers nothing",
+            )
+        container = await authz.AUTHZ.container_of(workspace_id)
+        with people_errors(_member_denied):
+            if body.admin is False:
+                await people.set_workspace_admin(
+                    user_id=user_id, workspace_id=workspace_id, admin=False, by=current_user
+                )
+            if body.level is not None:
+                await people.set_level(
+                    user_id=user_id,
+                    level=body.level,
+                    by=current_user,
+                    where=[container] if container else [],
+                )
+            if body.admin:
+                await people.set_workspace_admin(
+                    user_id=user_id, workspace_id=workspace_id, admin=True, by=current_user
+                )
+        row = await _find_workspace_member(service, workspace_id=workspace_id, user_id=user_id)
+        return {
+            "status": "updated",
+            "level": row.level if row else body.level,
+            "admin": bool(row and row.role in ("admin", "owner")),
+        }
+    updates = body.model_dump(exclude_none=True)
     if "role" in updates and user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot change your own role")
     try:
@@ -1047,7 +1192,7 @@ async def upload_workspace_logo(
     service: WorkspaceService = Depends(get_workspace_service),
     object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> dict:
-    """Store the logo in the workspace drive (``logo_store``); the previous one is archived."""
+    """Store the logo in Workspace Files (``logo_store``); the previous one is archived."""
     workspace = await service.get_workspace(workspace_id=workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -1114,7 +1259,7 @@ async def remove_workspace_logo(
     service: WorkspaceService = Depends(get_workspace_service),
     object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> dict:
-    """Archive the logo in the workspace drive and clear it."""
+    """Archive the logo in Workspace Files and clear it."""
     workspace = await service.get_workspace(workspace_id=workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -1131,7 +1276,7 @@ def _delete_legacy_logo(previous: str | None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Home desk wallpaper (workspace drive .home/): stage → preview → commit.
+# Home desk wallpaper (Workspace Files .home/): stage → preview → commit.
 # ---------------------------------------------------------------------------
 
 

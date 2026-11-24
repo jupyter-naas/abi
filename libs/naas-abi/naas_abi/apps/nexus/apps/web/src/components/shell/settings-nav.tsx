@@ -1,21 +1,24 @@
 import {
   AppWindow,
+  BarChart3,
   Bot,
   BrainCircuit,
   Network,
-  SlidersHorizontal,
+  Globe,
   Cpu,
   Download,
-  HardDrive,
   KeyRound,
   Shield,
   Users,
+  UsersRound,
   Workflow,
   Zap,
   Search,
   Map,
   type LucideIcon,
 } from 'lucide-react';
+import { opensSection, type AccessSection } from '@/components/access/access-sections';
+import type { AccessView } from '@/lib/iam-admin/types';
 import type { ResourceKind, WorkspaceResources } from '@/lib/workspace-resources';
 
 export type SettingsNavItem = {
@@ -26,9 +29,11 @@ export type SettingsNavItem = {
   feature?: string;
   /** The module resources the page lists: shown only when the caller may use one of them. */
   kinds?: ResourceKind[];
-  /** `iam`: shown to whoever would see a section of Roles & permissions in the workspace
-   *  (IAM says, `GET /access`). */
-  needs?: 'iam';
+  /** An Access page (``AccessSection``): shown to whoever IAM lets open it in the workspace
+   *  (`GET /access`, `ACCESS_SECTIONS`), whatever their role. `analytics`: shown to whoever
+   *  may read the workspace's analytics (`GET /api/workspaces/{id}/analytics/access`
+   *  answers `can_read`). */
+  needs?: AccessSection | 'analytics';
 };
 
 export type SettingsNavGroup = {
@@ -37,11 +42,9 @@ export type SettingsNavGroup = {
 };
 
 /**
- * Workspace settings categories, shown both in the Settings sub-panel and
- * driving the default redirect for /workspace/[id]/settings.
- *
- * Account and Organization live in standalone routes (linked from the
- * top-right user menu), and are not duplicated here.
+ * The Workspace level of Settings (`settingsLevels`), and the default landing of
+ * /workspace/[id]/settings. Account, Organization and Platform are the other levels, at
+ * their own routes; a page belongs to one level only.
  *
  * The Features group is what the caller may use here: an entry whose feature
  * they do not hold, or whose module resources they may use none of, is hidden
@@ -51,11 +54,18 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
     label: 'General',
     items: [
-      { href: '/settings/general', label: 'General', icon: SlidersHorizontal },
-      { href: '/settings/members', label: 'Members', icon: Users },
-      { href: '/settings/permissions', label: 'Roles & permissions', icon: KeyRound, needs: 'iam' },
+      { href: '/settings/general', label: 'General', icon: Globe }, // the Organization's and Platform's icon
+      { href: '/settings/users', label: 'Users', icon: Users },
+      { href: '/settings/analytics', label: 'Analytics', icon: BarChart3, needs: 'analytics' },
       { href: '/settings/secrets', label: 'Secrets', icon: Shield },
       { href: '/settings/export', label: 'Data Export', icon: Download },
+    ],
+  },
+  {
+    label: 'Access',
+    items: [
+      { href: '/settings/groups', label: 'Groups', icon: UsersRound, needs: 'groups' },
+      { href: '/settings/policies', label: 'Policies', icon: KeyRound, needs: 'policies' },
     ],
   },
   {
@@ -64,7 +74,6 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       // Agents the workspace builds itself (a model and a prompt) need no module.
       { href: '/settings/agents', label: 'Agents', icon: Bot, feature: 'agents' },
       { href: '/settings/apps', label: 'Apps', icon: AppWindow, feature: 'apps', kinds: ['apps'] },
-      { href: '/settings/drives', label: 'Drives', icon: HardDrive, feature: 'files' },
       { href: '/settings/graphs', label: 'Graphs', icon: Network, feature: 'graph' },
       { href: '/settings/maps', label: 'Maps', icon: Map, feature: 'maps' },
       { href: '/settings/models', label: 'Models', icon: Cpu },
@@ -90,8 +99,11 @@ export function workspaceOrganization(workspace: { organizationId?: string } | n
 /** First settings item, used as the default landing for /settings. */
 export const DEFAULT_SETTINGS_PATH = SETTINGS_GROUPS[0].items[0].href;
 
-/** Roles & permissions, the page whoever holds only `iam:` rights in a workspace opens. */
-export const PERMISSIONS_SETTINGS_PATH = '/settings/permissions';
+/** Policies, the page whoever holds only `iam:` rights in a workspace opens first. */
+export const POLICIES_SETTINGS_PATH = '/settings/policies';
+
+/** A person's page under Users (`/settings/users/<IAM id>`). */
+const PERSON_PAGE = /\/settings\/users\/[^/?#]+/;
 
 /**
  * Whether the workspace has what an entry manages. With the workspace's resources
@@ -117,33 +129,70 @@ export function settingsItemShown(
   return true;
 }
 
+/** Whether the caller may open an entry: what it `needs` (an entry that needs nothing: yes).
+ *  ``roleOpens``: the role already brings these pages, so Analytics and Access stay listed
+ *  until their own read has answered (``accessKnown`` / ``analyticsKnown``). */
+export function settingsItemNeedsMet(
+  item: SettingsNavItem,
+  {
+    access = null,
+    readsAnalytics = false,
+    roleOpens = false,
+    accessKnown = true,
+    analyticsKnown = true,
+  }: {
+    access?: AccessView | null;
+    readsAnalytics?: boolean;
+    roleOpens?: boolean;
+    accessKnown?: boolean;
+    analyticsKnown?: boolean;
+  } = {}
+): boolean {
+  if (!item.needs) return true;
+  if (item.needs === 'analytics') return readsAnalytics || (roleOpens && !analyticsKnown);
+  return opensSection(access, item.needs) || (roleOpens && !accessKnown);
+}
+
 /**
- * The groups with only the entries the workspace has, and the ones the caller may open: an
- * entry that needs `iam` only for whoever would see a section of it there (`holdsIam`). An empty
- * group is left out.
+ * The groups with only the entries the workspace has, and the ones the caller may open: a page
+ * of Access only for whoever IAM lets open it there (``access``, `GET /access`), Analytics only
+ * for whoever may read the workspace's analytics (``readsAnalytics``). An empty group is left out.
  */
 export function visibleSettingsGroups(
   resources: WorkspaceResources | null,
   flags?: Partial<Record<string, boolean>>,
   groups: SettingsNavGroup[] = SETTINGS_GROUPS,
-  { holdsIam = false }: { holdsIam?: boolean } = {}
+  held: {
+    access?: AccessView | null;
+    readsAnalytics?: boolean;
+    roleOpens?: boolean;
+    accessKnown?: boolean;
+    analyticsKnown?: boolean;
+  } = {}
 ): SettingsNavGroup[] {
   return groups
     .map((group) => ({
       ...group,
       items: group.items.filter(
-        (item) => (item.needs !== 'iam' || holdsIam) && settingsItemShown(item, resources, flags)
+        (item) => settingsItemNeedsMet(item, held) && settingsItemShown(item, resources, flags)
       ),
     }))
     .filter((group) => group.items.length > 0);
+}
+
+/** The pages of Access the caller opens in the workspace, in order. */
+export function accessSettingsItems(access: AccessView | null, groups: SettingsNavGroup[] = SETTINGS_GROUPS): SettingsNavItem[] {
+  return groups
+    .flatMap((group) => group.items)
+    .filter((item) => !!item.needs && item.needs !== 'analytics' && opensSection(access, item.needs));
 }
 
 /**
  * Whether a workspace's settings open for the caller, the rule the dock, the mobile sheet and
  * the settings pages share: `all` when their role there brings the settings
  * (`settings.workspace`, its owners and admins), `iam` when it does not but IAM shows them a
- * section of Roles & permissions there (that page alone), `none` otherwise (no page: they
- * say so), `unknown` until the access is read.
+ * page of Access there (those pages alone, and a member's page from them), `none` otherwise
+ * (no page: they say so), `unknown` until the access is read.
  */
 export type WorkspaceSettingsAccess = 'all' | 'iam' | 'none' | 'unknown';
 
@@ -161,21 +210,29 @@ export function workspaceSettingsAccess({
   return holdsIam ? 'iam' : 'none';
 }
 
-/** Whether the settings page at `path` opens under `access`: null while unknown. */
+/** Whether the settings page at `path` opens under `access`: null while unknown. For an `iam`
+ *  holder, the pages of Access IAM lets them open (``iam``, its answer there) and a member's
+ *  page, which shows what that person holds. */
 export function settingsPageOpens(
   access: WorkspaceSettingsAccess,
   path: string,
-  groups: SettingsNavGroup[] = SETTINGS_GROUPS
+  groups: SettingsNavGroup[] = SETTINGS_GROUPS,
+  iam: AccessView | null = null
 ): boolean | null {
   if (access === 'unknown') return null;
   if (access === 'all') return true;
   if (access === 'none') return false;
-  return settingsItemFor(path, groups)?.needs === 'iam';
+  if (PERSON_PAGE.test(path)) return true;
+  // An Access page opens to an iam: holder; Analytics is a settings page of the role's.
+  const needs = settingsItemFor(path, groups)?.needs;
+  return !!needs && needs !== 'analytics' && opensSection(iam, needs);
 }
 
-/** Where the settings land for `access`: General, or Roles & permissions for an `iam:` holder. */
-export function settingsLandingPath(access: WorkspaceSettingsAccess): string {
-  return access === 'iam' ? PERMISSIONS_SETTINGS_PATH : DEFAULT_SETTINGS_PATH;
+/** Where the settings land for `access`: General, or for an `iam:` holder the first page of
+ *  Access they hold (Policies while that is not known). */
+export function settingsLandingPath(access: WorkspaceSettingsAccess, iam: AccessView | null = null): string {
+  if (access !== 'iam') return DEFAULT_SETTINGS_PATH;
+  return accessSettingsItems(iam)[0]?.href ?? POLICIES_SETTINGS_PATH;
 }
 
 /** The entry a settings path belongs to (`/settings/apps/...` is Apps), if any. */

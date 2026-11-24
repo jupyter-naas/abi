@@ -23,8 +23,8 @@ describe('isSettingsRoute', () => {
 });
 
 describe('isCachedSettingsRoute', () => {
-  it('matches the Components settings pages, Members and their detail pages', () => {
-    for (const page of ['agents', 'ontologies', 'graphs', 'search', 'skills', 'apps', 'models', 'drives', 'members']) {
+  it('matches the Components settings pages, Users and their detail pages', () => {
+    for (const page of ['agents', 'ontologies', 'graphs', 'search', 'skills', 'apps', 'models', 'users']) {
       expect(isCachedSettingsRoute(`/workspace/ws-1/settings/${page}`)).toBe(true);
     }
     expect(isCachedSettingsRoute('/workspace/ws-1/settings/agents/a1')).toBe(true);
@@ -46,7 +46,7 @@ describe('shouldUseSettingsCache', () => {
     expect(shouldUseSettingsCache('/workspace/ws-1/settings/agents', 'get')).toBe(true);
     expect(shouldUseSettingsCache('/workspace/ws-1/settings/agents', 'PATCH')).toBe(false);
     expect(shouldUseSettingsCache('/workspace/ws-1/chat', 'GET')).toBe(false);
-    expect(shouldUseSettingsCache('/workspace/ws-1/settings/members', 'GET')).toBe(true);
+    expect(shouldUseSettingsCache('/workspace/ws-1/settings/users', 'GET')).toBe(true);
     expect(shouldUseSettingsCache('/workspace/ws-1/settings/secrets', 'GET')).toBe(false);
     expect(shouldUseSettingsCache('/organizations/org-1/settings/users', 'GET')).toBe(false);
   });

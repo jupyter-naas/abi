@@ -233,11 +233,42 @@ class IAMService(ServiceProxy):
     # -- groups ---------------------------------------------------------------------
 
     async def create_group(
-        self, name: str, *, scope: str | None = None
+        self,
+        name: str,
+        *,
+        scope: str | None = None,
+        membership_of: str | None = None,
+        level: bool = False,
     ) -> dict[str, Any]:
         """A group owned by ``scope``: ``abi:`` (the platform, the default) or a
-        container's name."""
-        return await self._request("create_group", name=name, scope=scope)
+        container's name. ``membership_of``: a membership group of that
+        container; ``level``: a level group (the platform's grants only)."""
+        return await self._request(
+            "create_group",
+            name=name,
+            scope=scope,
+            membership_of=membership_of,
+            level=level,
+        )
+
+    async def mark_group(
+        self, group_id: str, *, membership_of: str | None = None, level: bool = False
+    ) -> dict[str, Any]:
+        """Set both markers of a group: a membership group of ``membership_of``
+        (None: none), a level group or not."""
+        return await self._request(
+            "mark_group", group_id=group_id, membership_of=membership_of, level=level
+        )
+
+    async def list_memberships(self, principal_id: str) -> list[dict[str, Any]]:
+        """The memberships (``group_id``, ``container``) of ``principal_id``
+        whose group the caller may read."""
+        return await self._request("list_memberships", principal_id=principal_id)
+
+    async def list_container_members(self, container: str) -> list[str]:
+        """The members of ``container``, through its membership groups the
+        caller may read."""
+        return await self._request("list_container_members", container=container)
 
     async def get_group(self, group_id: str) -> dict[str, Any]:
         return await self._request("get_group", group_id=group_id)
@@ -246,6 +277,10 @@ class IAMService(ServiceProxy):
         self, *, limit: int = 100, after: str | None = None, scope: str | None = None
     ) -> dict[str, Any]:
         return await self._request("list_groups", limit=limit, after=after, scope=scope)
+
+    async def update_group(self, group_id: str, *, name: str) -> dict[str, Any]:
+        """Rename a group (``iam:UpdateGroup``)."""
+        return await self._request("update_group", group_id=group_id, name=name)
 
     async def delete_group(self, group_id: str) -> dict[str, Any]:
         return await self._request("delete_group", group_id=group_id)

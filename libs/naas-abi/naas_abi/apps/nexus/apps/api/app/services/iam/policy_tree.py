@@ -63,7 +63,12 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.role_features import recorded
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam import module_scopes, roles
 from naas_abi_core.services.iam.catalog import CatalogRegistry
-from naas_abi_core.services.iam.names import PLATFORM, encode_segment, matches
+from naas_abi_core.services.iam.names import (
+    PLATFORM,
+    encode_segment,
+    is_membership_scope,
+    matches,
+)
 from naas_abi_core.services.iam.policy import (
     MAX_PATTERNS,
     MAX_STATEMENTS,
@@ -725,9 +730,20 @@ def _known(world: World, place: Place) -> bool:
 
 
 def _grantees(world: World) -> list[tuple[str, str | None, str]]:
-    """``(policy, scope, principal)`` of every attachment and pending grant."""
-    found = [(a.policy_id, a.scope, a.principal_id) for a in world.attachments]
-    found += [(g.policy_id, g.scope, f"pending:{g.id}") for g in world.pending]
+    """``(policy, scope, principal)`` of every attachment and pending grant. One
+    at ``${my workspaces}`` is the new model's, which no set ever bounded: a new
+    install's start makes the level groups before this move ("Members" holding
+    "Member access" there)."""
+    found = [
+        (a.policy_id, a.scope, a.principal_id)
+        for a in world.attachments
+        if not is_membership_scope(a.scope)
+    ]
+    found += [
+        (g.policy_id, g.scope, f"pending:{g.id}")
+        for g in world.pending
+        if not is_membership_scope(g.scope)
+    ]
     return found
 
 

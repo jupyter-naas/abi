@@ -12,8 +12,11 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { discardDeferredStorage } from '@/lib/deferred-storage';
 import { clearAuthFlagCookie, mergeAuthPersistedState, setAuthFlagCookie } from '@/lib/auth-session';
 import { getSafeStorage } from '@/lib/safe-storage';
+import { forgetSettingsPaths } from '@/lib/settings-scope-path';
 import { dropWebPass, keepWebPass } from '@/lib/web-pass';
-import { clearViewFlag, setViewFlag, viewFlagActive, readViewFlag } from '@/lib/view-flag';
+import { clearViewFlag, setViewFlag, viewFlagActive, readViewFlag, onViewFlagChange } from '@/lib/view-flag';
+import { changesPermissions, configurePermissionContext, permissionReadKey, PermissionSessionChanged, usePermissionCache } from '@/lib/permission-cache';
+import { apiPath, clearResources, configureResourceSession, followResourceSession, invalidateResourcesAfter } from '@/lib/resource-cache';
 import {
   announceViewRefusal,
   navigation,
@@ -89,11 +92,13 @@ export const useAuthStore = create<AuthState>()(
 
       // Logout - clears auth state and ALL persisted store data
       logout: () => {
+        usePermissionCache.getState().invalidate();
         clearAuthFlagCookie();
         // This host's own routes stop answering for the browser at once.
         dropWebPass();
         // The sign-out ends the view on the server; the browser forgets it too.
         clearViewFlag();
+        forgetSettingsPaths();
         const { csrfToken } = get();
         // The API ends the session; the provider may end its own too.
         void fetch(`${getApiUrl()}/api/auth/oidc/logout`, {
@@ -242,6 +247,51 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
+/** No token in a cache key. CSRF/session replacement advances the separate generation. */
+// The provider is not part of it: a restored user gains it when the session read of the page
+// load answers (same person, same session), while a session at another provider brings a new
+// CSRF token, which resets the permissions below.
+function permissionIdentity(state: AuthState): string {
+  const flag = readViewFlag();
+  return JSON.stringify([
+    getApiUrl(), state.user?.id ?? null, state.user?.is_superadmin ?? false, state.isAuthenticated,
+    state.viewer?.id ?? null, state.view?.person.id ?? null, state.view?.workspace.id ?? null,
+    state.view?.ends_at ?? null, state.view?.groups_from ?? null, flag ? flag.workspaceId : null,
+  ]);
+}
+
+function identifyPermissions(force = false): void {
+  const state = useAuthStore.getState();
+  usePermissionCache.getState().identify(permissionIdentity(state), force, permissionSessionReady(state));
+}
+
+function permissionSessionReady(state: AuthState): boolean {
+  const flag = readViewFlag();
+  return !!state.user?.id && state.isAuthenticated && !!flag === !!state.view &&
+    (!state.view || (flag?.workspaceId === state.view.workspace.id && Date.parse(state.view.ends_at) > Date.now()));
+}
+
+useAuthStore.subscribe((state, previous) => {
+  // A new session of the same user (another CSRF token) resets the permissions. The first token
+  // of a page load confirms the session the restored user already read with: nothing to reset.
+  const newSession = previous.csrfToken !== null && state.csrfToken !== previous.csrfToken;
+  usePermissionCache.getState().identify(permissionIdentity(state), newSession, permissionSessionReady(state));
+  followResourceSession();
+});
+configurePermissionContext(identifyPermissions);
+// Business answers are kept once the API has answered the session read (its CSRF token).
+configureResourceSession(() => !!useAuthStore.getState().csrfToken);
+identifyPermissions();
+onViewFlagChange(() => identifyPermissions(true));
+if (typeof window !== 'undefined') {
+  const revalidate = () => {
+    identifyPermissions();
+    if (document.visibilityState !== 'hidden') usePermissionCache.getState().revalidate();
+  };
+  window.addEventListener?.('focus', revalidate);
+  document.addEventListener?.('visibilitychange', revalidate);
+}
+
 /**
  * The person of a view as the server answers them (`GET /api/auth/me` runs as the person in a view),
  * or the little the view itself says when that fails: never the viewer.
@@ -323,32 +373,76 @@ export async function withAuth(init: RequestInit = {}): Promise<RequestInit> {
   return { ...init, headers, credentials: authCredentials() };
 }
 
+export interface AuthFetchPolicy {
+  /**
+   * Whether the API's settings cache may answer this GET (`X-Nexus-Cache`). A resource
+   * read states it (`ResourcePolicy.backendCache`), so a prefetch and a page read agree;
+   * left out, the open page decides (`shouldUseSettingsCache`), for the reads not yet
+   * declared as resources.
+   */
+  settingsCache?: boolean;
+}
+
 /**
  * Authenticated fetch wrapper: the session cookie, the CSRF token on changes.
  * On a 401 the session is re-read once before giving up and signing out.
  */
-export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+export async function authFetch(url: string, options: RequestInit = {}, policy: AuthFetchPolicy = {}): Promise<Response> {
+  if (typeof window !== 'undefined') {
+    identifyPermissions();
+    const apiBase = getApiUrl();
+    const fullUrl = url.startsWith('http') ? url : `${apiBase}${url}`;
+    const key = permissionReadKey(fullUrl, apiBase, options);
+    if (key) {
+      const generation = usePermissionCache.getState().generation;
+      return usePermissionCache.getState().read(
+        key,
+        () => liveAuthFetch(url, { ...options, cache: 'no-store' }, generation),
+        { force: options.cache === 'reload', current: identifyPermissions },
+      );
+    }
+  }
+  return liveAuthFetch(url, options, undefined, policy);
+}
+
+async function liveAuthFetch(
+  url: string,
+  options: RequestInit = {},
+  permissionGeneration?: number,
+  policy: AuthFetchPolicy = {},
+): Promise<Response> {
   const apiBase = getApiUrl();
 
   // Prepend API_BASE if URL is relative
   const fullUrl = url.startsWith('http') ? url : `${apiBase}${url}`;
 
-  // Settings pages read through the backend's 24h settings cache (see lib/settings-cache).
+  // Settings reads go through the backend's 24h settings cache (see lib/settings-cache):
+  // as the resource declares, else as the open page says.
+  const method = (options.method || 'GET').toUpperCase();
   const wantSettingsCache =
     typeof window !== 'undefined' &&
     fullUrl.startsWith(apiBase) &&
     !new Headers(options.headers).has(SETTINGS_CACHE_HEADER) &&
-    shouldUseSettingsCache(window.location.pathname, options.method);
+    (policy.settingsCache === undefined
+      ? shouldUseSettingsCache(window.location.pathname, options.method)
+      : policy.settingsCache && method === 'GET');
 
-  const method = (options.method || 'GET').toUpperCase();
-  const makeRequest = () =>
-    fetchWithSettingsCacheFallback(wantSettingsCache, (useCache) => {
+  const current = () => {
+    if (permissionGeneration !== undefined) identifyPermissions();
+    if (permissionGeneration !== undefined && permissionGeneration !== usePermissionCache.getState().generation) {
+      throw new PermissionSessionChanged();
+    }
+  };
+  const makeRequest = () => {
+    current();
+    return fetchWithSettingsCacheFallback(wantSettingsCache, (useCache) => {
       const headers = new Headers(options.headers);
       const { csrfToken } = useAuthStore.getState();
       if (csrfToken && !SAFE_METHODS.has(method)) headers.set(CSRF_HEADER, csrfToken);
       if (useCache) headers.set(SETTINGS_CACHE_HEADER, '1');
       return fetch(fullUrl, { ...options, headers, credentials: 'include' as const });
     });
+  };
 
   // Surface in-flight activity to the UI (e.g. ApiStatusIndicator pulses while busy).
   const { useNetworkActivityStore } = await import('./network-activity');
@@ -357,9 +451,18 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
 
   try {
     const response = await sessionFetch(method, makeRequest);
+    current();
     if (useAuthStore.getState().view) {
       const refusal = await viewRefusalMessage(response);
       if (refusal) announceViewRefusal(refusal);
+    }
+    if (response.ok && changesPermissions(fullUrl, method, apiBase)) {
+      usePermissionCache.getState().invalidate();
+      // What a list holds follows IAM: every kept resource answer goes too.
+      clearResources();
+    } else if (response.ok && !SAFE_METHODS.has(method)) {
+      const path = apiPath(fullUrl, apiBase);
+      if (path) invalidateResourcesAfter(path);
     }
     return response;
   } finally {

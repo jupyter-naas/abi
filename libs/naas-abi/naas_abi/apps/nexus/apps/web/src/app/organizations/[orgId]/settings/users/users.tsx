@@ -7,7 +7,6 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   Plus,
   Shield,
-  Crown,
   UserCircle,
   AlertCircle,
   Trash2,
@@ -18,10 +17,21 @@ import {
   Search,
   Download,
   Pencil,
+  Mail,
 } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth';
-import { useOrganizationStore } from '@/stores/organization';
+import { useOrganizationStore, type OrganizationMember } from '@/stores/organization';
+import { InvitedBadge, ResendButton } from '@/components/people/member-status';
+import { createPeopleApi } from '@/lib/people';
+import {
+  orgUserRoleLabel,
+  orgUserRoleRank,
+  removableFromOrganization,
+  removalConfirmation,
+  workspacesBody,
+  WORKSPACE_ACCESS_ONLY,
+} from './users-model';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
@@ -63,13 +73,7 @@ type WorkspaceMembership = {
   role: string;
 };
 
-const ROLE_LABEL: Record<'owner' | 'admin' | 'member', string> = {
-  owner: 'Owner',
-  admin: 'Admin',
-  member: 'Member',
-};
-
-const ROLE_RANK: Record<string, number> = { owner: 0, admin: 1, member: 2 };
+const peopleApi = createPeopleApi();
 
 function summarizeWorkspaces(names: string[], visible = 2) {
   if (names.length === 0) {
@@ -82,27 +86,38 @@ function summarizeWorkspaces(names: string[], visible = 2) {
   };
 }
 
-function roleBadge(role: 'owner' | 'admin' | 'member') {
-  if (role === 'owner') {
+function roleBadge(user: Pick<OrganizationMember, 'role' | 'source' | 'orgAdmin' | 'level'>) {
+  const label = orgUserRoleLabel(user);
+  if (label === WORKSPACE_ACCESS_ONLY) {
+    // Linked through a workspace only, with no level known (a role of before).
     return (
-      <span className="org-settings-users-badge org-settings-users-badge-owner">
-        <Crown size={12} />
-        Owner
+      <span className="org-settings-users-role-none" data-role="none">
+        <span aria-hidden>—</span>
+        <span
+          className="org-settings-users-badge org-settings-users-badge-member"
+          title="They only reach the workspaces they were added to."
+        >
+          {WORKSPACE_ACCESS_ONLY}
+        </span>
       </span>
     );
   }
-  if (role === 'admin') {
+  if (label === 'Org admin') {
     return (
-      <span className="org-settings-users-badge org-settings-users-badge-admin">
+      <span className="org-settings-users-badge org-settings-users-badge-admin" data-role="org-admin">
         <Shield size={12} />
-        Admin
+        Org admin
       </span>
     );
   }
   return (
-    <span className="org-settings-users-badge org-settings-users-badge-member">
+    <span
+      className="org-settings-users-badge org-settings-users-badge-member"
+      data-role={label.toLowerCase()}
+      title="Their level, in all their workspaces"
+    >
       <UserCircle size={12} />
-      Member
+      {label}
     </span>
   );
 }
@@ -129,17 +144,17 @@ export default function OrgUsersPage() {
   const authUser = useAuthStore((s) => s.user);
   const {
     fetchMembers,
-    removeMember,
+    removeFromOrganization,
     membersCache,
     membersLoading,
   } = useOrganizationStore();
 
   const members = membersCache[orgId] || [];
   const myMembership = members.find((m) => m.userId === authUser?.id);
-  const canManage =
-    myMembership?.role === 'owner' || myMembership?.role === 'admin';
+  const canManage = !!myMembership?.orgAdmin;
 
   const [actionError, setActionError] = useState('');
+  const [actionNotice, setActionNotice] = useState('');
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirm();
   const [workspaces, setWorkspaces] = useState<OrgWorkspace[]>([]);
   const [memberships, setMemberships] = useState<WorkspaceMembership[]>([]);
@@ -306,7 +321,8 @@ export default function OrgUsersPage() {
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspace_ids: workspaceIds }),
+        // Each workspace keeps "admin" where they have it; one added joins at their level.
+        body: JSON.stringify(workspacesBody(workspaceIds, memberships, userId)),
       }
     );
     if (!response.ok) {
@@ -322,20 +338,21 @@ export default function OrgUsersPage() {
     setOpenPickerUserId(userId);
   };
 
-  const handleRemove = async (userId: string) => {
+  const handleRemove = async (user: OrganizationMember) => {
     if (!orgId || !canManage) return;
     if (
-      !(await confirmAction({
-        title: 'Remove this user from the organization?',
-        confirmLabel: 'Remove',
-      }))
+      !(await confirmAction(
+        removalConfirmation(user.name || user.email || 'this user', assignedNamesByUser[user.userId] || [])
+      ))
     ) {
       return;
     }
     setActionError('');
+    setActionNotice('');
     try {
-      await removeMember(orgId, userId);
-      await loadMemberWorkspaces();
+      // Every group of the organization; 409 for its last org admin, said as the API words it.
+      await removeFromOrganization(orgId, user.userId);
+      await Promise.all([fetchMembers(orgId), loadMemberWorkspaces()]);
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Failed to remove user';
@@ -393,7 +410,7 @@ export default function OrgUsersPage() {
           (value, index, all) => all.indexOf(value) === index
         );
       }
-      if (columnId === 'role') return [ROLE_LABEL[user.role]];
+      if (columnId === 'role') return [orgUserRoleLabel(user)];
       const names = assignedNamesByUser[user.userId] || [];
       return names.length > 0 ? names : ['No workspaces'];
     },
@@ -430,7 +447,7 @@ export default function OrgUsersPage() {
       if (sortKey === 'user') {
         cmp = (a.name || a.email || '').localeCompare(b.name || b.email || '');
       } else if (sortKey === 'role') {
-        cmp = (ROLE_RANK[a.role] ?? 9) - (ROLE_RANK[b.role] ?? 9);
+        cmp = orgUserRoleRank(a) - orgUserRoleRank(b);
       } else {
         cmp =
           (assignedNamesByUser[a.userId]?.length || 0) -
@@ -476,7 +493,7 @@ export default function OrgUsersPage() {
   const columns: { id: ColumnId; label: string }[] = [
     { id: 'user', label: 'User' },
     { id: 'workspaces', label: 'Workspaces' },
-    { id: 'role', label: 'Role' },
+    { id: 'role', label: 'Access' },
   ];
 
   const hasActiveFilters = columns.some((column) => !isBlank(columnFilters[column.id]));
@@ -485,7 +502,7 @@ export default function OrgUsersPage() {
     const rows = visibleMembers.map((user) => ({
       name: user.name || 'Unknown',
       email: user.email || user.userId,
-      role: ROLE_LABEL[user.role],
+      role: orgUserRoleLabel(user),
       groups: (assignedNamesByUser[user.userId] || []).join('; '),
     }));
     const date = new Date().toISOString().slice(0, 10);
@@ -548,7 +565,7 @@ export default function OrgUsersPage() {
                   type="button"
                   className="org-settings-primary-button"
                   disabled
-                  title="Only organization owners and admins can create users"
+                  title="Only organization admins can create users"
                 >
                   <Plus size={16} />
                   Create user
@@ -562,6 +579,13 @@ export default function OrgUsersPage() {
           <div className="org-settings-users-alert" role="alert">
             <AlertCircle size={16} />
             <span>{actionError}</span>
+          </div>
+        )}
+
+        {actionNotice && (
+          <div className="org-settings-users-alert" role="status">
+            <Mail size={16} />
+            <span>{actionNotice}</span>
           </div>
         )}
 
@@ -601,7 +625,7 @@ export default function OrgUsersPage() {
               <p className="org-settings-empty-body">
                 {canManage
                   ? 'Add an existing account by email to grant organization access.'
-                  : 'Ask an organization owner or admin to add users.'}
+                  : 'Ask an organization admin to add users.'}
               </p>
             </div>
           ) : (
@@ -677,9 +701,7 @@ export default function OrgUsersPage() {
                   const summary = summarizeWorkspaces(assignedNames);
                   const isPickerOpen = openPickerUserId === user.userId;
                   const canRemove =
-                    canManage &&
-                    user.role !== 'owner' &&
-                    user.userId !== authUser?.id;
+                    canManage && removableFromOrganization(user.userId, authUser?.id);
                   const summaryLabel =
                     workspacesLoading && assignedNames.length === 0
                       ? 'Loading...'
@@ -687,6 +709,7 @@ export default function OrgUsersPage() {
                   return (
                     <tr
                       key={user.id}
+                      data-user={user.userId}
                       className={canManage ? 'org-settings-users-row-link' : undefined}
                       onClick={(event) => {
                         // Buttons and inputs in the row (workspaces, remove) keep their own action.
@@ -714,9 +737,25 @@ export default function OrgUsersPage() {
                           <div className="org-settings-users-identity">
                             <p className="org-settings-users-name">
                               {user.name || 'Unknown'}
+                              <InvitedBadge status={user.status} className="ml-2" />
                             </p>
                             <p className="org-settings-users-email">
                               {user.email || user.userId}
+                              {canManage && user.status === 'invited' && user.email && (
+                                <ResendButton
+                                  className="ml-2"
+                                  email={user.email}
+                                  resend={() => peopleApi.resendOrganization(orgId, user.userId)}
+                                  onDone={(message) => {
+                                    setActionError('');
+                                    setActionNotice(message);
+                                  }}
+                                  onError={(message) => {
+                                    setActionNotice('');
+                                    setActionError(message);
+                                  }}
+                                />
+                              )}
                             </p>
                           </div>
                         </div>
@@ -759,7 +798,7 @@ export default function OrgUsersPage() {
                       </td>
                       <td>
                         <div className="org-settings-users-row-end">
-                          {roleBadge(user.role)}
+                          {roleBadge(user)}
                           {canManage ? (
                             <span className="org-settings-users-row-actions">
                               <button
@@ -780,8 +819,9 @@ export default function OrgUsersPage() {
                                   <button
                                     type="button"
                                     className="org-settings-users-remove"
-                                    onClick={() => void handleRemove(user.userId)}
-                                    title="Remove user"
+                                    onClick={() => void handleRemove(user)}
+                                    title="Remove from organization"
+                                    aria-label={`Remove ${user.name || user.email || 'user'} from the organization`}
                                   >
                                     <Trash2 size={16} />
                                   </button>
@@ -800,11 +840,13 @@ export default function OrgUsersPage() {
         </div>
 
         <p className="org-settings-footnote">
-          Click a user to open their organization profile. Create user invites
-          the person through the identity provider: the account is made there
-          if it does not exist yet, and they sign in with the code it emails.
+          Click a user to open their organization profile. Create user adds the
+          person at once, invited until they first sign in; their account is made
+          at the identity provider if it does not exist yet. Each person has one level (Member or Viewer) in all their
+          workspaces; org admins reach every workspace of the organization.
         </p>
 
+        {/* Invitations made before people were created at once: listed until they are migrated. */}
         <PendingInvitations
           scope="organizations"
           id={orgId}

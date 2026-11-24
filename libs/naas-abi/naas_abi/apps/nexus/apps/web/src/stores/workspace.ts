@@ -166,8 +166,6 @@ export interface Workspace {
   organizationSlug?: string;
   /** The organization's own square logo (the Workspaces list's headings). */
   organizationLogoUrl?: string;
-  /** Whether the user may open the organization's drive (Files sidebar). */
-  organizationDriveEnabled?: boolean;
   ownerId?: string;
   icon?: string;
   color?: string;
@@ -178,8 +176,6 @@ export interface Workspace {
   updatedAt: Date;
   currentUserRole?: string;
   featureFlags?: WorkspaceFeatureFlags;
-  platformDriveEnabled?: boolean;
-  systemDriveEnabled?: boolean;
   isDemo?: boolean;
 }
 
@@ -193,11 +189,12 @@ export interface GitCommit {
 }
 
 // Sidebar expandable sections
-export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'code' | 'slides' | 'documents' | 'sheets' | 'tasks' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings' | 'infrastructure';
+export type SidebarSection = 'home' | 'workspaces' | 'maps' | 'chat' | 'search' | 'files' | 'datasets' | 'code' | 'slides' | 'documents' | 'sheets' | 'tasks' | 'ontology' | 'graph' | 'apps' | 'marketplace' | 'settings';
 
 // Lab left the dock; Events moved to Platform Settings › System › Events.
 // `board` is the panel id Tasks had before its rename.
-const RETIRED_PANEL_SECTIONS = new Set<string>(['lab', 'events', 'board']);
+// Infrastructure is in Settings › Platform › System now; Settings is a full-screen shell with its own column.
+const RETIRED_PANEL_SECTIONS = new Set<string>(['lab', 'events', 'board', 'infrastructure', 'settings']);
 
 /** Home is a full-bleed desk. Workspaces is a mark-owned directory. Neither is a last-panel restore target. */
 export function isTransientPanelSection(section: SidebarSection | null): boolean {
@@ -1448,7 +1445,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         organizationName: ws.organization_name || undefined,
         organizationSlug: ws.organization_slug || undefined,
         organizationLogoUrl: normalize(ws.organization_logo_url),
-        organizationDriveEnabled: Boolean(ws.organization_drive),
         ownerId: ws.owner_id || undefined,
         icon: ws.icon || ws.logo_emoji,
         color: ws.color,
@@ -1482,8 +1478,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         updatedAt: new Date(ws.updated_at || Date.now()),
         currentUserRole: ws.current_user_role,
         featureFlags: ws.feature_flags,
-        platformDriveEnabled: Boolean(ws.platform_drive_enabled),
-        systemDriveEnabled: Boolean(ws.system_drive_enabled),
       }));
 
       set({ workspaces });

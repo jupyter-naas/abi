@@ -113,6 +113,12 @@ _ENTRIES: list[PlatformTableEntry] = [
             "admins groups, by container.",
         ),
         (
+            "workspace_feature_policies",
+            "Feature policies",
+            "The policy Workspace settings > General writes for each feature of a workspace "
+            "(who may use it there).",
+        ),
+        (
             "provisioned_identities",
             "Accounts ABI made at identity providers",
             "The accounts an invitation created at a provider: only those are deactivated or "
@@ -129,6 +135,11 @@ _ENTRIES: list[PlatformTableEntry] = [
         "Chat, agents & models",
         ("conversations", "Conversations", "Chat conversations per workspace and user."),
         ("messages", "Messages", "Chat messages in each conversation."),
+        (
+            "message_tools",
+            "Message tools",
+            "The tools each assistant message called, with their number of calls.",
+        ),
         (
             "chat_ingestion_jobs",
             "Chat ingestion jobs",
@@ -211,6 +222,40 @@ _ENTRIES: list[PlatformTableEntry] = [
             "ontology_icons",
             "Ontology icons",
             "Icons chosen for ontology classes and resources.",
+        ),
+    ),
+    *_section(
+        "Analytics",
+        (
+            "analytics_events",
+            "Analytics events",
+            "Usage events of the last 45 days (purged daily), keyed by user and tracker id.",
+        ),
+        (
+            "analytics_hourly",
+            "Analytics hourly counts",
+            "Events per hour, organization, workspace, user, event and page.",
+        ),
+        (
+            "analytics_user_hourly",
+            "Analytics hourly users",
+            "Events and page views per hour, organization, workspace and user.",
+        ),
+        ("analytics_session", "Analytics sessions", "Usage sessions per workspace."),
+        (
+            "analytics_page_titles",
+            "Analytics page titles",
+            "The latest title seen for each page, per organization and workspace.",
+        ),
+        (
+            "analytics_jobs",
+            "Analytics jobs",
+            "When the analytics backfill, message indexing and purge last ran.",
+        ),
+        (
+            "analytics_legacy_replayed",
+            "Analytics legacy replay",
+            "The removed analytics app's events already counted by the rollups.",
         ),
     ),
     *_section(

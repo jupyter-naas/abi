@@ -31,13 +31,13 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         "a pass for the web app's server routes, for the session cookie's user, CSRF-checked"
     ),
     ("GET", "/api/auth/oidc/web-pass"): "whose web pass this is: the pass is the credential",
-    ("GET", "/api/auth/avatar/user/{user_id}"): "account pictures (personal drive) in <img> tags",
-    ("GET", "/api/auth/avatar/user/{user_id}/org"): "organization member pictures (personal drive)",
+    ("GET", "/api/auth/avatar/user/{user_id}"): "account pictures (My Files) in <img> tags",
+    ("GET", "/api/auth/avatar/user/{user_id}/org"): "organization member pictures (My Files)",
     ("GET", "/api/auth/avatar/user/{user_id}/org/{org_id}"): "per-org member pictures",
     (
         "GET",
         "/api/workspaces/{workspace_id}/logo",
-    ): "workspace logos (workspace drive) in <img> tags",
+    ): "workspace logos (Workspace Files) in <img> tags",
     ("GET", "/app-preview/{token}"): "capability URL (signed preview token)",
     ("GET", "/app-preview/{token}/{path:path}"): "capability URL (signed preview token)",
     **{

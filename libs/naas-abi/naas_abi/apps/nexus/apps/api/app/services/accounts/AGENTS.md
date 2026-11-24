@@ -5,14 +5,18 @@
 Every account of the platform, and its lifecycle, for the platform admin: the directory behind Platform
 Settings › Users (web: `apps/web/src/app/settings/users/`, Nexus `AGENTS.md`, "Platform Settings").
 
-- **The directory**: every Nexus account (a `users` row) and everyone invited who has none yet (their pending
-  invitations, by email; id `invited:<email>`), each with their IAM id, whether they signed in at least once
-  ("invited, not yet": a row of the old login or one the configuration seeds, never linked to a provider; an
-  invitee), whether they are deactivated (IAM suspended the user; for an invitee, their provider disabled the
+- **The directory**: every Nexus account (a `users` row, `invited` from the invitation that made it until the
+  first sign-in: `services/people`) and everyone with a pending invitation of before that and no row (by email; id
+  `invited:<email>`): the start after the upgrade moves those into `invited` rows
+  (`services/invites/migration.py`), so only an invitation whose provider did not answer then is still listed this
+  way. Each with their IAM id, whether they signed in at least once
+  ("invited, not yet": an `invited` row, which the configuration's people are too (`core/org_seed.py`), a row of
+  the old login never linked to a provider; an invitee), whether they are deactivated (IAM suspended the user; for an invitee, their provider disabled the
   account), whether they are a platform admin (IAM's `builtin.platform_admin`) and their organizations.
-- **Invite** through Nexus's invitations (`services/invites`), the one way someone is invited: an invitation to
-  the platform alone (no organization, no role, no grant). The provider makes the person exist; their access is
-  attached once they have an account (Roles & permissions).
+- **Invite** through the platform's people (`services/people`), the one way someone is invited: an invitation to
+  the platform alone (no organization, no role, no grant). The person's account exists at once (`status:
+  invited`, a real id), the provider makes theirs; their access is attached on their page under Users, or on a
+  policy's page in Access.
 - **Rename** (Nexus's row and the provider's account ABI made: a sign-in refreshes the name from the provider), and
   **superadmin** on or off.
 - **Deactivate / reactivate**: IAM suspends the user (no sign-in through `identity.authenticate`, no API call: a
@@ -26,19 +30,20 @@ Settings › Users (web: `apps/web/src/app/settings/users/`, Nexus `AGENTS.md`, 
   `deleted_at` set, its email released (`<id>@deleted.internal`, never matched by a lookup, an invitation or a
   sign-in), and every read of `services/auth` and of the sign-in skips it.
 
-Access is not shown or changed here: a row opens the person's page in Roles & permissions.
+Access is not shown or changed in the list: a row opens the person's page under Users (`/settings/users/<IAM id>`).
 
 ## Files
 
 | File | Role |
 |---|---|
-| `port.py` | Records (`Account`, `NexusUser`, `DeletionPlan`, ...), errors, `AccountStorePort` (Nexus rows), `AccessGateway` (IAM), `IdentityGateway` (the providers), `InvitationsGateway` |
+| `port.py` | Records (`Account`, `NexusUser`, `DeletionPlan`, ...), errors, `AccountStorePort` (Nexus rows), `AccessGateway` (IAM), `IdentityGateway` (the providers), `InvitationsGateway` (pending invitations of before), `PeopleGateway` (inviting) |
 | `service.py` | `AccountService`: `list`, `invite`, `rename`, `set_superadmin`, `deactivate` / `reactivate`, `deletion` (the plan), `delete`; the rules; the audit |
 | `runtime.py` | `RUNTIME`: the service of a request from the engine's IAM and identity, Nexus's database, invitations and the IAM admin's audit log; tests `configure` another |
 | `adapters/primary/accounts__primary_adapter__FastAPI.py` | `/api/admin/users`, each route `guard`ed by its `nexus` action |
 | `adapters/secondary/postgres.py` | `users`, `auth_sessions`, `organization_members` (profiles), `workspace_members` (`migrations/0067_users_deleted.sql`: `deleted_at`) |
 | `adapters/secondary/engine.py` | `EngineAccessGateway` (IAM: reads as `api`, changes as the caller through `EngineIamGateway.bind`, the platform admin's role through `MEMBERSHIPS`), `EngineIdentityGateway` (identity as `api` on behalf of the caller) |
-| `adapters/secondary/invitations.py` | `InvitationsAdapter`: `services/invites`' `InvitationService`, every pending invitation, a platform invitation |
+| `adapters/secondary/invitations.py` | `InvitationsAdapter`: `services/invites`' `InvitationService`, every pending invitation (listed, withdrawn) |
+| `adapters/secondary/people.py` | `PeopleAdapter`: `services/people`' `PeopleService.create_or_link` with no grant, the platform invitation |
 
 ## Routes
 
@@ -46,11 +51,15 @@ Access is not shown or changed here: a row opens the person's page in Roles & pe
 
 - `GET ""` → `[{id, kind: account|invitation, email, name, avatar, principal_id, status: signed_in|invited,
   deactivated, is_superadmin, created_at, organizations: [{id, name, role}], provider, warning}]` (`ListUsers`)
+- `GET /{id}/access` → `{user_id, principal_id, level, platform_admin, organizations, workspaces, capabilities}`
+  (`ListUsers`): what their groups give them; `id` is the account's id or its IAM id (the row's `principal_id`, else
+  the account IAM names for it, linked from the old login), so the person's page reads it alone, never the directory
+  (#1608); 404 for no account of the directory (an invitee, a deleted account)
 - `POST /invite` `{email, name?, provider?}` → `{user, user_created, sign_in_email_sent, provisioning_skipped,
-  renewed, warning}` (`InviteUser`); 409 when an account holds the address, or when a deleted account is still
-  bound to the address's account at its provider; 400 no provider, or an address the provider will not take;
-  502 a provider that could not make the person (`invites.views.PROVIDER_FAILURES`, as the organization's and
-  the workspace's invitations answer it)
+  renewed, warning}` (`InviteUser`): `user` is the new account (`kind: account`, its real id, `status: invited`),
+  `renewed` is always false; 409 when an account holds the address, or when a deleted account is still bound to
+  the address's account at its provider; 400 no provider, or an address the provider will not take; 502 a
+  provider that could not make the person (`ProvisioningFailedError`)
 - `PATCH /{id}` `{name?, is_superadmin?}` → the row (`UpdateUser`): every rule of both is checked before
   either is made, and the superadmin change (IAM's) goes first, so a refusal leaves the name as it was
 - `POST /{id}/deactivate`, `POST /{id}/reactivate` → the row (`SuspendUser`, `ResumeUser`)
@@ -93,7 +102,7 @@ at the provider).
 - **Audited first, fail-closed.** Every change goes through `run_audited` into the IAM admin's log (`audit_logs`,
   `iam.<operation>`, service `iam`): `invite_user`, `rename_user`, `grant_platform_admin`, `revoke_platform_admin`,
   `suspend_user`, `resume_user`, `delete_user`, each `requested` then `succeeded` or `failed`, with the actor, the
-  account's id and its email. Roles & permissions › Audit shows them.
+  account's id and its email. Platform Settings › Access › Audit shows them.
 - **IAM first, then the provider.** Deactivating, reactivating and deleting an account change IAM first (its
   refusal stops everything); the provider follows, and what it could not do is the answer's `warning`, as is a
   lookup of the person's account at a provider that failed (it was not changed there). An invitee has no IAM
@@ -101,7 +110,8 @@ at the provider).
 - **Only an account ABI made is changed at the provider.** At ABI's own provider (`provisioning: builtin`)
   every account is ABI's. At a shared realm (Keycloak, Zitadel), an invitation may find an account that already
   existed there (`ensure_user`'s existing-account path: nothing created); only one an invitation created is
-  recorded (`provisioned_identities`, migration `0068`, written by `services/invites`) and is ABI's
+  recorded (`provisioned_identities`, migration `0068`, written by `services/people`, and by `services/invites`
+  before it; the configuration's people made at their provider are recorded too) and is ABI's
   (`AccountService._split`). Renaming, deactivating and deleting change ABI's accounts only: the person's own
   account stays as it is, used by their other applications, and the answer and the deletion plan say so ("Their
   account at <provider> is theirs, not ABI's"); their access to ABI is what ends (IAM, sessions, keys). An
@@ -119,8 +129,8 @@ at the provider).
   The plan's `warning` and the deletion's answer say so; inviting that address again is refused (409) where the
   provider tells its account (`AccountStorePort.retired_identity`). Under `provisioning: none` it cannot tell:
   the plan's warning is the only notice.
-- **One invitation path.** A platform invitation is `InvitationService.invite` with no organization, no workspace
-  and no role (no grant, no policy: `InvalidPolicyError` for one); the address must have no account (409).
+- **One invitation path.** A platform invitation is `PeopleService.create_or_link` (`services/people`) with no
+  grant: the account is made at once (`invited`); the address must have no account (409).
 
 ## Decisions
 

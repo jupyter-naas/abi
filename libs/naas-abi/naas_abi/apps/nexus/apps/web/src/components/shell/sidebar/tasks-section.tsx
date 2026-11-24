@@ -28,7 +28,7 @@ import {
   type TasksFilterKind,
 } from '@/lib/tasks';
 import { CollapsibleSection } from './collapsible-section';
-import { OntologyMultiPicker, type OntologyPickerOption } from './ontology-multi-picker';
+import { SearchPicker, type SearchPickerOption } from './search-picker';
 import { SidebarNewItem } from './sidebar-new-item';
 import { getWorkspacePath } from './utils';
 
@@ -154,7 +154,7 @@ export function TasksSection({ collapsed, detailOnly }: { collapsed: boolean; de
     [memberName, iterationById, settings.stages, settings.priorities],
   );
 
-  const assigneeOptions = useMemo<OntologyPickerOption[]>(
+  const assigneeOptions = useMemo<SearchPickerOption[]>(
     () => [
       { value: UNASSIGNED, label: 'Unassigned' },
       ...[...members]
@@ -168,7 +168,7 @@ export function TasksSection({ collapsed, detailOnly }: { collapsed: boolean; de
     [members, userId],
   );
 
-  const priorityOptions = useMemo<OntologyPickerOption[]>(
+  const priorityOptions = useMemo<SearchPickerOption[]>(
     () => [
       ...settings.priorities.map((p) => ({ value: p.key, label: p.label })),
       { value: NO_PRIORITY, label: 'No priority' },
@@ -177,7 +177,7 @@ export function TasksSection({ collapsed, detailOnly }: { collapsed: boolean; de
   );
 
   // Suggested labels first, then every other label already on a task.
-  const labelOptions = useMemo<OntologyPickerOption[]>(() => {
+  const labelOptions = useMemo<SearchPickerOption[]>(() => {
     const used = tasks.flatMap((t) => t.labels).filter((l) => !settings.suggested_labels.includes(l));
     return [
       ...[...settings.suggested_labels, ...Array.from(new Set(used)).sort()].map((l) => ({ value: l, label: l })),
@@ -187,7 +187,7 @@ export function TasksSection({ collapsed, detailOnly }: { collapsed: boolean; de
 
   if (!workspaceId) return null;
 
-  const pickers: { kind: TasksFilterKind; items: OntologyPickerOption[]; noun: string; allLabel: string }[] = [
+  const pickers: { kind: TasksFilterKind; items: SearchPickerOption[]; noun: string; allLabel: string }[] = [
     { kind: 'assignees', items: assigneeOptions, noun: 'assignees', allLabel: 'All assignees' },
     { kind: 'priorities', items: priorityOptions, noun: 'priorities', allLabel: 'All priorities' },
     { kind: 'labels', items: labelOptions, noun: 'labels', allLabel: 'All labels' },
@@ -231,7 +231,7 @@ export function TasksSection({ collapsed, detailOnly }: { collapsed: boolean; de
       </Link>
       <div className="shell-sidebar-home-gutter pb-2 pt-1">
         {pickers.map((picker) => (
-          <OntologyMultiPicker
+          <SearchPicker
             key={`${picker.kind}:${workspaceId}`}
             items={picker.items}
             value={filters[picker.kind]}

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+import urllib.parse
 
 import click
 
@@ -14,6 +14,7 @@ from .nexus_client import (
     print_table,
 )
 from .nexus_postgres import create_workspace_sql, run_postgres_sql
+from .org import legacy_access, workspace_access_body
 
 
 @click.group("workspace")
@@ -23,7 +24,9 @@ def workspace() -> None:
 
 @workspace.command("create")
 @click.option("--name", required=True, help="Workspace display name.")
-@click.option("--slug", required=True, help="URL-safe slug (lowercase, digits, hyphens).")
+@click.option(
+    "--slug", required=True, help="URL-safe slug (lowercase, digits, hyphens)."
+)
 @click.option(
     "--org",
     "organization_id",
@@ -67,7 +70,9 @@ def workspace_create(
             print(sql)
             return
         out = run_postgres_sql(sql)
-        print_json({"via": "postgres", "id": ws_id, "slug": slug, "postgres_output": out})
+        print_json(
+            {"via": "postgres", "id": ws_id, "slug": slug, "postgres_output": out}
+        )
         return
 
     body = {"name": name, "slug": slug, "organization_id": organization_id}
@@ -134,7 +139,11 @@ def workspace_get(
     """Fetch a workspace by id or slug."""
     if bool(workspace_id) == bool(slug):
         raise click.ClickException("Provide exactly one of --id or --slug.")
-    path = f"/api/workspaces/{workspace_id}" if workspace_id else f"/api/workspaces/slug/{slug}"
+    path = (
+        f"/api/workspaces/{workspace_id}"
+        if workspace_id
+        else f"/api/workspaces/slug/{slug}"
+    )
     if dry_run:
         print_json({"method": "GET", "path": path})
         return
@@ -176,7 +185,9 @@ def workspace_members() -> None:
 
 
 @workspace_members.command("list")
-@click.option("--workspace", "workspace_id", required=True, help="Workspace id (ws-...).")
+@click.option(
+    "--workspace", "workspace_id", required=True, help="Workspace id (ws-...)."
+)
 @common_api_options
 def workspace_members_list(
     workspace_id: str,
@@ -199,36 +210,119 @@ def workspace_members_list(
         return
     print_table(
         rows,
-        ["user_id", "email", "name", "role"],
+        ["user_id", "email", "name", "role", "source", "status"],
         title=f"Members of {workspace_id}",
     )
 
 
-@workspace_members.command("add")
-@click.option("--workspace", "workspace_id", required=True, help="Workspace id (ws-...).")
-@click.option("--email", "member_email", required=True, help="Invitee email (created if missing).")
-@click.option("--name", "member_name", default=None, help="Display name when creating the user.")
+@workspace_members.command("search")
 @click.option(
-    "--role",
-    default="member",
-    show_default=True,
-    type=click.Choice(["admin", "member", "viewer"], case_sensitive=False),
+    "--workspace", "workspace_id", required=True, help="Workspace id (ws-...)."
 )
+@click.option(
+    "--q", "query", required=True, help="Name or email (at least 2 characters)."
+)
+@click.option("--limit", default=10, show_default=True, type=click.IntRange(1, 20))
 @common_api_options
-def workspace_members_add(
+def workspace_members_search(
     workspace_id: str,
-    member_email: str,
-    member_name: str | None,
-    role: str,
+    query: str,
+    limit: int,
     api_url: str,
     token: str | None,
     dry_run: bool,
 ) -> None:
-    """Invite a user into a workspace (create-on-invite + sign-in email)."""
-    path = f"/api/workspaces/{workspace_id}/members/invite"
-    body: dict[str, Any] = {"email": member_email, "role": role.lower()}
-    if member_name:
-        body["name"] = member_name
+    """Find people of the workspace's organization to add (not already in it)."""
+    path = (
+        f"/api/workspaces/{workspace_id}/members/candidates?"
+        f"{urllib.parse.urlencode({'q': query, 'limit': limit})}"
+    )
+    if dry_run:
+        print_json({"method": "GET", "path": path})
+        return
+    client = build_client(api_url=api_url, token=token)
+    try:
+        found = client.get(path)
+    except NexusApiError as exc:
+        raise click.ClickException(str(exc)) from exc
+    rows = found.get("items") if isinstance(found, dict) else None
+    if not isinstance(rows, list):
+        print_json(found)
+        return
+    print_table(
+        rows,
+        ["user_id", "email", "name", "org_role", "status"],
+        title=f"People to add to {workspace_id}",
+    )
+
+
+@workspace_members.command("add")
+@click.option(
+    "--workspace", "workspace_id", required=True, help="Workspace id (ws-...)."
+)
+@click.option(
+    "--user-id",
+    "member_user_id",
+    default=None,
+    help="Someone of the organization (see `members search`): added now and notified.",
+)
+@click.option(
+    "--email",
+    "member_email",
+    default=None,
+    help="Anyone else: their account is created, or the one of this email linked.",
+)
+@click.option(
+    "--name", "member_name", default=None, help="Display name when creating the user."
+)
+@click.option(
+    "--level",
+    default=None,
+    type=click.Choice(["viewer", "member"], case_sensitive=False),
+    help="Their level, in all their workspaces (default: theirs; Member if new).",
+)
+@click.option(
+    "--admin", is_flag=True, default=False, help="They administer the workspace."
+)
+@click.option(
+    "--capability",
+    "capabilities",
+    multiple=True,
+    help="A capability group id (repeat for several).",
+)
+@click.option(
+    "--role",
+    default=None,
+    type=click.Choice(["admin", "member", "viewer"], case_sensitive=False),
+    help="Deprecated: admin is --admin, viewer or member the --level.",
+)
+@common_api_options
+def workspace_members_add(
+    workspace_id: str,
+    member_user_id: str | None,
+    member_email: str | None,
+    member_name: str | None,
+    level: str | None,
+    admin: bool,
+    capabilities: tuple[str, ...],
+    role: str | None,
+    api_url: str,
+    token: str | None,
+    dry_run: bool,
+) -> None:
+    """Add a user to a workspace (nothing at the organization)."""
+    if bool(member_user_id) == bool(member_email):
+        raise click.ClickException("Provide exactly one of --user-id or --email.")
+    level, _, admin = legacy_access(level, False, admin, role=None, workspace_role=role)
+    body = workspace_access_body(level, admin, capabilities)
+    if member_user_id:
+        path = f"/api/workspaces/{workspace_id}/members"
+        body["user_id"] = member_user_id
+    else:
+        path = f"/api/workspaces/{workspace_id}/members/invite"
+        body["email"] = member_email
+        if member_name:
+            body["name"] = member_name
     if dry_run:
         print_json({"method": "POST", "path": path, "body": body})
         return
@@ -239,8 +333,35 @@ def workspace_members_add(
         raise click.ClickException(str(exc)) from exc
 
 
+@workspace_members.command("resend")
+@click.option(
+    "--workspace", "workspace_id", required=True, help="Workspace id (ws-...)."
+)
+@click.option("--user-id", required=True, help="An invited member's user id.")
+@common_api_options
+def workspace_members_resend(
+    workspace_id: str,
+    user_id: str,
+    api_url: str,
+    token: str | None,
+    dry_run: bool,
+) -> None:
+    """Send an invited member their sign-in mail again."""
+    path = f"/api/workspaces/{workspace_id}/members/{user_id}/resend"
+    if dry_run:
+        print_json({"method": "POST", "path": path})
+        return
+    client = build_client(api_url=api_url, token=token)
+    try:
+        print_json(client.post(path))
+    except NexusApiError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 @workspace_members.command("remove")
-@click.option("--workspace", "workspace_id", required=True, help="Workspace id (ws-...).")
+@click.option(
+    "--workspace", "workspace_id", required=True, help="Workspace id (ws-...)."
+)
 @click.option("--user-id", required=True, help="User id to remove.")
 @click.option("--yes", is_flag=True, default=False, help="Skip confirmation.")
 @common_api_options

@@ -4,10 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Bot, CheckCircle, Save, XCircle } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { getApiUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
-import { authFetch } from '@/stores/auth';
-import { useAgentsStore } from '@/stores/agents';
+import { readAgentRoster, useAgentsStore } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/input';
@@ -54,7 +52,7 @@ export default function AgentEditPage() {
   const workspaceId = params.workspaceId as string;
   const agentId = params.agentId as string;
 
-  const { agents, fetchAgents, updateAgent } = useAgentsStore();
+  const { agents, updateAgent } = useAgentsStore();
   const { refreshProviders } = useIntegrationsStore();
 
   const [loading, setLoading] = useState(true);
@@ -81,22 +79,24 @@ export default function AgentEditPage() {
   }, [serviceAgent]);
 
   useEffect(() => {
+    // An answer for another agent or workspace (the page moved on) is dropped.
+    let cancelled = false;
     const load = async () => {
       try {
         if (!workspaceId || !agentId) return;
         setLoading(true);
         setError(null);
 
-        // Run the three loads in parallel; they are independent.
-        const [response] = await Promise.all([
-          authFetch(`${getApiUrl()}/api/agents/?workspace_id=${workspaceId}`),
-          fetchAgents(workspaceId, true),
+        // One roster for the store and this page (reconciled when it is old); the
+        // providers are independent and read meanwhile.
+        const [roster] = await Promise.all([
+          readAgentRoster(workspaceId).catch(() => {
+            throw new Error('Failed to load agent from service');
+          }),
           refreshProviders(),
         ]);
-        if (!response.ok) {
-          throw new Error('Failed to load agent from service');
-        }
-        const serviceAgents = (await response.json()) as ServiceAgent[];
+        if (cancelled) return;
+        const serviceAgents = roster as ServiceAgent[];
         const selectedServiceAgent = serviceAgents.find((agent) => agent.id === agentId) || null;
         if (!selectedServiceAgent) {
           setError('Agent not found in service');
@@ -112,15 +112,19 @@ export default function AgentEditPage() {
         setLogoUrl(selectedServiceAgent.logo_url || '');
 
       } catch (err) {
+        if (cancelled) return;
         console.error(err);
         setError(err instanceof Error ? err.message : 'Failed to load agent');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     void load();
-  }, [workspaceId, agentId, fetchAgents, refreshProviders]);
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, agentId, refreshProviders]);
 
   const handleSave = async () => {
     if (!storeAgent) return;

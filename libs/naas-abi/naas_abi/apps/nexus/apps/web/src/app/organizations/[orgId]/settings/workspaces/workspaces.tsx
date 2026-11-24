@@ -17,7 +17,10 @@ import {
 } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
+import { readOrganization } from '@/lib/organization-resource';
 import { useOrganizationStore } from '@/stores/organization';
+import { useWorkspaceStore } from '@/stores/workspace';
+import { getWorkspaceHomePath } from '@/lib/feature-access';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
 import { SearchBox } from '@/components/settings/search-box';
@@ -124,6 +127,17 @@ function countFacets(values: string[]): FacetBucket[] {
 export default function OrganizationWorkspacesPage() {
   const params = useParams();
   const router = useRouter();
+  // Opens a workspace as the sidebar's switcher does: made current first, so the page does not
+  // render a frame (or stay) on the workspace left; one not yet in the caller's list is read anew.
+  const openWorkspace = useCallback(
+    async (workspaceId: string, path: string) => {
+      const store = useWorkspaceStore.getState();
+      if (!store.workspaces.some((w) => w.id === workspaceId)) await store.fetchWorkspaces();
+      useWorkspaceStore.getState().setCurrentWorkspace(workspaceId);
+      router.push(path);
+    },
+    [router]
+  );
   const orgId = params.orgId as string;
   const { fetchMembers, membersCache } = useOrganizationStore();
 
@@ -152,7 +166,7 @@ export default function OrganizationWorkspacesPage() {
       try {
         const [wsRes, orgRes] = await Promise.all([
           authFetch(`/api/organizations/${orgId}/workspaces`),
-          authFetch(`/api/organizations/${orgId}`),
+          readOrganization(orgId),
         ]);
         if (cancelled) return;
         if (!wsRes.ok) {
@@ -559,7 +573,7 @@ export default function OrganizationWorkspacesPage() {
                       }`}
                       onClick={(event) => {
                         if ((event.target as HTMLElement).closest('a, button, input, label')) return;
-                        router.push(`/workspace/${workspace.id}/settings`);
+                        void openWorkspace(workspace.id, `/workspace/${workspace.id}/settings`);
                       }}
                     >
                       {canManage && (
@@ -624,8 +638,15 @@ export default function OrganizationWorkspacesPage() {
                       <td>
                         <div className="org-workspaces-actions">
                           <Link
-                            href={`/workspace/${workspace.id}/home`}
+                            href={getWorkspaceHomePath(workspace.id)}
                             className="org-settings-users-secondary-button org-workspaces-open"
+                            data-action="open"
+                            onClick={(event) => {
+                              // A new tab (Cmd/Ctrl/Shift, middle click) reads the workspace from its URL.
+                              if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                              event.preventDefault();
+                              void openWorkspace(workspace.id, getWorkspaceHomePath(workspace.id));
+                            }}
                           >
                             <ExternalLink size={14} />
                             Open

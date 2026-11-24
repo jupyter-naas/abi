@@ -16,6 +16,9 @@ from naas_abi.apps.nexus.apps.api.app.services.accounts.adapters.secondary.engin
 from naas_abi.apps.nexus.apps.api.app.services.accounts.adapters.secondary.invitations import (
     InvitationsAdapter,
 )
+from naas_abi.apps.nexus.apps.api.app.services.accounts.adapters.secondary.people import (
+    PeopleAdapter,
+)
 from naas_abi.apps.nexus.apps.api.app.services.accounts.adapters.secondary.postgres import (
     AccountStorePostgres,
 )
@@ -30,6 +33,7 @@ from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites
 from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.secondary.engine import (
     default_identity,
 )
+from naas_abi.apps.nexus.apps.api.app.services.people import runtime as people_runtime
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.sql_audit_log import (
     SqlAdminAuditLog,
 )
@@ -64,6 +68,7 @@ class AccountRuntime:
             self.identity,
             InvitationsAdapter(invites_runtime.RUNTIME.service(db)),
             self._audit(),
+            people=PeopleAdapter(people_runtime.RUNTIME.service(db)),
             clock=now_utc_naive,
         )
 

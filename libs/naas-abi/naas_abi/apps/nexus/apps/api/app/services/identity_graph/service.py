@@ -125,7 +125,11 @@ class _Builder:
         self.graph += entity.rdf()
         return URIRef(entity._uri)
 
-    def instant(self, at: datetime.datetime) -> list[URIRef]:
+    def instant(self, at: datetime.datetime | None) -> list[URIRef]:
+        """The instant ``at``; none when it is not known (a membership held
+        through a group)."""
+        if at is None:
+            return []
         label = at.isoformat()
         return [self.add(TemporalInstant(_uri=str(iris.instant_iri(label)), label=label))]
 
@@ -133,7 +137,7 @@ class _Builder:
         return [self.site] if self.site is not None else []
 
     def process(
-        self, cls: type, iri: URIRef, label: str, at: datetime.datetime, **links: Any
+        self, cls: type, iri: URIRef, label: str, at: datetime.datetime | None, **links: Any
     ) -> URIRef:
         return self.add(
             cls(
@@ -332,6 +336,10 @@ class _Builder:
         )
 
     def organization_membership(self, membership: Any) -> None:
+        if membership.role is None:
+            # Workspace access only: a user of the organization (``has_user``),
+            # holding no role in it, so no membership record.
+            return
         person = iris.person_iri(membership.user_id)
         record = iris.organization_membership_iri(membership.organization_id, membership.user_id)
         who = self.names.get(membership.user_id, membership.user_id)

@@ -8,17 +8,23 @@ import { getApiUrl } from '@/lib/config';
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { useConfirm } from '@/components/ui/dialogs';
-import { ROLE_LABELS as BUILT_IN_ROLE_LABELS, assignableRoles, changeMemberRole, roleChangeable } from '@/components/access/roles/role-change';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
 import { orgSettingsSectionPath } from '../../lib/nav';
+import { removableFromOrganization, removalConfirmation } from '../users-model';
 import {
+  accessChanges,
+  accessError,
   changedProfileFields,
+  initialAccess,
   saveMemberChanges,
   PROFILE_FIELDS,
+  type AccessDraft,
   type MemberDetails,
   type MemberProfileField,
 } from './member-details';
+import { MemberAccess } from './member-access';
+import { MemberAccessEditor, type OrgWorkspaceChoice } from './member-access-editor';
 import '@/app/account/profile/profile.css';
 import '../users.css';
 
@@ -34,13 +40,6 @@ const TEXT_FIELDS: { field: MemberProfileField; label: string; placeholder: stri
   { field: 'interest', label: 'Interest', placeholder: 'Interests' },
 ];
 
-const ROLE_LABELS: Record<string, string> = {
-  owner: 'Owner',
-  admin: 'Admin',
-  member: 'Member',
-  viewer: 'Viewer',
-};
-
 function photoUrl(avatar?: string | null) {
   if (!avatar) return '';
   return avatar.startsWith('/') ? `${getApiUrl()}${avatar}` : avatar;
@@ -49,6 +48,32 @@ function photoUrl(avatar?: string | null) {
 function formatError(err: unknown, fallback: string) {
   if (err instanceof Error && err.message) return err.message;
   return fallback;
+}
+
+/** `PATCH …/members/{id}` (org admin, level, capability groups) then `PUT …/members/{id}/workspaces`. */
+async function saveAccess(
+  orgId: string,
+  userId: string,
+  changes: ReturnType<typeof accessChanges>
+): Promise<void> {
+  const base = `/api/organizations/${orgId}/members/${encodeURIComponent(userId)}`;
+  const send = async (path: string, method: string, body: unknown) => {
+    const response = await authFetch(path, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw new Error(await readApiError(response, 'Failed to change their access'));
+  };
+  if (changes.member) {
+    const { orgAdmin, level, capabilities } = changes.member;
+    await send(base, 'PATCH', {
+      ...(orgAdmin !== undefined ? { org_admin: orgAdmin } : {}),
+      ...(level ? { level } : {}),
+      ...(capabilities ? { capabilities } : {}),
+    });
+  }
+  if (changes.workspaces) await send(`${base}/workspaces`, 'PUT', { workspaces: changes.workspaces });
 }
 
 async function readApiError(response: Response, fallback: string): Promise<string> {
@@ -79,15 +104,22 @@ export default function OrgUserProfilePage() {
   const orgId = params.orgId as string;
   const userId = params.userId as string;
   const authUser = useAuthStore((state) => state.user);
-  const { updateMemberProfile, uploadMemberAvatar, removeMemberAvatar, removeMember, fetchMembers } =
-    useOrganizationStore();
+  const {
+    updateMemberProfile,
+    uploadMemberAvatar,
+    removeMemberAvatar,
+    removeFromOrganization,
+    fetchMembers,
+  } = useOrganizationStore();
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   const [details, setDetails] = useState<MemberDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [refused, setRefused] = useState(false);
   const [draft, setDraft] = useState(emptyDraft);
-  const [orgRole, setOrgRole] = useState<'admin' | 'member'>('member');
+  const [access, setAccess] = useState<AccessDraft | null>(null);
+  const [orgWorkspaces, setOrgWorkspaces] = useState<OrgWorkspaceChoice[]>([]);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -102,7 +134,8 @@ export default function OrgUserProfilePage() {
         `/api/organizations/${orgId}/members/${encodeURIComponent(userId)}`
       );
       if (res.status === 403) {
-        router.replace(orgSettingsSectionPath(orgId, 'users'));
+        // Not an admin here: whoever opens the organization's Access still sees what they hold.
+        setRefused(true);
         return;
       }
       if (!res.ok) {
@@ -117,36 +150,63 @@ export default function OrgUserProfilePage() {
           PROFILE_FIELDS.map((field) => [field, data.organization_profile[field] ?? ''])
         ) as Record<MemberProfileField, string>
       );
-      setOrgRole(data.member.role === 'admin' ? 'admin' : 'member');
+      setAccess(initialAccess(data));
     } catch {
       setLoadError('Failed to load this user. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, [orgId, userId, router]);
+  }, [orgId, userId]);
 
   useEffect(() => {
     if (orgId && userId) void load();
   }, [orgId, userId, load]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await authFetch(`/api/organizations/${orgId}/workspaces`);
+        if (response.ok && !cancelled) setOrgWorkspaces((await response.json()) as OrgWorkspaceChoice[]);
+      } catch {
+        // The editor lists the workspaces they are in.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
+
   if (loading) return <p className="text-sm text-muted-foreground">Loading user...</p>;
   if (!details) {
     return (
-      <div className="org-settings-users-alert" role="alert">
-        <AlertCircle size={16} />
-        <span>{loadError || 'User not found.'}</span>
+      <div className="account-profile-page">
+        {!refused && (
+          <div className="org-settings-users-alert" role="alert">
+            <AlertCircle size={16} />
+            <span>{loadError || 'User not found.'}</span>
+          </div>
+        )}
+        <MemberAccess orgId={orgId} personId={userId} />
       </div>
     );
   }
 
   const { member, account, organization_profile: orgProfile, workspaces } = details;
   const isSelf = member.user_id === authUser?.id;
-  const isOwner = member.role === 'owner';
-  const canEditOrgRole = roleChangeable({ role: member.role, inherited: false, userId: member.user_id, selfId: authUser?.id });
-  const canRemove = !isOwner && !isSelf;
+  const canRemove = removableFromOrganization(member.user_id, authUser?.id);
   const changes = changedProfileFields(orgProfile, draft);
-  const roleChanged = canEditOrgRole && orgRole !== member.role;
-  const dirty = Object.keys(changes).length > 0 || roleChanged;
+  const savedAccess = initialAccess(details);
+  const accessDraft = access ?? savedAccess;
+  const accessDiff = accessChanges(savedAccess, accessDraft);
+  const accessChanged = !isSelf && (accessDiff.member !== null || accessDiff.workspaces !== null);
+  const accessProblem = accessChanged ? accessError(accessDraft) : null;
+  const dirty = Object.keys(changes).length > 0 || accessChanged;
+  // Every workspace of the organization, and those they are in that the list has not loaded.
+  const workspaceChoices: OrgWorkspaceChoice[] = [
+    ...orgWorkspaces,
+    ...workspaces.filter((w) => !orgWorkspaces.some((o) => o.id === w.id)).map((w) => ({ id: w.id, name: w.name })),
+  ];
   // Always the account name (users.name): an organization cannot rename someone.
   const displayName = account.name || account.email || 'Unknown';
   const orgAvatarUrl = photoUrl(orgProfile.avatar);
@@ -157,10 +217,7 @@ export default function OrgUserProfilePage() {
     try {
       const failed = await saveMemberChanges({
         profile: Object.keys(changes).length > 0 ? () => updateMemberProfile(orgId, member.user_id, changes) : null,
-        // The same role change as Roles & permissions › People & roles.
-        role: roleChanged
-          ? () => changeMemberRole({ level: 'organization', organizationId: orgId }, member.user_id, orgRole)
-          : null,
+        access: accessChanged ? () => saveAccess(orgId, member.user_id, accessDiff) : null,
         // The Users list reads the members' roles from the store.
         refreshed: () => fetchMembers(orgId),
       });
@@ -177,18 +234,17 @@ export default function OrgUserProfilePage() {
   };
 
   const handleRemove = async () => {
-    if (
-      !(await confirm({
-        title: `Remove ${displayName} from this organization?`,
-        confirmLabel: 'Remove',
-      }))
-    ) {
+    // The workspaces they joined themselves (not those an org admin reaches anyway).
+    const ownWorkspaces = workspaces.filter((w) => w.source === 'workspace').map((w) => w.name);
+    if (!(await confirm(removalConfirmation(displayName, ownWorkspaces)))) {
       return;
     }
     setError('');
     setRemoving(true);
     try {
-      await removeMember(orgId, member.user_id);
+      // Every group of the organization; the last org admin is the API's 409, shown as is.
+      await removeFromOrganization(orgId, member.user_id);
+      await fetchMembers(orgId);
       router.push(orgSettingsSectionPath(orgId, 'users'));
     } catch (err) {
       setError(formatError(err, 'Failed to remove this user'));
@@ -247,13 +303,7 @@ export default function OrgUserProfilePage() {
               onClick={() => void handleRemove()}
               disabled={!canRemove || removing}
               className="org-member-detail-remove-button"
-              title={
-                isOwner
-                  ? 'The owner cannot be removed'
-                  : isSelf
-                    ? 'You cannot remove yourself'
-                    : undefined
-              }
+              title={isSelf ? 'You cannot remove yourself' : undefined}
             >
               <Trash2 size={16} />
               {removing ? 'Removing...' : 'Remove from organization'}
@@ -261,7 +311,8 @@ export default function OrgUserProfilePage() {
             <button
               type="button"
               onClick={() => void handleSave()}
-              disabled={!dirty || saving}
+              disabled={!dirty || saving || accessProblem !== null}
+              title={accessProblem ?? undefined}
               className={
                 saved
                   ? 'account-profile-save-button account-profile-save-button-saved'
@@ -376,35 +427,6 @@ export default function OrgUserProfilePage() {
               />
             </div>
           ))}
-          <div className="account-profile-field">
-            <label className="account-profile-field-label" htmlFor="org-member-role">
-              Member role
-            </label>
-            <select
-              id="org-member-role"
-              value={isOwner ? 'owner' : orgRole}
-              onChange={(event) => setOrgRole(event.target.value as 'admin' | 'member')}
-              className="account-profile-field-input"
-              disabled={!canEditOrgRole}
-              title={
-                isOwner
-                  ? 'Owners come from the config'
-                  : isSelf
-                    ? 'You cannot change your own role'
-                    : undefined
-              }
-            >
-              {isOwner ? (
-                <option value="owner">{BUILT_IN_ROLE_LABELS.owner}</option>
-              ) : (
-                assignableRoles('organization').map((role) => (
-                  <option key={role} value={role}>
-                    {BUILT_IN_ROLE_LABELS[role]}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
           {TEXT_FIELDS.slice(2).map(({ field, label, placeholder }) => (
             <div key={field} className="account-profile-field">
               <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
@@ -458,50 +480,19 @@ export default function OrgUserProfilePage() {
         </div>
       </AccountSectionCard>
 
-      <section className="org-member-detail-section">
-        <header className="org-member-detail-section-header">
-          <h3>
-            Workspaces{' '}
-            <span className="org-member-detail-count">{workspaces.length}</span>
-          </h3>
-          <p>
-            Workspaces they can access in this organization. Assign them from the Users table; org
-            owners and admins reach every workspace.
-          </p>
-        </header>
-        <div className="org-settings-users-table-wrap">
-          {workspaces.length === 0 ? (
-            <p className="org-settings-users-no-match">No workspace in this organization.</p>
-          ) : (
-            <table className="org-settings-users-table org-member-detail-workspaces">
-              <thead>
-                <tr>
-                  <th>Workspace</th>
-                  <th>Role</th>
-                  <th>Access</th>
-                </tr>
-              </thead>
-              <tbody>
-                {workspaces.map((workspace) => (
-                  <tr key={workspace.id}>
-                    <td>{workspace.name}</td>
-                    <td>{ROLE_LABELS[workspace.role] ?? workspace.role}</td>
-                    <td>
-                      {workspace.source === 'organization' ? (
-                        <span className="org-settings-users-badge org-settings-users-badge-member">
-                          via organization
-                        </span>
-                      ) : (
-                        <span className="org-member-detail-value">Workspace member</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </section>
+      <MemberAccessEditor
+        orgId={orgId}
+        draft={accessDraft}
+        onChange={setAccess}
+        workspaces={workspaceChoices}
+        disabled={isSelf || saving}
+      />
+      {accessProblem && (
+        <p className="org-settings-footnote" role="alert" data-access-error>
+          {accessProblem}
+        </p>
+      )}
+      <MemberAccess orgId={orgId} personId={member.principal_id || member.user_id} />
       {confirmDialog}
     </div>
   );

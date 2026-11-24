@@ -7,6 +7,7 @@ Uses asyncpg for production-grade performance.
 
 import re
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from sqlalchemy import inspect, text
@@ -18,6 +19,12 @@ from sqlalchemy.orm import DeclarativeBase
 # already catches the duplicate-column error on idempotent re-runs.
 _SQLITE_ADD_COLUMN_RE = re.compile(
     r"\bADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\b",
+    re.IGNORECASE,
+)
+# SQLite has no ``DROP COLUMN IF EXISTS``: the runner drops ``IF EXISTS`` and skips
+# a column already gone (``_DROP_COLUMN_RE``).
+_SQLITE_DROP_COLUMN_RE = re.compile(
+    r"\bDROP\s+COLUMN\s+IF\s+EXISTS\b",
     re.IGNORECASE,
 )
 
@@ -57,6 +64,11 @@ _ALTER_CONSTRAINT_RE = re.compile(
 )
 
 
+# ``DO $$ ... $$``: a PostgreSQL block (a guarded copy, say). SQLite has nothing like it:
+# the runner skips it there (the migration says what that leaves out).
+_DO_BLOCK_RE = re.compile(r"^\s*DO\s+\$\$", re.IGNORECASE)
+
+
 # ``ALTER TABLE t DROP COLUMN c``: neither SQLite nor older PostgreSQL drivers
 # phrase "already dropped" like "already exists", so a rerun is told apart here.
 _DROP_COLUMN_RE = re.compile(r"^\s*ALTER\s+TABLE\s+\S+\s+DROP\s+COLUMN\b", re.IGNORECASE)
@@ -81,6 +93,84 @@ def rename_already_applied(columns: set[str], old: str, new: str) -> bool:
     return old not in columns and new in columns
 
 
+# `ALTER TABLE t ADD COLUMN [IF NOT EXISTS] c ... [, ADD COLUMN ...]`: PostgreSQL takes
+# the table's ACCESS EXCLUSIVE lock before it checks IF NOT EXISTS, so on every boot such
+# a statement would queue behind any long transaction on the table (and every query of it
+# behind the ALTER). The runner skips it once all its columns exist.
+_ADD_COLUMN_STATEMENT_RE = re.compile(
+    r'^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"?(\w+)"?\s+(ADD\s+COLUMN\s+.*?)\s*;?\s*$',
+    re.IGNORECASE | re.DOTALL,
+)
+_ADD_COLUMN_CLAUSE_RE = re.compile(
+    r'^\s*ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?(?:\s|$)',
+    re.IGNORECASE,
+)
+
+
+def parse_add_columns(statement: str) -> tuple[str, list[str]] | None:
+    """(table, columns) for an `ALTER TABLE ... ADD COLUMN ...` made of ADD COLUMN
+    clauses only, else None."""
+    match = _ADD_COLUMN_STATEMENT_RE.match(statement)
+    if not match:
+        return None
+    table, body = match.group(1), match.group(2)
+    # Any other clause (``, DROP COLUMN ...``): run as written. Literals and
+    # parentheses (``NUMERIC(10,2)``) are left out of the look.
+    bare = re.sub(r"'[^']*'|\([^()]*\)", "", body)
+    if re.search(r",(?!\s*ADD\s+COLUMN\s)", bare, flags=re.I):
+        return None
+    columns = []
+    for clause in re.split(r",\s*(?=ADD\s+COLUMN\s)", body, flags=re.I):
+        found = _ADD_COLUMN_CLAUSE_RE.match(clause)
+        if found is None:
+            return None
+        columns.append(found.group(1))
+    return table, columns
+
+
+def add_columns_already_applied(columns: set[str], added: list[str]) -> bool:
+    return bool(added) and all(column in columns for column in added)
+
+
+def split_statements(sql: str) -> list[str]:
+    """The statements of a migration file, each on one line: comment lines and inline
+    ``--`` comments dropped, a statement ending at a line that ends with ``;``, except
+    inside a dollar-quoted body (``DO $$ ... $$;``), which stays one statement. The
+    lines are joined with spaces, so a body's comment lines are dropped too; a body
+    keeps no inline ``--`` comment."""
+    statements: list[str] = []
+    current: list[str] = []
+    quoted = False
+    for raw in sql.split("\n"):
+        line = raw.strip()
+        if not line or line.startswith("--"):
+            continue
+        if not quoted and "--" in line:
+            line = line[: line.index("--")].strip()
+            if not line:
+                continue
+        current.append(line)
+        if line.count("$$") % 2:
+            quoted = not quoted
+        if not quoted and line.endswith(";"):
+            statements.append(" ".join(current))
+            current = []
+    return statements
+
+
+async def _columns_of(table: str, engine: Any = None) -> set[str] | None:
+    """The table's column names; None when it does not exist."""
+    async with (engine or async_engine).connect() as conn:
+
+        def read(sync_conn) -> set[str] | None:
+            inspector = inspect(sync_conn)
+            if not inspector.has_table(table):
+                return None
+            return {c["name"] for c in inspector.get_columns(table)}
+
+        return await conn.run_sync(read)
+
+
 def _adapt_statement_for_dialect(statement: str, dialect: str) -> list[str]:
     """Return the statement(s) to actually execute for the active dialect.
 
@@ -88,6 +178,8 @@ def _adapt_statement_for_dialect(statement: str, dialect: str) -> list[str]:
     SQLite, two Postgres-isms get rewritten:
       - `ADD COLUMN IF NOT EXISTS` → `ADD COLUMN` (duplicate errors are
         caught and skipped by the runner for idempotent re-runs).
+      - `DROP COLUMN IF EXISTS` → `DROP COLUMN` (a column already dropped is
+        skipped by the runner).
       - `ALTER TABLE t ADD COLUMN a, ADD COLUMN b` → two separate ALTERs.
     """
     if dialect != "sqlite":
@@ -105,7 +197,12 @@ def _adapt_statement_for_dialect(statement: str, dialect: str) -> list[str]:
     if _ALTER_CONSTRAINT_RE.match(statement):
         return []
 
+    # `DO $$ ... $$` is PostgreSQL's alone.
+    if _DO_BLOCK_RE.match(statement):
+        return []
+
     rewritten = _SQLITE_ADD_COLUMN_RE.sub("ADD COLUMN", statement)
+    rewritten = _SQLITE_DROP_COLUMN_RE.sub("DROP COLUMN", rewritten)
 
     # Detect "ALTER TABLE x ADD COLUMN ... , ADD COLUMN ..." and split.
     match = _ALTER_TABLE_PREFIX_RE.match(rewritten)
@@ -195,6 +292,65 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+async def run_migration_statements(
+    statements: list[str], dialect: str, engine: Any = None
+) -> tuple[int, int]:
+    """Run a migration's statements, each in its own transaction, as every start does:
+    adapted to ``dialect``, and skipped when already applied (a column added, renamed
+    or dropped by an earlier run, a table or index that exists). Returns
+    ``(executed, skipped)``; any other error is raised."""
+    engine = engine or async_engine
+    executed = 0
+    skipped = 0
+    for raw_statement in statements:
+        adapted = _adapt_statement_for_dialect(raw_statement.strip().rstrip(";"), dialect)
+        for statement in adapted:
+            if not statement:
+                continue
+            rename = parse_rename_column(statement)
+            if rename is not None:
+                table, old, new = rename
+                async with engine.connect() as conn:
+                    columns = await conn.run_sync(
+                        lambda sync_conn, t=table: {
+                            c["name"] for c in inspect(sync_conn).get_columns(t)
+                        }
+                    )
+                if rename_already_applied(columns, old, new):
+                    skipped += 1
+                    continue
+            added = parse_add_columns(statement)
+            if added is not None:
+                existing = await _columns_of(added[0], engine)
+                if existing is not None and add_columns_already_applied(existing, added[1]):
+                    skipped += 1
+                    continue
+            try:
+                async with engine.begin() as conn:
+                    await conn.execute(text(statement))
+                    executed += 1
+            except Exception as e:
+                error_msg = str(e).lower()
+                # Idempotent reruns: existing column / table / index
+                # surfaces as different wording across drivers.
+                if (
+                    "already exists" in error_msg
+                    or "duplicate" in error_msg
+                    or "duplicate column" in error_msg
+                    # A column a migration drops, dropped by an earlier run.
+                    or (
+                        _DROP_COLUMN_RE.match(statement)
+                        and ("no such column" in error_msg or "does not exist" in error_msg)
+                    )
+                ):
+                    skipped += 1
+                else:
+                    print(f"\n✗ Error executing: {statement[:80]}...")
+                    print(f"  Error: {e}")
+                    raise
+    return executed, skipped
+
+
 async def init_db() -> None:
     """Initialize the database schema (async). Runs all migrations on every startup."""
     import asyncio
@@ -262,69 +418,7 @@ async def init_db() -> None:
             print(f"⊘ (skipped on {current_dialect})")
             continue
 
-        # Split by semicolon but handle multi-line statements
-        statements = []
-        current_statement = []
-
-        for line in sql.split("\n"):
-            line = line.strip()
-            # Skip comments and empty lines
-            if line.startswith("--") or not line:
-                continue
-            # Remove inline comments
-            if "--" in line:
-                line = line[: line.index("--")].strip()
-            if line:
-                current_statement.append(line)
-                if line.endswith(";"):
-                    statements.append(" ".join(current_statement))
-                    current_statement = []
-
-        # Execute each statement in its own transaction for idempotency
-        executed = 0
-        skipped = 0
-        for raw_statement in statements:
-            adapted = _adapt_statement_for_dialect(
-                raw_statement.strip().rstrip(";"), current_dialect
-            )
-            for statement in adapted:
-                if not statement:
-                    continue
-                rename = parse_rename_column(statement)
-                if rename is not None:
-                    table, old, new = rename
-                    async with async_engine.connect() as conn:
-                        columns = await conn.run_sync(
-                            lambda sync_conn, t=table: {
-                                c["name"] for c in inspect(sync_conn).get_columns(t)
-                            }
-                        )
-                    if rename_already_applied(columns, old, new):
-                        skipped += 1
-                        continue
-                try:
-                    async with async_engine.begin() as conn:
-                        await conn.execute(text(statement))
-                        executed += 1
-                except Exception as e:
-                    error_msg = str(e).lower()
-                    # Idempotent reruns: existing column / table / index
-                    # surfaces as different wording across drivers.
-                    if (
-                        "already exists" in error_msg
-                        or "duplicate" in error_msg
-                        or "duplicate column" in error_msg
-                        # A column a migration drops, dropped by an earlier run.
-                        or (
-                            _DROP_COLUMN_RE.match(statement)
-                            and ("no such column" in error_msg or "does not exist" in error_msg)
-                        )
-                    ):
-                        skipped += 1
-                    else:
-                        print(f"\n✗ Error executing: {statement[:80]}...")
-                        print(f"  Error: {e}")
-                        raise
+        executed, skipped = await run_migration_statements(split_statements(sql), current_dialect)
 
         # Report result
         if executed > 0 and skipped > 0:

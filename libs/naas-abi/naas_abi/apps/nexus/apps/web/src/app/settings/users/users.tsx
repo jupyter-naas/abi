@@ -53,7 +53,6 @@ import {
   EXPORT_HEADERS,
   exportRow,
   isSelf,
-  NO_IAM_ID,
   NEW_USER_PATH,
   NO_ORGANIZATION,
   personHref,
@@ -66,6 +65,7 @@ import {
   type Deletion,
   type SortDir,
 } from './users-model';
+import { PlatformHolders } from './platform-holders';
 import './users.css';
 
 type Can = (action: string) => boolean;
@@ -244,8 +244,8 @@ function UserRow({
           className="org-settings-users-edit"
           data-action="superadmin"
           disabled={busy}
-          title={user.is_superadmin ? 'Remove superadmin' : 'Make superadmin'}
-          aria-label={`${user.is_superadmin ? 'Remove superadmin from' : 'Make superadmin'} ${user.email}`}
+          title={user.is_superadmin ? 'Remove platform admin' : 'Make platform admin'}
+          aria-label={`${user.is_superadmin ? 'Remove platform admin from' : 'Make platform admin'} ${user.email}`}
           onClick={() => void run(() => updateUser(user.id, { is_superadmin: !user.is_superadmin }, fetcher))}
         >
           <Crown size={16} />
@@ -324,7 +324,6 @@ function UserRow({
             </div>
           </div>
         </td>
-        <td className="platform-users-mono">{user.principal_id ?? <span className="platform-users-muted">{NO_IAM_ID}</span>}</td>
         <td>
           <span className={`platform-users-status is-${user.status}`} data-field="status">
             {statusLabel(user)}
@@ -338,7 +337,7 @@ function UserRow({
         <td data-field="superadmin">
           {user.is_superadmin ? (
             <span className="platform-users-badge is-superadmin">
-              <Crown size={12} /> Superadmin
+              <Crown size={12} /> Platform admin
             </span>
           ) : (
             <span className="platform-users-muted">No</span>
@@ -448,7 +447,7 @@ function UserRow({
 
 /**
  * Every account of the platform, and the people invited who have none yet: search,
- * column filters, sort, export, and the lifecycle (invite, edit the name, superadmin,
+ * column filters, sort, export, and the lifecycle (invite, edit the name, platform admin,
  * deactivate, reactivate, delete), each button shown for the access action IAM gives.
  * A row opens the person's page in Roles & permissions; access is never shown here.
  */
@@ -724,8 +723,8 @@ export function PlatformUsers({
         </div>
 
         <p className="org-settings-footnote">
-          A row opens the person&apos;s page in Roles &amp; permissions, where their roles, groups and policies
-          are seen and attached: this page does not show or change access. Deactivating stops their sign-in at
+          A row opens the person&apos;s page, where their roles, groups and policies at every level are seen,
+          attached and detached, and where you may view Nexus as them. Deactivating stops their sign-in at
           the identity provider and every API call, and keeps their data and memberships. Nobody deactivates,
           deletes or demotes themselves, and the platform always keeps one administrator.
         </p>
@@ -740,5 +739,9 @@ export default function PlatformUsersPage() {
   const { actions } = usePlatformSettingsAccess();
   const can = useCallback((action: string) => actions?.[action] === true, [actions]);
   const navigate = useCallback((href: string) => router.push(href), [router]);
+  // Users opens to whoever may list the attachments too: without the accounts, the holders.
+  if (actions && !can('nexus:ListUsers') && can('iam:ListAttachments')) {
+    return <PlatformHolders can={can} navigate={navigate} />;
+  }
   return <PlatformUsers can={can} selfId={selfId} navigate={navigate} />;
 }

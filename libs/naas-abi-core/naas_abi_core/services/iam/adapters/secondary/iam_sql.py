@@ -29,6 +29,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     LegacyScopeSet,
     ManifestRecord,
     ManifestStatus,
+    Membership,
     NameRewriter,
     Page,
     PendingGrant,
@@ -86,7 +87,9 @@ from sqlalchemy.exc import IntegrityError
 # 6: container paths: ``iam_containers``, the registry of containers, and
 # ``iam_placements.container``; a placement of the old form (``org``,
 # ``workspace``) waits for the rewrite of the names (``rewrite_names``).
-SCHEMA_VERSION = 6
+# 7: membership and level groups: ``iam_principals.membership_of`` (indexed) and
+# ``iam_principals.level_group``.
+SCHEMA_VERSION = 7
 
 # The platform before container paths, as schemas 2 to 5 stored it.
 _OLD_PLATFORM = "abi:-:-"
@@ -114,7 +117,12 @@ principals = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Column("owner_scope", Text, nullable=False, default=PLATFORM_SCOPE),
+    # Groups: the container a membership group makes its members members of.
+    Column("membership_of", Text, nullable=True),
+    # Groups: a level group (``PrincipalRecord.level_group``).
+    Column("level_group", Boolean, nullable=False, default=False),
     UniqueConstraint("issuer", "subject", name="iam_principals_user_identity"),
+    Index("iam_principals_membership", "membership_of"),
 )
 
 # Identities added to a user that holds another as its own: the users of the
@@ -365,6 +373,8 @@ def _principal(row: Row) -> PrincipalRecord:
         created_at=_aware(row.created_at),
         updated_at=_aware(row.updated_at),
         owner_scope=row.owner_scope,
+        membership_of=row.membership_of,
+        level_group=bool(row.level_group),
     )
 
 
@@ -380,6 +390,8 @@ def _principal_values(record: PrincipalRecord) -> dict[str, Any]:
         "email_verified": record.email_verified,
         "display_name": record.display_name,
         "owner_id": record.owner_id,
+        "membership_of": record.membership_of,
+        "level_group": record.level_group,
     }
 
 
@@ -590,6 +602,8 @@ class IAMStoreSQL(IAMStore):
             self._migrate_set_actions(conn)
         if version < 6:
             self._migrate_containers(conn)
+        if version < 7:
+            self._migrate_memberships(conn)
         if version < SCHEMA_VERSION:
             conn.execute(update(state).values(schema_version=SCHEMA_VERSION))
 
@@ -744,6 +758,42 @@ class IAMStoreSQL(IAMStore):
                 .where(column == _OLD_PLATFORM)
                 .values({column.name: PLATFORM_SCOPE})
             )
+
+    def _migrate_memberships(self, conn: Connection) -> None:
+        """7: no group is a membership group or a level group yet:
+        ``membership_of`` NULL (indexed, to list a container's membership
+        groups) and ``level_group`` false."""
+        name = (
+            f'"{self._schema}".{principals.name}' if self._schema else principals.name
+        )
+        postgres = conn.dialect.name == "postgresql"
+        if postgres:
+            # The schema's advisory lock serializes two processes opening it.
+            missing = {"membership_of", "level_group"}
+            add = "ADD COLUMN IF NOT EXISTS"
+        else:
+            columns = {
+                c["name"]
+                for c in inspect(conn).get_columns(principals.name, schema=self._schema)
+            }
+            missing = {"membership_of", "level_group"} - columns
+            add = "ADD COLUMN"
+        if "membership_of" in missing:
+            conn.execute(text(f"ALTER TABLE {name} {add} membership_of TEXT"))
+        if "level_group" in missing:
+            false = "FALSE" if postgres else "0"
+            conn.execute(
+                text(
+                    f"ALTER TABLE {name} {add} level_group BOOLEAN NOT NULL "
+                    f"DEFAULT {false}"
+                )
+            )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS iam_principals_membership "
+                f"ON {name} (membership_of)"
+            )
+        )
 
     def _warn_old_platform_names(self, conn: Connection) -> None:
         """Schema 2 names the platform's policies and groups
@@ -1033,6 +1083,32 @@ class IAMStoreSQL(IAMStore):
                     select(group_members.c.group_id)
                     .where(group_members.c.member_id == member_id)
                     .order_by(group_members.c.group_id)
+                )
+            )
+
+    def memberships_of(self, member_id: str) -> list[Membership]:
+        with self._read() as conn:
+            rows = conn.execute(
+                select(group_members.c.group_id, principals.c.membership_of)
+                .join(principals, principals.c.id == group_members.c.group_id)
+                .where(
+                    group_members.c.member_id == member_id,
+                    principals.c.membership_of.is_not(None),
+                )
+                .order_by(group_members.c.group_id)
+            ).all()
+        return [Membership(row.group_id, row.membership_of) for row in rows]
+
+    def membership_groups(self, container: str) -> list[str]:
+        with self._read() as conn:
+            return list(
+                conn.scalars(
+                    select(principals.c.id)
+                    .where(
+                        principals.c.kind == "group",
+                        principals.c.membership_of == container,
+                    )
+                    .order_by(principals.c.id)
                 )
             )
 

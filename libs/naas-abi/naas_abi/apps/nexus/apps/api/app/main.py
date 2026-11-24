@@ -99,12 +99,24 @@ def _invalidate_settings_cache() -> None:
     invalidate_on_startup()
 
 
+_identity_graph_sync_lock: asyncio.Lock | None = None
+
+
 async def _sync_identity_graph() -> None:
     """Rebuild graph/nexus-identity from Postgres and the running configuration:
     users and persons, organizations, workspaces, memberships and access roles,
     features and policies, and their setup processes. Event payloads only hold
-    ids; this graph resolves them to people.
+    ids; this graph resolves them to people. One at a time: the boot's and one an
+    identity event scheduled would each read everything and rewrite the same graph.
     """
+    global _identity_graph_sync_lock
+    if _identity_graph_sync_lock is None:
+        _identity_graph_sync_lock = asyncio.Lock()
+    async with _identity_graph_sync_lock:
+        await _sync_identity_graph_now()
+
+
+async def _sync_identity_graph_now() -> None:
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
@@ -192,8 +204,8 @@ def _schedule_identity_graph_sync(_published: int = 0, delay_seconds: float = 2.
 
 
 def _install_drive_writers() -> None:
-    """Keep .manifest.json and the default folders in every workspace drive,
-    organization drive and My Drive."""
+    """Keep .manifest.json and the default folders in every Workspace Files,
+    Organization Files and My Files folder."""
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
@@ -217,8 +229,8 @@ def _install_drive_writers() -> None:
 
 
 async def _backfill_drives() -> None:
-    """Write missing workspace, organization and My Drive defaults, and the platform
-    drive's staff folders."""
+    """Write missing Workspace Files, Organization Files and My Files defaults, and
+    Platform Files' staff folders."""
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
@@ -244,7 +256,7 @@ async def _backfill_drives() -> None:
         platform = await backfill_platform_drive(storage)
         if any(any(counts.values()) for counts in (workspaces, organizations, users, platform)):
             _log.info(
-                "✓ Drives backfilled: workspaces %s, organizations %s, my drives %s, platform %s",
+                "✓ Drives backfilled: workspaces %s, organizations %s, my files %s, platform %s",
                 workspaces,
                 organizations,
                 users,
@@ -362,6 +374,7 @@ async def _prepare_iam() -> None:
     are refused (``authz.upgrading``)."""
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, async_engine
     from naas_abi.apps.nexus.apps.api.app.services.iam import (
+        access_model,
         bootstrap,
         container_defaults,
         container_names,
@@ -373,6 +386,10 @@ async def _prepare_iam() -> None:
 
     log = logging.getLogger(__name__)
     MEMBERSHIPS.known_user = bootstrap.nexus_user_exists
+    from naas_abi.apps.nexus.apps.api.app.services.audit import audit_group_change
+
+    if audit_group_change not in MEMBERSHIPS.audit_sinks:
+        MEMBERSHIPS.audit_sinks.append(audit_group_change)
     # A role changed in another process's organization or workspace: its default
     # groups are read from the database.
     container_defaults.CONTAINER_DEFAULTS.session_factory = AsyncSessionLocal
@@ -419,6 +436,15 @@ async def _prepare_iam() -> None:
                 # Each organization and workspace has its access policy and its
                 # members and admins groups (made once for those that predate them).
                 await container_defaults.migrate(db)
+                # Once, after those: per-person attachments become groups (#1587).
+                # It stops with nothing recorded on a shape it does not know; one
+                # interrupted half way is finished next start. Who gains and loses
+                # what is compared after the start (``_complete_access_report``).
+                try:
+                    await access_model.migrate_access(db)
+                except Exception:  # noqa: BLE001 - retried at the next start
+                    await db.rollback()
+                    log.exception("The access move did not run: the next start retries it")
                 # The agents a workspace had turned off, of modules loaded since.
                 try:
                     await policy_tree.deny_deferred_agents(db)
@@ -427,6 +453,25 @@ async def _prepare_iam() -> None:
                     log.exception("The turned-off agents of modules loaded since were not denied")
     except Exception:
         log.exception("Nexus could not set up its authorization in IAM: every request is refused")
+
+
+async def _complete_access_report() -> None:
+    """The access move's decisions compared, after the start
+    (``access_model.complete_report``): the start that moves does not wait for
+    them (tens of minutes on a large deployment), and one restarted before they are
+    compared compares them again. One API process at a time; another goes on
+    without waiting."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, async_engine
+    from naas_abi.apps.nexus.apps.api.app.services.iam import access_model, container_names
+
+    try:
+        async with container_names.lock_if_free(async_engine, container_names.REPORT_LOCK) as held:
+            if held:
+                await access_model.complete_report(AsyncSessionLocal)
+    except Exception:  # noqa: BLE001 - compared again at the next start
+        logging.getLogger(__name__).exception(
+            "The access move's decisions were not compared: the next start compares them"
+        )
 
 
 async def _container_defaults_after_seeds() -> None:
@@ -548,6 +593,23 @@ def _warn_of_the_shared_pages_sso_secret() -> None:
         logging.getLogger(__name__).warning(message)
 
 
+async def _migrate_pending_invitations() -> None:
+    """Pending invitations become invited people, once (``services/invites/migration.py``),
+    in the background: the identity provider they name may answer after the API
+    starts. Not while IAM's names wait to become container paths (the grants are
+    named in them): the next start does it."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, async_engine
+    from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+    from naas_abi.apps.nexus.apps.api.app.services.invites.runtime import migrate_when_ready
+
+    if authz.upgrading():
+        logging.getLogger(__name__).info(
+            "Pending invitations are moved to the people directory once IAM's moves are recorded"
+        )
+        return
+    await migrate_when_ready(AsyncSessionLocal, async_engine)
+
+
 async def _place_workspace_resources() -> None:
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
     from naas_abi.apps.nexus.apps.api.app.services.iam import placements
@@ -649,11 +711,29 @@ async def _startup(app: FastAPI) -> None:
         asyncio.create_task(_sync_identity_graph())
         # After seeds too: users and workspaces created before the drive writers get theirs.
         asyncio.create_task(_backfill_drives())
+        # After seeds and the moves: pending invitations become invited people.
+        asyncio.create_task(_migrate_pending_invitations())
+        # The access move's report: who gains and loses what, compared from IAM as
+        # it was before the move, while the API serves.
+        asyncio.create_task(_complete_access_report())
 
     try:
         start_chat_ingestion_consumer(app)
     except Exception:
         logging.getLogger(__name__).exception("Unable to start chat ingestion consumer")
+
+    # The analytics rollups: the log's consumer, the one-time backfill and the daily
+    # purge of raw events (services/analytics/jobs.py), after seeds so the
+    # backfill stamps seeded workspaces' organizations.
+    try:
+        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.services.analytics.jobs import (
+            start_analytics_jobs,
+        )
+
+        start_analytics_jobs(AsyncSessionLocal)
+    except Exception:
+        logging.getLogger(__name__).exception("Unable to start the analytics rollups")
 
     # Relay platform LogProcess events to the Socket.IO admin_events room
     # for the superadmin live event stream UI.
@@ -717,6 +797,9 @@ async def _startup(app: FastAPI) -> None:
 
 async def _shutdown(app: FastAPI) -> None:
     """Application shutdown handler."""
+    from naas_abi.apps.nexus.apps.api.app.services.analytics.jobs import stop_analytics_jobs
+
+    stop_analytics_jobs()
 
 
 @asynccontextmanager

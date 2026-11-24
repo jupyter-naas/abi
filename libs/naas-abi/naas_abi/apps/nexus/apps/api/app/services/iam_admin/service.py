@@ -36,6 +36,7 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
     AdminAuditLog,
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources_service import run_audited
+from naas_abi_core import logger
 from naas_abi_core.engine.call_context import current_call_context
 from naas_abi_core.services.iam import roles
 from naas_abi_core.services.iam.IAMPorts import (
@@ -45,6 +46,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PermissionDeniedError,
     Policy,
     PrincipalKind,
+    PrincipalRecord,
 )
 from naas_abi_core.services.iam.IAMService import (
     attachment_resource,
@@ -81,6 +83,11 @@ AUDIT_LIMIT = 500
 MAX_ATTACHABLE_SCAN = 2000
 # How long a service-account key lives unless told: IAM's own default applies when None.
 MAX_KEY_DAYS = 365
+# A page of groups (#1608): IAM's default, and the largest one a request may ask for.
+GROUPS_PAGE_DEFAULT = 100
+GROUPS_PAGE_MAX = 500
+# The principals one attachments read may name (a person and their groups, #1608).
+MAX_PRINCIPALS_PER_READ = 100
 
 # What each action decides on, for ``access``: the type of its resource.
 _WILDCARD_TYPE = {
@@ -90,6 +97,7 @@ _WILDCARD_TYPE = {
     "iam:DeletePolicy": "policy",
     "iam:ListGroups": "group",
     "iam:CreateGroup": "group",
+    "iam:UpdateGroup": "group",
     "iam:DeleteGroup": "group",
     "iam:AddGroupMember": "group",
     "iam:RemoveGroupMember": "group",
@@ -128,10 +136,28 @@ ACCOUNT_ACTIONS: tuple[str, ...] = (
     "nexus:ResumeUser",
     "nexus:DeleteUser",
 )
+# The platform's drives (Platform Settings > Drives): answered at the platform only.
+DRIVE_ACTIONS: tuple[str, ...] = ("nexus:ListDrives",)
+# The ``nexus`` actions Platform Settings asks of the platform, each on ``<type>/-``.
+PLATFORM_NEXUS_ACTIONS: tuple[str, ...] = (*ACCOUNT_ACTIONS, *DRIVE_ACTIONS)
 
 # Each module's key and the ``module`` catalog types it exposes (its agents, apps,
 # workflows, pipelines), for ``publishers``.
 ModuleTypes = Callable[[], Awaitable[Mapping[str, Collection[str]]]]
+# Of these policy ids, those Workspace settings > General writes (``services/feature_access``):
+# marked "managed from General" where policies are listed.
+ManagedFrom = Callable[[Collection[str]], Awaitable[Mapping[str, str]]]
+# An organization's id -> its access policy, "<O> access" (``container_defaults``): the
+# bound of its "Workflow runners".
+OrgAccessOf = Callable[[str], Awaitable[str | None]]
+
+# The capability groups (``iam/capabilities``), each owned by its level: an
+# organization's "Workflow runners", the platform's "Models · all".
+CAPABILITY_LEVELS: dict[str, str] = {"workflow_runners": "organization", "models_all": "platform"}
+
+# After a group's members changed here: what Nexus keeps in step with a person's
+# groups follows them (``platform_files.follow``, #1590). Given the principal id.
+MembershipFollower = Callable[[str], Awaitable[None]]
 
 
 async def _module_types() -> Mapping[str, Collection[str]]:
@@ -151,11 +177,40 @@ class IamAdminService:
         *,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         modules: ModuleTypes = _module_types,
+        managed_from: ManagedFrom | None = None,
+        org_access_of: OrgAccessOf | None = None,
+        follow_member: MembershipFollower | None = None,
     ) -> None:
         self._gateway = gateway
+        self._org_access_of = org_access_of
         self._audit = audit
         self._clock = clock
         self._modules = modules
+        self._managed_from = managed_from
+        self._follow_member = follow_member
+
+    async def _followed(self, member_id: str) -> None:
+        """Let what follows a person's groups catch up; a failure is logged, the
+        change made stands (the next start puts it back in step)."""
+        if self._follow_member is None:
+            return
+        try:
+            await self._follow_member(member_id)
+        except Exception:  # noqa: BLE001 - the membership change stands
+            logger.warning(f"Could not follow the groups of {member_id}", exc_info=True)
+
+    async def _mark_managed(self, policies: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Each policy view with ``managed_from``: ``general`` for one Workspace settings >
+        General writes, else None. Shown only: a failed read marks none (logged)."""
+        found: Mapping[str, str] = {}
+        if self._managed_from is not None and policies:
+            try:
+                found = await self._managed_from([p["id"] for p in policies])
+            except Exception:  # noqa: BLE001 - a mark only, never a failed listing
+                logger.warning("The policies General manages could not be read", exc_info=True)
+        for policy in policies:
+            policy["managed_from"] = "general" if policy["id"] in found else None
+        return policies
 
     # -- plumbing ---------------------------------------------------------------------
 
@@ -233,7 +288,9 @@ class IamAdminService:
         actions, reads_system, accounts = await asyncio.gather(
             self._read(user, decide),
             self._reads_system(user) if scope is None else _false(),
-            self._account_actions(user) if scope is None else _none_of(ACCOUNT_ACTIONS),
+            self._platform_nexus_actions(user)
+            if scope is None
+            else _none_of(PLATFORM_NEXUS_ACTIONS),
         )
         actions["nexus:ReadSystem"] = reads_system
         actions.update(accounts)
@@ -342,15 +399,19 @@ class IamAdminService:
 
         return await AUTHZ.allowed("ReadSystem", user=user)
 
-    async def _account_actions(self, user: Any) -> dict[str, bool]:
-        """Platform Settings > Users (``services/accounts``): each ``nexus`` action on
-        the platform's accounts, as its routes ask it (``abi:nexus:user/-``)."""
+    async def _platform_nexus_actions(self, user: Any) -> dict[str, bool]:
+        """Platform Settings > Users (``services/accounts``) and Drives (``services/drives``):
+        each ``nexus`` action on the platform's accounts and drives, as its routes ask it
+        (``abi:nexus:user/-``, ``abi:nexus:drive/-``)."""
         from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 
         held = await asyncio.gather(
-            *(AUTHZ.allowed(a.removeprefix("nexus:"), user=user, id="-") for a in ACCOUNT_ACTIONS)
+            *(
+                AUTHZ.allowed(a.removeprefix("nexus:"), user=user, id="-")
+                for a in PLATFORM_NEXUS_ACTIONS
+            )
         )
-        return dict(zip(ACCOUNT_ACTIONS, held, strict=True))
+        return dict(zip(PLATFORM_NEXUS_ACTIONS, held, strict=True))
 
     # -- catalogs and validation ------------------------------------------------------
 
@@ -439,7 +500,9 @@ class IamAdminService:
                 "next_after": page.next_after,
             }
 
-        return await self._read(user, read)
+        found = await self._read(user, read)
+        await self._mark_managed(found["items"])
+        return found
 
     async def get_policy(self, user: Any, policy_id: str) -> dict[str, Any]:
         """A policy, with its parent (named for whoever sees its id) and the
@@ -456,7 +519,9 @@ class IamAdminService:
                 ],
             }
 
-        return await self._read(user, read)
+        found = await self._read(user, read)
+        await self._mark_managed([found])
+        return found
 
     async def create_policy(
         self,
@@ -525,20 +590,40 @@ class IamAdminService:
         self,
         user: Any,
         *,
-        principal_id: str | None = None,
+        principal_id: str | Collection[str] | None = None,
         policy_id: str | None = None,
         scope: str | None = None,
     ) -> dict[str, Any]:
+        """The attachments the caller may list. ``principal_id`` may name several
+        principals (a person and their groups, at most ``MAX_PRINCIPALS_PER_READ``): the
+        answer is each one's, in the order named, as one read of each would give them,
+        and each policy and principal is named once."""
         if scope is not None:
             validate_scope(scope)
+        wanted: list[str | None] = (
+            [principal_id]
+            if principal_id is None or isinstance(principal_id, str)
+            else list(dict.fromkeys(principal_id))
+        )
+        if not wanted:
+            wanted = [None]
+        if len(wanted) > MAX_PRINCIPALS_PER_READ:
+            raise ValueError(f"At most {MAX_PRINCIPALS_PER_READ} principals at once")
 
         # One principal's or one policy's attachments across levels: IAM keeps each one the
         # caller may list, so an empty answer says only that there is none to show them. A
         # level's list, or every attachment, stays refused to whoever may list none there.
-        across_levels = scope is None and (principal_id is not None or policy_id is not None)
+        named = wanted != [None]
+        across_levels = scope is None and (named or policy_id is not None)
 
         def read(session: IIAMService) -> dict[str, Any]:
-            found = session.list_attachments(principal_id=principal_id, policy_id=policy_id)
+            found = [
+                attachment
+                for principal in wanted
+                for attachment in session.list_attachments(
+                    principal_id=principal, policy_id=policy_id
+                )
+            ]
             if scope is not None:
                 found = [a for a in found if a.scope == scope]
             if not across_levels:
@@ -714,22 +799,137 @@ class IamAdminService:
             lambda s: views.principal_view(s.resume_principal(principal_id)),
         )
 
-    # -- groups -----------------------------------------------------------------------
+    # -- capability groups ------------------------------------------------------------
 
-    async def list_groups(self, user: Any, scope: str | None = None) -> dict[str, Any]:
-        """The groups the caller may list; with ``scope``, that level's own (and,
-        at a workspace, its org's the caller attaches to there). A scope below a
-        container lists that container's."""
-        owner = validate_owner_scope(_owner_of(scope)) if scope is not None else None
+    @staticmethod
+    def _capability_place(scope: str | None) -> tuple[str, str | None]:
+        """Where a page's capability groups are owned: the platform's at the platform,
+        else the organization's of the scope (a workspace's is its organization's)."""
+        owner = validate_owner_scope(_owner_of(scope)) if scope is not None else PLATFORM
+        if owner == PLATFORM:
+            return PLATFORM, None
+        from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, org_of
+
+        org = org_of(owner)
+        if org is None:
+            raise ValueError("Capability groups belong to the platform or to an organization")
+        return org_container(org), org
+
+    def _may_make(self, session: IIAMService, capability: str, container: str) -> bool:
+        """Whether the caller may make the group themselves: create a group there, and
+        the policy it holds (Workflow runners) or attach the platform's (Models · all)."""
+        if not session.authorize("iam:CreateGroup", group_resource("*", container)).allowed:
+            return False
+        if capability == "models_all":
+            return session.authorize(
+                "iam:AttachPolicy", attachment_resource("*", "*", PLATFORM)
+            ).allowed
+        return session.authorize("iam:CreatePolicy", policy_resource("*", container)).allowed
+
+    def _capability_view(
+        self, session: IIAMService, capability: str, container: str, org: str | None
+    ) -> dict[str, Any]:
+        from naas_abi.apps.nexus.apps.api.app.services.iam.capabilities import NAMES
+
+        found = self._gateway.capability(org, capability)
+        return {
+            "capability": capability,
+            "name": NAMES[capability],
+            "owner_scope": container,
+            "group_id": found.group_id if found else None,
+            "policy_id": (found.policy_id or None) if found else None,
+            "can_create": found is None and self._may_make(session, capability, container),
+        }
+
+    async def capabilities(self, user: Any, scope: str | None = None) -> dict[str, Any]:
+        """The capability groups of ``scope``'s level, for whoever may list the groups
+        there: each made or not, and whether the caller may make it."""
+        container, org = self._capability_place(scope)
+        kinds = [
+            k for k, level in CAPABILITY_LEVELS.items() if (level == "platform") == (org is None)
+        ]
 
         def read(session: IIAMService) -> dict[str, Any]:
-            page = session.list_groups(scope=owner)
+            if not session.authorize("iam:ListGroups", group_resource("*", container)).allowed:
+                raise PermissionDeniedError(message="You may not list the groups here")
+            rows = [self._capability_view(session, k, container, org) for k in kinds]
+            return {"scope": container, "capabilities": rows}
+
+        return await self._read(user, read)
+
+    async def ensure_capability(
+        self, user: Any, capability: str, scope: str | None = None
+    ) -> dict[str, Any]:
+        """Make the capability group of ``scope``'s level (idempotent), for whoever may
+        make it there; written as ``api`` (``iam/capabilities``), audited first."""
+        if capability not in CAPABILITY_LEVELS:
+            raise ValueError(f"{capability!r} is not a capability group")
+        container, org = self._capability_place(scope)
+        if (CAPABILITY_LEVELS[capability] == "platform") != (org is None):
+            raise ValueError(f"{capability!r} is not a capability group of this level")
+        org_access: str | None = None
+        if org is not None:
+            org_access = await self._org_access_of(org) if self._org_access_of else None
+            if not org_access:
+                raise ValueError("This organization has no access policy to bound the group")
+        session = self._session(user)
+
+        def make() -> dict[str, Any]:
+            if not self._may_make(session, capability, container):
+                raise PermissionDeniedError(message="You may not create this capability group here")
+            self._gateway.capability(org, capability, org_access=org_access, create=True)
+            return self._capability_view(session, capability, container, org)
+
+        action = AdminAction(_actor_id(user), SERVICE, "ensure_capability", capability, container)
+        return await run_audited(self._audit, action, lambda: run_in_threadpool(make))
+
+    # -- groups -----------------------------------------------------------------------
+
+    async def list_groups(
+        self,
+        user: Any,
+        scope: str | None = None,
+        *,
+        after: str | None = None,
+        limit: int = GROUPS_PAGE_DEFAULT,
+        member_counts: bool = False,
+    ) -> dict[str, Any]:
+        """A page of the groups the caller may list (IAM's order, ``next_after`` for the
+        next); with ``scope``, that level's own (and, at a workspace, its org's the caller
+        attaches to there). A scope below a container lists that container's. With
+        ``member_counts``, each group's ``member_count``: the number of its members for a
+        group the caller may read (``iam:GetGroup``, as its detail), else None."""
+        owner = validate_owner_scope(_owner_of(scope)) if scope is not None else None
+        if not 1 <= limit <= GROUPS_PAGE_MAX:
+            raise ValueError(f"A page holds 1 to {GROUPS_PAGE_MAX} groups")
+
+        def read(session: IIAMService) -> dict[str, Any]:
+            page = session.list_groups(scope=owner, limit=limit, after=after)
             self._listing(session, "iam:ListGroups", self._wildcard("group", _owner_of(owner)))(
                 page.items
             )
-            return {"items": [views.principal_view(g) for g in page.items if g.status != "deleted"]}
+            groups = [g for g in page.items if g.status != "deleted"]
+            items = [views.principal_view(g) for g in groups]
+            if member_counts:
+                counts = self._member_counts(session, groups)
+                for item in items:
+                    item["member_count"] = counts.get(item["id"])
+            return {"items": items, "next_after": page.next_after}
 
         return await self._read(user, read)
+
+    @staticmethod
+    def _member_counts(session: IIAMService, groups: list[PrincipalRecord]) -> dict[str, int]:
+        """How many members each group has, for those the caller may read: decided in one
+        ``filter`` as ``get_group`` decides each (``iam:GetGroup`` on the group as named at
+        its owner), then IAM's own ``list_group_members``. No member is named."""
+        names = {g.id: group_resource(g.id, g.owner_scope) for g in groups}
+        readable = set(session.filter("iam:GetGroup", names.values()).allowed)
+        return {
+            group_id: len(set(session.list_group_members(group_id)))
+            for group_id, name in names.items()
+            if name in readable
+        }
 
     def _group_view(self, session: IIAMService, group_id: str) -> dict[str, Any]:
         group = session.get_group(group_id)
@@ -758,6 +958,13 @@ class IamAdminService:
             detail=owner or "platform group",
         )
 
+    async def rename_group(self, user: Any, group_id: str, name: str) -> dict[str, Any]:
+        def rename(session: IIAMService) -> dict[str, Any]:
+            session.update_group(group_id, name=name)
+            return self._group_view(session, group_id)
+
+        return await self._change(user, "update_group", group_id, rename, detail=name)
+
     async def delete_group(self, user: Any, group_id: str) -> None:
         await self._change(user, "delete_group", group_id, lambda s: s.delete_group(group_id))
 
@@ -766,7 +973,9 @@ class IamAdminService:
             session.add_group_member(group_id, member_id)
             return self._group_view(session, group_id)
 
-        return await self._change(user, "add_group_member", f"{group_id}/{member_id}", add)
+        view = await self._change(user, "add_group_member", f"{group_id}/{member_id}", add)
+        await self._followed(member_id)
+        return view
 
     async def remove_member(self, user: Any, group_id: str, member_id: str) -> dict[str, Any]:
         def remove(session: IIAMService) -> dict[str, Any]:
@@ -774,7 +983,9 @@ class IamAdminService:
                 raise IAMNotFoundError("That principal is not a member")
             return self._group_view(session, group_id)
 
-        return await self._change(user, "remove_group_member", f"{group_id}/{member_id}", remove)
+        view = await self._change(user, "remove_group_member", f"{group_id}/{member_id}", remove)
+        await self._followed(member_id)
+        return view
 
     async def map_idp_group(
         self, user: Any, group_id: str, provider: str, claim_value: str

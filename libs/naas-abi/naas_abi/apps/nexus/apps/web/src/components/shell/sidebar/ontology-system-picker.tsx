@@ -7,7 +7,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { buildOntologySystems } from '@/lib/ontology-system-graph';
 import { selectedSystems, systemFilterRoute } from '@/lib/ontology-system-filter';
 import { systemRoute } from '@/lib/ontology-navigation';
-import { OntologyMultiPicker } from './ontology-multi-picker';
+import { SearchPicker } from './search-picker';
 import { getWorkspacePath } from './utils';
 
 /** The same full-width checkbox picker as ontology files, with an overview shortcut. */
@@ -30,7 +30,7 @@ export function OntologySystemPicker() {
     router.push(getWorkspacePath(workspaceId, `/ontology?${route}`), {scroll: false});
   }
   const label = !value.length ? 'All systems' : value.length === 1 ? systems.find(system => system.term.id === value[0])?.term.name || 'Selected system' : `${value.length} systems selected`;
-  return <OntologyMultiPicker key={workspaceId} items={systems.map(system => ({value: system.term.id, label: system.term.name, detail: `${system.processes.length} processes`}))}
+  return <SearchPicker key={workspaceId} items={systems.map(system => ({value: system.term.id, label: system.term.name, detail: `${system.processes.length} processes`}))}
       value={value} onToggle={toggle} onClear={() => toggle()} loading={!ready || dictionary.loading} error={ready ? dictionary.error : null}
       label={label} noun="systems" allLabel="All systems"
       action={{ label: 'Open system overview', onClick: () => router.push(getWorkspacePath(workspaceId, `/ontology?${systemRoute(latestQuery.current)}`), {scroll: false}) }} />;

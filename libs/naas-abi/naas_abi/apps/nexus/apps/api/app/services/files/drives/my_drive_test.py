@@ -1,4 +1,4 @@
-"""A user committed through the ORM gets a .manifest.json and default folders in My Drive.
+"""A user committed through the ORM gets a .manifest.json and default folders in My Files.
 
 Runs against a real SQLite session and a filesystem ObjectStorage.
 """

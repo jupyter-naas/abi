@@ -79,6 +79,10 @@ REGENERATE_OF_KEY = "regenerate_of"
 SUPERSEDED_BY_KEY = "superseded_by"
 REGENERATE_REPLAY_KEY = "regenerate_replay"
 
+# What a dislike may say beyond itself, kept in the message's metadata beside
+# ``feedback`` (the owner's like or dislike of an answer).
+FEEDBACK_DETAIL_KEYS = ("feedback_type", "feedback_detail", "feedback_severity")
+
 # Prepended to the replayed prompt on the way to the provider — never stored.
 # Dropping the previous answer from the transcript is not enough: agents run with
 # their own thread memory (the in-process ABI agent only ever receives the latest
@@ -1019,6 +1023,46 @@ class ChatService:
             message_id=message_id,
             metadata=json.dumps(merged),
         )
+
+    async def set_message_feedback(
+        self,
+        user_id: str,
+        conversation_id: str,
+        message_id: str,
+        feedback: str | None,
+        details: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Set the owner's ``like``/``dislike`` of a message, or clear it (``None``).
+
+        A dislike may carry ``feedback_type``, ``feedback_detail`` and
+        ``feedback_severity`` (``details``); a like or a cleared feedback drops them.
+        The rest of the message's metadata is kept. Returns the feedback as stored,
+        None when the conversation has no such message.
+        """
+        await self._own_conversation(user_id, conversation_id)
+        existing = await self.get_message(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            message_id=message_id,
+        )
+        if existing is None:
+            return None
+        metadata = self._parse_message_metadata(existing.metadata_)
+        for key in ("feedback", *FEEDBACK_DETAIL_KEYS):
+            metadata.pop(key, None)
+        if feedback is not None:
+            metadata["feedback"] = feedback
+            if feedback == "dislike":
+                for key in FEEDBACK_DETAIL_KEYS:
+                    value = (details or {}).get(key)
+                    if value is not None and value != "":
+                        metadata[key] = value
+        if not await self.adapter.update_message_metadata(
+            message_id=message_id,
+            metadata=json.dumps(metadata),
+        ):
+            return None
+        return {"feedback": feedback, **{key: metadata.get(key) for key in FEEDBACK_DETAIL_KEYS}}
 
     async def mark_message_superseded(
         self,

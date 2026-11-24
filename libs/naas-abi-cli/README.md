@@ -419,12 +419,12 @@ session only, never a key.
 abi workspace create --name "Research preview" --slug research-preview --org org-...
 abi workspace list --org org-...
 abi workspace members list --workspace ws-...
-abi workspace members add --workspace ws-... --email someone@naas.ai --role member
+abi workspace members add --workspace ws-... --email someone@naas.ai --level member [--admin]
 
 # Someone with no account is invited through the identity provider (it makes them
 # exist and mails the code at their first sign-in); an existing account is added directly.
 abi user invite --email someone@gmail.com --name "Someone" \
-  --org org-... --workspace ws-... --role member --workspace-role member
+  --org org-... --workspace ws-... --level member [--admin] [--org-admin] [--capability grp_...]
 abi org members invite --org org-... --email someone@gmail.com --workspace ws-...
 
 abi user list --org org-...   # or --workspace ws-...
@@ -436,6 +436,14 @@ abi org workspaces --org org-...
 
 All of these accept `--dry-run` (prints the intended API call) and
 `--api-url` / `--token`.
+
+**Pending invitations of an older Nexus** become invited users at its first start; to
+move those whose provider did not answer then:
+
+```bash
+abi user migrate-invitations            # dry run: the invitations still pending
+abi user migrate-invitations --apply    # each becomes an invited user, same access
+```
 
 **Moving an older project to the identity provider** (accounts of the removed
 password / magic-link login):

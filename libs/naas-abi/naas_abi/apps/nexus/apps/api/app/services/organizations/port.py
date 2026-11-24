@@ -42,6 +42,8 @@ class OrganizationRecord:
     postal_code: str | None = None
     city: str | None = None
     country: str | None = None
+    # IANA time zone of the analytics periods (migration 0073).
+    timezone: str = "UTC"
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -83,6 +85,8 @@ class OrganizationCreateInput:
     postal_code: str | None = None
     city: str | None = None
     country: str | None = None
+    # IANA time zone of the analytics periods (migration 0073).
+    timezone: str = "UTC"
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -122,6 +126,7 @@ class OrganizationUpdateInput:
     postal_code: str | None = None
     city: str | None = None
     country: str | None = None
+    timezone: str | None = None
     updated_at: datetime | None = None
     set_fields: set[str] | None = None
 
@@ -143,10 +148,13 @@ class OrganizationWorkspaceRecord:
 
 @dataclass
 class OrganizationMemberRecord:
+    """One person of the organization's directory (``Memberships.org_directory``)."""
+
     id: str
     organization_id: str
     user_id: str
-    role: str
+    # Their organization role; None: they hold a role only in one of its workspaces.
+    role: str | None
     email: str | None = None
     name: str | None = None
     created_at: datetime | None = None
@@ -160,6 +168,13 @@ class OrganizationMemberRecord:
     # Their IAM principal (``Member.principal_id``): an account linked from the old
     # login has another id in IAM than in Nexus. What the access pages link to.
     principal_id: str | None = None
+    # "organization": they hold a role in the organization; "workspace": only in
+    # one of its workspaces (linked to the organization, granted nothing there).
+    source: str = "organization"
+    # "invited" until their first sign-in, then "active" (the users row).
+    status: str = "active"
+    # Their level ("member", "viewer"; #1585), one choice for every workspace.
+    level: str | None = None
 
 
 @dataclass
@@ -210,7 +225,8 @@ class UserOrganizationMembershipRecord:
     user_id: str
     organization_id: str
     organization_name: str
-    role: str
+    # None: linked through a workspace of the organization only.
+    role: str | None
 
 
 @dataclass
@@ -219,6 +235,7 @@ class UserRecord:
     email: str
     name: str | None = None
     bio: str | None = None
+    status: str = "active"
 
 
 @dataclass

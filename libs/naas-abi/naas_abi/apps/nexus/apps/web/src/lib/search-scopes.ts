@@ -68,7 +68,7 @@ export const WEB_SCOPE = 'web';
 export const FEATURE_SCOPES: readonly SearchScope[] = [
   { id: 'apps', kind: 'feature', feature: 'apps', label: 'Apps', icon: 'AppWindow', description: 'Apps in the workspace catalog' },
   { id: 'chat', kind: 'feature', feature: 'chat', label: 'Chats', icon: 'MessageSquare', description: 'Conversation titles' },
-  { id: 'files', kind: 'feature', feature: 'files', label: 'Files', icon: 'Folder', description: 'File names in the workspace drive' },
+  { id: 'files', kind: 'feature', feature: 'files', label: 'Files', icon: 'Folder', description: 'File names in Workspace Files' },
   { id: 'documents', kind: 'feature', feature: 'documents', label: 'Documents', icon: 'FileText', description: 'Document titles' },
   { id: 'slides', kind: 'feature', feature: 'slides', label: 'Slides', icon: 'Presentation', description: 'Presentation titles' },
   { id: 'sheets', kind: 'feature', feature: 'sheets', label: 'Sheets', icon: 'Sheet', description: 'Workbook titles' },

@@ -32,7 +32,7 @@ function setup(extra: Record<string, unknown> = {}) {
 
 async function openAccount(m: Mounted, name: string) {
   const row = m.host.querySelector(`[data-service-account="${name}"]`);
-  await m.click(row?.querySelector('button.access-row-toggle') ?? null);
+  await m.click(row?.querySelector('button[data-action="keys"]') ?? null);
   await m.flush();
 }
 

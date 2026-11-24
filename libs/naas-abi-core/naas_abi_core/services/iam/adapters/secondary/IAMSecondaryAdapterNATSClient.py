@@ -35,6 +35,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     ManifestRecord,
     ManifestStatus,
     ManifestSubmission,
+    Membership,
     Page,
     PendingGrant,
     Placement,
@@ -202,10 +203,43 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
 
     # -- groups -------------------------------------------------------------------------
 
-    def create_group(self, name: str, *, scope: str | None = None) -> PrincipalRecord:
+    def create_group(
+        self,
+        name: str,
+        *,
+        scope: str | None = None,
+        membership_of: str | None = None,
+        level: bool = False,
+    ) -> PrincipalRecord:
         return codec.principal_from_pb(
-            self._request("create_group", name=name, scope=scope).group
+            self._request(
+                "create_group",
+                name=name,
+                scope=scope,
+                membership_of=membership_of,
+                level=level,
+            ).group
         )
+
+    def mark_group(
+        self, group_id: str, *, membership_of: str | None = None, level: bool = False
+    ) -> PrincipalRecord:
+        return codec.principal_from_pb(
+            self._request(
+                "mark_group",
+                group_id=group_id,
+                membership_of=membership_of,
+                level=level,
+            ).group
+        )
+
+    def list_memberships(self, principal_id: str) -> list[Membership]:
+        response = self._request("list_memberships", principal_id=principal_id)
+        return [codec.membership_from_pb(m) for m in response.memberships]
+
+    def list_container_members(self, container: str) -> list[str]:
+        response = self._request("list_container_members", container=container)
+        return list(response.principal_ids)
 
     def get_group(self, group_id: str) -> PrincipalRecord:
         return codec.principal_from_pb(
@@ -219,6 +253,11 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         return Page(
             [codec.principal_from_pb(g) for g in response.groups],
             response.next_after if response.HasField("next_after") else None,
+        )
+
+    def update_group(self, group_id: str, *, name: str) -> PrincipalRecord:
+        return codec.principal_from_pb(
+            self._request("update_group", group_id=group_id, name=name).group
         )
 
     def delete_group(self, group_id: str) -> PrincipalRecord:

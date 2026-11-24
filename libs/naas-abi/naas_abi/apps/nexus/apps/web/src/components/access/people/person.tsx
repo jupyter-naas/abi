@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { attachmentsByPrincipal } from '@/lib/iam-admin/batched';
 import type { AttachmentView, PrincipalView } from '@/lib/iam-admin/types';
 import { viewFlagActive } from '@/lib/view-flag';
 import { useAuthStore } from '@/stores/auth';
@@ -24,7 +25,9 @@ type Props = AccessViewProps & {
   personId: string;
   /** Their name as the page that opened this one shows it, until IAM's is read. */
   label?: string | null;
-  onClose: () => void;
+  /** Back to where the page was opened from (Users, Members); without it, no back link. */
+  onClose?: () => void;
+  backLabel?: string;
   /** Changes a role (tests pass a fake); the membership routes by default. */
   changeRole?: (target: RoleTarget, userId: string, role: BuiltInRole) => Promise<void>;
   /** The workspaces to view them in (tests pass a fake); IAM's answer by default. */
@@ -42,7 +45,7 @@ const targetKey = (target: RoleTarget) =>
   target.level === 'workspace' ? `workspace/${target.workspaceId}` : `organization/${target.organizationId}`;
 
 /**
- * The person as the members of ``target`` name them, as People & roles joins them
+ * The person as the members of ``target`` name them, as the people of a scope are joined
  * (`people-model.peopleAt`): their IAM id, else, for an account linked from the old login, the
  * member with their email. Null when they are not found there, or their role there is the
  * organization's (read-only), or the members cannot be read: the role is then not changed here.
@@ -71,9 +74,9 @@ async function memberAt(
 
 /**
  * A person's page: every role, policy and group they hold, at every level IAM lets the viewer
- * list (`GET /attachments?principal_id=`, `GET /principals/{id}/groups` and each group's
- * attachments), whatever the level of the page it is opened from. Each row names its level as
- * the Owner column does, says whether it is direct or through which group, links to the policy
+ * list (`GET /attachments?principal_id=`, `GET /principals/{id}/groups`, then every group's
+ * attachments in one `GET /attachments?principal_id=…&principal_id=…`), whatever the level of
+ * the page it is opened from. Each row names its level as the Owner column does, says whether it is direct or through which group, links to the policy
  * at its owner, and offers the detach (or, for a role, the change of role, as on Members) where
  * IAM says the viewer may. A policy is attached to them here too (the person fixed), at the
  * page's level by default or at another one they belong to: the platform, or an organization
@@ -91,6 +94,7 @@ export function PersonView({
   personId,
   label,
   onClose,
+  backLabel = 'Users',
   changeRole = changeMemberRole,
   viewable,
 }: Props) {
@@ -122,17 +126,19 @@ export function PersonView({
         },
       ),
     ]);
-    const heldByGroups = await Promise.all(
-      groups.map((group) =>
-        held(group.id).then(
-          (page) => ({ group, attachments: page.items }),
-          (e: unknown) => {
-            notices.push(`What ${principalLabel(group, group.id)} gives could not be read (${message(e)}).`);
-            return { group, attachments: [] as AttachmentView[] };
-          },
-        ),
-      ),
+    // Every group's attachments in one request (#1608), each kept by IAM as one read of it would.
+    const byGroup = await attachmentsByPrincipal(
+      api,
+      groups.map((group) => group.id),
+      inView ? ownerOf(scope) : null,
     );
+    const heldByGroups = groups.map((group) => {
+      const found = byGroup.get(group.id);
+      if (found?.error) {
+        notices.push(`What ${principalLabel(group, group.id)} gives could not be read (${message(found.error)}).`);
+      }
+      return { group, attachments: found?.items ?? [] };
+    });
     let profile = direct.find((a) => a.principal)?.principal ?? null;
     // A person read by id is outside a view (``view_as/AGENTS.md``): their rows name them, else the label does.
     if (!profile && !viewFlagActive()) profile = await api.getPrincipal(personId).catch(() => null);
@@ -206,9 +212,11 @@ export function PersonView({
 
   return (
     <div className="access-person" data-person-page={personId}>
-      <button type="button" className="access-person-back" onClick={onClose}>
-        <ArrowLeft size={14} /> People &amp; roles
-      </button>
+      {onClose && (
+        <button type="button" className="access-person-back" onClick={onClose}>
+          <ArrowLeft size={14} /> {backLabel}
+        </button>
+      )}
       <header className="access-person-header">
         <h3 className="access-person-name">{name}</h3>
         {shownEmail && <span className="access-people-sub">{shownEmail}</span>}
@@ -271,7 +279,7 @@ export function PersonView({
               <AttachForm
                 key={attachAt}
                 api={api}
-                // The platform's level is an attachment everywhere (no scope), as on People & roles.
+                // The platform's level is an attachment everywhere (no scope).
                 scope={attachAt === PLATFORM ? null : attachAt}
                 principals={[]}
                 principalId={personId}

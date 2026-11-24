@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useIsMobile } from '@/hooks/use-is-mobile';
+import { isMobileViewport, useIsMobile } from '@/hooks/use-is-mobile';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
 import { firstPlatformSettingsPath } from './lib/nav';
 
@@ -17,7 +17,7 @@ export default function PlatformSettingsIndexPage() {
   const { status, actions } = usePlatformSettingsAccess();
 
   useEffect(() => {
-    if (isMobile || status !== 'ready') return;
+    if (isMobile || isMobileViewport() || status !== 'ready') return;
     const first = firstPlatformSettingsPath(actions);
     if (first) router.replace(first);
   }, [isMobile, status, actions, router]);

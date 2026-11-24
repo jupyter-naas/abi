@@ -1,7 +1,7 @@
 'use client';
 
 import type { DictionaryFile } from '@/lib/ontology-file-filter';
-import { OntologyMultiPicker } from './ontology-multi-picker';
+import { SearchPicker } from './search-picker';
 
 export function OntologyFilePicker({ files, value, ...props }: {
   files: DictionaryFile[];
@@ -12,6 +12,6 @@ export function OntologyFilePicker({ files, value, ...props }: {
   error: string | null;
 }) {
   const label = !value.length ? 'All ontologies' : value.length === 1 ? value[0].split('/').pop()! : `${value.length} ontologies selected`;
-  return <OntologyMultiPicker {...props} value={value} label={label} noun="ontologies" allLabel="All ontologies"
+  return <SearchPicker {...props} value={value} label={label} noun="ontologies" allLabel="All ontologies"
     items={files.map(file => ({value: file.path, label: file.path.split('/').pop()!, detail: file.moduleName, title: `${file.name}\n${file.path}`}))} />;
 }

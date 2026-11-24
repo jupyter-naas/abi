@@ -15,22 +15,16 @@ import {
   type BuiltInRole,
   type RoleTarget,
 } from '../roles/role-change';
+import { PLATFORM_ACCESS_LABEL } from '../builtins';
 import { principalLabel } from '../attachments/attachments-model';
 import { groupHolders, peopleAt, type PersonRow } from './people-model';
-import { PersonView } from './person';
 import './people.css';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-/** The person whose page is open: their IAM id, and how the page that opened it named them. */
-export type PersonFocus = { id: string; label?: string };
-
 type Props = AccessViewProps & {
   /** Changes a member's role (tests pass a fake); the membership routes by default. */
   changeRole?: (target: RoleTarget, userId: string, role: BuiltInRole) => Promise<void>;
-  /** A person's page, open instead of the table. */
-  person?: PersonFocus | null;
-  onClosePerson?: () => void;
   /** How long the search waits for the typing to stop (tests pass 0). */
   searchDelayMs?: number;
 };
@@ -50,7 +44,8 @@ function roleTarget(scope: AccessViewProps['scope']): RoleTarget | null {
  * Who holds which role or policy at the scope: directly, or through a group that holds
  * policies there. A role that comes from the organization is shown read-only. Roles change as
  * memberships (`changeMemberRole`, the code Members uses), other policies are attached and
- * detached here; IAM decides every call.
+ * detached here; IAM decides every call. Platform › Users shows it to whoever may list the
+ * attachments and not the accounts; each name opens the person's page.
  */
 export function PeopleView({
   api,
@@ -60,8 +55,6 @@ export function PeopleView({
   nonce = 0,
   open,
   changeRole = changeMemberRole,
-  person,
-  onClosePerson,
   searchDelayMs = 250,
 }: Props) {
   const selfId = useAuthStore((s) => s.user?.id ?? null);
@@ -81,7 +74,7 @@ export function PeopleView({
   const [found, setFound] = useState<{ text: string; items: PrincipalView[] }>({ text: '', items: [] });
   const wanted = filter.trim();
   useEffect(() => {
-    if (!searches || wanted.length < SEARCH_MIN || person) {
+    if (!searches || wanted.length < SEARCH_MIN) {
       setFound({ text: '', items: [] });
       return;
     }
@@ -96,7 +89,7 @@ export function PeopleView({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [api, searches, wanted, searchDelayMs, person]);
+  }, [api, searches, wanted, searchDelayMs]);
 
   const load = useCallback(async () => {
     try {
@@ -155,23 +148,6 @@ export function PeopleView({
       setError(message(e));
     }
   };
-
-  if (person) {
-    return (
-      <PersonView
-        api={api}
-        can={can}
-        scope={scope}
-        directory={directory}
-        nonce={nonce}
-        open={open}
-        personId={person.id}
-        label={person.label}
-        onClose={() => onClosePerson?.()}
-        changeRole={changeRole}
-      />
-    );
-  }
 
   if (attachments === null) {
     return error ? <p className="access-source-note" role="alert">{error}</p> : <p className="access-empty">Loading…</p>;
@@ -273,7 +249,7 @@ export function PeopleView({
                         data-with-role=""
                         title="IAM attaches these with the role and removes them with it."
                       >
-                        With the role: {person.withRole.map((a) => a.policy_name ?? a.policy_id).join(', ')}
+                        With the role: {PLATFORM_ACCESS_LABEL}
                       </p>
                     )}
                   </td>

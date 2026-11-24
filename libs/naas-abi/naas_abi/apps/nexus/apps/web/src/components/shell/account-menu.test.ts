@@ -1,14 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
 
-const state = vi.hoisted(() => ({
-  user: 'olivia',
-  answers: {} as Record<string, unknown>,
-  opensWorkspaceSettings: false,
-  hang: false,
-  platformStatus: 'ready' as 'ready' | 'checking',
-}));
+const session = vi.hoisted(() => ({ logout: vi.fn(), pushed: [] as string[] }));
 
 vi.mock('next/link', async () => {
   const { createElement } = await import('react');
@@ -17,101 +11,155 @@ vi.mock('next/link', async () => {
       createElement('a', { href, ...rest }, children as never),
   };
 });
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined }) }));
-vi.mock('@/hooks/use-platform-settings-access', () => ({
-  usePlatformSettingsAccess: () => ({
-    status: state.platformStatus,
-    actions: state.platformStatus === 'ready' ? {} : null,
-    retry: () => undefined,
-  }),
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: (to: string) => session.pushed.push(to), replace: () => undefined }),
+  usePathname: () => '/workspace/ws-joe/home',
 }));
-vi.mock('@/hooks/use-workspace-settings-access', () => ({
-  useOpensWorkspaceSettings: () => state.opensWorkspaceSettings,
+vi.mock('@/hooks/use-avatar-settings-links', () => ({
+  useWarmAvatarSettingsLinks: () => undefined,
+  useSettingsHref: () => '/workspace/ws-joe/settings/general',
 }));
 vi.mock('@/stores/auth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/stores/auth')>()),
   useAuthStore: (select: (s: unknown) => unknown) =>
-    select({ user: { id: state.user }, logout: () => undefined }),
-  authFetch: async (url: string) =>
-    state.hang
-      ? new Promise<Response>(() => undefined)
-      : url in state.answers
-      ? new Response(JSON.stringify(state.answers[url]), { status: 200 })
-      : new Response('{}', { status: 403 }),
+    select({ user: { name: 'Dev Admin', email: 'admin@joe.com' }, logout: session.logout }),
 }));
 
 import { useWorkspaceStore } from '@/stores/workspace';
-import { AccountMenuPanel } from './account-menu';
+import { AccountMenu, placeAccountMenu, type MenuAnchor } from './account-menu';
 
-const ACCESS_ACME = `/api/iam/admin/access?scope=${encodeURIComponent('abi:nexus:organization/acme')}`;
+const joe = {
+  id: 'ws-joe',
+  name: 'JOE',
+  organizationId: 'org-joe',
+  organizationName: 'JOE Platform',
+  currentUserRole: 'admin',
+  theme: { primaryColor: '#22c55e' },
+};
+const other = {
+  id: 'ws-other',
+  name: 'Other',
+  organizationId: 'org-other',
+  organizationName: 'Other Org',
+  currentUserRole: 'member',
+  theme: { primaryColor: '#3b82f6' },
+};
 
 let mounted: Mounted | null = null;
+
+beforeEach(() => {
+  session.logout.mockClear();
+  session.pushed = [];
+  useWorkspaceStore.setState({
+    workspaces: [joe, other] as never,
+    currentWorkspaceId: 'ws-joe',
+    activeConversationId: 'conv-keep',
+    activePanelSection: null,
+    panelSectionBeforeWorkspaces: null,
+  });
+});
+
 afterEach(async () => {
   await mounted?.unmount();
   mounted = null;
-  state.opensWorkspaceSettings = false;
-  state.hang = false;
-  state.platformStatus = 'ready';
+  document.body.innerHTML = '';
+  useWorkspaceStore.setState({
+    workspaces: [],
+    currentWorkspaceId: null,
+    activeConversationId: null,
+    activePanelSection: null,
+    panelSectionBeforeWorkspaces: null,
+  });
 });
 
-async function menuFor(user: string, orgRole: string): Promise<HTMLElement> {
-  state.user = user;
-  state.answers = {
-    '/api/organizations': [{ id: 'acme', name: 'Acme', current_user_role: orgRole }],
-    [ACCESS_ACME]: { actions: { 'iam:ListPolicies': false } },
-  };
-  mounted = await mount(AccountMenuPanel, { user: { name: user, email: `${user}@example.com` }, onClose: () => undefined });
+async function openMenu(): Promise<HTMLElement> {
+  mounted = await mount(AccountMenu, { labeled: true });
   await mounted.flush();
-  await mounted.flush();
-  return mounted.host;
+  await mounted.click(mounted.host.querySelector('button'));
+  const menu = document.querySelector<HTMLElement>('[role="menu"]');
+  if (!menu) throw new Error('menu did not open');
+  return menu;
 }
 
-function organizationLink(menu: HTMLElement): HTMLAnchorElement | null {
-  return menu.querySelector<HTMLAnchorElement>('a[href^="/organizations/acme/settings"]');
+function row(menu: ParentNode, id: string): HTMLElement {
+  const found = menu.querySelector<HTMLElement>(`[data-account-row="${id}"]`);
+  if (!found) throw new Error(`missing row ${id}`);
+  return found;
 }
+
+const box = (partial: MenuAnchor): MenuAnchor => partial;
 
 describe('the account menu', () => {
-  it('links Organization to an organization admin', async () => {
-    const link = organizationLink(await menuFor('olivia', 'admin'));
-    expect(link?.textContent).toContain('Organization');
+  it('lists name, workspace and role, Find workspace, Account, Settings, then Log out', async () => {
+    const menu = await openMenu();
+    expect([...menu.querySelectorAll('[data-account-row]')].map((el) => el.getAttribute('data-account-row'))).toEqual([
+      'identity', 'workspace', 'find', 'account', 'settings', 'logout',
+    ]);
+    expect(row(menu, 'identity').querySelector('a')).toBeNull();
+    expect(row(menu, 'identity').textContent).toContain('Dev Admin');
+    expect(row(menu, 'identity').textContent).toContain('admin@joe.com');
+    expect(row(menu, 'workspace').querySelector('a')).toBeNull();
+    expect(row(menu, 'workspace').textContent?.trim()).toBe('JOE · Admin');
+    expect(row(menu, 'find').textContent?.trim()).toBe('Find workspace');
+    expect(row(menu, 'account').getAttribute('href')).toBe('/account/profile');
+    expect(row(menu, 'account').textContent?.trim()).toBe('Account');
+    expect(row(menu, 'settings').getAttribute('href')).toBe('/workspace/ws-joe/settings/general');
+    expect(row(menu, 'settings').textContent?.trim()).toBe('Settings');
+    expect(row(menu, 'logout').textContent?.trim()).toBe('Log out');
+    expect(menu.textContent).not.toMatch(/Help|Download app|Upgrade|Usage|Language|API keys/);
   });
-  it('hides it from a workspace owner who is a member of the organization', async () => {
-    const menu = await menuFor('bob', 'member');
-    expect(organizationLink(menu)).toBeNull();
-    expect(menu.textContent).toContain('Account');
+
+  it('opens the same Workspaces column as the workspace mark, and closes it the same way', async () => {
+    const menu = await openMenu();
+    await mounted?.click(row(menu, 'find'));
+    expect(useWorkspaceStore.getState().activePanelSection).toBe('workspaces');
+    expect(document.querySelector('[aria-label="Find workspace"]')).toBeNull();
+
+    const again = await openMenu();
+    await mounted?.click(row(again, 'find'));
+    expect(useWorkspaceStore.getState().activePanelSection).toBeNull();
+  });
+
+  it('logs out through the existing logout, then the login page', async () => {
+    const menu = await openMenu();
+    await mounted?.click(row(menu, 'logout'));
+    expect(session.logout).toHaveBeenCalledOnce();
+    expect(session.pushed).toEqual(['/auth/login']);
   });
 });
 
-describe('Infrastructure in the account menu', () => {
-  function items(menu: HTMLElement): string[] {
-    return [...menu.querySelectorAll('[role="menuitem"]')].map((el) => el.textContent?.trim() ?? '');
-  }
-
-  it('sits right above Help for whoever opens the workspace settings', async () => {
-    useWorkspaceStore.setState({ currentWorkspaceId: 'ws-1' });
-    state.opensWorkspaceSettings = true;
-    const menu = await menuFor('olivia', 'member');
-    const link = menu.querySelector<HTMLAnchorElement>('a[href$="/settings/infrastructure"]');
-    expect(link?.getAttribute('href')).toContain('ws-1');
-    const labels = items(menu);
-    expect(labels.indexOf('Infrastructure')).toBe(labels.indexOf('Help') - 1);
+describe('placeAccountMenu', () => {
+  it('opens upward at the width of a wide nav column', () => {
+    const placed = placeAccountMenu(
+      box({ top: 700, bottom: 748, left: 0, width: 280 }),
+      box({ top: 0, bottom: 800, left: 0, width: 280 }),
+      { width: 1200, height: 800 },
+    );
+    expect(placed.open).toBe('up');
+    expect(placed.width).toBe(280);
+    expect(placed.left).toBe(0);
+    expect(placed.bottom).toBe(100);
   });
 
-  it('is not there for anyone else', async () => {
-    useWorkspaceStore.setState({ currentWorkspaceId: 'ws-1' });
-    const menu = await menuFor('bob', 'member');
-    expect(items(menu)).not.toContain('Infrastructure');
-    expect(items(menu)).toContain('Help');
+  it('stays readable above the icon rail, still growing upward from its left edge', () => {
+    const placed = placeAccountMenu(
+      box({ top: 720, bottom: 760, left: 8, width: 40 }),
+      box({ top: 0, bottom: 800, left: 0, width: 56 }),
+      { width: 1200, height: 800 },
+    );
+    expect(placed.open).toBe('up');
+    expect(placed.left).toBe(0);
+    expect(placed.width).toBe(256);
   });
-});
 
-describe('the settings entries while their access is read', () => {
-  it('shows Organization and Platform as busy rows, not links, until they answer', async () => {
-    state.hang = true;
-    state.platformStatus = 'checking';
-    const menu = await menuFor('carol', 'admin');
-    const busy = [...menu.querySelectorAll('[aria-busy="true"]')].map((el) => el.textContent?.trim());
-    expect(busy).toEqual(['Organization', 'Platform']);
-    expect(menu.querySelector('a[href^="/organizations/"]')).toBeNull();
+  it('opens under a control that sits in the phone top bar, still on screen', () => {
+    const placed = placeAccountMenu(
+      box({ top: 8, bottom: 40, left: 340, width: 32 }),
+      box({ top: 8, bottom: 40, left: 340, width: 32 }),
+      { width: 390, height: 844 },
+    );
+    expect(placed.open).toBe('down');
+    expect(placed.top).toBe(48);
+    expect(placed.left + placed.width).toBeLessThanOrEqual(390 - 8);
   });
 });

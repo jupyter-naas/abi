@@ -178,6 +178,27 @@ def test_a_catalogs_platform_access_joins_the_platform_policies():
     assert "nexus:ListProviderModels" not in actions_of(self_policy)
 
 
+def test_the_platform_companions_reach_no_shared_object_storage_folder():
+    """A role's platform companions reach the person's own objects (``my-drive``,
+    ``users``), never ``naas_abi/platform-drive``: Platform Files is granted by a
+    policy only, the object storage's ``*Object`` with it."""
+    from naas_abi_core.services.object_storage.iam_catalog import CATALOG as OBJECTS
+
+    found = registry()
+    found.register(OBJECTS)
+    for policy_id in (roles.PLATFORM_VIEWER, roles.PLATFORM_MEMBER):
+        resources = resources_of(_platform(policy_id, found))
+        assert (
+            "abi:object_storage:object/naas_abi/my-drive/${principal.id}/*" in resources
+        )
+        assert "abi:object_storage:object/users/${principal.id}/*" in resources
+        assert not any("platform-drive" in resource for resource in resources), (
+            policy_id
+        )
+    for row in roles.PLATFORM_TYPES:
+        assert not any("platform-drive" in resource for resource in row.resources)
+
+
 def test_a_modules_catalog_declares_no_platform_access():
     with pytest.raises(CatalogError, match="platform access"):
         ActionCatalog(
@@ -338,3 +359,46 @@ def test_a_role_names_what_sits_in_its_container_never_the_platform():
                 role,
                 resource,
             )
+
+
+def test_the_platform_policies_grant_no_model():
+    """Models come from model-set policies (Nexus's "Models · <set>"), never from
+    being a workspace's viewer or member."""
+    from naas_abi_core.services.model_registry.iam_catalog import CATALOG as MODELS
+
+    found = registry()
+    found.register(MODELS)
+    for policy_id in (roles.PLATFORM_VIEWER, roles.PLATFORM_MEMBER, roles.SELF):
+        policy = _platform(policy_id, found)
+        assert not {a for a in actions_of(policy) if a.startswith("model_registry:")}
+        assert not {r for r in resources_of(policy) if "model_registry:" in r}
+
+
+def test_self_grants_join_the_self_policy_and_read_back():
+    found = registry()
+    grants = [roles.SelfGrant("nexus:CreateWorkspace", ("abi:nexus:workspace/*",))]
+    nexus = ActionCatalog(
+        service="nexus",
+        version=2,
+        resource_types=NEXUS.resource_types,
+        actions=NEXUS.actions,
+        platform_access=(),
+    )
+    found.register(nexus)
+    self_policy = next(
+        p
+        for p in roles.builtin_policies(found, self_grants=grants)
+        if p.id == roles.SELF
+    )
+    assert "nexus:CreateWorkspace" in actions_of(self_policy)
+    assert "abi:nexus:workspace/*" in resources_of(self_policy)
+    assert "nexus:CreateOrganization" not in actions_of(self_policy)
+    assert roles.stored_self_grants(self_policy) == grants
+    # An action no registered catalog declares is not granted.
+    unknown = [roles.SelfGrant("nexus:Nothing", ("abi:nexus:workspace/*",))]
+    self_policy = next(
+        p
+        for p in roles.builtin_policies(found, self_grants=unknown)
+        if p.id == roles.SELF
+    )
+    assert "nexus:Nothing" not in actions_of(self_policy)

@@ -11,7 +11,8 @@ import { APP_MENU_ROW, APP_MENU_SURFACE, APP_MENU_TRIGGER } from '@/components/s
 export type FilesViewMode = 'list' | 'grid';
 
 export type FilesMenuBarProps = {
-  isLocalFolder: boolean;
+  /** All Views is open: its folders are the views, nothing can be created or uploaded there. */
+  isViewsRoot: boolean;
   loading: boolean;
   viewMode: FilesViewMode;
   onViewModeChange: (mode: FilesViewMode) => void;
@@ -23,6 +24,8 @@ export type FilesMenuBarProps = {
   onUpload: () => void;
   onRefresh: () => void;
   onOpenDriveSettings: () => void;
+  /** "Drive settings…" is shown only to who may open Platform settings › Drives. */
+  showDriveSettings: boolean;
   /** The open folder is a system folder: nothing can be created or uploaded in it. */
   isSystemFolder: boolean;
   /** Names starting with "." — hidden unless on, and read-only either way. */
@@ -39,7 +42,7 @@ const trigger = APP_MENU_TRIGGER;
  * app-menu slot, same pattern as Ontology / Knowledge Graph / Slides.
  */
 export function FilesMenuBar({
-  isLocalFolder,
+  isViewsRoot,
   loading,
   viewMode,
   onViewModeChange,
@@ -50,6 +53,7 @@ export function FilesMenuBar({
   onUpload,
   onRefresh,
   onOpenDriveSettings,
+  showDriveSettings,
   isSystemFolder,
   showSystemFiles,
   onShowSystemFilesChange,
@@ -70,7 +74,7 @@ export function FilesMenuBar({
             <DropdownMenu.Content align="start" sideOffset={5} className={surface}>
               <DropdownMenu.Item
                 className={row}
-                disabled={isLocalFolder || isSystemFolder}
+                disabled={isViewsRoot || isSystemFolder}
                 onSelect={onNewFile}
                 data-testid="files-menuitem-new-file"
               >
@@ -78,7 +82,7 @@ export function FilesMenuBar({
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 className={row}
-                disabled={isLocalFolder || isSystemFolder}
+                disabled={isViewsRoot || isSystemFolder}
                 onSelect={onNewFolder}
                 data-testid="files-menuitem-new-folder"
               >
@@ -87,7 +91,7 @@ export function FilesMenuBar({
               <DropdownMenu.Separator className="my-1 h-px bg-border" />
               <DropdownMenu.Item
                 className={row}
-                disabled={isLocalFolder || isSystemFolder}
+                disabled={isViewsRoot || isSystemFolder}
                 onSelect={onUpload}
                 data-testid="files-menuitem-upload"
               >
@@ -102,14 +106,18 @@ export function FilesMenuBar({
               >
                 {loading ? 'Refreshing…' : 'Refresh'}
               </DropdownMenu.Item>
-              <DropdownMenu.Separator className="my-1 h-px bg-border" />
-              <DropdownMenu.Item
-                className={row}
-                onSelect={onOpenDriveSettings}
-                data-testid="files-menuitem-drive-settings"
-              >
-                Drive settings…
-              </DropdownMenu.Item>
+              {showDriveSettings ? (
+                <>
+                  <DropdownMenu.Separator className="my-1 h-px bg-border" />
+                  <DropdownMenu.Item
+                    className={row}
+                    onSelect={onOpenDriveSettings}
+                    data-testid="files-menuitem-drive-settings"
+                  >
+                    Drive settings…
+                  </DropdownMenu.Item>
+                </>
+              ) : null}
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>

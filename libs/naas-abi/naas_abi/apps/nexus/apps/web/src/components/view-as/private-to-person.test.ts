@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The pages of the person's own say "Private to <name>" in a view and ask the server for nothing:
- * chat history, My Drive, coding environments, the workspace's secrets, the account's API keys.
+ * chat history, My Files, coding environments, the workspace's secrets, the account's API keys.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
@@ -54,9 +54,9 @@ const text = () => mounted!.host.textContent ?? '';
 describe('the placeholder', () => {
   it('names the person', async () => {
     inView();
-    mounted = await mount(PrivateToPerson, { what: 'My Drive' });
+    mounted = await mount(PrivateToPerson, { what: 'My Files' });
     expect(text()).toContain('Private to Carol');
-    expect(text()).toContain('My Drive');
+    expect(text()).toContain('My Files');
   });
 
   it('renders nothing outside a view', async () => {
@@ -108,17 +108,17 @@ describe('the coding environments', () => {
 });
 
 describe('what asks the server for the person’s own', () => {
-  it('My Drive is not listed', async () => {
+  it('My Files is not listed', async () => {
     inView();
-    useFilesStore.setState({ activeSource: 'my-drive', files: [{ name: 'viewers.txt' } as never] });
+    useFilesStore.setState({ activeSource: 'my-files', files: [{ name: 'viewers.txt' } as never] });
     await useFilesStore.getState().fetchFiles('');
     expect(fetcher).not.toHaveBeenCalled();
     expect(useFilesStore.getState().files).toEqual([]);
   });
 
-  it('the workspace’s own drive still is', async () => {
+  it('Workspace Files still is', async () => {
     inView();
-    useFilesStore.setState({ activeSource: 'workspace' });
+    useFilesStore.setState({ activeSource: 'workspace-files' });
     await useFilesStore.getState().fetchFiles('ws-alpha', { workspaceId: 'ws-alpha' });
     expect(fetcher.mock.calls.some(([url]) => String(url).includes('/api/files/'))).toBe(true);
   });
