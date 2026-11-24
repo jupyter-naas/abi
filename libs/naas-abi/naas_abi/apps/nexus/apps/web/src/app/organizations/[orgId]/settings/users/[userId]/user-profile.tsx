@@ -1,14 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertCircle, ArrowLeft, Camera, RefreshCw, Save, Trash2, X } from 'lucide-react';
+import { AlertCircle, Camera, ChevronDown, RefreshCw, Save, Trash2, X } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { useConfirm } from '@/components/ui/dialogs';
-import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
 import { orgSettingsSectionPath } from '../../lib/nav';
 import { removableFromOrganization, removalConfirmation } from '../users-model';
@@ -19,8 +17,12 @@ import {
   type MemberDetails,
   type MemberProfileField,
 } from './member-details';
-import { MemberAccess } from './member-access';
+import '@/components/access/access-base.css';
+import '@/components/access/access.css';
+import { ViewAsControl } from '@/components/access/people/view-as-control';
+import { SettingsBackButton, SettingsNotice, SettingsPageHeader } from '@/components/settings/settings-ui';
 import { MemberRoleSection } from '@/components/people/member-role-section';
+import { UsersReloadButton } from '@/components/settings/users-table/users-table-actions';
 import '@/app/account/profile/profile.css';
 import '../users.css';
 
@@ -94,6 +96,8 @@ export default function OrgUserProfilePage() {
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // Bumped by Reload: their Role is read again too.
+  const [nonce, setNonce] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   /** ``resetForm: false`` refreshes the data (e.g. a new picture) and keeps unsaved edits. */
@@ -134,14 +138,17 @@ export default function OrgUserProfilePage() {
   if (loading) return <p className="text-sm text-muted-foreground">Loading user...</p>;
   if (!details) {
     return (
-      <div className="account-profile-page">
+      <div className="space-y-6">
+        <SettingsPageHeader
+          leading={<SettingsBackButton label="Users" href={orgSettingsSectionPath(orgId, 'users')} />}
+          title="Member"
+          description={refused ? 'Only the organization’s admins see its people.' : 'Their workspaces, groups and policies in this organization'}
+        />
         {!refused && (
-          <div className="org-settings-users-alert" role="alert">
-            <AlertCircle size={16} />
-            <span>{loadError || 'User not found.'}</span>
-          </div>
+          <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+            {loadError || 'User not found.'}
+          </SettingsNotice>
         )}
-        <MemberAccess orgId={orgId} personId={userId} />
       </div>
     );
   }
@@ -231,28 +238,213 @@ export default function OrgUserProfilePage() {
     }
   };
 
+  const named = [displayName, account.email].filter((v, i, all) => v && all.indexOf(v) === i).join(' · ');
   return (
-    <div className="account-profile-page">
-      <Link href={orgSettingsSectionPath(orgId, 'users')} className="org-member-detail-back">
-        <ArrowLeft size={14} />
-        Users
-      </Link>
-
-      <AccountPageHeader
-        title={displayName}
-        subtitle="Their profile in this organization. Their account shows these values when it has none of its own."
+    <div className="space-y-6">
+      <SettingsPageHeader
+        leading={<SettingsBackButton label="Users" href={orgSettingsSectionPath(orgId, 'users')} />}
+        title="Member"
+        description={named}
         actions={
-          <div className="org-member-detail-actions">
+          <>
+            {member.principal_id && !isSelf && (
+              <ViewAsControl personId={member.principal_id} name={displayName} workspaceId={null} />
+            )}
+            <UsersReloadButton
+              onReload={() => {
+                setNonce((n) => n + 1);
+                void load({ resetForm: false });
+              }}
+            />
             <button
               type="button"
               onClick={() => void handleRemove()}
               disabled={!canRemove || removing}
               className="org-member-detail-remove-button"
               title={isSelf ? 'You cannot remove yourself' : undefined}
+              data-action="remove-member"
             >
               <Trash2 size={16} />
               {removing ? 'Removing...' : 'Remove from organization'}
             </button>
+          </>
+        }
+      />
+
+      {(error || loadError) && (
+        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+          {error || loadError}
+        </SettingsNotice>
+      )}
+
+      {!isSelf && (
+        <MemberRoleSection
+          scope={{ kind: 'organization', id: orgId }}
+          userId={member.user_id}
+          nonce={nonce}
+          onChanged={() => void load({ resetForm: false })}
+        />
+      )}
+
+      {/* Their profile in this organization, folded: the page is about where they work. */}
+      <details className="group border border-border bg-card" data-section="profile">
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-foreground">Profile</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Their profile in this organization. Their account shows these values when it has none of its own.
+            </p>
+          </div>
+          <ChevronDown size={16} className="mt-0.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="account-profile-page border-t border-border p-4">
+          <div className="account-profile-avatar-section">
+            <div className="account-profile-avatar-wrapper">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                onChange={(event) => void handleAvatarUpload(event)}
+                className="account-profile-avatar-input"
+              />
+              {orgAvatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={orgAvatarUrl} alt={displayName} className="account-profile-avatar-image" />
+              ) : (
+                <div className="account-profile-avatar-placeholder">
+                  {displayName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="account-profile-avatar-upload-button"
+                title="Upload a picture for this organization"
+              >
+                {uploading ? (
+                  <RefreshCw size={16} className="account-profile-avatar-upload-button-spin" />
+                ) : (
+                  <Camera size={16} />
+                )}
+              </button>
+            </div>
+            <div>
+              <h3 className="account-profile-avatar-info-name">{displayName}</h3>
+              <p className="account-profile-avatar-info-email">{account.email}</p>
+              <p className="account-profile-avatar-info-hint">
+                Organization picture (max 2MB). Their account shows it when it has no picture.
+              </p>
+              {orgAvatarUrl ? (
+                <button
+                  type="button"
+                  onClick={() => void handleAvatarRemove()}
+                  className="account-profile-avatar-remove-button"
+                >
+                  <X size={12} />
+                  Remove picture
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <AccountSectionCard padded stack>
+            <div className="account-profile-form-grid">
+              <div className="account-profile-field">
+                <label className="account-profile-field-label" htmlFor="org-member-name">
+                  Full name
+                </label>
+                <input
+                  id="org-member-name"
+                  type="text"
+                  value={account.name ?? ''}
+                  className="account-profile-field-input"
+                  title="The account name (Account Settings > Profile)"
+                  disabled
+                  readOnly
+                />
+              </div>
+              <div className="account-profile-field">
+                <label className="account-profile-field-label" htmlFor="org-member-email">
+                  Email
+                </label>
+                <input
+                  id="org-member-email"
+                  type="email"
+                  value={account.email ?? ''}
+                  className="account-profile-field-input"
+                  disabled
+                  readOnly
+                />
+              </div>
+              {TEXT_FIELDS.slice(0, 2).map(({ field, label, placeholder }) => (
+                <div key={field} className="account-profile-field">
+                  <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
+                    {label}
+                  </label>
+                  <input
+                    id={`org-member-${field}`}
+                    type="text"
+                    value={draft[field]}
+                    onChange={(event) => setDraft((d) => ({ ...d, [field]: event.target.value }))}
+                    placeholder={placeholder}
+                    className="account-profile-field-input"
+                  />
+                </div>
+              ))}
+              {TEXT_FIELDS.slice(2).map(({ field, label, placeholder }) => (
+                <div key={field} className="account-profile-field">
+                  <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
+                    {label}
+                  </label>
+                  <input
+                    id={`org-member-${field}`}
+                    type="text"
+                    value={draft[field]}
+                    onChange={(event) =>
+                      setDraft((d) => ({
+                        ...d,
+                        [field]:
+                          field === 'interest'
+                            ? event.target.value.slice(0, INTEREST_MAX_LENGTH)
+                            : event.target.value,
+                      }))
+                    }
+                    placeholder={placeholder}
+                    className="account-profile-field-input"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="account-profile-field">
+              <div className="account-profile-bio-header">
+                <label className="account-profile-field-label" htmlFor="org-member-bio">
+                  Bio
+                </label>
+                <span
+                  className={
+                    draft.bio.length > BIO_MAX_LENGTH
+                      ? 'account-profile-bio-count account-profile-bio-count-over'
+                      : 'account-profile-bio-count'
+                  }
+                >
+                  {draft.bio.length} / {BIO_MAX_LENGTH}
+                </span>
+              </div>
+              <textarea
+                id="org-member-bio"
+                value={draft.bio}
+                onChange={(event) =>
+                  setDraft((d) => ({ ...d, bio: event.target.value.slice(0, BIO_MAX_LENGTH) }))
+                }
+                placeholder={account.bio ?? 'Bio in this organization'}
+                rows={8}
+                maxLength={BIO_MAX_LENGTH}
+                className="account-profile-field-textarea"
+              />
+            </div>
+          </AccountSectionCard>
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={() => void handleSave()}
@@ -262,176 +454,14 @@ export default function OrgUserProfilePage() {
                   ? 'account-profile-save-button account-profile-save-button-saved'
                   : 'account-profile-save-button'
               }
+              data-action="save-profile"
             >
               <Save size={16} />
               {saving ? 'Saving...' : saved ? 'Saved!' : 'Save changes'}
             </button>
           </div>
-        }
-      />
-
-      {(error || loadError) && (
-        <div className="org-settings-users-alert" role="alert">
-          <AlertCircle size={16} />
-          <span>{error || loadError}</span>
         </div>
-      )}
-
-      <div className="account-profile-avatar-section">
-        <div className="account-profile-avatar-wrapper">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
-            onChange={(event) => void handleAvatarUpload(event)}
-            className="account-profile-avatar-input"
-          />
-          {orgAvatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={orgAvatarUrl} alt={displayName} className="account-profile-avatar-image" />
-          ) : (
-            <div className="account-profile-avatar-placeholder">
-              {displayName.charAt(0).toUpperCase()}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="account-profile-avatar-upload-button"
-            title="Upload a picture for this organization"
-          >
-            {uploading ? (
-              <RefreshCw size={16} className="account-profile-avatar-upload-button-spin" />
-            ) : (
-              <Camera size={16} />
-            )}
-          </button>
-        </div>
-        <div>
-          <h3 className="account-profile-avatar-info-name">{displayName}</h3>
-          <p className="account-profile-avatar-info-email">{account.email}</p>
-          <p className="account-profile-avatar-info-hint">
-            Organization picture (max 2MB). Their account shows it when it has no picture.
-          </p>
-          {orgAvatarUrl ? (
-            <button
-              type="button"
-              onClick={() => void handleAvatarRemove()}
-              className="account-profile-avatar-remove-button"
-            >
-              <X size={12} />
-              Remove picture
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      <AccountSectionCard padded stack>
-        <div className="account-profile-form-grid">
-          <div className="account-profile-field">
-            <label className="account-profile-field-label" htmlFor="org-member-name">
-              Full name
-            </label>
-            <input
-              id="org-member-name"
-              type="text"
-              value={account.name ?? ''}
-              className="account-profile-field-input"
-              title="The account name (Account Settings > Profile)"
-              disabled
-              readOnly
-            />
-          </div>
-          <div className="account-profile-field">
-            <label className="account-profile-field-label" htmlFor="org-member-email">
-              Email
-            </label>
-            <input
-              id="org-member-email"
-              type="email"
-              value={account.email ?? ''}
-              className="account-profile-field-input"
-              disabled
-              readOnly
-            />
-          </div>
-          {TEXT_FIELDS.slice(0, 2).map(({ field, label, placeholder }) => (
-            <div key={field} className="account-profile-field">
-              <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
-                {label}
-              </label>
-              <input
-                id={`org-member-${field}`}
-                type="text"
-                value={draft[field]}
-                onChange={(event) => setDraft((d) => ({ ...d, [field]: event.target.value }))}
-                placeholder={placeholder}
-                className="account-profile-field-input"
-              />
-            </div>
-          ))}
-          {TEXT_FIELDS.slice(2).map(({ field, label, placeholder }) => (
-            <div key={field} className="account-profile-field">
-              <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
-                {label}
-              </label>
-              <input
-                id={`org-member-${field}`}
-                type="text"
-                value={draft[field]}
-                onChange={(event) =>
-                  setDraft((d) => ({
-                    ...d,
-                    [field]:
-                      field === 'interest'
-                        ? event.target.value.slice(0, INTEREST_MAX_LENGTH)
-                        : event.target.value,
-                  }))
-                }
-                placeholder={placeholder}
-                className="account-profile-field-input"
-              />
-            </div>
-          ))}
-        </div>
-        <div className="account-profile-field">
-          <div className="account-profile-bio-header">
-            <label className="account-profile-field-label" htmlFor="org-member-bio">
-              Bio
-            </label>
-            <span
-              className={
-                draft.bio.length > BIO_MAX_LENGTH
-                  ? 'account-profile-bio-count account-profile-bio-count-over'
-                  : 'account-profile-bio-count'
-              }
-            >
-              {draft.bio.length} / {BIO_MAX_LENGTH}
-            </span>
-          </div>
-          <textarea
-            id="org-member-bio"
-            value={draft.bio}
-            onChange={(event) =>
-              setDraft((d) => ({ ...d, bio: event.target.value.slice(0, BIO_MAX_LENGTH) }))
-            }
-            placeholder={account.bio ?? 'Bio in this organization'}
-            rows={8}
-            maxLength={BIO_MAX_LENGTH}
-            className="account-profile-field-textarea"
-          />
-        </div>
-      </AccountSectionCard>
-
-      {!isSelf && (
-        <MemberRoleSection
-          scope={{ kind: 'organization', id: orgId }}
-          userId={member.user_id}
-          onChanged={() => void load()}
-        />
-      )}
-      <MemberAccess orgId={orgId} personId={member.principal_id || member.user_id} />
+      </details>
       {confirmDialog}
     </div>
   );

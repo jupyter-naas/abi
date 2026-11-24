@@ -110,12 +110,15 @@ class RoleOptionView(BaseModel):
     """A group or a policy a member's Role may hold: ``kind`` "level" (Members, Viewers:
     ``level``), "own" (the container's own group, never removed there), "admins", "group"
     (a capability group, a workspace's group at an organization, one an admin made) or
-    "policy"."""
+    "policy". A workspace's group at an organization names it (``workspace``), and
+    whether it is its admins group (``administers``)."""
 
     kind: str
     id: str
     name: str
     level: str | None = None
+    workspace: str | None = None
+    administers: bool = False
 
 
 class RoleOptionsView(BaseModel):
@@ -128,6 +131,27 @@ class MemberRolesInput(BaseModel):
 
     groups: list[str] = Field(default_factory=list, max_length=500)
     policies: list[str] = Field(default_factory=list, max_length=200)
+
+
+class ShownRoleView(BaseModel):
+    """One of the groups a person's Role shows (Users › Role), as their page lists it.
+    ``managed``: why a change of their Role here leaves it alone: "admins" (the
+    container's own group, which an admin reaches through an admins group), or
+    "organization" / "platform" (managed in that one's Users); None: theirs to change."""
+
+    id: str
+    name: str
+    implied: bool = False
+    managed: str | None = None
+
+
+class HeldRolesView(MemberRolesInput):
+    """What a member holds (a person's page lists it, a change of their Role starts from
+    it), with the name of each group and policy (id -> name), and the groups their Role
+    shows (``shown``, in its order), those a change here leaves alone among them."""
+
+    names: dict[str, str] = Field(default_factory=dict)
+    shown: list[ShownRoleView] = Field(default_factory=list)
 
 
 async def iam_answer(call: Any) -> Any:
@@ -215,12 +239,33 @@ async def role_options(
     return RoleOptionsView(groups=options, policies=sorted(policies, key=lambda p: p.name.lower()))
 
 
-async def held_roles(scope: str, principal_id: str, groups: RoleGroups) -> MemberRolesInput:
-    """What a member holds at ``scope``, as a change of their Role starts from."""
+async def held_roles(scope: str, principal_id: str, groups: RoleGroups) -> HeldRolesView:
+    """What a member holds at ``scope``, as a change of their Role starts from, named."""
     from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import PLATFORM
 
     held, policies = await MEMBERSHIPS.held_at(scope, principal_id)
-    return MemberRolesInput(groups=sorted(held - groups.elsewhere), policies=sorted(policies))
+    group_ids = sorted(held - groups.elsewhere)
+    policy_ids = sorted(policies)
+    refs = (await MEMBERSHIPS.roles_at(scope, [principal_id])).get(principal_id, [])
+
+    def managed(ref: Any) -> str | None:
+        if ref.id in group_ids:
+            return None
+        if ref.implied:
+            return "admins"
+        return "platform" if ref.owner == PLATFORM else "organization"
+
+    return HeldRolesView(
+        groups=group_ids,
+        policies=policy_ids,
+        names=await MEMBERSHIPS.names_of(group_ids, policy_ids),
+        shown=[
+            ShownRoleView(id=r.id, name=r.name, implied=r.implied, managed=managed(r))
+            for r in refs
+            if r.kind == "group"
+        ],
+    )
 
 
 async def change_roles(

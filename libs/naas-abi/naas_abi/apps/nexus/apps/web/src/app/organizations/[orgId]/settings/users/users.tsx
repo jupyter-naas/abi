@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Plus,
@@ -14,7 +13,6 @@ import {
   ChevronUp,
   ChevronDown,
   Search,
-  Download,
   Pencil,
   Mail,
 } from 'lucide-react';
@@ -43,9 +41,10 @@ import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-
 import { SearchBox } from '@/components/settings/search-box';
 import { matchesSearch } from '@/app/settings/lib/search';
 import {
-  downloadUsersExport,
+  downloadTableExport,
   type UsersExportFormat,
 } from '@/components/settings/users-table/users-table-export';
+import { UsersExportMenu, UsersReloadButton } from '@/components/settings/users-table/users-table-actions';
 import '../components/org-settings-components.css';
 import './users.css';
 
@@ -124,6 +123,7 @@ export default function OrgUsersPage() {
   const [openPickerUserId, setOpenPickerUserId] = useState<string | null>(null);
   const [draftWorkspaceIds, setDraftWorkspaceIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [reloading, setReloading] = useState(false);
   const [sheetQuery, setSheetQuery] = useState('');
   const [search, setSearch] = useState('');
   const [columnFilters, setColumnFilters] = useState<
@@ -463,15 +463,26 @@ export default function OrgUsersPage() {
 
   const hasActiveFilters = columns.some((column) => !isBlank(columnFilters[column.id]));
 
+  // The table's columns: User (name, email), Workspaces, Role.
   const exportVisibleUsers = (format: UsersExportFormat) => {
-    const rows = visibleMembers.map((user) => ({
-      name: user.name || 'Unknown',
-      email: user.email || user.userId,
-      role: user.roles.map((r) => r.name).join('; '),
-      groups: (assignedNamesByUser[user.userId] || []).join('; '),
-    }));
+    const rows = visibleMembers.map((user) => [
+      user.name || 'Unknown',
+      user.email || user.userId,
+      (assignedNamesByUser[user.userId] || []).join('; '),
+      user.roles.map((r) => r.name).join('; '),
+    ]);
     const date = new Date().toISOString().slice(0, 10);
-    downloadUsersExport(rows, format, `users_${date}`);
+    downloadTableExport(['Name', 'Email', 'Workspaces', 'Role'], rows, format, `users_${date}`, 'Users');
+  };
+
+  const reloadUsers = async () => {
+    if (!orgId) return;
+    setReloading(true);
+    try {
+      await Promise.all([fetchMembers(orgId), loadMemberWorkspaces()]);
+    } finally {
+      setReloading(false);
+    }
   };
 
   return (
@@ -483,39 +494,8 @@ export default function OrgUsersPage() {
           subtitle="Manage who has access to this organization and its workspaces"
           actions={
             <>
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger asChild>
-                  <button
-                    type="button"
-                    className="org-settings-users-secondary-button"
-                    disabled={visibleMembers.length === 0}
-                  >
-                    <Download size={16} />
-                    Export
-                    <ChevronDown size={14} />
-                  </button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content
-                    align="end"
-                    sideOffset={4}
-                    className="org-settings-users-export-menu"
-                  >
-                    <DropdownMenu.Item
-                      className="org-settings-users-export-item"
-                      onSelect={() => exportVisibleUsers('csv')}
-                    >
-                      CSV
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      className="org-settings-users-export-item"
-                      onSelect={() => exportVisibleUsers('xlsx')}
-                    >
-                      Excel (.xlsx)
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Root>
+              <UsersReloadButton onReload={() => void reloadUsers()} busy={reloading} />
+              <UsersExportMenu onExport={exportVisibleUsers} disabled={visibleMembers.length === 0} />
               {canManage ? (
                 <button
                   type="button"

@@ -11,6 +11,8 @@ import { PendingInvitations } from '@/components/invitations/pending-invitations
 import { AddPeopleDialog } from '@/components/people/add-people-dialog';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
 import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-table-filter';
+import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
+import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
 import type { FacetBucket } from '@/lib/graph-query/types';
 import { matchesSearch } from '@/app/settings/lib/search';
@@ -23,8 +25,10 @@ import {
 } from '@/lib/people';
 import {
   MEMBER_COLUMNS,
+  MEMBER_EXPORT_HEADERS,
   joinedDay,
   memberCellValues,
+  memberExportRow,
   memberSearchTexts,
   readWorkspaceMember,
   sortMembers,
@@ -190,6 +194,10 @@ function Members() {
     setSortDir('asc');
   };
   const filtered = searchQuery.trim() !== '' || MEMBER_COLUMNS.some((column) => !isBlank(filters[column.id]));
+  const exportVisible = (format: UsersExportFormat) => {
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTableExport(MEMBER_EXPORT_HEADERS, filteredMembers.map(memberExportRow), format, `users_${date}`, 'Users');
+  };
   const adminCount = members.filter((m) => m.admin).length;
   const invitedCount = members.filter((m) => m.status === 'invited').length;
 
@@ -204,15 +212,18 @@ function Members() {
         }
         description="Manage who has access to this workspace"
         actions={
-          <Button
-            onClick={() => setAddOpen(true)}
-            disabled={!canManage}
-            title={canManage ? undefined : 'Only workspace owners and admins can add members'}
-            data-action="add-people"
-          >
-            <Plus size={16} />
-            Invite user
-          </Button>
+          <>
+            <UsersExportMenu onExport={exportVisible} disabled={filteredMembers.length === 0} />
+            <Button
+              onClick={() => setAddOpen(true)}
+              disabled={!canManage}
+              title={canManage ? undefined : 'Only workspace owners and admins can add members'}
+              data-action="add-people"
+            >
+              <Plus size={16} />
+              Invite user
+            </Button>
+          </>
         }
       />
 

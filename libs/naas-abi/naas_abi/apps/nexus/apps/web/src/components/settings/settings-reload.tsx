@@ -100,8 +100,9 @@ export function useSettingsReloadGeneration(): number {
 }
 
 /**
- * Reload button for settings page headers. Shown on the cached settings pages only
- * (Components and Members); renders nothing elsewhere or outside a settings tree.
+ * Reload button for settings page headers, an icon as on every Users page. Shown on the
+ * cached settings pages only (Components and Members); renders nothing elsewhere or outside a
+ * settings tree.
  */
 export function SettingsReloadButton({ className }: { className?: string }) {
   const context = useContext(SettingsReloadContext);
@@ -113,10 +114,11 @@ export function SettingsReloadButton({ className }: { className?: string }) {
       onClick={() => void context.reload()}
       disabled={context.reloading}
       title="Reload: skip the 24h cache and fetch this page's data again"
+      aria-label="Reload"
+      data-action="reload"
       className={className}
     >
       <RefreshCw size={16} className={cn(context.reloading && 'animate-spin')} />
-      Reload
     </Button>
   );
 }

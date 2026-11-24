@@ -507,6 +507,40 @@ async def test_a_role_at_the_organization_and_at_the_platform(world):
 
 
 @pytest.mark.asyncio
+async def test_a_persons_page_names_their_groups_and_policies(world):
+    """Users › a person lists their Role by name: groups and policies, an unknown id
+    left out."""
+    await _team(world)
+    levels = LEVELS.get(world.iam)
+    names = await MEMBERSHIPS.names_of([levels.members, "grp_gone"], ["builtin.member", "pol_gone"])
+    assert names[levels.members] == "Members"
+    assert names["builtin.member"]
+    assert "grp_gone" not in names and "pol_gone" not in names
+
+
+@pytest.mark.asyncio
+async def test_a_persons_page_shows_what_their_role_shows(world):
+    """Users › a person lists the groups their Role shows (Users › Role), each one a
+    change here leaves alone said why: the workspace's own group an organization's admin
+    reaches through its admins group, the organization's admins group (managed in
+    Organization › Users)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import held_roles
+
+    await _team(world)
+    groups = await MEMBERSHIPS.role_groups(world.W)
+    oadmin = await held_roles(world.W, world.principal("oadmin"), groups)
+    shown = {s.name: s.managed for s in oadmin.shown}
+    assert list(shown) == ["Alpha workspace", "Acme admins"]
+    assert shown == {"Alpha workspace": "admins", "Acme admins": "organization"}
+    assert not {s.id for s in oadmin.shown} & set(oadmin.groups)
+    wadmin = await held_roles(world.W, world.principal("wadmin"), groups)
+    assert [(s.name, s.managed) for s in wadmin.shown] == [
+        ("Alpha workspace", None),
+        ("Alpha admins", None),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_the_people_gateway_joins_and_leaves_the_groups(world):
     """The people service's ``AccessGateway`` (#1589): seats in the groups, checked
     as the inviting person, and the level."""

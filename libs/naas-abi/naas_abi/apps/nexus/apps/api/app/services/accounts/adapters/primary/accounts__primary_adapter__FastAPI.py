@@ -51,6 +51,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import PLATFORM
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import (
     KEEP,
+    HeldRolesView,
     MemberRolesInput,
     RoleChange,
     RoleOptionsView,
@@ -466,7 +467,7 @@ async def _person(account_id: str) -> tuple[str, str]:
     "/{account_id}/roles",
     dependencies=[guard("ListUsers", workspace=None, literal=LIST)],
 )
-async def user_roles(account_id: str) -> MemberRolesInput:
+async def user_roles(account_id: str) -> HeldRolesView:
     """What a person holds at the platform (its groups, the policies attached to them
     without a scope), as a change of their Role starts from."""
     _user, principal = await _person(account_id)

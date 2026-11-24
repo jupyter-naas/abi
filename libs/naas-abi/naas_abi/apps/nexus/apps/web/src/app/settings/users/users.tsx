@@ -3,19 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   AlertCircle,
   Ban,
   ChevronDown,
   ChevronUp,
   Crown,
-  Download,
   Filter,
   Pencil,
   Play,
   Plus,
-  RefreshCw,
   Trash2,
   UserCircle,
 } from 'lucide-react';
@@ -32,6 +29,7 @@ import {
   downloadTableExport,
   type UsersExportFormat,
 } from '@/components/settings/users-table/users-table-export';
+import { UsersExportMenu, UsersReloadButton } from '@/components/settings/users-table/users-table-actions';
 import { matchesSearch } from '../lib/search';
 import { countFacets } from '../lib/page-helpers';
 import {
@@ -545,33 +543,8 @@ export function PlatformUsers({
           subtitle="Every account of the platform, and the people invited who have not signed in yet"
           actions={
             <>
-              <button type="button" className="org-settings-users-secondary-button" onClick={() => reload()} title="Refresh">
-                <RefreshCw size={16} />
-              </button>
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger asChild>
-                  <button
-                    type="button"
-                    className="org-settings-users-secondary-button"
-                    data-action="export"
-                    disabled={visible.length === 0}
-                  >
-                    <Download size={16} />
-                    Export
-                    <ChevronDown size={14} />
-                  </button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content align="end" sideOffset={4} className="org-settings-users-export-menu">
-                    <DropdownMenu.Item className="org-settings-users-export-item" onSelect={() => exportVisible('csv')}>
-                      CSV
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item className="org-settings-users-export-item" onSelect={() => exportVisible('xlsx')}>
-                      Excel (.xlsx)
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Root>
+              <UsersReloadButton onReload={() => reload()} />
+              <UsersExportMenu onExport={exportVisible} disabled={visible.length === 0} />
               {can(USER_ACTIONS.invite) && (
                 <Link href={NEW_USER_PATH} className="org-settings-primary-button" data-action="invite">
                   <Plus size={16} />

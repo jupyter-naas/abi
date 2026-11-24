@@ -114,6 +114,17 @@
   color: var(--foreground-hex);
 }
 
+/* The organization or workspace the level is, after its label. */
+.settings-tab-name {
+  margin-left: var(--space-1);
+  font-weight: var(--font-weight-normal);
+  color: var(--muted-foreground-hex);
+}
+
+.settings-tab-name::before {
+  content: '· ';
+}
+
 .settings-tab-active,
 .settings-tab-active:hover {
   border-bottom-color: var(--color-primary);

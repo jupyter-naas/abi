@@ -38,6 +38,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import (
     KEEP,
+    HeldRolesView,
     MemberRolesInput,
     RoleChange,
     RoleOptionsView,
@@ -1156,11 +1157,15 @@ async def org_member_role_options(
     container = org_container(org_id)
     groups = await role_groups_of(container)
     more: list[RoleOptionView] = []
-    for _ws, own, admins, own_name, admins_name in await _org_workspace_groups(service, org_id):
+    for ws, own, admins, own_name, admins_name in await _org_workspace_groups(service, org_id):
         if own:
-            more.append(RoleOptionView(kind="group", id=own, name=own_name))
+            more.append(RoleOptionView(kind="group", id=own, name=own_name, workspace=ws))
         if admins:
-            more.append(RoleOptionView(kind="group", id=admins, name=admins_name))
+            more.append(
+                RoleOptionView(
+                    kind="group", id=admins, name=admins_name, workspace=ws, administers=True
+                )
+            )
     return await role_options(current_user, container, groups, listed_at=container, more=more)
 
 
@@ -1175,7 +1180,7 @@ async def org_member_role_options(
         )
     ],
 )
-async def org_member_roles(org_id: str, user_id: str) -> MemberRolesInput:
+async def org_member_roles(org_id: str, user_id: str) -> HeldRolesView:
     """What a member holds in the organization (its groups and its workspaces'), as a
     change of their Role starts from."""
     try:

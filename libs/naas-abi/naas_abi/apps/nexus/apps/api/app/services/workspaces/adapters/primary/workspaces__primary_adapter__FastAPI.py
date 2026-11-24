@@ -56,6 +56,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_of
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import (
     KEEP,
+    HeldRolesView,
     MemberRolesInput,
     RoleChange,
     RoleOptionsView,
@@ -864,7 +865,7 @@ async def member_roles(
     workspace_id: str,
     user_id: str,
     service: WorkspaceService = Depends(get_workspace_service),
-) -> MemberRolesInput:
+) -> HeldRolesView:
     """What a member holds here, as a change of their Role starts from (``PUT``): the
     groups bearing on the workspace and the policies attached to them there, but what
     is managed elsewhere (their organization's people and admins) and what follows

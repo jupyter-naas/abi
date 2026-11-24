@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   levelLabel,
+  MEMBER_EXPORT_HEADERS,
   memberCellValues,
+  memberExportRow,
   memberSearchTexts,
   readWorkspaceMember,
   sortMembers,
@@ -66,6 +68,20 @@ describe('a member of the workspace', () => {
     const moved = readWorkspaceMember(raw({ created_at: null, joined_before: '2026-11-24T09:00:00Z' }));
     expect(moved.joinedBefore?.toISOString().startsWith('2026-11-24')).toBe(true);
     expect(memberCellValues(moved, 'joined')).toEqual(['before 2026-11-24']);
+  });
+
+  it('exports as the table shows them, a name and an email, their status', () => {
+    const row = readWorkspaceMember(
+      raw({
+        status: 'invited',
+        roles: [
+          { kind: 'group', id: 'grp_w', name: 'Alpha workspace' },
+          { kind: 'group', id: 'grp_m', name: 'Members' },
+        ],
+      })
+    );
+    expect(MEMBER_EXPORT_HEADERS).toEqual(['Name', 'Email', 'Status', 'Role', 'Joined']);
+    expect(memberExportRow(row)).toEqual(['Bob', 'bob@example.com', 'Invited', 'Alpha workspace; Members', '2026-11-01']);
   });
 
   it('is found by any column, by their level and by Invited', () => {

@@ -27,7 +27,7 @@ const labels = (input: SettingsLevelsInput, id: string) =>
 
 const all: SettingsLevelsInput = {
   ...member,
-  workspace: { id: 'ws-1', groups: SETTINGS_GROUPS },
+  workspace: { id: 'ws-1', name: 'Support', groups: SETTINGS_GROUPS },
   organization: { id: 'acme', name: 'Acme', items: orgSettingsNavForRole('admin', { access: { actions: { 'iam:ListPolicies': true, 'iam:ListGroups': true } } }), current: true },
   platform: visiblePlatformSettingsGroups({ 'nexus:ReadSystem': true, 'nexus:ListUsers': true }),
 };
@@ -150,6 +150,8 @@ describe('the tabs of Settings', () => {
       ['Workspace', '/workspace/ws-1/settings/general', false],
       ['Account', '/account/profile', false],
     ]);
+    // The organization and the workspace are named in their tabs.
+    expect(tabs.map((tab) => tab.name ?? null)).toEqual([null, 'Acme', 'Support', null]);
   });
 
   it('open a level where the caller left it, while that is still one of its pages', () => {

@@ -125,6 +125,19 @@ export function memberSearchTexts(row: WorkspaceMemberRow): string[] {
   ];
 }
 
+/** Users › Export: the table's columns (the member as their name and email), and their status. */
+export const MEMBER_EXPORT_HEADERS = ['Name', 'Email', 'Status', 'Role', 'Joined'] as const;
+
+export function memberExportRow(row: WorkspaceMemberRow): string[] {
+  return [
+    row.name,
+    row.email,
+    row.status === 'invited' ? INVITED : 'Active',
+    [...new Set(row.roles.map((r) => r.name))].join('; '),
+    joinedDay(row),
+  ];
+}
+
 export type SortDir = 'asc' | 'desc';
 
 function sortText(row: WorkspaceMemberRow, column: MemberColumnId): string {

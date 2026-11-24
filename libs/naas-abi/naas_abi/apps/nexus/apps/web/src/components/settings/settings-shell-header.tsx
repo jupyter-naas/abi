@@ -97,11 +97,12 @@ export function SettingsShellHeader({
             <Link
               key={tab.id}
               href={tab.href}
-              title={tab.label}
+              title={tab.name ? `${tab.label}: ${tab.name}` : tab.label}
               aria-current={tab.active ? 'true' : undefined}
               className={tab.active ? 'settings-tab settings-tab-active' : 'settings-tab'}
             >
               {tab.label}
+              {tab.name && <span className="settings-tab-name">{tab.name}</span>}
             </Link>
           ))}
         </nav>

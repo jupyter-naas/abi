@@ -5,18 +5,98 @@
 
 export type RoleOptionKind = 'level' | 'own' | 'admins' | 'group' | 'policy';
 
-export type RoleOption = { kind: RoleOptionKind; id: string; name: string; level?: 'member' | 'viewer' | null };
+/**
+ * A group or policy a Role may hold. At an organization, a group of one of its workspaces names
+ * it (`workspace`), and says whether it is the workspace's admins group (`administers`).
+ */
+export type RoleOption = {
+  kind: RoleOptionKind;
+  id: string;
+  name: string;
+  level?: 'member' | 'viewer' | null;
+  workspace?: string;
+  administers?: boolean;
+};
 
 export type RoleOptions = { groups: RoleOption[]; policies: RoleOption[] };
 
 /** What the editor holds: group and policy ids. */
 export type RoleSelection = { groups: string[]; policies: string[] };
 
+/**
+ * Why a change of their Role here leaves one of their groups alone: the container's own group
+ * an admin reaches through an admins group, or a group managed in the organization's or the
+ * platform's Users.
+ */
+export type RoleManaged = 'admins' | 'organization' | 'platform';
+
+/** One of the groups a person's Role shows (Users › Role), in its order. */
+export type ShownRole = { id: string; name: string; implied: boolean; managed: RoleManaged | null };
+
+/**
+ * What a person holds (`GET …/roles`): the ids, each one's name, and the groups their Role
+ * shows (`shown`), those a change here leaves alone among them.
+ */
+export type HeldRoles = RoleSelection & { names: Record<string, string>; shown?: ShownRole[] };
+
+/** A group or policy on a person's page; `managed`: why it cannot be removed here. */
+export type HeldItem = RoleOption & { managed?: RoleManaged };
+
+const KIND_ORDER: Record<RoleOptionKind, number> = { own: 0, admins: 1, level: 2, group: 3, policy: 4 };
+const MANAGED: readonly string[] = ['admins', 'organization', 'platform'];
+
+/**
+ * What a person holds, as their page lists it: their groups as their Role shows them (the
+ * container's own first, then what gives them their place, their level, the others), those a
+ * change here leaves alone included, then the rest they hold (the level of an admin); and their
+ * policies, each named. One the caller is not offered keeps the name IAM gives it, as a plain
+ * group or policy.
+ */
+export function heldItems(options: RoleOptions, held: HeldRoles): { groups: HeldItem[]; policies: HeldItem[] } {
+  const known = new Map([...options.groups, ...options.policies].map((o) => [`${o.kind === 'policy' ? 'p' : 'g'}:${o.id}`, o]));
+  const named = (id: string, kind: 'group' | 'policy'): RoleOption =>
+    known.get(`${kind === 'policy' ? 'p' : 'g'}:${id}`) ?? { kind, id, name: held.names[id] || id, level: null };
+  const order = (a: RoleOption, b: RoleOption) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.name.localeCompare(b.name);
+  const shown = held.shown ?? [];
+  const place = new Map(shown.map((s, i) => [s.id, i]));
+  const rank = (o: RoleOption) => place.get(o.id) ?? shown.length;
+  const mine = new Set(held.groups);
+  const fixed: HeldItem[] = shown
+    .filter((s) => s.managed && !mine.has(s.id))
+    .map((s) => ({ kind: s.implied ? 'own' : 'group', id: s.id, name: s.name, level: null, managed: s.managed ?? undefined }));
+  return {
+    groups: [...held.groups.map((id) => named(id, 'group')), ...fixed].sort((a, b) => rank(a) - rank(b) || order(a, b)),
+    policies: held.policies.map((id) => named(id, 'policy')).sort(order),
+  };
+}
+
+function readShown(value: unknown): ShownRole[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row): ShownRole[] => {
+    if (!row || typeof row !== 'object') return [];
+    const { id, name, implied, managed } = row as Record<string, unknown>;
+    if (typeof id !== 'string' || !id) return [];
+    return [
+      {
+        id,
+        name: typeof name === 'string' && name ? name : id,
+        implied: implied === true,
+        managed: typeof managed === 'string' && MANAGED.includes(managed) ? (managed as RoleManaged) : null,
+      },
+    ];
+  });
+}
+
+/** `selection` with every one of `picked` added (`withRole`, in order). */
+export function withRoles(options: RoleOptions, selection: RoleSelection, picked: RoleOption[]): RoleSelection {
+  return picked.reduce((next, option) => withRole(options, next, option), selection);
+}
+
 export function readRoleOptions(data: unknown): RoleOptions {
   const read = (items: unknown, fallback: RoleOptionKind): RoleOption[] =>
     (Array.isArray(items) ? items : []).flatMap((item) => {
       if (!item || typeof item !== 'object') return [];
-      const { kind, id, name, level } = item as Record<string, unknown>;
+      const { kind, id, name, level, workspace, administers } = item as Record<string, unknown>;
       if (typeof id !== 'string' || !id) return [];
       const known: RoleOptionKind[] = ['level', 'own', 'admins', 'group', 'policy'];
       return [
@@ -25,6 +105,7 @@ export function readRoleOptions(data: unknown): RoleOptions {
           id,
           name: typeof name === 'string' && name ? name : id,
           level: level === 'member' || level === 'viewer' ? level : null,
+          ...(typeof workspace === 'string' && workspace ? { workspace, administers: administers === true } : {}),
         },
       ];
     });
@@ -104,15 +185,15 @@ async function answer<T>(response: Response, fallback: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-/** A member as their page needs them: their Nexus id, name, and how they reach the workspace. */
-export type MemberRef = { userId: string; name: string; source: 'workspace' | 'organization' };
+/** A member as their page needs them: their Nexus id, name, email, and how they reach the workspace. */
+export type MemberRef = { userId: string; name: string; email: string | null; source: 'workspace' | 'organization' };
 
 export type MemberRolesApi = {
   options: (scope: RoleScope) => Promise<RoleOptions>;
   /** A workspace's member whose IAM id is `principalId`, or null. */
   member: (workspaceId: string, principalId: string) => Promise<MemberRef | null>;
-  /** What the person holds there (what their Role editor starts from). */
-  held: (scope: RoleScope, userId: string) => Promise<RoleSelection>;
+  /** What the person holds there, named (what their page lists, a change starts from). */
+  held: (scope: RoleScope, userId: string) => Promise<HeldRoles>;
   /** Make their Role there `selection`. */
   set: (scope: RoleScope, userId: string, selection: RoleSelection) => Promise<Record<string, unknown>>;
 };
@@ -143,15 +224,20 @@ export function createMemberRolesApi(fetcher: Fetcher = defaultFetcher): MemberR
       return {
         userId: row.user_id,
         name: (typeof row.name === 'string' && row.name) || (typeof row.email === 'string' ? row.email : row.user_id),
+        email: typeof row.email === 'string' && row.email ? row.email : null,
         source: row.source === 'organization' ? 'organization' : 'workspace',
       };
     },
     async held(scope, userId) {
-      const data = await answer<Partial<RoleSelection>>(
+      const data = await answer<Partial<HeldRoles>>(
         await fetcher(`${roleBase(scope)}/${encodeURIComponent(userId)}/roles`),
         'Could not load their roles'
       );
-      return { groups: ids(data.groups), policies: ids(data.policies) };
+      const names: Record<string, string> = {};
+      if (data.names && typeof data.names === 'object') {
+        for (const [id, name] of Object.entries(data.names)) if (typeof name === 'string' && name) names[id] = name;
+      }
+      return { groups: ids(data.groups), policies: ids(data.policies), names, shown: readShown(data.shown) };
     },
     async set(scope, userId, selection) {
       return answer<Record<string, unknown>>(

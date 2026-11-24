@@ -25,7 +25,6 @@ import { holdingRows, levelLabel, scopesOf } from '../holdings/holdings-model';
 import { HoldingsTable } from '../holdings/holdings-table';
 import { useActionsAt, useContainerNames } from '../policies/policy-owners';
 import { GROUP_KIND_LABELS, groupKind, groupRank } from '@/lib/access-model/levels';
-import { AccessModelPanel } from './access-model-panel';
 import '../people/people.css';
 import './groups.css';
 
@@ -215,7 +214,6 @@ export function GroupsView({
         </div>
       )}
       {creating && create}
-      <AccessModelPanel api={api} scope={scope} nonce={nonce} onOpenGroup={setSelected} onChanged={() => void load()} />
       <ListSearch
         value={list.search}
         onChange={list.setSearch}

@@ -146,6 +146,8 @@ class RoleRef:
     # The container's own group, shown for everyone who reaches it, held or not (an
     # admin reaches it through "<W> admins" or their organization's admins).
     implied: bool = False
+    # A group's owner (its container, ``PLATFORM`` for the platform's).
+    owner: str | None = None
 
 
 @dataclass(frozen=True)
@@ -797,6 +799,32 @@ class Memberships:
 
         return await self._run(work)
 
+    async def names_of(self, group_ids: Sequence[str], policy_ids: Sequence[str]) -> dict[str, str]:
+        """The names of these groups and policies (id -> name; an unknown one is left
+        out), read from the engine's store, as ``api``: what a person's page lists of
+        their Role, which the route authorized its caller to read."""
+
+        def work(iam: Any) -> dict[str, str]:
+            store = getattr(iam, "store", None) or iam
+            names: dict[str, str] = {}
+            for group_id in group_ids:
+                try:
+                    group = store.get_principal(group_id)
+                except (IAMNotFoundError, ResourceNotFoundError):
+                    continue
+                if group is not None:
+                    names[group_id] = str(group.name or group_id)
+            for policy_id in policy_ids:
+                try:
+                    policy = store.get_policy(policy_id)
+                except (IAMNotFoundError, ResourceNotFoundError):
+                    continue
+                if policy is not None:
+                    names[policy_id] = str(policy.name or policy_id)
+            return names
+
+        return await self._run(work)
+
     async def roles_at(self, scope: str, principal_ids: Sequence[str]) -> dict[str, list[RoleRef]]:
         """What counts of each person's roles at the container ``scope`` (Users › Role),
         in this order:
@@ -927,12 +955,14 @@ class Memberships:
                 refs: dict[tuple[str, str], RoleRef] = {}
                 if own_group and own_name:
                     refs[("group", own_group)] = RoleRef(
-                        "group", own_group, own_name, implied=own_group not in held
+                        "group", own_group, own_name, implied=own_group not in held, owner=scope
                     )
                 for group in groups:
                     key = ("group", str(group.id))
                     if key not in refs and str(group.id) not in hidden:
-                        refs[key] = RoleRef("group", str(group.id), group.name)
+                        refs[key] = RoleRef(
+                            "group", str(group.id), group.name, owner=str(group.owner_scope)
+                        )
                 for attachment in attachments_of(principal_id):
                     if not bears(attachment.scope):
                         continue

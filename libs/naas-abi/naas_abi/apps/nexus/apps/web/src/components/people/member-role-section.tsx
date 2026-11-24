@@ -1,40 +1,72 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useConfirm } from '@/components/ui/dialogs';
 import { SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
 import {
+  addable,
   createMemberRolesApi,
+  heldItems,
   roleProblem,
+  withRoles,
+  withoutRole,
+  type HeldItem,
+  type HeldRoles,
   type MemberRolesApi,
+  type RoleManaged,
+  type RoleOption,
   type RoleOptions,
   type RoleScope,
   type RoleSelection,
 } from '@/lib/member-roles';
-import { RoleEditor } from './role-editor';
+import { RolePickerDialog, roleHint } from './role-picker-dialog';
 
-const same = (a: RoleSelection, b: RoleSelection) =>
-  [...a.groups].sort().join() === [...b.groups].sort().join() &&
-  [...a.policies].sort().join() === [...b.policies].sort().join();
+const NOTHING: HeldRoles = { groups: [], policies: [], names: {} };
 
-const TITLES: Record<RoleScope['kind'], string> = {
-  workspace: 'Role in this workspace',
-  organization: 'Role in this organization',
-  platform: 'Role on the platform',
+const GROUPS_HELP: Record<RoleScope['kind'], string> = {
+  workspace: 'The groups they are in that bear on this workspace. A level (Members, Viewers) applies in all their workspaces.',
+  organization: "The organization's groups they are in. A level (Members, Viewers) applies in all their workspaces.",
+  platform: "The platform's groups they are in. A level applies in all their workspaces.",
 };
 
+const POLICIES_HELP: Record<RoleScope['kind'], string> = {
+  workspace: 'The policies attached to them here.',
+  organization: 'The policies attached to them in this organization.',
+  platform: 'The policies attached to them everywhere (without a scope).',
+};
+
+const WORKSPACES_HELP = "The organization's workspaces they work in, and those they administer.";
+
+type PickerKind = 'workspaces' | 'groups' | 'policies';
+
+/** Why a group cannot be removed here, said in its place. */
+const MANAGED_TEXT: Record<RoleManaged, { label: string; title: string }> = {
+  admins: { label: 'Comes with their admins group', title: 'They reach it as an admin' },
+  organization: { label: "Managed in the organization's Users", title: "Change it in the organization's settings › Users" },
+  platform: { label: "Managed in the platform's Users", title: 'Change it in Platform settings › Users' },
+};
+
+/** A person as their page names them, once found among the people of the scope. */
+export type PersonRef = { userId: string; name: string; email: string | null };
+
 /**
- * A person's Role at a workspace, an organization or the platform, on their page (Users ›
- * a person): the groups and policies they hold there, changed as on Create user, then saved at
- * once (`PUT …/roles`). At a workspace the page names them by their IAM id (`principalId`):
+ * A person's Role at a workspace, an organization or the platform, on their page (Users › a
+ * person): lists of what they hold there, Groups and Policies (and first, at an organization,
+ * the Workspaces its workspaces' groups place them in). Removing one asks for a
+ * confirmation; the add button opens a search of the ones they may be given, one or several
+ * picked. Each change is saved at once (`PUT …/roles`), what the API would refuse said before
+ * asking (`roleProblem`). At a workspace the page names them by their IAM id (`principalId`):
  * they are found among its members (an organization's admin reaches it without a level).
  */
 export function MemberRoleSection({
   scope,
   userId,
   principalId,
+  nonce = 0,
   onChanged,
+  onPerson,
   api,
 }: {
   scope: RoleScope;
@@ -42,30 +74,37 @@ export function MemberRoleSection({
   userId?: string;
   /** At a workspace: their IAM id, looked up among its members. */
   principalId?: string;
+  /** Bumped to read it all again (the page's Refresh). */
+  nonce?: number;
   onChanged?: () => void;
+  /** At a workspace: the member found, so the page names them. */
+  onPerson?: (person: PersonRef | null) => void;
   api?: MemberRolesApi;
 }) {
   const roles = useMemo(() => api ?? createMemberRolesApi(), [api]);
-  const [person, setPerson] = useState<{ userId: string; name: string; reachesOtherwise: boolean } | null | undefined>(
-    undefined
-  );
+  const { confirm, dialog: confirmDialog } = useConfirm();
+  const [person, setPerson] = useState<(PersonRef & { reachesOtherwise: boolean }) | null | undefined>(undefined);
   const [options, setOptions] = useState<RoleOptions>({ groups: [], policies: [] });
-  const [held, setHeld] = useState<RoleSelection>({ groups: [], policies: [] });
-  const [role, setRole] = useState<RoleSelection>({ groups: [], policies: [] });
+  const [held, setHeld] = useState<HeldRoles>(NOTHING);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [picker, setPicker] = useState<PickerKind | null>(null);
   const scopeKey = scope.kind === 'platform' ? 'platform' : `${scope.kind}:${scope.id}`;
 
   useEffect(() => {
     let live = true;
+    setError('');
     (async () => {
-      let found: { userId: string; name: string; reachesOtherwise: boolean } | null = null;
+      let found: (PersonRef & { reachesOtherwise: boolean }) | null = null;
       if (scope.kind === 'workspace' && principalId && !userId) {
         const member = await roles.member(scope.id, principalId);
-        found = member ? { userId: member.userId, name: member.name, reachesOtherwise: member.source === 'organization' } : null;
+        found = member
+          ? { userId: member.userId, name: member.name, email: member.email, reachesOtherwise: member.source === 'organization' }
+          : null;
+        if (live) onPerson?.(found);
       } else if (userId) {
-        found = { userId, name: 'They', reachesOtherwise: scope.kind === 'platform' };
+        found = { userId, name: '', email: null, reachesOtherwise: scope.kind === 'platform' };
       }
       if (!live) return;
       setPerson(found);
@@ -74,66 +113,172 @@ export function MemberRoleSection({
       if (!live) return;
       setOptions(offered);
       setHeld(mine);
-      setRole(mine);
     })().catch((e: unknown) => live && setError(e instanceof Error ? e.message : 'Could not load their roles'));
     return () => {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `scope` is read through its key
-  }, [roles, scopeKey, userId, principalId]);
+  }, [roles, scopeKey, userId, principalId, nonce]);
 
   if (person === null) return null; // not one of its people: their page says the rest
   const reachesOtherwise = !!person?.reachesOtherwise;
-  const changed = !same(role, held);
-  const problem = roleProblem(options, role, reachesOtherwise);
+  const items = heldItems(options, held);
+  const more = addable(options, held);
+  const who = person?.name || 'They';
+  const ready = person !== undefined && !busy;
 
-  const save = async () => {
+  const save = async (next: RoleSelection, done: string) => {
     if (!person) return;
-    setSaving(true);
+    await roles.set(scope, person.userId, { groups: next.groups, policies: next.policies });
+    setHeld(await roles.held(scope, person.userId));
     setError('');
+    setNotice(done);
+    onChanged?.();
+  };
+
+  const remove = async (option: RoleOption) => {
     setNotice('');
+    const next = withoutRole(held, option);
+    const problem = roleProblem(options, next, reachesOtherwise);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    const ok = await confirm({
+      title: option.kind === 'policy' ? `Detach ${option.name}?` : `Remove from ${option.name}?`,
+      description:
+        option.kind === 'policy'
+          ? `${who} will lose what the policy ${option.name} gives them.`
+          : `${who} will leave the group ${option.name} and lose what it gives them.`,
+      confirmLabel: option.kind === 'policy' ? 'Detach' : 'Remove',
+    });
+    if (!ok) return;
+    setBusy(true);
     try {
-      await roles.set(scope, person.userId, role);
-      const mine = await roles.held(scope, person.userId);
-      setHeld(mine);
-      setRole(mine);
-      setNotice('Their Role is saved.');
-      onChanged?.();
+      await save(next, `${option.name} removed.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not change their roles');
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   };
 
-  return (
-    <SettingsSection
-      title={TITLES[scope.kind]}
-      description="The groups they are in and the policies attached to them here. A level (Members, Viewers) applies in all their workspaces."
+  const add = async (picked: RoleOption[]) => {
+    setNotice('');
+    setBusy(true);
+    try {
+      await save(withRoles(options, held, picked), picked.length > 1 ? `${picked.length} added.` : `${picked[0]?.name} added.`);
+      setPicker(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const list = (found: HeldItem[], empty: string) =>
+    found.length === 0 ? (
+      <p className="text-sm text-muted-foreground">{empty}</p>
+    ) : (
+      <ul className="divide-y divide-border">
+        {found.map((option) => {
+          const hint = roleHint(option);
+          return (
+            <li
+              key={`${option.kind}:${option.id}`}
+              className="flex items-center justify-between gap-3 py-2"
+              data-role-item={option.id}
+              data-role={option.kind}
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm text-foreground">{option.name}</span>
+                {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
+              </span>
+              {option.managed ? (
+                <span className="shrink-0 text-xs text-muted-foreground" title={MANAGED_TEXT[option.managed].title} data-managed={option.managed}>
+                  {MANAGED_TEXT[option.managed].label}
+                </span>
+              ) : option.kind === 'own' ? (
+                <span className="shrink-0 text-xs text-muted-foreground" title="Remove them from Users to take them out">
+                  Kept while they are here
+                </span>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Remove ${option.name}`}
+                  title={option.kind === 'policy' ? 'Detach' : 'Remove'}
+                  disabled={!ready}
+                  onClick={() => void remove(option)}
+                  data-action="remove-role"
+                >
+                  <Trash2 size={15} />
+                </Button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    );
+
+  const ADD_LABEL: Record<PickerKind, string> = { workspaces: 'Add workspaces', groups: 'Add groups', policies: 'Add policies' };
+  const addButton = (kind: PickerKind, offered: RoleOption[]) => (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={() => {
+        setNotice('');
+        setPicker(kind);
+      }}
+      disabled={!ready || offered.length === 0}
+      title={offered.length === 0 ? 'Nothing more you may add' : undefined}
+      aria-label={ADD_LABEL[kind]}
+      data-action={`add-${kind}`}
     >
-      <div className="space-y-3" data-member-role>
-        {error && (
-          <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
-            {error}
-          </SettingsNotice>
-        )}
-        {notice && <SettingsNotice tone="info">{notice}</SettingsNotice>}
-        <RoleEditor
-          options={options}
-          value={role}
-          onChange={setRole}
-          disabled={saving || person === undefined}
-          reachesOtherwise={reachesOtherwise}
+      <Plus size={14} />
+    </Button>
+  );
+
+  // At an organization, its workspaces' groups are a section of their own.
+  const split = scope.kind === 'organization';
+  const inWorkspace = (o: RoleOption) => split && !!o.workspace;
+  const heldWorkspaces = items.groups.filter(inWorkspace).sort((a, b) => a.name.localeCompare(b.name));
+  const heldGroups = items.groups.filter((o) => !inWorkspace(o));
+  const moreWorkspaces = more.filter(inWorkspace);
+  const moreGroups = more.filter((o) => o.kind !== 'policy' && !inWorkspace(o));
+  const morePolicies = more.filter((o) => o.kind === 'policy');
+  const offered: Record<PickerKind, RoleOption[]> = { workspaces: moreWorkspaces, groups: moreGroups, policies: morePolicies };
+  const loading = <p className="text-sm text-muted-foreground">Loading…</p>;
+  const problemOf = (picked: RoleOption[]) => roleProblem(options, withRoles(options, held, picked), reachesOtherwise);
+
+  return (
+    <div className="space-y-4" data-member-role="">
+      {error && (
+        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+          {error}
+        </SettingsNotice>
+      )}
+      {notice && <SettingsNotice tone="info">{notice}</SettingsNotice>}
+      {split && (
+        <SettingsSection title="Workspaces" description={WORKSPACES_HELP} actions={addButton('workspaces', moreWorkspaces)}>
+          <div data-role-list="workspaces">{person === undefined ? loading : list(heldWorkspaces, 'In none of its workspaces.')}</div>
+        </SettingsSection>
+      )}
+      <SettingsSection title="Groups" description={GROUPS_HELP[scope.kind]} actions={addButton('groups', moreGroups)}>
+        <div data-role-list="groups">{person === undefined ? loading : list(heldGroups, 'In no group here.')}</div>
+      </SettingsSection>
+      <SettingsSection title="Policies" description={POLICIES_HELP[scope.kind]} actions={addButton('policies', morePolicies)}>
+        <div data-role-list="policies">{person === undefined ? loading : list(items.policies, 'No policy attached to them here.')}</div>
+      </SettingsSection>
+      {picker && (
+        <RolePickerDialog
+          open
+          title={ADD_LABEL[picker]}
+          options={offered[picker]}
+          onClose={() => setPicker(null)}
+          onAdd={add}
+          problemOf={problemOf}
         />
-        <div className="flex gap-2">
-          <Button size="sm" onClick={() => void save()} disabled={!changed || !!problem || saving} data-action="save-role">
-            {saving ? 'Saving…' : 'Save'}
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => setRole(held)} disabled={!changed || saving}>
-            Reset
-          </Button>
-        </div>
-      </div>
-    </SettingsSection>
+      )}
+      {confirmDialog}
+    </div>
   );
 }
