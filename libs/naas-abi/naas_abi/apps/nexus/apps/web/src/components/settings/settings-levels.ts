@@ -77,7 +77,7 @@ export function settingsLevels(input: SettingsLevelsInput): SettingsLevel[] {
     if (others.length > 0) groups.push({ label: 'Other organizations', links: others });
     levels.push({
       id: 'organization',
-      label: others.length > 0 || !organization.current ? `Organization · ${organization.name}` : 'Organization',
+      label: 'Organization',
       index: orgSettingsIndexPath(organization.id),
       groups,
     });
