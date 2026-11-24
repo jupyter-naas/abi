@@ -211,7 +211,7 @@ function Members() {
             data-action="add-people"
           >
             <Plus size={16} />
-            Add people
+            Invite user
           </Button>
         }
       />
@@ -353,8 +353,20 @@ function Members() {
               {filteredMembers.map((member) => {
                 const initial = (member.name || member.email || '?').charAt(0).toUpperCase();
                 const inherited = member.source === 'organization';
+                const personHref = `/workspace/${workspaceId}/settings/users/${encodeURIComponent(
+                  member.principalId ?? member.user_id
+                )}`;
                 return (
-                  <tr key={member.id}>
+                  <tr
+                    key={member.id}
+                    className="cursor-pointer"
+                    data-person={member.user_id}
+                    onClick={(event) => {
+                      // A click on a button or a field of the row does its own thing.
+                      if ((event.target as HTMLElement).closest('button, a, input, select, label')) return;
+                      router.push(personHref);
+                    }}
+                  >
                     <td>
                       <div className="flex items-center gap-3">
                         <div className="flex h-9 w-9 items-center justify-center bg-primary text-primary-foreground">
@@ -415,11 +427,7 @@ function Members() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() =>
-                          router.push(
-                            `/workspace/${workspaceId}/settings/users/${encodeURIComponent(member.principalId ?? member.user_id)}`
-                          )
-                        }
+                        onClick={() => router.push(personHref)}
                         title="Edit their roles"
                         aria-label={`Edit the roles of ${member.name}`}
                         data-action="edit"

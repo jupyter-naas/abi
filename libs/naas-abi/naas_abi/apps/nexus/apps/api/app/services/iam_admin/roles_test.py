@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from naas_abi.apps.nexus.apps.api.app.services.workspaces.roles import (
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import (
     KEEP,
     RoleChangeRefused,
     RoleGroups,

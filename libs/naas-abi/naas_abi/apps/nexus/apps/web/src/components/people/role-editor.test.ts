@@ -8,7 +8,7 @@ const OPTIONS = readRoleOptions({
   groups: [
     { kind: 'level', id: 'grp_m', name: 'Members', level: 'member' },
     { kind: 'level', id: 'grp_v', name: 'Viewers', level: 'viewer' },
-    { kind: 'workspace', id: 'grp_w', name: 'ABI workspace' },
+    { kind: 'own', id: 'grp_w', name: 'ABI workspace' },
     { kind: 'admins', id: 'grp_wa', name: 'ABI admins' },
   ],
   policies: [{ kind: 'policy', id: 'pol_a', name: 'Alpha reports' }],
@@ -31,7 +31,7 @@ describe('the Role editor', () => {
     const onChange = await render({ groups: ['grp_m', 'grp_w', 'grp_hidden'], policies: ['pol_a'] });
     const tags = [...mounted!.host.querySelectorAll('[data-role]')].map((t) => t.textContent);
     expect(tags).toEqual(['ABI workspace', 'Members', 'Alpha reports']);
-    expect(mounted!.host.querySelector('[data-role="workspace"] button')).toBeNull();
+    expect(mounted!.host.querySelector('[data-role="own"] button')).toBeNull();
     await mounted!.click(mounted!.host.querySelector('[data-role="level"] button'));
     // An id the caller is not offered stays.
     expect(onChange).toHaveBeenCalledWith({ groups: ['grp_w', 'grp_hidden'], policies: ['pol_a'] });

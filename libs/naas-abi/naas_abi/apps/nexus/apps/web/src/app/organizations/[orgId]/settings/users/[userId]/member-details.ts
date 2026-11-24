@@ -1,4 +1,4 @@
-import { levelConflict, readLevel, type Level, type WorkspaceAccess } from '@/lib/people';
+import { type Level } from '@/lib/people';
 
 /** One member, as `GET /api/organizations/{org}/members/{user}` returns it. */
 export interface MemberAccount {
@@ -132,51 +132,3 @@ export async function saveMemberChanges({
   return null;
 }
 
-/** A member's access as the page edits it (#1589). */
-export type AccessDraft = {
-  orgAdmin: boolean;
-  level: Level | null;
-  /** The workspaces they joined (not those an org admin reaches anyway), each with "admin". */
-  workspaces: WorkspaceAccess[];
-  capabilities: string[];
-};
-
-export function initialAccess(details: MemberDetails): AccessDraft {
-  const { member } = details;
-  return {
-    orgAdmin: member.org_admin ?? member.role === 'admin',
-    level: readLevel(member.level),
-    workspaces: details.workspaces
-      .filter((w) => w.source === 'workspace')
-      .map((w) => ({ id: w.id, admin: w.admin ?? (w.role === 'admin' || w.role === 'owner') })),
-    capabilities: (details.capabilities ?? []).map((c) => c.id),
-  };
-}
-
-const sameSet = (a: string[], b: string[]) => a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n');
-const workspaceKeys = (ws: WorkspaceAccess[]) => ws.map((w) => `${w.id}:${w.admin ? 1 : 0}`);
-
-/** What saving sends: the member change (`PATCH …/members/{id}`) and the workspaces
- *  (`PUT …/members/{id}/workspaces`), each null when unchanged. */
-export function accessChanges(
-  saved: AccessDraft,
-  draft: AccessDraft
-): {
-  member: { orgAdmin?: boolean; level?: Level; capabilities?: string[] } | null;
-  workspaces: WorkspaceAccess[] | null;
-} {
-  const member: { orgAdmin?: boolean; level?: Level; capabilities?: string[] } = {};
-  if (draft.orgAdmin !== saved.orgAdmin) member.orgAdmin = draft.orgAdmin;
-  if (draft.level && draft.level !== saved.level) member.level = draft.level;
-  if (!sameSet(draft.capabilities, saved.capabilities)) member.capabilities = [...draft.capabilities];
-  const workspacesChanged = !sameSet(workspaceKeys(draft.workspaces), workspaceKeys(saved.workspaces));
-  return {
-    member: Object.keys(member).length ? member : null,
-    workspaces: workspacesChanged ? draft.workspaces : null,
-  };
-}
-
-/** Why the access cannot be saved, or null: a workspace admin is a Member. */
-export function accessError(draft: AccessDraft): string | null {
-  return levelConflict(draft.level, draft.workspaces.some((w) => w.admin));
-}

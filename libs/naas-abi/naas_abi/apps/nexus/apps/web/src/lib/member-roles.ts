@@ -1,9 +1,9 @@
-// Users › Role at a workspace: the groups and policies a member's Role holds there, the ones
-// it may hold (`GET …/members/role-options`), and the change asked (`PUT …/members/<id>/roles`).
-// The pure part of the Role editor: the default Role of someone created in a workspace
-// (Members and the workspace's own group), and what adding or removing one gives (one level).
+// Users › Role at a workspace, an organization or the platform: the groups and policies a
+// person's Role holds there, the ones it may hold (`GET …/role-options`), and the change asked
+// (`PUT …/<id>/roles`). The pure part of the Role editor: the default Role of someone created
+// there (Members, and the container's own group), and what adding or removing one gives.
 
-export type RoleOptionKind = 'level' | 'workspace' | 'admins' | 'group' | 'policy';
+export type RoleOptionKind = 'level' | 'own' | 'admins' | 'group' | 'policy';
 
 export type RoleOption = { kind: RoleOptionKind; id: string; name: string; level?: 'member' | 'viewer' | null };
 
@@ -18,7 +18,7 @@ export function readRoleOptions(data: unknown): RoleOptions {
       if (!item || typeof item !== 'object') return [];
       const { kind, id, name, level } = item as Record<string, unknown>;
       if (typeof id !== 'string' || !id) return [];
-      const known: RoleOptionKind[] = ['level', 'workspace', 'admins', 'group', 'policy'];
+      const known: RoleOptionKind[] = ['level', 'own', 'admins', 'group', 'policy'];
       return [
         {
           kind: known.includes(kind as RoleOptionKind) ? (kind as RoleOptionKind) : fallback,
@@ -32,9 +32,9 @@ export function readRoleOptions(data: unknown): RoleOptions {
   return { groups: read(value.groups, 'group'), policies: read(value.policies, 'policy') };
 }
 
-/** The Role of someone created in a workspace: Members and the workspace's own group. */
+/** The Role of someone created there: Members, and the container's own group (none at the platform). */
 export function defaultRole(options: RoleOptions): RoleSelection {
-  const own = options.groups.find((g) => g.kind === 'workspace');
+  const own = options.groups.find((g) => g.kind === 'own');
   const members = options.groups.find((g) => g.kind === 'level' && g.level === 'member');
   return { groups: [own?.id, members?.id].filter((id): id is string => !!id), policies: [] };
 }
@@ -59,9 +59,9 @@ export function withRole(options: RoleOptions, selection: RoleSelection, option:
   return { ...selection, groups: groups.includes(option.id) ? groups : [...groups, option.id] };
 }
 
-/** `selection` without `option`; the workspace's own group stays (removing someone takes them out). */
+/** `selection` without `option`; the container's own group stays (removing someone takes them out). */
 export function withoutRole(selection: RoleSelection, option: RoleOption): RoleSelection {
-  if (option.kind === 'workspace') return selection;
+  if (option.kind === 'own') return selection;
   return option.kind === 'policy'
     ? { ...selection, policies: selection.policies.filter((id) => id !== option.id) }
     : { ...selection, groups: selection.groups.filter((id) => id !== option.id) };
@@ -78,7 +78,7 @@ export function roleProblem(options: RoleOptions, selection: RoleSelection, reac
     return 'A workspace admin is a Member: a Viewer administers nothing';
   }
   if (!levels.length && !admin && !selection.policies.length && !reachesOtherwise) {
-    return 'They would use nothing in this workspace: keep a level (Members or Viewers), the admins group or a policy';
+    return 'They would use nothing here: keep a level (Members or Viewers), the admins group or a policy';
   }
   return null;
 }
@@ -108,25 +108,36 @@ async function answer<T>(response: Response, fallback: string): Promise<T> {
 export type MemberRef = { userId: string; name: string; source: 'workspace' | 'organization' };
 
 export type MemberRolesApi = {
-  options: (workspaceId: string) => Promise<RoleOptions>;
-  /** The member whose IAM id is `principalId`, or null. */
+  options: (scope: RoleScope) => Promise<RoleOptions>;
+  /** A workspace's member whose IAM id is `principalId`, or null. */
   member: (workspaceId: string, principalId: string) => Promise<MemberRef | null>;
-  /** What the member holds here (what their Role editor starts from). */
-  held: (workspaceId: string, userId: string) => Promise<RoleSelection>;
-  /** The member as the members list shows them, after the change. */
-  set: (workspaceId: string, userId: string, selection: RoleSelection) => Promise<Record<string, unknown>>;
+  /** What the person holds there (what their Role editor starts from). */
+  held: (scope: RoleScope, userId: string) => Promise<RoleSelection>;
+  /** Make their Role there `selection`. */
+  set: (scope: RoleScope, userId: string, selection: RoleSelection) => Promise<Record<string, unknown>>;
 };
 
+/** Where a Role is: a workspace, an organization, or the platform. */
+export type RoleScope = { kind: 'workspace'; id: string } | { kind: 'organization'; id: string } | { kind: 'platform' };
+
+/** The people of a scope, under which its Role routes are. */
+export function roleBase(scope: RoleScope): string {
+  if (scope.kind === 'workspace') return `/api/workspaces/${encodeURIComponent(scope.id)}/members`;
+  if (scope.kind === 'organization') return `/api/organizations/${encodeURIComponent(scope.id)}/members`;
+  return '/api/admin/users';
+}
+
 export function createMemberRolesApi(fetcher: Fetcher = defaultFetcher): MemberRolesApi {
-  const members = (id: string) => `/api/workspaces/${encodeURIComponent(id)}/members`;
+  const ids = (value: unknown) => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []);
   return {
-    async options(workspaceId) {
-      return readRoleOptions(
-        await answer<unknown>(await fetcher(`${members(workspaceId)}/role-options`), 'Could not load the roles')
-      );
+    async options(scope) {
+      return readRoleOptions(await answer<unknown>(await fetcher(`${roleBase(scope)}/role-options`), 'Could not load the roles'));
     },
     async member(workspaceId, principalId) {
-      const rows = await answer<Record<string, unknown>[]>(await fetcher(members(workspaceId)), 'Could not load the members');
+      const rows = await answer<Record<string, unknown>[]>(
+        await fetcher(roleBase({ kind: 'workspace', id: workspaceId })),
+        'Could not load the members'
+      );
       const row = (Array.isArray(rows) ? rows : []).find((r) => r.principal_id === principalId);
       if (!row || typeof row.user_id !== 'string') return null;
       return {
@@ -135,17 +146,16 @@ export function createMemberRolesApi(fetcher: Fetcher = defaultFetcher): MemberR
         source: row.source === 'organization' ? 'organization' : 'workspace',
       };
     },
-    async held(workspaceId, userId) {
+    async held(scope, userId) {
       const data = await answer<Partial<RoleSelection>>(
-        await fetcher(`${members(workspaceId)}/${encodeURIComponent(userId)}/roles`),
+        await fetcher(`${roleBase(scope)}/${encodeURIComponent(userId)}/roles`),
         'Could not load their roles'
       );
-      const ids = (value: unknown) => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []);
       return { groups: ids(data.groups), policies: ids(data.policies) };
     },
-    async set(workspaceId, userId, selection) {
+    async set(scope, userId, selection) {
       return answer<Record<string, unknown>>(
-        await fetcher(`${members(workspaceId)}/${encodeURIComponent(userId)}/roles`, {
+        await fetcher(`${roleBase(scope)}/${encodeURIComponent(userId)}/roles`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(selection),

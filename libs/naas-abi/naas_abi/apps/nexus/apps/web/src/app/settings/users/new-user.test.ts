@@ -11,6 +11,20 @@ vi.mock('next/link', async () => {
 });
 
 import { NewUser } from './new-user';
+import { readRoleOptions } from '@/lib/member-roles';
+
+const ROLE_OPTIONS = readRoleOptions({
+  groups: [
+    { kind: 'level', id: 'grp_m', name: 'Members', level: 'member' },
+    { kind: 'level', id: 'grp_v', name: 'Viewers', level: 'viewer' },
+    { kind: 'admins', id: 'grp_pa', name: 'Platform admins' },
+  ],
+  policies: [],
+});
+
+function roles(set = vi.fn(async () => ({}))) {
+  return { options: async () => ROLE_OPTIONS, set };
+}
 
 type Call = { url: string; method: string; body: unknown };
 
@@ -74,7 +88,7 @@ const create = () => mounted!.host.querySelector('[data-action="create"]') as HT
 describe('NewUser', () => {
   it('creates through the provider picked, and says what was done', async () => {
     const { fetcher, calls } = api(() => ({ status: 200, body: INVITED }));
-    mounted = await mount(NewUser, { fetcher });
+    mounted = await mount(NewUser, { fetcher, rolesApi: roles() });
     await mounted.flush();
     expect(mounted.host.querySelector('h2')?.textContent).toBe('Create user');
     expect(create().disabled).toBe(true);
@@ -106,7 +120,7 @@ describe('NewUser', () => {
       ...PROVIDERS,
       providers: [PROVIDERS.providers[0]],
     });
-    mounted = await mount(NewUser, { fetcher });
+    mounted = await mount(NewUser, { fetcher, rolesApi: roles() });
     await mounted.flush();
     expect(field('invite-provider')).toBeNull();
     await mounted.type(field('invite-email'), 'carol');
@@ -117,13 +131,15 @@ describe('NewUser', () => {
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ email: 'carol@example.com' });
   });
 
-  it('makes them a platform admin when "Platform admin" is ticked', async () => {
-    const { fetcher, calls } = api(() => ({ status: 200, body: INVITED }));
-    mounted = await mount(NewUser, { fetcher });
+  it('asks for their Role, Members to start with, and makes it theirs; Platform admins makes them one', async () => {
+    const { fetcher, calls } = api(() => ({ status: 200, body: { ...INVITED, user: { ...INVITED.user, id: 'usr_carol', kind: 'user' } } }));
+    const set = vi.fn(async () => ({}));
+    mounted = await mount(NewUser, { fetcher, rolesApi: roles(set) });
     await mounted.flush();
+    const tags = () => [...mounted!.host.querySelectorAll('[data-role]')].map((t) => t.textContent);
+    expect(tags()).toEqual(['Members']);
     await mounted.type(field('invite-email'), 'carol@example.com');
-    expect((field('invite-platform-admin') as HTMLInputElement).checked).toBe(false);
-    await mounted.click(field('invite-platform-admin'));
+    await mounted.select(mounted.host.querySelector('[data-field="add-role"]'), 'admins:grp_pa');
     await mounted.click(create());
     await mounted.flush();
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({
@@ -131,12 +147,24 @@ describe('NewUser', () => {
       provider: 'builtin',
       platform_admin: true,
     });
-    expect((field('invite-platform-admin') as HTMLInputElement).checked).toBe(false);
+    expect(set).toHaveBeenCalledWith({ kind: 'platform' }, 'usr_carol', { groups: ['grp_m', 'grp_pa'], policies: [] });
+    expect(tags()).toEqual(['Members']);
+  });
+
+  it('makes no Role for an invitation, which has nobody in IAM yet', async () => {
+    const { fetcher } = api(() => ({ status: 200, body: INVITED }));
+    const set = vi.fn(async () => ({}));
+    mounted = await mount(NewUser, { fetcher, rolesApi: roles(set) });
+    await mounted.flush();
+    await mounted.type(field('invite-email'), 'carol@example.com');
+    await mounted.click(create());
+    await mounted.flush();
+    expect(set).not.toHaveBeenCalled();
   });
 
   it('says why the API refused', async () => {
     const { fetcher } = api(() => ({ status: 403, body: { detail: 'Not allowed to invite users' } }));
-    mounted = await mount(NewUser, { fetcher });
+    mounted = await mount(NewUser, { fetcher, rolesApi: roles() });
     await mounted.flush();
     await mounted.type(field('invite-email'), 'carol@example.com');
     await mounted.click(create());

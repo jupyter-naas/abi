@@ -27,6 +27,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     Seat,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    PLATFORM,
     org_below,
     org_container,
     workspace_container,
@@ -437,6 +438,25 @@ async def test_a_role_is_the_groups_and_policies_that_bear_on_the_workspace(worl
     assert implied["member"] == [] and implied["oadmin"] == ["Alpha workspace"]
     kinds = {r.name: r.kind for r in roles[people["member"]]}
     assert kinds == {"Alpha reports": "policy", "Alpha workspace": "group", "Members": "group"}
+
+
+@pytest.mark.asyncio
+async def test_the_role_groups_of_an_organization_and_of_the_platform(world):
+    """An organization's Role is made of its people and admins groups (and its workspaces'
+    groups, to place someone in them); the platform's of its admins group; the levels at
+    each. A workspace's Role leaves its organization's to Organization › Users."""
+    await _team(world)
+    org = await MEMBERSHIPS.role_groups(ORG)
+    ws = await MEMBERSHIPS.role_groups(world.W)
+    platform = await MEMBERSHIPS.role_groups(PLATFORM)
+    assert org.own and org.admins and {org.own, org.admins}.isdisjoint({ws.own, ws.admins})
+    assert {org.own, org.admins} <= ws.elsewhere
+    assert platform.own is None and platform.admins and platform.members == org.members
+    member = world.principal("member")
+    at_org, _ = await MEMBERSHIPS.held_at(ORG, member)
+    at_platform, _ = await MEMBERSHIPS.held_at(PLATFORM, member)
+    assert ws.own in at_org and org.members in at_org
+    assert ws.own not in at_platform and org.members in at_platform
 
 
 @pytest.mark.asyncio

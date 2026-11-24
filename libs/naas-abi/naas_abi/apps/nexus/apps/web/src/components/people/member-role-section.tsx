@@ -7,9 +7,9 @@ import { SettingsNotice, SettingsSection } from '@/components/settings/settings-
 import {
   createMemberRolesApi,
   roleProblem,
-  type MemberRef,
   type MemberRolesApi,
   type RoleOptions,
+  type RoleScope,
   type RoleSelection,
 } from '@/lib/member-roles';
 import { RoleEditor } from './role-editor';
@@ -18,39 +18,59 @@ const same = (a: RoleSelection, b: RoleSelection) =>
   [...a.groups].sort().join() === [...b.groups].sort().join() &&
   [...a.policies].sort().join() === [...b.policies].sort().join();
 
+const TITLES: Record<RoleScope['kind'], string> = {
+  workspace: 'Role in this workspace',
+  organization: 'Role in this organization',
+  platform: 'Role on the platform',
+};
+
 /**
- * A person's Role at a workspace, on their page (Users › Edit): the groups and policies they
- * hold here, changed as on Create user, then saved at once (`PUT …/roles`). An organization's
- * admin reaches the workspace without a level.
+ * A person's Role at a workspace, an organization or the platform, on their page (Users ›
+ * a person): the groups and policies they hold there, changed as on Create user, then saved at
+ * once (`PUT …/roles`). At a workspace the page names them by their IAM id (`principalId`):
+ * they are found among its members (an organization's admin reaches it without a level).
  */
-export function WorkspaceMemberRole({
-  workspaceId,
+export function MemberRoleSection({
+  scope,
+  userId,
   principalId,
   onChanged,
   api,
 }: {
-  workspaceId: string;
-  principalId: string;
+  scope: RoleScope;
+  /** Their Nexus id (an organization's, the platform's page; the platform takes their IAM id too). */
+  userId?: string;
+  /** At a workspace: their IAM id, looked up among its members. */
+  principalId?: string;
   onChanged?: () => void;
   api?: MemberRolesApi;
 }) {
   const roles = useMemo(() => api ?? createMemberRolesApi(), [api]);
-  const [member, setMember] = useState<MemberRef | null | undefined>(undefined);
+  const [person, setPerson] = useState<{ userId: string; name: string; reachesOtherwise: boolean } | null | undefined>(
+    undefined
+  );
   const [options, setOptions] = useState<RoleOptions>({ groups: [], policies: [] });
   const [held, setHeld] = useState<RoleSelection>({ groups: [], policies: [] });
   const [role, setRole] = useState<RoleSelection>({ groups: [], policies: [] });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
+  const scopeKey = scope.kind === 'platform' ? 'platform' : `${scope.kind}:${scope.id}`;
 
   useEffect(() => {
     let live = true;
     (async () => {
-      const found = await roles.member(workspaceId, principalId);
+      let found: { userId: string; name: string; reachesOtherwise: boolean } | null = null;
+      if (scope.kind === 'workspace' && principalId && !userId) {
+        const member = await roles.member(scope.id, principalId);
+        found = member ? { userId: member.userId, name: member.name, reachesOtherwise: member.source === 'organization' } : null;
+      } else if (userId) {
+        found = { userId, name: 'They', reachesOtherwise: scope.kind === 'platform' };
+      }
       if (!live) return;
-      setMember(found);
+      setPerson(found);
       if (!found) return;
-      const [offered, mine] = await Promise.all([roles.options(workspaceId), roles.held(workspaceId, found.userId)]);
+      const [offered, mine] = await Promise.all([roles.options(scope), roles.held(scope, found.userId)]);
       if (!live) return;
       setOptions(offered);
       setHeld(mine);
@@ -59,24 +79,25 @@ export function WorkspaceMemberRole({
     return () => {
       live = false;
     };
-  }, [roles, workspaceId, principalId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `scope` is read through its key
+  }, [roles, scopeKey, userId, principalId]);
 
-  if (member === null) return null; // not a member of this workspace: their page says the rest
-  const reachesOtherwise = member?.source === 'organization';
+  if (person === null) return null; // not one of its people: their page says the rest
+  const reachesOtherwise = !!person?.reachesOtherwise;
   const changed = !same(role, held);
   const problem = roleProblem(options, role, reachesOtherwise);
 
   const save = async () => {
-    if (!member) return;
+    if (!person) return;
     setSaving(true);
     setError('');
     setNotice('');
     try {
-      await roles.set(workspaceId, member.userId, role);
-      const mine = await roles.held(workspaceId, member.userId);
+      await roles.set(scope, person.userId, role);
+      const mine = await roles.held(scope, person.userId);
       setHeld(mine);
       setRole(mine);
-      setNotice(`${member.name}'s Role here is saved.`);
+      setNotice('Their Role is saved.');
       onChanged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not change their roles');
@@ -87,7 +108,7 @@ export function WorkspaceMemberRole({
 
   return (
     <SettingsSection
-      title="Role in this workspace"
+      title={TITLES[scope.kind]}
       description="The groups they are in and the policies attached to them here. A level (Members, Viewers) applies in all their workspaces."
     >
       <div className="space-y-3" data-member-role>
@@ -101,7 +122,7 @@ export function WorkspaceMemberRole({
           options={options}
           value={role}
           onChange={setRole}
-          disabled={saving || member === undefined}
+          disabled={saving || person === undefined}
           reachesOtherwise={reachesOtherwise}
         />
         <div className="flex gap-2">

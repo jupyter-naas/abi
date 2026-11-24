@@ -131,8 +131,8 @@ describe('Add people', () => {
     await key('ArrowUp');
     expect(options()[1].getAttribute('aria-selected')).toBe('true');
     await key('Enter');
-    await mounted!.flush();
-    expect(api.addMember).toHaveBeenCalledWith('ws-1', expect.objectContaining({ userId: 'usr_flo2' }));
+    expect(mounted!.host.querySelector('[data-add-people-pick]')?.textContent).toContain('florent.frvservices@gmail.com');
+    expect(api.addMember).not.toHaveBeenCalled();
   });
 
   it('closes the list with Escape', async () => {
@@ -144,16 +144,34 @@ describe('Add people', () => {
     expect(options()).toEqual([]);
   });
 
-  it('adds the person picked to the workspace at once, keeping their level, then says so', async () => {
+  it('offers to add the person picked, or to add them and send an invitation', async () => {
     const { api, onAdded } = await render();
     await typeAndSettle('Flo');
     await mounted!.click(options()[0]);
+    expect(api.addMember).not.toHaveBeenCalled();
+    expect(mounted!.host.querySelector('[data-add-people-pick]')?.textContent).toContain('florent@naas.ai');
+    await mounted!.click(mounted!.host.querySelector('[data-action="add"]'));
     await mounted!.flush();
-    expect(api.addMember).toHaveBeenCalledWith('ws-1', { userId: 'usr_flo', level: null, admin: false, capabilities: [] });
+    expect(api.addMember).toHaveBeenCalledWith('ws-1', {
+      userId: 'usr_flo',
+      level: null,
+      admin: false,
+      capabilities: [],
+      notify: false,
+    });
     expect(onAdded).toHaveBeenCalledWith(FLO, true);
     expect(input().value).toBe('');
-    expect(mounted!.host.querySelector('[data-field="level"]')).toBeNull();
+    expect(mounted!.host.querySelector('[data-add-people-pick]')).toBeNull();
     expect(document.activeElement).toBe(input());
+  });
+
+  it('adds and sends an invitation with Invite', async () => {
+    const { api } = await render();
+    await typeAndSettle('Flo');
+    await mounted!.click(options()[0]);
+    await mounted!.click(mounted!.host.querySelector('[data-action="invite"]'));
+    await mounted!.flush();
+    expect(api.addMember).toHaveBeenCalledWith('ws-1', expect.objectContaining({ userId: 'usr_flo', notify: true }));
   });
 
   it('shows what the API refused', async () => {
@@ -162,6 +180,7 @@ describe('Add people', () => {
     await render({ api });
     await typeAndSettle('Flo');
     await mounted!.click(options()[0]);
+    await mounted!.click(mounted!.host.querySelector('[data-action="invite"]'));
     await mounted!.flush();
     expect(mounted!.host.textContent).toContain('Already a member of this workspace');
   });

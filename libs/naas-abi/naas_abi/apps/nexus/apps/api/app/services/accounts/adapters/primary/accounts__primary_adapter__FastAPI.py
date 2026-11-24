@@ -44,7 +44,20 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MEMBERSHIPS,
     AccessSummary,
+    MembershipDenied,
+    UnknownUserError,
     is_user_principal_id,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import PLATFORM
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import (
+    KEEP,
+    MemberRolesInput,
+    RoleChange,
+    RoleOptionsView,
+    change_roles,
+    held_roles,
+    role_groups_of,
+    role_options,
 )
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     InvalidPolicyError,
@@ -411,6 +424,90 @@ async def user_access(account_id: str, db: AsyncSession = Depends(get_db)) -> Ad
             for g, name, owner in summary.capabilities
         ],
     )
+
+
+@router.get(
+    "/role-options",
+    dependencies=[guard("ListUsers", workspace=None, literal=LIST)],
+)
+async def user_role_options(
+    current_user: User = Depends(get_current_user_required),
+) -> RoleOptionsView:
+    """What a person's Role at the platform may hold, as the caller may give it: the
+    levels, Platform admins, the platform's other groups the caller lists (Models ·
+    all…), and the policies the caller may attach without a scope."""
+    groups = await role_groups_of(PLATFORM)
+    return await role_options(current_user, PLATFORM, groups, listed_at=None)
+
+
+async def _person(account_id: str) -> tuple[str, str]:
+    """``(their Nexus id, their IAM id)`` from either (a person's page names the IAM id)."""
+    if is_user_principal_id(account_id):
+        summary = await MEMBERSHIPS.access_of(account_id)
+        if summary is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        return summary.user_id, account_id
+    try:
+        return account_id, await MEMBERSHIPS.principal_id(account_id)
+    except UnknownUserError as exc:
+        raise HTTPException(status_code=404, detail="User not found") from exc
+
+
+@router.get(
+    "/{account_id}/roles",
+    dependencies=[guard("ListUsers", workspace=None, literal=LIST)],
+)
+async def user_roles(account_id: str) -> MemberRolesInput:
+    """What a person holds at the platform (its groups, the policies attached to them
+    without a scope), as a change of their Role starts from."""
+    _user, principal = await _person(account_id)
+    return await held_roles(PLATFORM, principal, await role_groups_of(PLATFORM))
+
+
+@router.put(
+    "/{account_id}/roles",
+    dependencies=[guard("UpdateUser", workspace=None, id="account_id")],
+)
+async def set_user_roles(
+    account_id: str,
+    body: MemberRolesInput,
+    current_user: User = Depends(get_current_user_required),
+    service: AccountService = Depends(get_account_service),
+) -> MemberRolesInput:
+    """Make a person's Role at the platform the groups and policies asked: their level,
+    whether they are a platform admin (the accounts' own rule: the platform keeps one),
+    the platform's other groups and the policies attached without a scope, as the
+    caller."""
+    user_id, principal = await _person(account_id)
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot change your own access")
+    groups = await role_groups_of(PLATFORM)
+
+    async def seats(change: RoleChange, held: set[str]) -> set[str]:
+        if change.admin is not None:
+            await _answer(
+                service.update(
+                    user_id, name=None, is_superadmin=change.admin, actor=current_user.id
+                )
+            )
+        if change.level not in (KEEP, None):
+            try:
+                await MEMBERSHIPS.set_level(user_id, str(change.level), by=current_user)
+            except MembershipDenied as exc:
+                raise HTTPException(status_code=403, detail=str(exc)) from exc
+        return {groups.admins} if groups.admins else set()
+
+    await change_roles(
+        user=current_user,
+        scope=PLATFORM,
+        principal_id=principal,
+        body=body,
+        groups=groups,
+        reaches_otherwise=True,
+        attach_at=None,
+        seats=seats,
+    )
+    return await held_roles(PLATFORM, principal, groups)
 
 
 @router.patch(

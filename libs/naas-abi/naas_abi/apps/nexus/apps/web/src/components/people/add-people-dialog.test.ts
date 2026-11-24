@@ -59,7 +59,7 @@ describe('Add people dialog', () => {
   it('asks for the name or email of the person, in a modal dialog', async () => {
     await render();
     expect(dialog()?.getAttribute('aria-modal')).toBe('true');
-    expect(dialog()?.textContent).toContain('Add people');
+    expect(dialog()?.textContent).toContain('Invite user');
     expect(input()).not.toBeNull();
   });
 
@@ -71,6 +71,7 @@ describe('Add people dialog', () => {
     const option = dialog()!.querySelector('[role="option"]');
     expect(option?.textContent).toContain('Florent');
     await mounted!.click(option);
+    await mounted!.click(dialog()!.querySelector('[data-action="invite"]'));
     await mounted!.flush();
     expect(api.addMember).toHaveBeenCalledWith('ws-1', expect.objectContaining({ userId: 'usr_flo' }));
     expect(onAdded).toHaveBeenCalledWith(FLO, true);

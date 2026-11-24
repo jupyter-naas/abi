@@ -57,6 +57,7 @@ export function WorkspaceCreateUserForm({
 }) {
   const people = useMemo(() => api ?? createPeopleApi(), [api]);
   const roles = useMemo(() => rolesApi ?? createMemberRolesApi(), [rolesApi]);
+  const scope = useMemo(() => ({ kind: 'workspace' as const, id: workspaceId }), [workspaceId]);
   const [email, setEmail] = useState(prefill?.email ?? '');
   const [name, setName] = useState(prefill?.name ?? '');
   const [options, setOptions] = useState<RoleOptions>(NO_OPTIONS);
@@ -68,7 +69,7 @@ export function WorkspaceCreateUserForm({
   useEffect(() => {
     let live = true;
     roles
-      .options(workspaceId)
+      .options(scope)
       .then((found) => {
         if (!live) return;
         setOptions(found);
@@ -78,7 +79,7 @@ export function WorkspaceCreateUserForm({
     return () => {
       live = false;
     };
-  }, [roles, workspaceId]);
+  }, [roles, scope]);
 
   const submit = async () => {
     setError('');
@@ -103,7 +104,7 @@ export function WorkspaceCreateUserForm({
       });
       let warning: string | null = null;
       try {
-        await roles.set(workspaceId, created.user.id, role);
+        await roles.set(scope, created.user.id, role);
       } catch (e) {
         warning = `${created.user.name || created.user.email} was added to ${workspaceName}, but their Role is not all made: ${
           e instanceof Error ? e.message : 'unknown error'

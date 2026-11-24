@@ -17,6 +17,19 @@ vi.mock('@/stores/auth', () => ({
 }));
 
 import { CreateUserForm, type CreateUserFormProps } from './create-user-form';
+import { readRoleOptions } from '@/lib/member-roles';
+
+const ORG_ROLES = readRoleOptions({
+  groups: [
+    { kind: 'level', id: 'grp_m', name: 'Members', level: 'member' },
+    { kind: 'level', id: 'grp_v', name: 'Viewers', level: 'viewer' },
+    { kind: 'own', id: 'grp_people', name: 'Acme people' },
+    { kind: 'admins', id: 'grp_oadmins', name: 'Acme admins' },
+    { kind: 'group', id: 'grp_wa', name: 'Alpha workspace' },
+    { kind: 'group', id: 'grp_wa_admins', name: 'Alpha admins' },
+  ],
+  policies: [{ kind: 'policy', id: 'pol_x', name: 'Acme reports' }],
+});
 
 const CREATED: CreatedPerson = {
   user: { id: 'usr_bob', email: 'bob@example.com', name: 'Bob', status: 'invited' },
@@ -47,14 +60,12 @@ const RUNNERS: CapabilityGroup = {
   scope: 'organization',
 };
 
-const WORKSPACES = [
-  { id: 'ws-b', name: 'Beta' },
-  { id: 'ws-a', name: 'Alpha' },
-];
 
 async function render(props: Partial<CreateUserFormProps>) {
   const api = fakeApi();
   const onCreated = vi.fn();
+  const set = vi.fn(async () => ({}));
+  const options = vi.fn(async () => ORG_ROLES);
   mounted = await mount(CreateUserForm, {
     organization: { fixed: { id: 'org-acme', name: 'Acme' } },
     organizationRoute: false,
@@ -63,12 +74,12 @@ async function render(props: Partial<CreateUserFormProps>) {
     onCreated,
     onCancel: () => undefined,
     api,
-    loadWorkspaces: async () => WORKSPACES,
     loadCapabilities: async () => [RUNNERS],
+    rolesApi: { options, set },
     ...props,
   } as CreateUserFormProps);
   await mounted.flush();
-  return { api, onCreated };
+  return { api, onCreated, set, options };
 }
 
 const field = <T extends Element = HTMLInputElement>(name: string) =>
@@ -130,49 +141,41 @@ describe('Create user, from a workspace', () => {
 });
 
 describe('Create user, from the organization', () => {
-  it('creates someone with two workspaces, admin of one, in one request', async () => {
-    const { api } = await render({ organizationRoute: true });
-    expect([...mounted!.host.querySelectorAll('[data-workspace]')].map((li) => li.getAttribute('data-workspace'))).toEqual([
-      'ws-a',
-      'ws-b',
-    ]);
-    await mounted!.click(mounted!.host.querySelector('[data-workspace="ws-a"] input[type="checkbox"]'));
-    await mounted!.click(mounted!.host.querySelector('[data-workspace="ws-b"] input[type="checkbox"]'));
-    await mounted!.click(mounted!.host.querySelector('[data-workspace="ws-b"] [data-field="workspace-admin"] input[type="checkbox"]'));
+  it('asks for their Role, the organization\'s people and Members to start with, and makes it theirs', async () => {
+    const { api, set } = await render({ organizationRoute: true });
+    const tags = () => [...mounted!.host.querySelectorAll('[data-role]')].map((tag) => tag.textContent);
+    expect(tags()).toEqual(['Acme people', 'Members']);
+    expect(mounted!.host.querySelector('[data-workspace]')).toBeNull();
+    expect(field('level')).toBeNull();
+    await mounted!.select(field('add-role'), 'group:grp_wa_admins');
+    await mounted!.select(field('add-role'), 'policy:pol_x');
     await mounted!.type(mounted!.host.querySelector('#create-user-email'), 'bob@example.com');
     await create();
-    expect(api.createInOrganization).toHaveBeenCalledTimes(1);
     expect(api.createInOrganization).toHaveBeenCalledWith(
       'org-acme',
-      expect.objectContaining({
-        email: 'bob@example.com',
-        level: 'member',
-        orgAdmin: false,
-        workspaces: [
-          { id: 'ws-a', admin: false },
-          { id: 'ws-b', admin: true },
-        ],
-      })
+      expect.objectContaining({ email: 'bob@example.com', level: 'member', orgAdmin: false, workspaces: [] })
     );
+    expect(set).toHaveBeenCalledWith({ kind: 'organization', id: 'org-acme' }, 'usr_bob', {
+      groups: ['grp_people', 'grp_m', 'grp_wa_admins'],
+      policies: ['pol_x'],
+    });
   });
 
-  it('makes an org admin with the toggle', async () => {
+  it('makes an org admin with the admins group', async () => {
     const { api } = await render({ organizationRoute: true });
-    await mounted!.click(mounted!.host.querySelector('[data-field="org-admin"] input[type="checkbox"]'));
+    await mounted!.select(field('add-role'), 'admins:grp_oadmins');
     await mounted!.type(mounted!.host.querySelector('#create-user-email'), 'bob@example.com');
     await create();
     expect(api.createInOrganization).toHaveBeenCalledWith('org-acme', expect.objectContaining({ orgAdmin: true }));
   });
 
-  it('refuses a Viewer who administers a workspace', async () => {
+  it('refuses a Role that gives nothing, before asking', async () => {
     const { api } = await render({ organizationRoute: true });
-    await mounted!.click(mounted!.host.querySelector('[data-workspace="ws-a"] input[type="checkbox"]'));
-    await mounted!.click(mounted!.host.querySelector('[data-workspace="ws-a"] [data-field="workspace-admin"] input[type="checkbox"]'));
-    await mounted!.select(field('level'), 'viewer');
+    await mounted!.click(mounted!.host.querySelector('[data-role="level"] button'));
     await mounted!.type(mounted!.host.querySelector('#create-user-email'), 'bob@example.com');
     await create();
     expect(api.createInOrganization).not.toHaveBeenCalled();
-    expect(mounted!.host.querySelector('[role="alert"]')?.textContent).toMatch(/workspace admin is a Member/);
+    expect(mounted!.host.querySelector('[role="alert"]')?.textContent).toMatch(/use nothing/);
   });
 
   it('shows the message the page returns, and empties the form', async () => {
@@ -185,11 +188,13 @@ describe('Create user, from the organization', () => {
   });
 
   it('lets the organization be picked when it is selectable', async () => {
-    const { api } = await render({
+    const { api, options } = await render({
       organization: { choices: [{ id: 'org-acme', name: 'Acme' }, { id: 'org-globex', name: 'Globex' }] },
       organizationRoute: true,
     });
     await mounted!.select(field('organization'), 'org-globex');
+    await mounted!.flush();
+    expect(options).toHaveBeenLastCalledWith({ kind: 'organization', id: 'org-globex' });
     await mounted!.type(mounted!.host.querySelector('#create-user-email'), 'bob@example.com');
     await create();
     expect(api.createInOrganization).toHaveBeenCalledWith('org-globex', expect.anything());

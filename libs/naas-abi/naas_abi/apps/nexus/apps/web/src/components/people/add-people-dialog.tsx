@@ -9,10 +9,11 @@ import { AddPeople } from './add-people';
 type AddPeopleProps = Parameters<typeof AddPeople>[0];
 
 /**
- * Add people (Workspace settings › Users › Add people): the search for a person by name or
- * email, in a modal dialog. Picking someone of the workspace's organization adds them (their
- * level, admin of the workspace or not, their groups), then closes it; with no match, Create
- * user opens the create page prefilled. Escape closes the suggestions first, then the dialog.
+ * Invite user (Workspace settings › Users › Invite user): the search for a person by name or
+ * email, in a modal dialog. Someone of the workspace's organization is added to it (Add to
+ * workspace) or added and sent an invitation (Invite & send invitation), then it closes; with no
+ * match, Create user opens the create page prefilled. Escape closes the suggestions first, then
+ * the dialog.
  */
 export function AddPeopleDialog({
   open,
@@ -32,11 +33,11 @@ export function AddPeopleDialog({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 id={titleId} className="text-base font-semibold text-foreground">
-              Add people
+              Invite user
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Type their name or email. Someone of this workspace&apos;s organization is added at
-              once, at the level you choose; anyone else can be created.
+              Type their name or email. Someone of this workspace&apos;s organization is added to it,
+              with or without an invitation; anyone else can be created.
             </p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close" data-action="close">

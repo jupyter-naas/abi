@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Search, UserPlus } from 'lucide-react';
+import { AlertCircle, Mail, Search, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SettingsNotice } from '@/components/settings/settings-ui';
@@ -52,8 +52,9 @@ const NO_MEMBERS: ReadonlySet<string> = new Set();
 /**
  * Add people (Workspace settings › Members): a search box over the workspace's organization.
  * It asks from two characters on, once the typing stops; a suggestion shows avatar, name and
- * email. Picking one adds them to the workspace at once: they keep their level (Member when
- * they have none), and their roles are changed on their page (Edit). With no
+ * email. Picking one offers to add them to the workspace, or to add them and send them an
+ * invitation: they keep their level (Member when they have none), and their roles are changed on
+ * their page (Edit). With no
  * match (or an email no suggestion has), "Create user '<text>'" in the list, or the Create user
  * button under the box, opens the create page prefilled. The listbox follows the
  * WAI-ARIA combobox pattern: arrows, Home and End move, Enter picks, Escape closes.
@@ -91,6 +92,7 @@ export function AddPeople({
   const [searchError, setSearchError] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
+  const [picked, setPicked] = useState<MemberCandidate | null>(null);
   const [adding, setAdding] = useState<MemberCandidate | null>(null);
   const [addError, setAddError] = useState('');
 
@@ -124,9 +126,9 @@ export function AddPeople({
 
   const listing = addPeopleListing(text, found, memberIds);
   const options = listing.options;
-  const createOption = listing.ready && !adding ? options.find((o) => o.kind === 'create') : undefined;
+  const createOption = listing.ready && !adding && !picked ? options.find((o) => o.kind === 'create') : undefined;
   const matched = options.some((o) => o.kind === 'candidate');
-  const expanded = open && query !== null && !adding;
+  const expanded = open && query !== null && !adding && !picked;
   const activeIndex = active < options.length ? active : -1;
 
   const choose = (option: AddPeopleOption) => {
@@ -136,19 +138,21 @@ export function AddPeople({
       navigate(createUserHref(workspaceId, option.text));
       return;
     }
-    void add(option.candidate);
+    setPicked(option.candidate);
+    setAddError('');
   };
 
-  // Back in the box once an add is done (it is disabled meanwhile).
+  // Back in the box once an add is done or a pick is cancelled (it is disabled meanwhile).
   useEffect(() => {
-    if (!adding && refocus.current) {
+    if (!adding && !picked && refocus.current) {
       refocus.current = false;
       inputRef.current?.focus();
     }
-  }, [adding]);
+  }, [adding, picked]);
 
-  /** Into the workspace at once: their level kept (Member when they have none), no admin, no group. */
-  const add = async (candidate: MemberCandidate) => {
+  /** Into the workspace: their level kept (Member when they have none), no admin, no group; with
+   *  `notify`, sent an invitation. */
+  const add = async (candidate: MemberCandidate, notify: boolean) => {
     setAdding(candidate);
     setAddError('');
     try {
@@ -157,8 +161,10 @@ export function AddPeople({
         level: null,
         admin: false,
         capabilities: [],
+        notify,
       });
       await onAdded(candidate, emailSent);
+      setPicked(null);
       setText('');
       setFound({ text: '', items: [] });
     } catch (error) {
@@ -218,7 +224,7 @@ export function AddPeople({
           autoComplete="off"
           autoFocus={autoFocus}
           value={text}
-          disabled={!!adding}
+          disabled={!!adding || !!picked}
           onChange={(event) => {
             setText(event.target.value);
             setOpen(true);
@@ -323,6 +329,41 @@ export function AddPeople({
         someone else, type their email, then Create user.
       </p>
 
+      {picked && (
+        <div className="flex flex-col gap-3 border border-border bg-card p-3 sm:flex-row sm:items-center" data-add-people-pick>
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <Avatar name={candidateLabel(picked)} avatar={picked.avatar} />
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 truncate text-sm font-medium">
+                {candidateLabel(picked)}
+                <InvitedBadge status={picked.status} />
+              </p>
+              <p className="truncate text-xs text-muted-foreground">{picked.email}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => void add(picked, false)} disabled={!!adding} data-action="add">
+              Add to workspace
+            </Button>
+            <Button size="sm" onClick={() => void add(picked, true)} disabled={!!adding} data-action="invite">
+              <Mail size={14} />
+              Invite &amp; send invitation
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setPicked(null);
+                refocus.current = true;
+              }}
+              disabled={!!adding}
+              data-action="cancel-pick"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
       {adding && (
         <p className="text-xs text-muted-foreground" role="status" data-adding>
           Adding {candidateLabel(adding)}…

@@ -6,6 +6,7 @@ import { RefreshCw } from 'lucide-react';
 import { pageFocus, platformAccessPath } from '@/components/access/access-paths';
 import { PLATFORM_ACCESS_SCOPE } from '@/components/access/access-scope';
 import { PersonPage } from '@/components/access/people/person-page';
+import { MemberRoleSection } from '@/components/people/member-role-section';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 import { PLATFORM_USERS_PATH } from './users-model';
@@ -42,6 +43,7 @@ export default function PlatformPersonPage() {
           </button>
         }
       />
+      <MemberRoleSection scope={{ kind: 'platform' }} userId={personId} onChanged={() => setNonce((n) => n + 1)} />
       <PlatformAccess personId={personId} nonce={nonce} />
       <PersonPage
         scope={PLATFORM_ACCESS_SCOPE}

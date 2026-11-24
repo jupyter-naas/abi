@@ -623,15 +623,31 @@ class Memberships:
         return await self._run(work)
 
     async def role_groups(self, scope: str) -> RoleGroups:
-        """The groups of ``scope``'s Role (``RoleGroups``), as ``api``."""
-        org = org_of(scope)
-        org_scope = org_container(org) if org is not None else None
-        grouped = await self._grouped_of([scope, *([org_scope] if org_scope else [])])
+        """The groups of ``scope``'s Role (``RoleGroups``): a workspace's own and admins
+        groups (its organization's people and admins managed in Organization › Users), an
+        organization's people and admins groups, or at the platform (``PLATFORM``) its
+        admins group; the level groups everywhere. As ``api``."""
+        org = org_of(scope) if scope != PLATFORM else None
+        workspace = is_workspace_container(scope)
+        org_scope = org_container(org) if org is not None and workspace else None
+        grouped = (
+            await self._grouped_of([scope, *([org_scope] if org_scope else [])])
+            if scope != PLATFORM
+            else {}
+        )
         here = grouped.get(scope)
         there = grouped.get(org_scope) if org_scope else None
 
         def work(iam: Any) -> RoleGroups:
             levels = LEVELS.peek(iam)
+            if scope == PLATFORM:
+                return RoleGroups(
+                    own=None,
+                    admins=levels.platform_admins if levels else None,
+                    members=levels.members if levels else None,
+                    viewers=levels.viewers if levels else None,
+                    elsewhere=frozenset({levels.workspace_admins} if levels else set()),
+                )
             elsewhere = {
                 g
                 for g in (
@@ -652,6 +668,52 @@ class Memberships:
 
         return await self._run(work)
 
+    async def workspace_groups(
+        self, org_id: str, workspace_ids: Sequence[str]
+    ) -> list[tuple[str, str | None, str | None, str, str]]:
+        """Each of the organization's workspaces whose people are groups: ``(id, its own
+        group, its admins group, their names)``, as an organization's Role offers them."""
+        records = []
+        for workspace_id in workspace_ids:
+            record = await CONTAINER_DEFAULTS.grouped_record(
+                workspace_container(org_id, workspace_id)
+            )
+            if record is not None:
+                records.append((workspace_id, record))
+
+        def work(iam: Any) -> list[tuple[str, str | None, str | None, str, str]]:
+            def name(group_id: str | None) -> str:
+                if not group_id:
+                    return ""
+                try:
+                    return str(iam.get_group(group_id).name)
+                except (IAMNotFoundError, ResourceNotFoundError):
+                    return group_id
+
+            return [
+                (
+                    workspace_id,
+                    str(r.members_group_id) if r.members_group_id else None,
+                    str(r.admins_group_id) if r.admins_group_id else None,
+                    name(r.members_group_id),
+                    name(r.admins_group_id),
+                )
+                for workspace_id, r in records
+            ]
+
+        return await self._run(work)
+
+    @staticmethod
+    def bears_on(owner: str, scope: str) -> bool:
+        """Whether a group ``owner`` owns bears on ``scope``'s Role: the platform's and
+        ``scope``'s containers' at a workspace or an organization, and at an organization
+        its workspaces' too (placing someone in them); at the platform its own alone."""
+        if scope == PLATFORM:
+            return owner == PLATFORM
+        if within_owner(owner, scope):
+            return True
+        return is_org_container(scope) and owner != PLATFORM and org_of(owner) == org_of(scope)
+
     async def held_at(
         self, scope: str, principal_id: str
     ) -> tuple[set[str], dict[str, str | None]]:
@@ -671,12 +733,15 @@ class Memberships:
             groups = {
                 str(g.id)
                 for g in iam.list_principal_groups(principal_id)
-                if g.status != "deleted" and within_owner(g.owner_scope, scope)
+                if g.status != "deleted" and self.bears_on(g.owner_scope, scope)
             }
             policies: dict[str, str | None] = {}
             for attachment in iam.list_attachments(principal_id=principal_id):
                 where = attachment.scope
-                if not (
+                if scope == PLATFORM:
+                    if where is not None:
+                        continue
+                elif not (
                     where is None
                     or is_membership_scope(where)
                     or within_owner(container_of_scope(where), scope)

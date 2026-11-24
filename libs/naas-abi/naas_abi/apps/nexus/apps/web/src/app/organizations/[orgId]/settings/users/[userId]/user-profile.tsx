@@ -13,18 +13,14 @@ import { AccountSectionCard } from '@/app/account/components/account-section-car
 import { orgSettingsSectionPath } from '../../lib/nav';
 import { removableFromOrganization, removalConfirmation } from '../users-model';
 import {
-  accessChanges,
-  accessError,
   changedProfileFields,
-  initialAccess,
   saveMemberChanges,
   PROFILE_FIELDS,
-  type AccessDraft,
   type MemberDetails,
   type MemberProfileField,
 } from './member-details';
 import { MemberAccess } from './member-access';
-import { MemberAccessEditor, type OrgWorkspaceChoice } from './member-access-editor';
+import { MemberRoleSection } from '@/components/people/member-role-section';
 import '@/app/account/profile/profile.css';
 import '../users.css';
 
@@ -50,31 +46,6 @@ function formatError(err: unknown, fallback: string) {
   return fallback;
 }
 
-/** `PATCH …/members/{id}` (org admin, level, capability groups) then `PUT …/members/{id}/workspaces`. */
-async function saveAccess(
-  orgId: string,
-  userId: string,
-  changes: ReturnType<typeof accessChanges>
-): Promise<void> {
-  const base = `/api/organizations/${orgId}/members/${encodeURIComponent(userId)}`;
-  const send = async (path: string, method: string, body: unknown) => {
-    const response = await authFetch(path, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) throw new Error(await readApiError(response, 'Failed to change their access'));
-  };
-  if (changes.member) {
-    const { orgAdmin, level, capabilities } = changes.member;
-    await send(base, 'PATCH', {
-      ...(orgAdmin !== undefined ? { org_admin: orgAdmin } : {}),
-      ...(level ? { level } : {}),
-      ...(capabilities ? { capabilities } : {}),
-    });
-  }
-  if (changes.workspaces) await send(`${base}/workspaces`, 'PUT', { workspaces: changes.workspaces });
-}
 
 async function readApiError(response: Response, fallback: string): Promise<string> {
   try {
@@ -118,8 +89,6 @@ export default function OrgUserProfilePage() {
   const [loadError, setLoadError] = useState('');
   const [refused, setRefused] = useState(false);
   const [draft, setDraft] = useState(emptyDraft);
-  const [access, setAccess] = useState<AccessDraft | null>(null);
-  const [orgWorkspaces, setOrgWorkspaces] = useState<OrgWorkspaceChoice[]>([]);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -150,7 +119,6 @@ export default function OrgUserProfilePage() {
           PROFILE_FIELDS.map((field) => [field, data.organization_profile[field] ?? ''])
         ) as Record<MemberProfileField, string>
       );
-      setAccess(initialAccess(data));
     } catch {
       setLoadError('Failed to load this user. Please try again.');
     } finally {
@@ -162,20 +130,6 @@ export default function OrgUserProfilePage() {
     if (orgId && userId) void load();
   }, [orgId, userId, load]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await authFetch(`/api/organizations/${orgId}/workspaces`);
-        if (response.ok && !cancelled) setOrgWorkspaces((await response.json()) as OrgWorkspaceChoice[]);
-      } catch {
-        // The editor lists the workspaces they are in.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId]);
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading user...</p>;
   if (!details) {
@@ -196,17 +150,8 @@ export default function OrgUserProfilePage() {
   const isSelf = member.user_id === authUser?.id;
   const canRemove = removableFromOrganization(member.user_id, authUser?.id);
   const changes = changedProfileFields(orgProfile, draft);
-  const savedAccess = initialAccess(details);
-  const accessDraft = access ?? savedAccess;
-  const accessDiff = accessChanges(savedAccess, accessDraft);
-  const accessChanged = !isSelf && (accessDiff.member !== null || accessDiff.workspaces !== null);
-  const accessProblem = accessChanged ? accessError(accessDraft) : null;
-  const dirty = Object.keys(changes).length > 0 || accessChanged;
-  // Every workspace of the organization, and those they are in that the list has not loaded.
-  const workspaceChoices: OrgWorkspaceChoice[] = [
-    ...orgWorkspaces,
-    ...workspaces.filter((w) => !orgWorkspaces.some((o) => o.id === w.id)).map((w) => ({ id: w.id, name: w.name })),
-  ];
+  // Their Role (level, org admin, workspaces, groups, policies) is saved in its own section.
+  const dirty = Object.keys(changes).length > 0;
   // Always the account name (users.name): an organization cannot rename someone.
   const displayName = account.name || account.email || 'Unknown';
   const orgAvatarUrl = photoUrl(orgProfile.avatar);
@@ -217,7 +162,7 @@ export default function OrgUserProfilePage() {
     try {
       const failed = await saveMemberChanges({
         profile: Object.keys(changes).length > 0 ? () => updateMemberProfile(orgId, member.user_id, changes) : null,
-        access: accessChanged ? () => saveAccess(orgId, member.user_id, accessDiff) : null,
+        access: null,
         // The Users list reads the members' roles from the store.
         refreshed: () => fetchMembers(orgId),
       });
@@ -311,8 +256,7 @@ export default function OrgUserProfilePage() {
             <button
               type="button"
               onClick={() => void handleSave()}
-              disabled={!dirty || saving || accessProblem !== null}
-              title={accessProblem ?? undefined}
+              disabled={!dirty || saving}
               className={
                 saved
                   ? 'account-profile-save-button account-profile-save-button-saved'
@@ -480,17 +424,12 @@ export default function OrgUserProfilePage() {
         </div>
       </AccountSectionCard>
 
-      <MemberAccessEditor
-        orgId={orgId}
-        draft={accessDraft}
-        onChange={setAccess}
-        workspaces={workspaceChoices}
-        disabled={isSelf || saving}
-      />
-      {accessProblem && (
-        <p className="org-settings-footnote" role="alert" data-access-error>
-          {accessProblem}
-        </p>
+      {!isSelf && (
+        <MemberRoleSection
+          scope={{ kind: 'organization', id: orgId }}
+          userId={member.user_id}
+          onChanged={() => void load()}
+        />
       )}
       <MemberAccess orgId={orgId} personId={member.principal_id || member.user_id} />
       {confirmDialog}

@@ -47,7 +47,6 @@ from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz, placements, user_features
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime as iam_runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
-from naas_abi.apps.nexus.apps.api.app.services.iam.levels import MEMBERS, VIEWERS
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MEMBERSHIPS,
     ROLE_NAMES,
@@ -55,7 +54,16 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     UnknownUserError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_of
-from naas_abi.apps.nexus.apps.api.app.services.iam_admin.runtime import get_iam_admin_service
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import (
+    KEEP,
+    MemberRolesInput,
+    RoleChange,
+    RoleOptionsView,
+    change_roles,
+    held_roles,
+    role_groups_of,
+    role_options,
+)
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
 )
@@ -104,12 +112,6 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceRecord,
     WorkspaceUpdateInput,
     new_workspace_id,
-)
-from naas_abi.apps.nexus.apps.api.app.services.workspaces.roles import (
-    KEEP,
-    RoleChangeRefused,
-    RoleGroups,
-    plan_role_change,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     LastOwnerError,
@@ -290,9 +292,11 @@ class WorkspaceMemberInvite(WorkspaceAccessInput):
 
 
 class WorkspaceMemberAdd(WorkspaceAccessInput):
-    """Someone of the organization's directory, added to the workspace."""
+    """Someone of the organization's directory, added to the workspace; ``notify``:
+    and sent an invitation (Invite user's "Invite & send invitation")."""
 
     user_id: str = Field(..., min_length=1, max_length=255)
+    notify: bool = True
 
 
 class WorkspaceMemberChange(BaseModel):
@@ -788,63 +792,6 @@ def _member_view(row: WorkspaceMemberRecord) -> WorkspaceMember:
     )
 
 
-class RoleOptionView(BaseModel):
-    """A group or a policy a member's Role at the workspace may hold: ``kind`` "level"
-    (Members, Viewers: ``level``), "workspace" (its own group), "admins", "group" (a
-    capability group or one an admin made) or "policy"."""
-
-    kind: str
-    id: str
-    name: str
-    level: str | None = None
-
-
-class RoleOptionsView(BaseModel):
-    groups: list[RoleOptionView] = Field(default_factory=list)
-    policies: list[RoleOptionView] = Field(default_factory=list)
-
-
-class MemberRolesInput(BaseModel):
-    """The groups and policies wanted for a member at the workspace (Users › Role)."""
-
-    groups: list[str] = Field(default_factory=list, max_length=200)
-    policies: list[str] = Field(default_factory=list, max_length=200)
-
-
-async def _iam_answer(call: Any) -> Any:
-    """IAM's answer, or its refusal as the HTTP response it is."""
-    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
-    from naas_abi_core.services.iam.IAMPorts import (
-        IAMConflictError,
-        IAMNotFoundError,
-        PermissionDeniedError,
-    )
-
-    try:
-        return await call
-    except PermissionDeniedError as exc:
-        raise HTTPException(403, detail=str(exc)) from exc
-    except IAMNotFoundError as exc:
-        raise HTTPException(404, detail=str(exc)) from exc
-    except IAMConflictError as exc:
-        raise HTTPException(409, detail=str(exc)) from exc
-    except AuditUnavailable as exc:
-        raise HTTPException(503, detail=f"No change made: {exc}") from exc
-    except ValueError as exc:
-        raise HTTPException(422, detail=str(exc)) from exc
-
-
-async def _role_groups(container: str) -> RoleGroups:
-    found = await MEMBERSHIPS.role_groups(container)
-    return RoleGroups(
-        own=found.own,
-        admins=found.admins,
-        members=found.members,
-        viewers=found.viewers,
-        elsewhere=found.elsewhere,
-    )
-
-
 @router.get(
     "/{workspace_id}/members/role-options",
     dependencies=[guard("ListWorkspaceMembers", literal="-")],
@@ -861,35 +808,19 @@ async def member_role_options(
     container = await authz.AUTHZ.container_of(workspace_id)
     if container is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    groups = await _role_groups(container)
-    admin_service = get_iam_admin_service()
-    listed = await _iam_answer(admin_service.list_groups(current_user, scope=container))
-    names = {str(g.get("id")): str(g.get("name") or g.get("id")) for g in listed.get("items", [])}
-    options: list[RoleOptionView] = []
-    for group_id, name, level in (
-        (groups.members, MEMBERS, "member"),
-        (groups.viewers, VIEWERS, "viewer"),
-    ):
-        if group_id:
-            options.append(RoleOptionView(kind="level", id=group_id, name=name, level=level))
-    for group_id, kind in ((groups.own, "workspace"), (groups.admins, "admins")):
-        if group_id:
-            options.append(
-                RoleOptionView(kind=kind, id=group_id, name=names.get(group_id, group_id))
-            )
-    fixed = {g for g in (groups.own, groups.admins, groups.members, groups.viewers) if g}
-    for item in listed.get("items", []):
-        group_id = str(item.get("id"))
-        if group_id in fixed or group_id in groups.elsewhere or item.get("level_group"):
-            continue
-        options.append(RoleOptionView(kind="group", id=group_id, name=names[group_id]))
-    attachable = await _iam_answer(admin_service.attachable(current_user, container))
-    policies = [
-        RoleOptionView(kind="policy", id=str(p["id"]), name=str(p.get("name") or p["id"]))
-        for p in attachable.get("items", [])
-        if not p.get("managed")
-    ]
-    return RoleOptionsView(groups=options, policies=sorted(policies, key=lambda p: p.name.lower()))
+    groups = await role_groups_of(container)
+    return await role_options(current_user, container, groups, listed_at=container)
+
+
+async def _member_row(
+    service: WorkspaceService, workspace_id: str, user_id: str
+) -> tuple[WorkspaceMemberRecord, str]:
+    rows = await service.list_workspace_members(workspace_id=workspace_id)
+    row = next((m for m in rows if m.user_id == user_id), None)
+    container = await authz.AUTHZ.container_of(workspace_id)
+    if row is None or not row.principal_id or container is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    return row, container
 
 
 @router.get(
@@ -905,14 +836,8 @@ async def member_roles(
     groups bearing on the workspace and the policies attached to them there, but what
     is managed elsewhere (their organization's people and admins) and what follows
     their groups."""
-    rows = await service.list_workspace_members(workspace_id=workspace_id)
-    row = next((m for m in rows if m.user_id == user_id), None)
-    container = await authz.AUTHZ.container_of(workspace_id)
-    if row is None or not row.principal_id or container is None:
-        raise HTTPException(status_code=404, detail="Member not found")
-    groups = await _role_groups(container)
-    held, policies = await MEMBERSHIPS.held_at(container, row.principal_id)
-    return MemberRolesInput(groups=sorted(held - groups.elsewhere), policies=sorted(policies))
+    row, container = await _member_row(service, workspace_id, user_id)
+    return await held_roles(container, str(row.principal_id), await role_groups_of(container))
 
 
 @router.put(
@@ -935,56 +860,38 @@ async def set_member_roles(
     the caller, so IAM decides; the workspace's own group never moves here."""
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot change your own access")
-    rows = await service.list_workspace_members(workspace_id=workspace_id)
-    row = next((m for m in rows if m.user_id == user_id), None)
-    container = await authz.AUTHZ.container_of(workspace_id)
-    if row is None or not row.principal_id or container is None:
-        raise HTTPException(status_code=404, detail="Member not found")
-    groups = await _role_groups(container)
-    held, policies = await MEMBERSHIPS.held_at(container, row.principal_id)
-    try:
-        change = plan_role_change(
-            current_groups=held,
-            current_policies=policies,
-            wanted_groups=set(body.groups),
-            wanted_policies=set(body.policies),
-            groups=groups,
-            reaches_otherwise=row.source == "organization" or bool(held & groups.elsewhere),
-        )
-    except RoleChangeRefused as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    admin_service = get_iam_admin_service()
-    principal = row.principal_id
-    with people_errors(_member_denied):
-        if change.admin is False:
-            await people.set_workspace_admin(
-                user_id=user_id, workspace_id=workspace_id, admin=False, by=current_user
-            )
-        if change.level not in (KEEP, None):
-            await people.set_level(
-                user_id=user_id, level=str(change.level), by=current_user, where=[container]
-            )
-        if change.admin is True:
-            await people.set_workspace_admin(
-                user_id=user_id, workspace_id=workspace_id, admin=True, by=current_user
-            )
-    if change.level is None:
-        for level_group in (groups.members, groups.viewers):
-            if level_group and level_group in held:
-                await _iam_answer(admin_service.remove_member(current_user, level_group, principal))
-    for group_id in change.join:
-        await _iam_answer(admin_service.add_member(current_user, group_id, principal))
-    for group_id in change.leave:
-        await _iam_answer(admin_service.remove_member(current_user, group_id, principal))
-    for policy_id in change.attach:
-        await _iam_answer(admin_service.attach(current_user, policy_id, principal, container))
-    for policy_id, scope in change.detach:
-        await _iam_answer(admin_service.detach(current_user, policy_id, principal, scope))
-    rows = await service.list_workspace_members(workspace_id=workspace_id)
-    updated = next((m for m in rows if m.user_id == user_id), None)
-    if updated is None:
-        raise HTTPException(status_code=404, detail="Member not found")
-    return _member_view(updated)
+    row, container = await _member_row(service, workspace_id, user_id)
+    groups = await role_groups_of(container)
+
+    async def seats(change: RoleChange, held: set[str]) -> set[str]:
+        with people_errors(_member_denied):
+            if change.admin is False:
+                await people.set_workspace_admin(
+                    user_id=user_id, workspace_id=workspace_id, admin=False, by=current_user
+                )
+            if change.level not in (KEEP, None):
+                await people.set_level(
+                    user_id=user_id, level=str(change.level), by=current_user, where=[container]
+                )
+            if change.admin is True:
+                await people.set_workspace_admin(
+                    user_id=user_id, workspace_id=workspace_id, admin=True, by=current_user
+                )
+        return set()
+
+    held, _ = await MEMBERSHIPS.held_at(container, str(row.principal_id))
+    await change_roles(
+        user=current_user,
+        scope=container,
+        principal_id=str(row.principal_id),
+        body=body,
+        groups=groups,
+        reaches_otherwise=row.source == "organization" or bool(held & groups.elsewhere),
+        attach_at=container,
+        seats=seats,
+    )
+    row, _ = await _member_row(service, workspace_id, user_id)
+    return _member_view(row)
 
 
 async def _find_workspace_member(
@@ -1098,11 +1005,12 @@ async def add_workspace_member(
 ) -> dict[str, object]:
     """Add someone of the organization's directory to the workspace ("<W>
     workspace"), with their level, whether they administer it and capability
-    groups, now, and notify them. Nobody outside the directory is found (404, as
-    for an unknown id); someone already in the workspace is a 409. No org role is
-    granted. The notice counts as an invitation mail: the inviting user's, the
-    address's and the organization's day limits apply."""
-    await check_rate_limit(get_rate_limit_identifier(request, current_user.id), _INVITE_LIMIT)
+    groups, now, and with ``notify`` send them an invitation. Nobody outside the
+    directory is found (404, as for an unknown id); someone already in the workspace
+    is a 409. No org role is granted. The notice counts as an invitation mail: the
+    inviting user's, the address's and the organization's day limits apply to it."""
+    if body.notify:
+        await check_rate_limit(get_rate_limit_identifier(request, current_user.id), _INVITE_LIMIT)
     entry = await service.directory_entry(workspace_id, body.user_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -1112,13 +1020,16 @@ async def add_workspace_member(
     if person is None:
         raise HTTPException(status_code=404, detail="User not found")
     workspace = await service.get_workspace(workspace_id)
-    await check_rate_limit(f"email:{person.email.lower()}", _INVITE_LIMIT)
-    await check_invitation_mail_quota(
-        workspace.organization_id if workspace else None, workspace_id
-    )
+    if body.notify:
+        await check_rate_limit(f"email:{person.email.lower()}", _INVITE_LIMIT)
+        await check_invitation_mail_quota(
+            workspace.organization_id if workspace else None, workspace_id
+        )
     grant = _grant_of(workspace.organization_id if workspace else None, workspace_id, body)
     with people_errors(_member_denied):
-        user = await people.add_existing(user_id=body.user_id, grant=grant, by=current_user)
+        user = await people.add_existing(
+            user_id=body.user_id, grant=grant, by=current_user, notify=body.notify
+        )
     member = await _added_member(
         service, workspace_id=workspace_id, user=user, role=_role_shown(grant)
     )

@@ -5,7 +5,7 @@ const OPTIONS = readRoleOptions({
   groups: [
     { kind: 'level', id: 'grp_m', name: 'Members', level: 'member' },
     { kind: 'level', id: 'grp_v', name: 'Viewers', level: 'viewer' },
-    { kind: 'workspace', id: 'grp_w', name: 'ABI workspace' },
+    { kind: 'own', id: 'grp_w', name: 'ABI workspace' },
     { kind: 'admins', id: 'grp_wa', name: 'ABI admins' },
     { kind: 'group', id: 'grp_r', name: 'Workflow runners' },
     { id: '' },

@@ -12,7 +12,7 @@ import {
   type RoleSelection,
 } from '@/lib/member-roles';
 
-const KIND_ORDER: Record<RoleOption['kind'], number> = { workspace: 0, admins: 1, level: 2, group: 3, policy: 4 };
+const KIND_ORDER: Record<RoleOption['kind'], number> = { own: 0, admins: 1, level: 2, group: 3, policy: 4 };
 
 /**
  * The Role of a person at a workspace (Users › Create user, a person's page): the groups and
@@ -59,7 +59,7 @@ export function RoleEditor({
             }
           >
             {option.name}
-            {option.kind !== 'workspace' && !disabled && (
+            {option.kind !== 'own' && !disabled && (
               <button
                 type="button"
                 aria-label={`Remove ${option.name}`}

@@ -11,7 +11,7 @@ const OPTIONS = readRoleOptions({
   groups: [
     { kind: 'level', id: 'grp_m', name: 'Members', level: 'member' },
     { kind: 'level', id: 'grp_v', name: 'Viewers', level: 'viewer' },
-    { kind: 'workspace', id: 'grp_w', name: 'ABI workspace' },
+    { kind: 'own', id: 'grp_w', name: 'ABI workspace' },
     { kind: 'admins', id: 'grp_wa', name: 'ABI admins' },
   ],
   policies: [{ kind: 'policy', id: 'pol_a', name: 'Alpha reports' }],
@@ -73,7 +73,7 @@ describe('Create user in a workspace', () => {
       admin: true,
       capabilities: [],
     });
-    expect(set).toHaveBeenCalledWith('ws-1', 'usr_new', { groups: ['grp_w', 'grp_m', 'grp_wa'], policies: ['pol_a'] });
+    expect(set).toHaveBeenCalledWith({ kind: 'workspace', id: 'ws-1' }, 'usr_new', { groups: ['grp_w', 'grp_m', 'grp_wa'], policies: ['pol_a'] });
     expect(onCreated).toHaveBeenCalledWith(CREATED, null);
   });
 

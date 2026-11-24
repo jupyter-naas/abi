@@ -211,6 +211,27 @@ async def test_adding_a_candidate_puts_them_in_the_workspace_only(api) -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_candidate_is_added_without_an_invitation_when_asked(api, monkeypatch) -> None:
+    """Invite user's "Add to workspace": in, and no mail (so no invitation limit)."""
+    counted: list[str] = []
+
+    async def count(*_args, **_kwargs) -> None:
+        counted.append("limit")
+
+    monkeypatch.setattr(workspaces_module, "check_invitation_mail_quota", count)
+    async with api.as_("wsadmin") as http:
+        added = await http.post(
+            "/api/workspaces/ws-1/members",
+            json={"user_id": "flora", "level": "viewer", "notify": False},
+        )
+    assert added.status_code == 201, added.text
+    assert added.json()["sign_in_email_sent"] is False
+    assert await role("flora", WS1) == "viewer"
+    (asked,) = api.people.named("add_existing")
+    assert asked["notify"] is False and counted == []
+
+
+@pytest.mark.asyncio
 async def test_an_add_says_whether_the_person_was_told(api) -> None:
     """The notice is the service's to send: the answer says what happened."""
     api.people.sent = False
