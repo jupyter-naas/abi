@@ -89,6 +89,26 @@ describe('Where a policy is attached', () => {
     expect(document.querySelector('[data-attach-notice]')?.textContent).toContain('Attached to Carol');
   });
 
+  it('shows a workspace’s offer read-only: its group bounded, nothing detached or attached', async () => {
+    const attachable = vi.fn().mockResolvedValue({ items: [{ id: 'pol_w', name: 'Sales access', description: '', managed: false }] });
+    const client = api({ attachable, listGroups: vi.fn().mockResolvedValue({ items: [] }) });
+    mounted = await mount(PolicyAttachments, {
+      api: client,
+      policyId: 'pol_w',
+      here: WS,
+      can: () => true,
+      scope: wsScope,
+      directory: fakeDirectory([member({ userId: 'usr_carol', name: 'Carol' })]),
+      boundOf: 'Sales workspace',
+    });
+    await mounted.flush();
+    await mounted.flush();
+    expect(document.querySelector('[data-held-bound]')?.textContent).toContain('Everyone in Sales workspace reaches what is offered here');
+    expect(document.querySelectorAll('[data-attached]').length).toBeGreaterThan(0);
+    expect(document.querySelector('[aria-label^="Detach from"]')).toBeNull();
+    expect(document.querySelector('[data-action="attach"]')).toBeNull();
+  });
+
   it('offers no attach without iam:AttachPolicy, nor for a policy IAM does not let the caller attach here', async () => {
     const attachable = vi.fn().mockResolvedValue({ items: [] });
     const scoped = { scope: wsScope, directory: fakeDirectory() };

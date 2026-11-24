@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createElement, useState } from 'react';
+import { NEW_POLICY } from '../access-paths';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { PolicyDocument } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
@@ -144,6 +146,32 @@ describe('PoliciesView', () => {
     // The search reaches a policy of the second API page.
     await mounted!.type(document.querySelector('input[aria-label="Search policies"]'), 'Policy 125');
     expect([...document.querySelectorAll('[data-policy]')].map((r) => r.getAttribute('data-policy'))).toEqual(['pol_125']);
+  });
+
+  it('opens a new policy from its address once IAM lets the caller create, not before', async () => {
+    // Create policy changes the address: the page opened again reads its rights a moment later.
+    const api = fake();
+    function Page() {
+      const [granted, setGranted] = useState(false);
+      return createElement(
+        'div',
+        null,
+        createElement('button', { type: 'button', 'data-test': 'grant', onClick: () => setGranted(true) }),
+        createElement(PoliciesView, {
+          api,
+          can: (action: string) => granted || action !== 'iam:CreatePolicy',
+          scope: PLATFORM_ACCESS_SCOPE,
+          directory: EMPTY_DIRECTORY,
+          focus: NEW_POLICY,
+        })
+      );
+    }
+    mounted = await mount(Page, {});
+    await mounted.flush();
+    expect(document.querySelector('[data-policy-page]')).toBeNull();
+    await mounted.click(document.querySelector('[data-test="grant"]'));
+    await mounted.flush();
+    expect(document.querySelector('[data-policy-page]')?.getAttribute('data-policy-page')).toBe(NEW_POLICY);
   });
 
   it('says why the list could not load', async () => {

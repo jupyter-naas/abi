@@ -21,7 +21,7 @@ import { PLATFORM, ownerOf, parseScope } from '../access-scope';
 import { listedOnPolicies } from '../builtins';
 import { WorkspaceOfferEditor } from '../offer/offer-editor';
 import { roleOfPolicy } from '../roles/role-change';
-import { levelPolicyOf } from '@/lib/access-model/levels';
+import { levelPolicyOf, workspaceGroupName } from '@/lib/access-model/levels';
 import { PolicyAttachments } from './policy-attachments';
 import { PolicyEditor } from './policy-editor';
 import { ownerHref, usePolicyOwners } from './policy-owners';
@@ -188,18 +188,23 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
     }
   };
 
-  // The address names a policy to open (or a new one): once, when the list is read.
+  // The address names a policy to open (or a new one): once, when the list is read. A new one
+  // waits for IAM to let the caller create here: Create policy changes the address, and the page
+  // opened again knows its rights a moment later.
   const [opened, setOpened] = useState(false);
+  const mayCreate = can('iam:CreatePolicy');
   useEffect(() => {
     if (!focus || opened || policies === null || held === null) return;
-    setOpened(true);
     if (focus === NEW_POLICY) {
-      if (can('iam:CreatePolicy')) setSelection({ kind: 'new' });
+      if (!mayCreate) return;
+      setOpened(true);
+      setSelection({ kind: 'new' });
       return;
     }
+    setOpened(true);
     resolve(focus).then(setSelection, (e: unknown) => setError(message(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus, opened, policies, held]);
+  }, [focus, opened, policies, held, mayCreate]);
 
   const ownerLabel = (policy: PolicyView) => owners[policy.owner_scope ?? PLATFORM]?.label ?? '';
   const columns: ListColumn<PolicyView>[] = [
@@ -303,6 +308,11 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
             can={can}
             open={open}
             nonce={nonce}
+            offerOf={
+              selection.kind === 'policy' && offerWorkspaceOf(selection.policy)
+                ? workspaceGroupName(selection.policy.name.replace(/ access$/, ''))
+                : null
+            }
             configuration={
               // A workspace's offer ("<W> access"): its switches are the policy's Configuration.
               selection.kind === 'policy' && offerWorkspaceOf(selection.policy)

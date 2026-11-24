@@ -86,6 +86,23 @@ describe('PolicyEditor with a Configuration (a workspace’s offer)', () => {
   });
 });
 
+describe('PolicyEditor sub-policies', () => {
+  it('counts them, names the first five, and five more at each Load more', async () => {
+    const subs = Array.from({ length: 12 }, (_, i) => ({ id: `pol_sub${i}`, name: `Sub ${i}` }));
+    await open({ policy: { ...readerPolicy, sub_policies: subs }, onOpen: vi.fn() });
+    const named = () =>
+      [...document.querySelectorAll('[aria-label="Sub-policies"] li')].map((li) => li.textContent?.trim()).filter((t) => t !== 'Load more');
+    const more = () => document.querySelector('[data-action="more-subs"]');
+    expect(document.querySelector('[data-field="subs-count"]')?.textContent).toBe('12');
+    expect(named()).toEqual(subs.slice(0, 5).map((s) => s.name));
+    await mounted!.click(more());
+    expect(named()).toEqual(subs.slice(0, 10).map((s) => s.name));
+    await mounted!.click(more());
+    expect(named()).toEqual(subs.map((s) => s.name));
+    expect(more()).toBeNull();
+  });
+});
+
 describe('PolicyEditor Discard changes', () => {
   it('shows once the policy is edited, and reads it again; no Cancel at the bottom', async () => {
     const getPolicy = vi.fn().mockResolvedValue(readerPolicy);

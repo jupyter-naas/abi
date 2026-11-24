@@ -43,6 +43,7 @@ export function PolicyAttachments({
   nonce = 0,
   scope,
   directory,
+  boundOf,
 }: {
   api: IamAdminApi;
   policyId: string;
@@ -55,6 +56,9 @@ export function PolicyAttachments({
   /** The page's scope, where the policy is attached from here; without it, nothing is. */
   scope?: AccessScope;
   directory?: AccessDirectory;
+  /** A workspace's offer ("<W> access"): the workspace group it bounds. Its holding is the
+   *  workspace's ceiling, not a grant: shown read-only, nothing detached or attached here. */
+  boundOf?: string | null;
 }) {
   const [items, setItems] = useState<AttachmentView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +85,8 @@ export function PolicyAttachments({
   const actionsAt = useActionsAt(api, scopes, here, can, nonce);
   // A role is a membership only for a user (changed as on Members); a group or a service
   // account holds it as a plain attachment, detached here like any other.
-  const membership = (kind: PrincipalKind) => isRoleCompanion(policyId) || (!!roleOfPolicy(policyId) && kind === 'user');
+  const membership = (kind: PrincipalKind) =>
+    !!boundOf || isRoleCompanion(policyId) || (!!roleOfPolicy(policyId) && kind === 'user');
 
   const detach = async (a: AttachmentView) => {
     try {
@@ -97,6 +102,12 @@ export function PolicyAttachments({
   return (
     <section className="access-policy-attachments" aria-label="Who holds it">
       <h4 className="access-policy-subheading">Held by</h4>
+      {boundOf && (
+        <p className="access-policy-muted" data-held-bound="">
+          Everyone in {boundOf} reaches what is offered here: this is the workspace&apos;s offer, changed in
+          Configuration. Read-only.
+        </p>
+      )}
       {error && (
         <p className="access-policy-error" role="alert">
           {error}
@@ -156,7 +167,7 @@ export function PolicyAttachments({
           </table>
         </div>
       )}
-      {scope && directory && can('iam:AttachPolicy') && (
+      {scope && directory && !boundOf && can('iam:AttachPolicy') && (
         <AttachToPrincipal
           api={api}
           policyId={policyId}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
 import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { PolicyRef, PolicySource, PolicyStatement, PolicyView, Publisher } from '@/lib/iam-admin/types';
@@ -87,6 +87,7 @@ export function PolicyEditor({
   open,
   nonce = 0,
   configuration,
+  offerOf = null,
 }: {
   api: IamAdminApi;
   policy: PolicyView | null;
@@ -116,6 +117,8 @@ export function PolicyEditor({
   /** The policy's own settings (a workspace's offer: its switches), its first tab, open first.
    *  They save themselves; `changed` reads the document again. */
   configuration?: (changed: () => void) => ReactNode;
+  /** A workspace's offer: the workspace group it bounds, its Held by shown read-only. */
+  offerOf?: string | null;
 }) {
   const [name, setName] = useState(policy?.name ?? '');
   const [description, setDescription] = useState(policy?.description ?? '');
@@ -134,9 +137,24 @@ export function PolicyEditor({
   const [base, setBase] = useState(() => baseOf(policy));
   // The text as the Code view opened it: an edit there is one too.
   const [textOpened, setTextOpened] = useState('');
+  // The description grows with its text, so that all of it shows.
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const fit = () => {
+      const area = descriptionRef.current;
+      if (!area) return;
+      area.style.height = 'auto';
+      area.style.height = `${area.scrollHeight + area.offsetHeight - area.clientHeight}px`;
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [description]);
   // The parent stays as it is on save (the update leaves it out); a reload shows the newer one.
   const [parent, setParent] = useState(() => parentOf(policy));
   const [subPolicies, setSubPolicies] = useState<PolicyRef[]>(policy?.sub_policies ?? []);
+  // How many sub-policies show: the first ones, more on demand (Load more).
+  const [subsShown, setSubsShown] = useState(SUBS_SHOWN);
   // A new policy's parent, chosen here.
   const [newParent, setNewParent] = useState('');
   const [starting, setStarting] = useState('');
@@ -433,10 +451,15 @@ export function PolicyEditor({
         </p>
       )}
       {subPolicies.length > 0 && (
-        <div className="access-policy-parent" aria-label="Sub-policies">
-          <span>Sub-policies, each within this one:</span>
+        <div className="access-policy-parent access-policy-subs-block" aria-label="Sub-policies">
+          <span className="access-policy-subs-title" title="Each never grants more than this one">
+            Subpolicies
+            <span className="access-policy-count" data-field="subs-count">
+              {subPolicies.length}
+            </span>
+          </span>
           <ul className="access-policy-subs">
-            {subPolicies.map((sub) => (
+            {subPolicies.slice(0, subsShown).map((sub) => (
               <li key={sub.id}>
                 {onOpen ? (
                   <button type="button" className="access-policy-link" onClick={() => onOpen(sub.id)}>
@@ -447,24 +470,23 @@ export function PolicyEditor({
                 )}
               </li>
             ))}
+            {subPolicies.length > subsShown && (
+              <li>
+                <button
+                  type="button"
+                  className="access-policy-more"
+                  data-action="more-subs"
+                  onClick={() => setSubsShown((n) => n + SUBS_SHOWN)}
+                >
+                  Load more
+                </button>
+              </li>
+            )}
           </ul>
         </div>
       )}
 
-      {policy && can && (
-        <PolicyAttachments
-          api={api}
-          policyId={policy.id}
-          here={ownerOf(scope)}
-          can={can}
-          open={open}
-          nonce={nonce}
-          scope={scope}
-          directory={directory}
-        />
-      )}
-
-      <div className="access-policy-row">
+      <div className="access-policy-row access-policy-row-top">
         <label className="access-policy-field access-policy-field-grow">
           <span>Name</span>
           <input
@@ -478,10 +500,12 @@ export function PolicyEditor({
         </label>
         <label className="access-policy-field access-policy-field-grow">
           <span>Description</span>
-          <input
-            type="text"
-            className="access-policy-input"
+          {/* Every line shown, one when one is enough. */}
+          <textarea
+            ref={descriptionRef}
+            className="access-policy-input access-policy-textarea"
             aria-label="Policy description"
+            rows={1}
             value={description}
             disabled={readOnly}
             onChange={(event) => setDescription(event.target.value)}
@@ -527,6 +551,21 @@ export function PolicyEditor({
           </label>
         )}
       </div>
+
+      {/* Who holds it, under its name and description. */}
+      {policy && can && (
+        <PolicyAttachments
+          api={api}
+          policyId={policy.id}
+          here={ownerOf(scope)}
+          can={can}
+          open={open}
+          nonce={nonce}
+          scope={scope}
+          directory={directory}
+          boundOf={offerOf}
+        />
+      )}
       {newParent && !policy && (
         <p className={parentRefused ? 'access-policy-error' : 'access-policy-muted'} role={parentRefused ? 'alert' : 'status'} data-parent-verdict="">
           {parentRefused
@@ -665,6 +704,9 @@ export function PolicyEditor({
     </section>
   );
 }
+
+/** How many sub-policies a policy's page names at first, and each Load more adds. */
+const SUBS_SHOWN = 5;
 
 /** What an existing policy is as read: its name, description and document (as the editor
  *  writes it), so that an edit is told from it. */
