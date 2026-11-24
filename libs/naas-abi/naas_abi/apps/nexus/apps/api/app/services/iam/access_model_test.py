@@ -616,6 +616,48 @@ async def test_a_role_another_one_already_gives_goes_and_is_said(nexus_db):
         assert not [k for k, allowed in lost.items() if not allowed]
 
 
+async def test_an_organization_s_admin_holds_no_level_unless_they_work_outside_it(nexus_db):
+    """An organization's admin needs no level: its admins group gives them every
+    workspace of it, whatever their roles there were. One who works in a workspace of
+    another organization keeps the level it asks. A level left by a build of before this
+    rule goes, and is said, when the move runs again; nobody loses a decision for it."""
+    nexus = previous._world()
+    scopes = _containers(previous)
+    nexus.grant("alice", "admin", scopes["ws-b"])  # in org-1, which she administers
+    nexus.grant("gina", "member", scopes["ws-a"])  # org-2's admin, a Member in org-1
+    with nexus.installed():
+        subjects = previous._subjects(nexus)
+        await _policy_tree_world_installed(nexus, nexus_db)
+        before = _matrix(nexus, subjects)
+        report = await _move(nexus_db, nexus)
+        assert report is not None and report.applied
+        _check_report(report, _diff(before, _matrix(nexus, subjects)), before["names"])
+        with as_service_account("engine"):
+            levels = LEVELS.get(nexus.iam)
+            alice = str(nexus.iam.resolve_user("alice").id)
+            gina = str(nexus.iam.resolve_user("gina").id)
+
+        def members(group_id) -> set:
+            with as_service_account("engine"):
+                return set(nexus.iam.list_group_members(group_id))
+
+        assert alice not in members(levels.members) | members(levels.viewers)
+        assert gina in members(levels.members)
+        # A level left by a build of before this rule: the move run again takes it out.
+        nexus.iam.store.add_group_member(levels.members, alice)
+        nexus.iam.invalidate()
+        held = _matrix(nexus, subjects)
+        again = await _move(nexus_db, nexus, force=True)
+        assert again is not None
+        assert again.redundant == [
+            "alice left Members: an admin of its organizations (org-1): their admins "
+            "group reaches every workspace of them"
+        ]
+        assert alice not in members(levels.members)
+        lost = _diff(held, _matrix(nexus, subjects))
+        assert not [k for k, allowed in lost.items() if not allowed]
+
+
 def test_a_platform_admin_stays_the_admin_of_an_organization_that_has_no_other():
     org_a, org_b = org_container("a"), org_container("b")
     by_group = {"grp_a": (org_a, "admins"), "grp_b": (org_b, "admins")}

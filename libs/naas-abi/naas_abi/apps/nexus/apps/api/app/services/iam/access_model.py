@@ -620,7 +620,8 @@ class PersonPlan:
     leaves: list[str] = field(default_factory=list)
     detach: list[tuple[str, str | None]] = field(default_factory=list)  # (policy, scope)
     kept: list[str] = field(default_factory=list)
-    # Admins groups another role of theirs already gives (``_drop_redundant``): (group, why).
+    # Admins groups another role of theirs already gives (``_drop_redundant``), and the
+    # level an organization's admin needs not (``_plan_member``): (group, why).
     redundant: list[tuple[str, str]] = field(default_factory=list)
 
     def containers(self, inputs: Inputs) -> set[str]:
@@ -907,6 +908,8 @@ def _plan_member(
             continue
         plan.org_people_of.add(org)
         level = _higher(level, LEVEL_OF_ROLE[role])
+    if plan.org_admin_of and not _works_outside(plan):
+        level = None  # their organizations' admins groups reach every workspace of them
     plan.level = level
     wanted: list[str] = []
     for org in sorted(plan.org_people_of):
@@ -923,6 +926,11 @@ def _plan_member(
         other = levels.group_of(VIEWER if level == MEMBER else MEMBER)
         if other in mine:
             plan.leaves.append(other)
+    else:
+        for group in levels.level_groups:
+            if group in mine:
+                plan.leaves.append(group)
+                plan.redundant.append((group, _no_level_needed(plan.org_admin_of)))
     if plan.org_admin_of or plan.admin_of:
         wanted.append(levels.workspace_admins)
     plan.joins = [g for g in dict.fromkeys(wanted) if g not in mine]
@@ -938,6 +946,24 @@ def _plan_member(
         ):
             name = names.get(str(attachment.policy_id), str(attachment.policy_id))
             plan.kept.append(f"{name} ({attachment.policy_id}) at {attachment.scope or 'no scope'}")
+
+
+def _works_outside(plan: PersonPlan) -> bool:
+    """Whether a person works where the admins groups of the organizations they
+    administer do not reach: a workspace of another organization (or of none), or among
+    the people of another organization. Only there does a level give them anything."""
+    orgs = plan.org_admin_of
+    return any(org_of(c) not in orgs for c in plan.workspaces | plan.admin_of) or bool(
+        plan.org_people_of - orgs
+    )
+
+
+def _no_level_needed(orgs: set[str]) -> str:
+    """Why an organization's admin left their level (``redundant``)."""
+    return (
+        f"an admin of its organizations ({', '.join(sorted(orgs))}): their admins group "
+        "reaches every workspace of them"
+    )
 
 
 def _is_graph_grant(policy_id: str, names: Mapping[str, str]) -> bool:
@@ -1230,7 +1256,11 @@ def _default_admin(iam: Any, inputs: Inputs, outcome: Outcome, levels: Levels) -
         plan.admin_of.add(container)
         plan.default_admin_of.add(container)
         report.default_admin_added.append(container)
-    if levels.members not in mine and not plan.platform_admin:
+    if (
+        levels.members not in mine
+        and not plan.platform_admin
+        and (not plan.org_admin_of or _works_outside(plan))
+    ):
         if levels.viewers in mine:
             iam.remove_group_member(levels.viewers, principal_id)
         _join(iam, levels.members, principal_id)
