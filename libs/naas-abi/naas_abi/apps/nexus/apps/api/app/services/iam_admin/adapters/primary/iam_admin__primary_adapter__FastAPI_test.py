@@ -395,6 +395,47 @@ def test_an_org_admin_attaches_roles_in_their_org_only(world):
     assert again.status_code == 404
 
 
+def test_an_org_admin_attaches_to_a_person_related_through_a_membership_group(world):
+    """Since the access model (#1583) a person belongs to a workspace through its
+    membership group ("<W> workspace") and holds no attachment of their own there:
+    they are related to the workspace and its organization, and an org admin
+    attaches a policy to them."""
+    member = _principal_id(world, "newcomer")
+    record = world.nexus.grouped_workspace("org-1", "ws-grouped")
+    with as_service_account("api"):
+        world.nexus.iam.add_group_member(record.members_group_id, member)
+        assert not world.nexus.iam.list_attachments(principal_id=member)
+    for scope in (workspace_container("org-1", "ws-grouped"), org_container("org-1")):
+        attached = post(
+            world,
+            "/attachments",
+            "admin",
+            policy_id="builtin.viewer",
+            principal_id=member,
+            scope=scope,
+        )
+        assert attached.status_code == 201, (scope, attached.text)
+        assert attached.json()["principal"]["id"] == member
+
+
+def test_an_org_admin_does_not_attach_to_a_member_of_another_organization(world):
+    """A membership group of another organization relates a person to that one only."""
+    member = _principal_id(world, "away")
+    record = world.nexus.grouped_workspace("org-2", "ws-away")
+    with as_service_account("api"):
+        world.nexus.iam.add_group_member(record.members_group_id, member)
+    refused = post(
+        world,
+        "/attachments",
+        "admin",
+        policy_id="builtin.viewer",
+        principal_id=member,
+        scope=org_container("org-1"),
+    )
+    assert refused.status_code == 404
+    assert "principal" not in refused.json()
+
+
 def test_attach_keeps_membership_from_who_may_not_attach(world):
     """A caller who may not attach there gets the same answer for a principal
     related to the org and for one that is not: nothing tells them apart."""
