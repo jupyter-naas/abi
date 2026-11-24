@@ -1328,7 +1328,8 @@ when there is one, plus an actor that is not first-party, as in "Grant only what
   whether a parent exists.
 
 **Grant only what you hold** checks the sub-policy's effective grant: its own Allows
-intersected with its chain's, at every scope it is checked at (see there).
+intersected with its chain's, less what its chain's Denies refuse, at every scope it is
+checked at (see there).
 
 **Write-time checks read the store.** A chain is read from the policy cache when IAM
 decides, and from the store when it checks a write (attaching, inviting, binding, creating,
@@ -1470,6 +1471,12 @@ On every resource:
 - **No Deny of the caller may overlap it.** A Deny's variables are also taken bound to the
   caller's ids, so a Deny on `…/${principal.id}/*` refuses a grant of the caller's own literal
   id. A Deny statement of the grant never needs cover: it only narrows.
+- **A Deny of a sub-policy's chain takes from its grant.** What a Deny of a policy of the
+  chain refuses the action on (in held form at the scope checked), the sub-policy never
+  grants: it needs no cover, and no Deny of the caller refuses it. A workspace's people
+  policy is given on by one of its people, whom the workspace's own Deny binds too
+  (`grants._chain_denies`). For an action kept as a pattern (a service with no catalog), a
+  Deny counts only when its actions are shown to take every action the pattern names.
 - **What a sub-policy of the caller holds** is its Allows within its chain's, shown without
   a search (`grants.within_chain`): pairs of action and resource patterns, each a pattern
   of the sub-policy that a pattern of a policy of the chain embeds, or the other way round,
