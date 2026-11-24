@@ -329,7 +329,7 @@ describe('PoliciesView at a workspace', () => {
       await mounted!.flush();
     }
     expect(mounted!.host.textContent).not.toContain('other statement');
-    await mounted!.click([...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === 'Statements') ?? null);
+    await mounted!.click([...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === 'Advanced') ?? null);
     expect(document.querySelectorAll('[aria-label^="Add to actions of statement"]')).toHaveLength(0);
   });
 
@@ -477,8 +477,8 @@ describe('PoliciesView sub-policies', () => {
     parent.value = 'pol_o';
     parent.dispatchEvent(new Event('change', { bubbles: true }));
     await mounted!.flush();
-    // No builder: the statement editor ("Visual") is open.
-    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Visual');
+    // No builder: the statement editor ("Advanced") is open.
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Advanced');
     await mounted!.click(button('Add statement') ?? null);
     await mounted!.type(field('Add to actions of statement 1'), 'nexus:UseFeature');
     await mounted!.click(document.querySelector('[role="option"] button') ?? button('Add statement') ?? null);
@@ -587,8 +587,8 @@ describe('PoliciesView, no leak', () => {
       'acme.people Agents: A',
     ]);
 
-    // The Statements view suggests the same, and nothing else.
-    await mounted!.click([...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === 'Statements') ?? null);
+    // The Advanced view suggests the same, and nothing else.
+    await mounted!.click([...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === 'Advanced') ?? null);
     await mounted!.click(button('Add statement') ?? null);
     const suggestions = () => [...document.querySelectorAll('[role="option"] .access-policy-suggestion-value')].map((e) => e.textContent);
     await mounted!.type(field('Add to actions of statement 1'), ':');

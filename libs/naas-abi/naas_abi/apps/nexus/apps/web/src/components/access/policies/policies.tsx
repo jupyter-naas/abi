@@ -284,16 +284,6 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
               </p>
             </section>
           )}
-          {selection.kind === 'policy' && offerWorkspaceOf(selection.policy) && (
-            <WorkspaceOfferEditor
-              workspaceId={offerWorkspaceOf(selection.policy)!}
-              scope={selection.policy.owner_scope ?? here}
-              policyId={selection.policy.id}
-              workspaceName={selection.policy.name.replace(/ access$/, '')}
-              api={api}
-              nonce={nonce}
-            />
-          )}
           <PolicyEditor
             key={selection.kind === 'new' ? NEW_POLICY : `${selection.policy.id}@${selection.policy.revision}`}
             api={api}
@@ -314,6 +304,22 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
             can={can}
             open={open}
             nonce={nonce}
+            configuration={
+              // A workspace's offer ("<W> access"): its switches are the policy's Configuration.
+              selection.kind === 'policy' && offerWorkspaceOf(selection.policy)
+                ? (changed) => (
+                    <WorkspaceOfferEditor
+                      workspaceId={offerWorkspaceOf(selection.policy)!}
+                      scope={selection.policy.owner_scope ?? here}
+                      policyId={selection.policy.id}
+                      workspaceName={selection.policy.name.replace(/ access$/, '')}
+                      api={api}
+                      nonce={nonce}
+                      onChanged={changed}
+                    />
+                  )
+                : undefined
+            }
           />
           </>
         )}

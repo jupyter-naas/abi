@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { PolicyRef, PolicySource, PolicyStatement, PolicyView, Publisher } from '@/lib/iam-admin/types';
@@ -34,7 +34,8 @@ import { PolicyText } from './policy-text';
 import { StatementEditor } from './statement-editor';
 import { usePolicyValidation, VALIDATION_DELAY_MS } from './use-policy-validation';
 
-type Mode = 'builder' | 'visual' | 'text';
+// `configuration`: the policy's own settings (a workspace's offer), when its page gives some.
+type Mode = 'configuration' | 'builder' | 'visual' | 'text';
 
 type SaveError = { message: string; errors: string[]; conflict: boolean; refused: string[] };
 
@@ -85,6 +86,7 @@ export function PolicyEditor({
   can,
   open,
   nonce = 0,
+  configuration,
 }: {
   api: IamAdminApi;
   policy: PolicyView | null;
@@ -112,12 +114,15 @@ export function PolicyEditor({
   open?: AccessNavigation;
   /** Bumped by the page's refresh button. */
   nonce?: number;
+  /** The policy's own settings (a workspace's offer: its switches), its first tab, open first.
+   *  They save themselves; `changed` reads the document again. */
+  configuration?: (changed: () => void) => ReactNode;
 }) {
   const [name, setName] = useState(policy?.name ?? '');
   const [description, setDescription] = useState(policy?.description ?? '');
   const [version, setVersion] = useState(policy?.document.version ?? POLICY_VERSION);
   const [statements, setStatements] = useState<EditorStatement[]>(policy ? fromDocument(policy.document) : []);
-  const [mode, setMode] = useState<Mode>('visual');
+  const [mode, setMode] = useState<Mode>(configuration ? 'configuration' : 'visual');
   // Until the user picks a view, the editor opens in the builder once it can show the policy.
   const [picked, setPicked] = useState(false);
   const [format, setFormat] = useState<TextFormat>('json');
@@ -214,7 +219,12 @@ export function PolicyEditor({
       return;
     }
     const split = intoBuilder(doc.statements, builder, choices);
-    if (!picked && mode !== 'text' && (policy ? split.rest.length === 0 : statements.length === 0 || split.rest.length === 0)) {
+    if (
+      !picked &&
+      mode !== 'text' &&
+      mode !== 'configuration' &&
+      (policy ? split.rest.length === 0 : statements.length === 0 || split.rest.length === 0)
+    ) {
       setMode('builder');
     }
     // Only the arrival decides it, not later edits.
@@ -340,7 +350,8 @@ export function PolicyEditor({
       setParent(parentOf(fresh));
       setSubPolicies(fresh.sub_policies ?? []);
       if (builder) intoBuilder(fresh.document.statements, builder);
-      setMode(builder ? 'builder' : 'visual');
+      // The configuration reads the document again after each of its saves: it stays open.
+      if (mode !== 'configuration') setMode(builder ? 'builder' : 'visual');
       setSaveError(null);
     } catch (error) {
       setSaveError({ message: message(error), errors: [], conflict: false, refused: [] });
@@ -511,12 +522,19 @@ export function PolicyEditor({
       )}
 
       <div className="access-policy-modes" role="tablist" aria-label="Editor view">
+        {configuration &&
+          tab('configuration', 'Configuration', () => {
+            setPicked(true);
+            setMode('configuration');
+          })}
+        {tab('visual', 'Advanced', () => void showForm('visual'))}
         {builder && tab('builder', 'Builder', () => void showForm('builder'))}
-        {tab('visual', builder ? 'Statements' : 'Visual', () => void showForm('visual'))}
-        {tab('text', 'YAML / JSON', showText)}
+        {tab('text', 'Code', showText)}
       </div>
 
-      {mode === 'builder' && !builder ? (
+      {mode === 'configuration' && configuration ? (
+        configuration(() => void reload())
+      ) : mode === 'builder' && !builder ? (
         // While what may be granted is read again (a new parent): nothing to edit yet.
         <p className="access-policy-muted" role="status" data-builder-loading="">
           Loading what you may grant…
@@ -546,12 +564,12 @@ export function PolicyEditor({
         <PolicyText text={text} onChange={setText} format={format} onFormat={changeFormat} readOnly={readOnly} />
       )}
 
-      {switchError && (
+      {mode !== 'configuration' && switchError && (
         <p className="access-policy-notice" role="status">
           {switchError}
         </p>
       )}
-      {!readOnly && grantable.state === 'failed' && !parentRefused && (
+      {mode !== 'configuration' && !readOnly && grantable.state === 'failed' && !parentRefused && (
         <p className="access-policy-notice" role="status" data-grantable-failure="">
           No builder or suggestions: {grantable.message}{' '}
           <button type="button" className="access-policy-button" onClick={() => setAttempt((n) => n + 1)}>
@@ -560,7 +578,7 @@ export function PolicyEditor({
         </p>
       )}
 
-      {!readOnly && (
+      {mode !== 'configuration' && !readOnly && (
         <div className="access-policy-validation" aria-live="polite">
           {errors.length > 0 && (
             <ul className="access-policy-errors" role="alert" aria-label="Validation errors">
@@ -604,7 +622,8 @@ export function PolicyEditor({
       )}
 
       <footer className="access-policy-actions">
-        {!readOnly && (
+        {/* The configuration saves each change itself. */}
+        {!readOnly && mode !== 'configuration' && (
           <button type="button" className="access-policy-button access-policy-button-primary" disabled={!canSave} onClick={() => void save()}>
             {saving ? 'Saving…' : policy ? 'Save changes' : 'Create policy'}
           </button>

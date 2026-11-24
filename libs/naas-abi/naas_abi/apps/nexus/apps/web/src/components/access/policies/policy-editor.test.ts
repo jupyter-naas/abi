@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createElement } from 'react';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { PolicyDocument, PolicyValidation, PublishersView } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
@@ -39,7 +40,7 @@ function api(over: Record<string, unknown> = {}) {
 
 const tab = (label: string) => [...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === label) ?? null;
 
-/** The editor, in the Statements view unless ``builder``: a new policy opens in the builder. */
+/** The editor, in the Advanced view unless ``builder``: a new policy opens in the builder. */
 async function open(props: Partial<Parameters<typeof PolicyEditor>[0]> = {}, { builder = false } = {}) {
   const onSaved = vi.fn();
   const onCancel = vi.fn();
@@ -52,10 +53,41 @@ async function open(props: Partial<Parameters<typeof PolicyEditor>[0]> = {}, { b
     ...props,
   });
   await mounted.flush();
-  const statements = tab('Statements');
+  const statements = tab('Advanced');
   if (!builder && statements?.getAttribute('aria-selected') === 'false') await mounted.click(statements);
   return { onSaved, onCancel };
 }
+
+describe('PolicyEditor with a Configuration (a workspace’s offer)', () => {
+  it('opens on Configuration, first of Configuration, Advanced, Builder, Code, with no Save', async () => {
+    const getPolicy = vi.fn().mockResolvedValue({ ...readerPolicy, revision: 4 });
+    let changed: () => void = () => undefined;
+    mounted = await mount(PolicyEditor, {
+      api: api({ getPolicy }),
+      policy: readerPolicy,
+      onSaved: vi.fn(),
+      onCancel: vi.fn(),
+      validationDelayMs: 0,
+      configuration: (onChanged: () => void) => {
+        changed = onChanged;
+        return createElement('p', { 'data-configuration': '' }, 'The switches');
+      },
+    });
+    await mounted.flush();
+    expect([...document.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).toEqual(['Configuration', 'Advanced', 'Builder', 'Code']);
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Configuration');
+    expect(document.querySelector('[data-configuration]')).not.toBeNull();
+    expect(button('Save changes')).toBeUndefined();
+    // A switch saved: the document is read again, and Configuration stays open.
+    changed();
+    await mounted.flush();
+    expect(getPolicy).toHaveBeenCalledWith(readerPolicy.id);
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Configuration');
+    await mounted.click(tab('Advanced'));
+    expect(document.querySelector('[data-configuration]')).toBeNull();
+    expect(button('Save changes')).toBeDefined();
+  });
+});
 
 describe('PolicyEditor autocomplete', () => {
   it('suggests actions from the catalogs while typing', async () => {
@@ -198,7 +230,7 @@ describe('PolicyEditor validation', () => {
 describe('PolicyEditor text view', () => {
   it('round-trips the document through the text view', async () => {
     await open({ policy: readerPolicy });
-    await mounted!.click(tab('YAML / JSON'));
+    await mounted!.click(tab('Code'));
     const text = (field('Policy document') as HTMLTextAreaElement).value;
     expect(JSON.parse(text)).toEqual(readerPolicy.document);
 
@@ -207,7 +239,7 @@ describe('PolicyEditor text view', () => {
       statements: [{ effect: 'Deny', actions: ['triple_store:DropGraph'], resources: ['*'] }],
     });
     await mounted!.type(field('Policy document'), edited);
-    await mounted!.click(tab('Statements'));
+    await mounted!.click(tab('Advanced'));
     await mounted!.flush();
 
     expect((field('Effect of statement 1') as HTMLSelectElement).value).toBe('Deny');
@@ -217,10 +249,10 @@ describe('PolicyEditor text view', () => {
   it('keeps a document IAM refuses in the text view, with its errors', async () => {
     const validatePolicy = vi.fn().mockResolvedValue({ valid: false, errors: ['not a policy'], document: null });
     await open({ api: api({ validatePolicy }), policy: readerPolicy });
-    await mounted!.click(tab('YAML / JSON'));
+    await mounted!.click(tab('Code'));
     await mounted!.type(field('Policy document'), '{ nope');
     await mounted!.flush();
-    await mounted!.click(tab('Statements'));
+    await mounted!.click(tab('Advanced'));
     await mounted!.flush();
 
     expect(field('Policy document')).not.toBeNull();
@@ -230,7 +262,7 @@ describe('PolicyEditor text view', () => {
 
   it('writes YAML on request', async () => {
     await open({ policy: readerPolicy });
-    await mounted!.click(tab('YAML / JSON'));
+    await mounted!.click(tab('Code'));
     (field('Text format') as HTMLSelectElement).value = 'yaml';
     field('Text format')?.dispatchEvent(new Event('change', { bubbles: true }));
     await mounted!.flush();
@@ -299,7 +331,7 @@ describe('PolicyEditor read-only', () => {
   });
 });
 
-describe('PolicyEditor Statements view listing', () => {
+describe('PolicyEditor Advanced view listing', () => {
   /** Graphs listed at ws-1; the caller may grant Query on every graph but `secret`. */
   const graphs: PublishersView = {
     scope: WS,

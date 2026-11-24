@@ -65,18 +65,28 @@ describe('Where a policy is attached', () => {
     const attachable = vi.fn().mockResolvedValue({ items: [{ id: 'pol_w', name: 'Writer', description: '', managed: false }] });
     const attach = vi.fn().mockResolvedValue(undefined);
     const client = api({ attachable, attach, listGroups: vi.fn().mockResolvedValue({ items: [] }) });
-    const directory = fakeDirectory([member({ userId: 'usr_carol', name: 'Carol' })]);
+    const directory = fakeDirectory([
+      member({ userId: 'usr_carol', name: 'Carol', email: 'carol@example.com' }),
+      member({ userId: 'usr_dan', name: 'Dan', email: 'dan@example.com' }),
+    ]);
     const can = (action: string) => action === 'iam:AttachPolicy';
     mounted = await mount(PolicyAttachments, { api: client, policyId: 'pol_w', here: WS, can, scope: wsScope, directory });
     await mounted.flush();
     await mounted.flush();
 
     expect(attachable).toHaveBeenCalledWith(WS);
-    expect([...document.querySelectorAll('datalist option')].map((o) => o.getAttribute('value'))).toEqual(['usr_carol']);
-    await mounted.type(field('Attach to'), 'usr_carol');
-    await mounted.click(button('Attach') ?? null);
+    await mounted.click(document.querySelector('[data-action="attach"]'));
+    const options = () => [...document.querySelectorAll('[data-attach-option]')].map((o) => o.getAttribute('data-attach-option'));
+    expect(options()).toEqual(['usr_carol', 'usr_dan']);
+    // Name and email shown, searched by either.
+    expect(document.querySelector('[data-attach-option="usr_carol"]')?.textContent).toContain('carol@example.com');
+    await mounted.type(field('Search whom to attach it to'), 'carol@');
+    expect(options()).toEqual(['usr_carol']);
+    await mounted.click(document.querySelector('[data-attach-option="usr_carol"] button'));
     await mounted.flush();
     expect(attach).toHaveBeenCalledWith({ policy_id: 'pol_w', principal_id: 'usr_carol', scope: WS });
+    expect(document.querySelector('[data-attach-dialog]')).toBeNull();
+    expect(document.querySelector('[data-attach-notice]')?.textContent).toContain('Attached to Carol');
   });
 
   it('offers no attach without iam:AttachPolicy, nor for a policy IAM does not let the caller attach here', async () => {
@@ -84,14 +94,14 @@ describe('Where a policy is attached', () => {
     const scoped = { scope: wsScope, directory: fakeDirectory() };
     mounted = await mount(PolicyAttachments, { api: api({ attachable }), policyId: 'pol_w', here: WS, can: () => false, ...scoped });
     await mounted.flush();
-    expect(field('Attach this policy')).toBeNull();
+    expect(document.querySelector('[data-action="attach"]')).toBeNull();
     expect(attachable).not.toHaveBeenCalled();
     await mounted.unmount();
     mounted = await mount(PolicyAttachments, { api: api({ attachable }), policyId: 'pol_w', here: WS, can: () => true, ...scoped });
     await mounted.flush();
     await mounted.flush();
     expect(attachable).toHaveBeenCalledWith(WS);
-    expect(field('Attach this policy')).toBeNull();
+    expect(document.querySelector('[data-action="attach"]')).toBeNull();
   });
 
   it('says so when IAM lets the caller list none of it', async () => {
