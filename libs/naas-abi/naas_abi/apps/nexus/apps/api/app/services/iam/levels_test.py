@@ -26,7 +26,11 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MembershipDenied,
     Seat,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_below, org_container
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    org_below,
+    org_container,
+    workspace_container,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import Offer
 from naas_abi.apps.nexus.apps.api.app.services.people.adapters.secondary.engine import (
@@ -325,6 +329,30 @@ async def test_the_member_lists_show_workspace_and_level(world):
     assert directory["member"].workspace_ids == ("ws-1",)
     assert directory["member"].level == "member"
     assert directory["oadmin"].role == "admin" and directory["oadmin"].org_wide
+
+
+@pytest.mark.asyncio
+async def test_the_member_list_of_one_scope_reads_that_scope_alone(world, monkeypatch):
+    """One workspace's members are read from its people, not from every person's
+    memberships across the deployment, and are what the full pass finds there: at
+    each workspace, at the organization and below it."""
+    await _team(world)
+    other = workspace_container("org-1", "ws-2")
+    for n in range(3):
+        world.user(f"other{n}")
+        await MEMBERSHIPS.grant(f"other{n}", "member" if n else "admin", other)
+    with as_service_account("api"):
+        full = MEMBERSHIPS.members_by_scope(world.iam)
+    read: list[str] = []
+    real = world.iam.list_memberships
+    monkeypatch.setattr(world.iam, "list_memberships", lambda p: read.append(p) or real(p))
+    for scope in (world.W, other, ORG, org_below("org-1")):
+        listed = await MEMBERSHIPS.members(scope)
+        assert [(m.user_id, m.role, m.level) for m in listed] == [
+            (m.user_id, m.role, m.level) for m in full.get(scope, [])
+        ], scope
+    assert {m.user_id for m in await MEMBERSHIPS.members(world.W)} == {"viewer", "member", "wadmin"}
+    assert not read
 
 
 @pytest.mark.asyncio

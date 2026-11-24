@@ -401,6 +401,7 @@ def test_an_org_admin_attaches_to_a_person_related_through_a_membership_group(wo
     they are related to the workspace and its organization, and an org admin
     attaches a policy to them."""
     member = _principal_id(world, "newcomer")
+    world.nexus.grouped_org("org-1")  # this IAM's, not a record an earlier test left
     record = world.nexus.grouped_workspace("org-1", "ws-grouped")
     with as_service_account("api"):
         world.nexus.iam.add_group_member(record.members_group_id, member)
@@ -421,6 +422,7 @@ def test_an_org_admin_attaches_to_a_person_related_through_a_membership_group(wo
 def test_an_org_admin_does_not_attach_to_a_member_of_another_organization(world):
     """A membership group of another organization relates a person to that one only."""
     member = _principal_id(world, "away")
+    world.nexus.grouped_org("org-2")
     record = world.nexus.grouped_workspace("org-2", "ws-away")
     with as_service_account("api"):
         world.nexus.iam.add_group_member(record.members_group_id, member)

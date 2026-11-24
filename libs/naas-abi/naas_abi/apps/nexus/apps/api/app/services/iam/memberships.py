@@ -394,6 +394,27 @@ class _Reading:
                     found.append((member, container))
         return found
 
+    def reached_at(
+        self, group_id: str, scope: str, at: str, members_at: Callable[[], set[str]]
+    ) -> list[str]:
+        """The members a group's attachment at ``scope`` reaches at the container
+        ``at`` alone: ``reached_through`` narrowed to ``at``, reading only what can
+        land there. Each member when ``scope`` is ``at``; at ``${my workspaces}``,
+        those of them who are members of ``at`` (``members_at``), when ``at`` is
+        within the group's owner. Nothing for another scope, without a read."""
+        membership = is_membership_scope(scope)
+        if not membership and scope != at:
+            return []
+        group = self.group(group_id)
+        if group is None or group.status == "deleted":
+            return []
+        if not membership:
+            return list(self.members(group_id))
+        if not within_owner(group.owner_scope, at):
+            return []
+        wanted = members_at()
+        return [member for member in self.members(group_id) if member in wanted]
+
     def roles_of(self, principal_id: str) -> dict[str, list[str]]:
         """``{scope: [role]}`` the principal holds: its own role attachments and
         those of its groups (``reached_through``)."""
@@ -630,6 +651,18 @@ class Memberships:
             if at is not None:
                 since[key] = min(at, since.get(key, at))
 
+        # One scope asked: a group's attachment is read only where it can land
+        # there (``reached_at``), and who is a member of ``scope`` is one read of
+        # its membership groups, not one per person of every group.
+        container_members: set[str] | None = None
+
+        def members_at_scope() -> set[str]:
+            nonlocal container_members
+            if container_members is None:
+                with as_service_account("api"):
+                    container_members = set(iam.list_container_members(scope))
+            return container_members
+
         for role, policy in _POLICY_OF.items():
             for attachment in iam.list_attachments(policy_id=policy):
                 if attachment.scope is None:
@@ -637,6 +670,12 @@ class Memberships:
                 if not attachment.principal_id.startswith("grp_"):
                     if not is_membership_scope(attachment.scope):
                         add(attachment.scope, attachment.principal_id, role, attachment.created_at)
+                    continue
+                if scope is not None:
+                    for member in reading.reached_at(
+                        attachment.principal_id, attachment.scope, scope, members_at_scope
+                    ):
+                        add(scope, member, role, None)
                     continue
                 for member, where in reading.reached_through(
                     attachment.principal_id, attachment.scope
