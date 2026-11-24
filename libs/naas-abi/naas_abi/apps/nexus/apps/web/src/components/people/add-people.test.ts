@@ -211,4 +211,16 @@ describe('Add people', () => {
     await key('Enter');
     expect(navigate).toHaveBeenCalledWith('/workspace/ws-1/settings/users/new?email=zoe%40other.org');
   });
+
+  it('offers a Create user button when nobody matches, opening the create page prefilled', async () => {
+    const { navigate } = await render();
+    await typeAndSettle('Florent');
+    expect(mounted!.host.querySelector('[data-action="create"]')).toBeNull();
+    await typeAndSettle('zoe@other.org');
+    const create = mounted!.host.querySelector<HTMLButtonElement>('[data-action="create"]');
+    expect(create?.textContent).toContain('Create user');
+    expect(mounted!.host.querySelector('[data-add-people-create]')?.textContent).toContain('zoe@other.org');
+    await mounted!.click(create);
+    expect(navigate).toHaveBeenCalledWith('/workspace/ws-1/settings/users/new?email=zoe%40other.org');
+  });
 });

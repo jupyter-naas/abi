@@ -62,7 +62,8 @@ const NO_MEMBERS: ReadonlySet<string> = new Set();
  * It asks from two characters on, once the typing stops; a suggestion shows avatar, name and
  * email. Picking one asks for their level (in all their workspaces), whether they administer
  * this workspace and the capability groups they are put in, then adds them at once. With no
- * match, "Create user '<text>'" opens the create page prefilled. The listbox follows the
+ * match (or an email no suggestion has), "Create user '<text>'" in the list, or the Create user
+ * button under the box, opens the create page prefilled. The listbox follows the
  * WAI-ARIA combobox pattern: arrows, Home and End move, Enter picks, Escape closes.
  */
 export function AddPeople({
@@ -73,6 +74,7 @@ export function AddPeople({
   api,
   loadCapabilities,
   searchDelayMs = CANDIDATE_DELAY_MS,
+  autoFocus = false,
 }: {
   workspaceId: string;
   /** Members already here: never suggested, even when the API still lists them. */
@@ -84,6 +86,8 @@ export function AddPeople({
   api?: Pick<PeopleApi, 'candidates' | 'addMember'>;
   loadCapabilities?: (at: CapabilityGroupsAt) => Promise<CapabilityGroup[]>;
   searchDelayMs?: number;
+  /** Focus the box on mount (the Add people dialog). */
+  autoFocus?: boolean;
 }) {
   const client = useMemo(() => api ?? createPeopleApi(), [api]);
   const id = useId();
@@ -135,6 +139,8 @@ export function AddPeople({
 
   const listing = addPeopleListing(text, found, memberIds);
   const options = listing.options;
+  const createOption = listing.ready && !picked ? options.find((o) => o.kind === 'create') : undefined;
+  const matched = options.some((o) => o.kind === 'candidate');
   const expanded = open && query !== null && !picked;
   const activeIndex = active < options.length ? active : -1;
 
@@ -238,6 +244,7 @@ export function AddPeople({
           aria-controls={expanded ? listId : undefined}
           aria-activedescendant={expanded && activeIndex >= 0 ? optionId(activeIndex) : undefined}
           autoComplete="off"
+          autoFocus={autoFocus}
           value={text}
           disabled={!!picked}
           onChange={(event) => {
@@ -319,9 +326,29 @@ export function AddPeople({
           {searchError}
         </SettingsNotice>
       )}
+      {createOption?.kind === 'create' && (
+        <div
+          className="flex items-center justify-between gap-3 border border-dashed border-border px-3 py-2 text-sm"
+          data-add-people-create
+        >
+          <span className="min-w-0 truncate text-muted-foreground">
+            {matched
+              ? `'${createOption.text}' is not in this organization yet.`
+              : `No one in this organization matches '${createOption.text}'.`}
+          </span>
+          <Button
+            size="sm"
+            onClick={() => navigate(createUserHref(workspaceId, createOption.text))}
+            data-action="create"
+          >
+            <UserPlus size={14} />
+            Create user
+          </Button>
+        </div>
+      )}
       <p className="text-xs text-muted-foreground">
-        Suggests people of this workspace&apos;s organization who are not members here yet. Someone
-        else is added with Create user and their exact email.
+        Suggests people of this workspace&apos;s organization who are not members here yet. For
+        someone else, type their email, then Create user.
       </p>
 
       {picked && (

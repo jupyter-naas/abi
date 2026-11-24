@@ -12,13 +12,12 @@ import { Select } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
-import { AddPeople } from '@/components/people/add-people';
+import { AddPeopleDialog } from '@/components/people/add-people-dialog';
 import { InvitedBadge, ResendButton } from '@/components/people/member-status';
 import {
   addedNotice,
   candidateLabel,
   createPeopleApi,
-  createUserHref,
   LEVELS,
   LEVEL_EVERYWHERE_NOTE,
   LEVEL_LABELS,
@@ -83,6 +82,7 @@ function Members() {
   // Back from the create page: who was added (worded here, never taken from the URL as is).
   const [inviteNotice, setInviteNotice] = useState(() => addedNotice(search) ?? '');
   const [actionError, setActionError] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
   // Said once: a reload does not say it again.
   useEffect(() => {
     if (search.get('added')) router.replace(`/workspace/${workspaceId}/settings/users`);
@@ -193,12 +193,13 @@ function Members() {
         description="Manage who has access to this workspace"
         actions={
           <Button
-            onClick={() => router.push(createUserHref(workspaceId, ''))}
+            onClick={() => setAddOpen(true)}
             disabled={!canManage}
             title={canManage ? undefined : 'Only workspace owners and admins can add members'}
+            data-action="add-people"
           >
             <Plus size={16} />
-            Create user
+            Add people
           </Button>
         }
       />
@@ -216,27 +217,24 @@ function Members() {
       )}
 
       {canManage && (
-        <SettingsSection
-          title="Add people"
-          description="Search this workspace's organization by name or email. Picking someone adds them at once, at the level you choose, admin or not; with no match, create them."
-        >
-          <AddPeople
-            workspaceId={workspaceId}
-            memberIds={memberIds}
-            navigate={(href) => router.push(href)}
-            onAdded={async (candidate, emailSent) => {
-              setActionError('');
-              setInviteNotice(
-                `${candidateLabel(candidate)} was added to this workspace.${
-                  emailSent ? ' They were emailed that they have access.' : ''
-                }`
-              );
-              await refreshMembers().catch((error: unknown) =>
-                setActionError(error instanceof Error ? error.message : 'Failed to load members')
-              );
-            }}
-          />
-        </SettingsSection>
+        <AddPeopleDialog
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          workspaceId={workspaceId}
+          memberIds={memberIds}
+          navigate={(href) => router.push(href)}
+          onAdded={async (candidate, emailSent) => {
+            setActionError('');
+            setInviteNotice(
+              `${candidateLabel(candidate)} was added to this workspace.${
+                emailSent ? ' They were emailed that they have access.' : ''
+              }`
+            );
+            await refreshMembers().catch((error: unknown) =>
+              setActionError(error instanceof Error ? error.message : 'Failed to load members')
+            );
+          }}
+        />
       )}
 
       {loading ? (
