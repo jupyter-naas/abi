@@ -3,10 +3,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Search, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input, Select } from '@/components/ui/input';
+import { Input } from '@/components/ui/input';
 import { SettingsNotice } from '@/components/settings/settings-ui';
-import { Checkbox } from '@/components/ui/checkbox';
-import { CapabilityGroupPicker, type CapabilityGroupsAt } from '@/components/invitations/invite-policy-picker';
 import { getApiUrl } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import {
@@ -16,22 +14,16 @@ import {
   candidateQuery,
   createPeopleApi,
   createUserHref,
-  LEVEL_EVERYWHERE_NOTE,
-  type CapabilityGroup,
   type MemberCandidate,
   type PeopleApi,
 } from '@/lib/people';
 import { InvitedBadge } from './member-status';
 import {
-  KEEP_LEVEL,
   addPeopleListing,
-  levelChoices,
   moveActive,
   optionText,
-  pickedAccess,
   type AddPeopleOption,
   type FoundPeople,
-  type LevelChoice,
 } from './add-people-model';
 
 function avatarUrl(avatar: string | null | undefined): string {
@@ -60,8 +52,8 @@ const NO_MEMBERS: ReadonlySet<string> = new Set();
 /**
  * Add people (Workspace settings › Members): a search box over the workspace's organization.
  * It asks from two characters on, once the typing stops; a suggestion shows avatar, name and
- * email. Picking one asks for their level (in all their workspaces), whether they administer
- * this workspace and the capability groups they are put in, then adds them at once. With no
+ * email. Picking one adds them to the workspace at once: they keep their level (Member when
+ * they have none), and their roles are changed on their page (Edit). With no
  * match (or an email no suggestion has), "Create user '<text>'" in the list, or the Create user
  * button under the box, opens the create page prefilled. The listbox follows the
  * WAI-ARIA combobox pattern: arrows, Home and End move, Enter picks, Escape closes.
@@ -72,7 +64,6 @@ export function AddPeople({
   onAdded,
   navigate,
   api,
-  loadCapabilities,
   searchDelayMs = CANDIDATE_DELAY_MS,
   autoFocus = false,
 }: {
@@ -84,7 +75,6 @@ export function AddPeople({
   navigate: (href: string) => void;
   /** Tests pass fakes. */
   api?: Pick<PeopleApi, 'candidates' | 'addMember'>;
-  loadCapabilities?: (at: CapabilityGroupsAt) => Promise<CapabilityGroup[]>;
   searchDelayMs?: number;
   /** Focus the box on mount (the Add people dialog). */
   autoFocus?: boolean;
@@ -101,12 +91,7 @@ export function AddPeople({
   const [searchError, setSearchError] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
-  const [picked, setPicked] = useState<MemberCandidate | null>(null);
-  const [level, setLevel] = useState<LevelChoice>(KEEP_LEVEL);
-  const [admin, setAdmin] = useState(false);
-  const [capabilities, setCapabilities] = useState<string[]>([]);
-  const capabilitiesAt = useMemo<CapabilityGroupsAt>(() => ({ workspaceId }), [workspaceId]);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState<MemberCandidate | null>(null);
   const [addError, setAddError] = useState('');
 
   const query = candidateQuery(text);
@@ -139,9 +124,9 @@ export function AddPeople({
 
   const listing = addPeopleListing(text, found, memberIds);
   const options = listing.options;
-  const createOption = listing.ready && !picked ? options.find((o) => o.kind === 'create') : undefined;
+  const createOption = listing.ready && !adding ? options.find((o) => o.kind === 'create') : undefined;
   const matched = options.some((o) => o.kind === 'candidate');
-  const expanded = open && query !== null && !picked;
+  const expanded = open && query !== null && !adding;
   const activeIndex = active < options.length ? active : -1;
 
   const choose = (option: AddPeopleOption) => {
@@ -151,49 +136,36 @@ export function AddPeople({
       navigate(createUserHref(workspaceId, option.text));
       return;
     }
-    setPicked(option.candidate);
-    setLevel(KEEP_LEVEL);
-    setAdmin(false);
-    setCapabilities([]);
-    setAddError('');
+    void add(option.candidate);
   };
 
-  const reset = () => {
-    setPicked(null);
-    setText('');
-    setCapabilities([]);
-    setLevel(KEEP_LEVEL);
-    setAdmin(false);
-    setAddError('');
-    setFound({ text: '', items: [] });
-    refocus.current = true;
-  };
-
-  // Back in the box once the pick is done (it is disabled while a pick is open).
+  // Back in the box once an add is done (it is disabled meanwhile).
   useEffect(() => {
-    if (!picked && refocus.current) {
+    if (!adding && refocus.current) {
       refocus.current = false;
       inputRef.current?.focus();
     }
-  }, [picked]);
+  }, [adding]);
 
-  const add = async () => {
-    if (!picked) return;
-    const chosen = pickedAccess(level, admin, capabilities);
-    if (!chosen.ok) {
-      setAddError(chosen.error);
-      return;
-    }
-    setAdding(true);
+  /** Into the workspace at once: their level kept (Member when they have none), no admin, no group. */
+  const add = async (candidate: MemberCandidate) => {
+    setAdding(candidate);
     setAddError('');
     try {
-      const { emailSent } = await client.addMember(workspaceId, { userId: picked.user_id, ...chosen.access });
-      await onAdded(picked, emailSent);
-      reset();
+      const { emailSent } = await client.addMember(workspaceId, {
+        userId: candidate.user_id,
+        level: null,
+        admin: false,
+        capabilities: [],
+      });
+      await onAdded(candidate, emailSent);
+      setText('');
+      setFound({ text: '', items: [] });
     } catch (error) {
       setAddError(error instanceof Error ? error.message : 'Failed to add the member');
     } finally {
-      setAdding(false);
+      refocus.current = true;
+      setAdding(null);
     }
   };
 
@@ -246,7 +218,7 @@ export function AddPeople({
           autoComplete="off"
           autoFocus={autoFocus}
           value={text}
-          disabled={!!picked}
+          disabled={!!adding}
           onChange={(event) => {
             setText(event.target.value);
             setOpen(true);
@@ -351,64 +323,15 @@ export function AddPeople({
         someone else, type their email, then Create user.
       </p>
 
-      {picked && (
-        <div className="space-y-3 border border-border bg-card p-3" data-add-people-pick>
-          {addError && (
-            <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
-              {addError}
-            </SettingsNotice>
-          )}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <Avatar name={candidateLabel(picked)} avatar={picked.avatar} />
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 truncate text-sm font-medium">
-                  {candidateLabel(picked)}
-                  <InvitedBadge status={picked.status} />
-                </p>
-                <p className="truncate text-xs text-muted-foreground">{picked.email}</p>
-              </div>
-            </div>
-            <Select
-              value={level}
-              onChange={(event) => setLevel(event.target.value as LevelChoice)}
-              className="sm:w-64"
-              aria-label="Level"
-              data-field="level"
-            >
-              {levelChoices().map((choice) => (
-                <option key={choice.value || 'keep'} value={choice.value}>
-                  {choice.label}
-                </option>
-              ))}
-            </Select>
-            <span data-field="admin">
-              <Checkbox label="Workspace admin" checked={admin} onCheckedChange={setAdmin} disabled={adding} />
-            </span>
-            <div className="flex gap-2">
-              <Button onClick={() => void add()} disabled={adding} data-action="add">
-                {adding ? 'Adding…' : 'Add'}
-              </Button>
-              <Button variant="secondary" onClick={reset} disabled={adding}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground" data-level-note>
-            {LEVEL_EVERYWHERE_NOTE}
-          </p>
-          <CapabilityGroupPicker
-            className="max-w-xl"
-            at={capabilitiesAt}
-            value={capabilities}
-            onChange={setCapabilities}
-            disabled={adding}
-            {...(loadCapabilities ? { load: loadCapabilities } : {})}
-          />
-          <p className="text-xs text-muted-foreground">
-            Added at once, and emailed that they have access.
-          </p>
-        </div>
+      {adding && (
+        <p className="text-xs text-muted-foreground" role="status" data-adding>
+          Adding {candidateLabel(adding)}…
+        </p>
+      )}
+      {addError && (
+        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+          {addError}
+        </SettingsNotice>
       )}
     </div>
   );

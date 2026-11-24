@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
 import { Select } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
 import { AddPeopleDialog } from '@/components/people/add-people-dialog';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
@@ -46,7 +45,6 @@ import {
   SettingsLoading,
   SettingsNotice,
   SettingsPageHeader,
-  SettingsSection,
   SettingsTableToolbar,
   countLabel,
 } from '@/components/settings/settings-ui';
@@ -487,33 +485,6 @@ function Members() {
       {/* Invitations made before people were created at once: listed until they are migrated. */}
       <PendingInvitations scope="workspaces" id={workspaceId} canManage={canManage} />
 
-      <IdpGroupBindings scope="workspaces" id={workspaceId} canManage={canManage} />
-
-      <SettingsSection title="Levels">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div>
-            <p className="text-sm font-medium">Member</p>
-            <p className="text-xs text-muted-foreground">
-              Uses the workspace&apos;s agents and apps, chat, files, datasets, graph, maps, ontology and search
-            </p>
-          </div>
-          <div>
-            <p className="text-sm font-medium">Viewer</p>
-            <p className="text-xs text-muted-foreground">Opens the workspace&apos;s apps and datasets, read-only</p>
-          </div>
-          <div>
-            <p className="text-sm font-medium">Workspace admin</p>
-            <p className="text-xs text-muted-foreground">
-              A Member who also manages this workspace: its settings, people, workflows and maps
-            </p>
-          </div>
-        </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          {LEVEL_EVERYWHERE_NOTE} Organization admins reach every workspace of the organization without being
-          added here. Capability groups (Workflow runners, Models · all, a seat) add one thing to a level: pick them
-          when adding someone.
-        </p>
-      </SettingsSection>
       {confirmDialog}
     </div>
   );

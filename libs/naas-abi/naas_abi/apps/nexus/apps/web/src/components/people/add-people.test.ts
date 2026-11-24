@@ -47,9 +47,6 @@ async function render(props: Partial<Parameters<typeof AddPeople>[0]> = {}) {
   const onAdded = vi.fn();
   mounted = await mount(AddPeople, {
     workspaceId: 'ws-1',
-    loadCapabilities: async () => [
-      { id: 'grp_runners', name: 'Workflow runners', description: null, owner_scope: 'abi:nexus:organization/acme', scope: 'organization' },
-    ],
     navigate,
     onAdded,
     api,
@@ -123,7 +120,7 @@ describe('Add people', () => {
   });
 
   it('moves with the arrows and picks with Enter', async () => {
-    await render();
+    const { api } = await render();
     await typeAndSettle('Flo');
     await key('ArrowDown');
     expect(options()[0].getAttribute('aria-selected')).toBe('true');
@@ -134,7 +131,8 @@ describe('Add people', () => {
     await key('ArrowUp');
     expect(options()[1].getAttribute('aria-selected')).toBe('true');
     await key('Enter');
-    expect(mounted!.host.querySelector('[data-add-people-pick]')?.textContent).toContain('florent.frvservices@gmail.com');
+    await mounted!.flush();
+    expect(api.addMember).toHaveBeenCalledWith('ws-1', expect.objectContaining({ userId: 'usr_flo2' }));
   });
 
   it('closes the list with Escape', async () => {
@@ -146,50 +144,16 @@ describe('Add people', () => {
     expect(options()).toEqual([]);
   });
 
-  it('adds the person picked with the level, the admin toggle and the groups chosen, then says so', async () => {
+  it('adds the person picked to the workspace at once, keeping their level, then says so', async () => {
     const { api, onAdded } = await render();
     await typeAndSettle('Flo');
     await mounted!.click(options()[0]);
-    const level = mounted!.host.querySelector<HTMLSelectElement>('[data-field="level"]')!;
-    expect([...level.options].map((o) => o.value)).toEqual(['', 'member', 'viewer']);
-    expect(mounted!.host.querySelector('[data-level-note]')?.textContent).toMatch(/all of this person.s workspaces/);
-    expect(mounted!.host.textContent).not.toMatch(/owner/i);
-    await mounted!.select(level, 'member');
-    await mounted!.click(mounted!.host.querySelector('[data-field="admin"] input[type="checkbox"]'));
-    await mounted!.click(mounted!.host.querySelector('[data-capability="grp_runners"]'));
-    await mounted!.click(mounted!.host.querySelector('[data-action="add"]'));
-    await mounted!.flush();
-    expect(api.addMember).toHaveBeenCalledWith('ws-1', {
-      userId: 'usr_flo',
-      level: 'member',
-      admin: true,
-      capabilities: ['grp_runners'],
-    });
-    expect(onAdded).toHaveBeenCalledWith(FLO, true);
-    expect(input().value).toBe('');
-    expect(mounted!.host.querySelector('[data-add-people-pick]')).toBeNull();
-    expect(document.activeElement).toBe(input());
-  });
-
-  it('keeps their level unless one is picked', async () => {
-    const { api } = await render();
-    await typeAndSettle('Flo');
-    await mounted!.click(options()[0]);
-    await mounted!.click(mounted!.host.querySelector('[data-action="add"]'));
     await mounted!.flush();
     expect(api.addMember).toHaveBeenCalledWith('ws-1', { userId: 'usr_flo', level: null, admin: false, capabilities: [] });
-  });
-
-  it('refuses a Viewer who administers the workspace, before asking', async () => {
-    const { api } = await render();
-    await typeAndSettle('Flo');
-    await mounted!.click(options()[0]);
-    await mounted!.select(mounted!.host.querySelector('[data-field="level"]'), 'viewer');
-    await mounted!.click(mounted!.host.querySelector('[data-field="admin"] input[type="checkbox"]'));
-    await mounted!.click(mounted!.host.querySelector('[data-action="add"]'));
-    await mounted!.flush();
-    expect(api.addMember).not.toHaveBeenCalled();
-    expect(mounted!.host.textContent).toContain('A workspace admin is a Member');
+    expect(onAdded).toHaveBeenCalledWith(FLO, true);
+    expect(input().value).toBe('');
+    expect(mounted!.host.querySelector('[data-field="level"]')).toBeNull();
+    expect(document.activeElement).toBe(input());
   });
 
   it('shows what the API refused', async () => {
@@ -198,7 +162,6 @@ describe('Add people', () => {
     await render({ api });
     await typeAndSettle('Flo');
     await mounted!.click(options()[0]);
-    await mounted!.click(mounted!.host.querySelector('[data-action="add"]'));
     await mounted!.flush();
     expect(mounted!.host.textContent).toContain('Already a member of this workspace');
   });

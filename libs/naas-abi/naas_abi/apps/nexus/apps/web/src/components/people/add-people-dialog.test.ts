@@ -41,7 +41,6 @@ async function render(open = true) {
     navigate: vi.fn(),
     workspaceId: 'ws-1',
     api,
-    loadCapabilities: async () => [],
     searchDelayMs: 0,
   };
   mounted = await mount(AddPeopleDialog, props);
@@ -72,7 +71,6 @@ describe('Add people dialog', () => {
     const option = dialog()!.querySelector('[role="option"]');
     expect(option?.textContent).toContain('Florent');
     await mounted!.click(option);
-    await mounted!.click(dialog()!.querySelector('[data-action="add"]'));
     await mounted!.flush();
     expect(api.addMember).toHaveBeenCalledWith('ws-1', expect.objectContaining({ userId: 'usr_flo' }));
     expect(onAdded).toHaveBeenCalledWith(FLO, true);
