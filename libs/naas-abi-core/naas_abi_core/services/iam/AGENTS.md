@@ -1622,11 +1622,26 @@ On every resource:
   caller's ids, so a Deny on `…/${principal.id}/*` refuses a grant of the caller's own literal
   id. A Deny statement of the grant never needs cover: it only narrows.
 - **A Deny of a sub-policy's chain takes from its grant.** What a Deny of a policy of the
-  chain refuses the action on (in held form at the scope checked), the sub-policy never
-  grants: it needs no cover, and no Deny of the caller refuses it. A workspace's people
-  policy is given on by one of its people, whom the workspace's own Deny binds too
-  (`grants._chain_denies`). For an action kept as a pattern (a service with no catalog), a
-  Deny counts only when its actions are shown to take every action the pattern names.
+  chain refuses the action on, the sub-policy never grants: it needs no cover, and no Deny
+  of the caller refuses it. A workspace's people policy is given on by one of its people,
+  whom the workspace's own Deny binds too (`grants._chain_denies`).
+  - What is taken may say less than the evaluator refuses, never more: the Deny's exact
+    held forms at the scope checked (`over=False`), not the wider ones a Deny of the caller
+    is read in. Below a container C, a Deny on `${scope}` takes C alone, not `C/*`; one on
+    `${scope}/x*` takes `C/x*`, not `C/*x*`.
+  - For an action kept as a pattern (a service with no catalog), a Deny counts only when
+    its actions are shown to take every action the pattern names.
+  - A Deny of the caller is first searched against the grant alone (the pruned overlap);
+    only one that meets it is searched again, against the chain's Denies.
+  - Still refused, as before: a chain Deny naming `${principal.id}` or `${user.id}` (taken
+    as a mark, while the caller's own copy of it is bound to their literal ids), and one on
+    a bus topic (the caller's Deny also holds the topic's `.*` sub-topics and its spellings
+    as written, which the chain's exact forms do not).
+  - Freshness: the check reads the chain from the store, decisions read it from the policy
+    cache. A process that still caches a parent from before a Deny was added lets the
+    sub-policy through for that name until it sees the store's revision move: at most
+    `revision_check_seconds` (2) after the write, sooner on the change event ("Freshness").
+    The same bound already held for a parent's Allows, which bound the grant the same way.
 - **What a sub-policy of the caller holds** is its Allows within its chain's, shown without
   a search (`grants.within_chain`): pairs of action and resource patterns, each a pattern
   of the sub-policy that a pattern of a policy of the chain embeds, or the other way round,

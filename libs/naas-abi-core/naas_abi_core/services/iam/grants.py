@@ -1163,10 +1163,12 @@ def _chain_denies(
     parents: Sequence[Sequence[Statement]], action: str, scope: str | None
 ) -> tuple[str, ...]:
     """The patterns, in held form at ``scope``, a Deny of a policy of a chain
-    refuses ``action`` on: the sub-policy never grants them. ``action`` may be
-    a pattern (``Holdings._actions``): then a Deny counts only when its actions
-    are shown to take every action the pattern names, so it may say less than
-    the chain refuses, never more."""
+    refuses ``action`` on: the sub-policy never grants them. They are taken out
+    of the grant, so they may say less than the evaluator refuses, never more:
+    the exact forms (``over=False``), not the wider ones a Deny of the giver is
+    read in. ``action`` may be a pattern (``Holdings._actions``): then a Deny
+    counts only when its actions are shown to take every action the pattern
+    names."""
     found: dict[str, None] = {}
     for level in parents:
         for statement in level:
@@ -1176,7 +1178,7 @@ def _chain_denies(
                 continue
             for r in statement.resources:
                 found.update(
-                    dict.fromkeys(held_forms(r, scope, variables=True, over=True))
+                    dict.fromkeys(held_forms(r, scope, variables=True, over=False))
                 )
     return tuple(found)
 
@@ -1201,10 +1203,11 @@ def _given(
 ) -> bool:
     """Whether a grant of ``grant`` within ``bounds`` may give a name ``denied``
     matches, one no pattern of ``taken`` (a Deny of the chain) refuses. True
-    when that is not disproven."""
-    if not taken:
-        return overlaps(grant, (denied,), within, bounds)
-    return not covered(grant, taken, within, (*bounds, (denied,)))
+    when that is not disproven. The pruned overlap search first: the costlier
+    one runs only for a Deny that meets the grant."""
+    if not overlaps(grant, (denied,), within, bounds):
+        return False
+    return not taken or not covered(grant, taken, within, (*bounds, (denied,)))
 
 
 def _within_parents(
