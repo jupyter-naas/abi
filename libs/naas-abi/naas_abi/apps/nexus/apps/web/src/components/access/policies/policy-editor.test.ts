@@ -43,19 +43,17 @@ const tab = (label: string) => [...document.querySelectorAll('[role="tab"]')].fi
 /** The editor, in the Advanced view unless ``builder``: a new policy opens in the builder. */
 async function open(props: Partial<Parameters<typeof PolicyEditor>[0]> = {}, { builder = false } = {}) {
   const onSaved = vi.fn();
-  const onCancel = vi.fn();
   mounted = await mount(PolicyEditor, {
     api: api(),
     policy: null,
     onSaved,
-    onCancel,
     validationDelayMs: 0,
     ...props,
   });
   await mounted.flush();
   const statements = tab('Advanced');
   if (!builder && statements?.getAttribute('aria-selected') === 'false') await mounted.click(statements);
-  return { onSaved, onCancel };
+  return { onSaved };
 }
 
 describe('PolicyEditor with a Configuration (a workspace’s offer)', () => {
@@ -66,7 +64,6 @@ describe('PolicyEditor with a Configuration (a workspace’s offer)', () => {
       api: api({ getPolicy }),
       policy: readerPolicy,
       onSaved: vi.fn(),
-      onCancel: vi.fn(),
       validationDelayMs: 0,
       configuration: (onChanged: () => void) => {
         changed = onChanged;
@@ -86,6 +83,23 @@ describe('PolicyEditor with a Configuration (a workspace’s offer)', () => {
     await mounted.click(tab('Advanced'));
     expect(document.querySelector('[data-configuration]')).toBeNull();
     expect(button('Save changes')).toBeDefined();
+  });
+});
+
+describe('PolicyEditor Discard changes', () => {
+  it('shows once the policy is edited, and reads it again; no Cancel at the bottom', async () => {
+    const getPolicy = vi.fn().mockResolvedValue(readerPolicy);
+    await open({ api: api({ getPolicy }), policy: readerPolicy });
+    const discard = () => document.querySelector('[data-action="discard"]');
+    expect(discard()).toBeNull();
+    expect(button('Cancel')).toBeUndefined();
+    await mounted!.type(field('Policy name'), 'Renamed here');
+    expect(discard()).not.toBeNull();
+    await mounted!.click(discard());
+    await mounted!.flush();
+    expect(getPolicy).toHaveBeenCalledWith(readerPolicy.id);
+    expect((field('Policy name') as HTMLInputElement).value).toBe(readerPolicy.name);
+    expect(discard()).toBeNull();
   });
 });
 

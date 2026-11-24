@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
 import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { PolicyRef, PolicySource, PolicyStatement, PolicyView, Publisher } from '@/lib/iam-admin/types';
 import { PLATFORM, PLATFORM_ACCESS_SCOPE, ownerOf, type AccessScope } from '../access-scope';
@@ -28,6 +28,7 @@ import {
 } from './policy-editor-model';
 import type { AccessDirectory } from '../access-directory';
 import type { AccessNavigation } from '../access-props';
+import { AccessHeaderAction } from '../access-list';
 import { PolicyAttachments } from './policy-attachments';
 import { ownedBy, ownerLabel, type PolicyOwner } from './policy-owners';
 import { PolicyText } from './policy-text';
@@ -78,7 +79,6 @@ export function PolicyEditor({
   parents = [],
   readOnly = false,
   onSaved,
-  onCancel,
   onOpen,
   owner: ownerInfo = null,
   ownerLink = null,
@@ -99,7 +99,6 @@ export function PolicyEditor({
   parents?: PolicyView[];
   readOnly?: boolean;
   onSaved: (policy: PolicyView) => void;
-  onCancel: () => void;
   /** Opens another policy (a parent or a sub-policy) by its id. */
   onOpen?: (id: string) => void;
   /** Who owns the policy, as the list names it. */
@@ -131,6 +130,10 @@ export function PolicyEditor({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<SaveError | null>(null);
   const [revision, setRevision] = useState(policy?.revision ?? 0);
+  // What was read (or last read again): an edit is told from it, and Discard goes back to it.
+  const [base, setBase] = useState(() => baseOf(policy));
+  // The text as the Code view opened it: an edit there is one too.
+  const [textOpened, setTextOpened] = useState('');
   // The parent stays as it is on save (the update leaves it out); a reload shows the newer one.
   const [parent, setParent] = useState(() => parentOf(policy));
   const [subPolicies, setSubPolicies] = useState<PolicyRef[]>(policy?.sub_policies ?? []);
@@ -266,6 +269,7 @@ export function PolicyEditor({
 
   const showText = () => {
     setText(toText(doc, format));
+    setTextOpened(toText(doc, format));
     setSwitchError(null);
     setPicked(true);
     setMode('text');
@@ -347,6 +351,9 @@ export function PolicyEditor({
       setVersion(fresh.document.version);
       setStatements(fromDocument(fresh.document));
       setRevision(fresh.revision);
+      setBase(baseOf(fresh));
+      setText('');
+      setTextOpened('');
       setParent(parentOf(fresh));
       setSubPolicies(fresh.sub_policies ?? []);
       if (builder) intoBuilder(fresh.document.statements, builder);
@@ -357,6 +364,15 @@ export function PolicyEditor({
       setSaveError({ message: message(error), errors: [], conflict: false, refused: [] });
     }
   };
+
+  // An existing policy changed here and not saved yet: Discard reads it again.
+  const dirty =
+    !!policy &&
+    !readOnly &&
+    (name !== base.name ||
+      description !== base.description ||
+      JSON.stringify(doc) !== base.doc ||
+      (mode === 'text' && text !== textOpened));
 
   const errors = verdict && !verdict.valid ? verdict.errors : [];
   const refused = Object.fromEntries((saveError?.refused ?? []).map((key) => [key, saveError!.message]));
@@ -521,6 +537,23 @@ export function PolicyEditor({
         </p>
       )}
 
+      {dirty && (
+        <AccessHeaderAction>
+          {/* Left of "+ Attach" in the page header (whichever was shown first). */}
+          <button
+            type="button"
+            className="org-settings-users-secondary-button"
+            style={{ order: 1 }}
+            data-action="discard"
+            disabled={saving}
+            onClick={() => void reload()}
+          >
+            <RotateCcw size={16} />
+            Discard changes
+          </button>
+        </AccessHeaderAction>
+      )}
+
       <div className="access-policy-modes" role="tablist" aria-label="Editor view">
         {configuration &&
           tab('configuration', 'Configuration', () => {
@@ -628,11 +661,18 @@ export function PolicyEditor({
             {saving ? 'Saving…' : policy ? 'Save changes' : 'Create policy'}
           </button>
         )}
-        <button type="button" className="access-policy-button" onClick={onCancel}>
-          {readOnly ? 'Close' : 'Cancel'}
-        </button>
       </footer>
     </section>
   );
 }
 
+/** What an existing policy is as read: its name, description and document (as the editor
+ *  writes it), so that an edit is told from it. */
+function baseOf(policy: PolicyView | null): { name: string; description: string; doc: string } {
+  if (!policy) return { name: '', description: '', doc: '' };
+  return {
+    name: policy.name,
+    description: policy.description,
+    doc: JSON.stringify(toDocument(fromDocument(policy.document), policy.document.version)),
+  };
+}

@@ -299,7 +299,6 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
               select({ kind: 'policy', policy: saved });
               void load();
             }}
-            onCancel={() => select(null)}
             onOpen={(id) => void openPolicy(id)}
             can={can}
             open={open}

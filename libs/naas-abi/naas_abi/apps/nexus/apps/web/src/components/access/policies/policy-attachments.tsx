@@ -260,6 +260,8 @@ function AttachToPrincipal({
         <button
           type="button"
           className="org-settings-primary-button"
+          // After "Discard changes", whichever was shown first.
+          style={{ order: 2 }}
           data-action="attach"
           onClick={() => {
             setNotice(null);

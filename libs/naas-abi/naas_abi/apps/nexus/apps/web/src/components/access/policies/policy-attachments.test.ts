@@ -147,7 +147,6 @@ describe('Where a policy is attached', () => {
       scope: wsScope,
       can: () => true,
       onSaved: vi.fn(),
-      onCancel: vi.fn(),
       validationDelayMs: 0,
     });
     await mounted.flush();
