@@ -276,6 +276,11 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
     def list_group_members(self, group_id: str) -> list[str]:
         return list(self._request("list_group_members", group_id=group_id).member_ids)
 
+    def list_group_member_dates(self, group_id: str) -> dict[str, datetime | None]:
+        raise NotImplementedError(
+            "The dates of a group's members are read in the engine"
+        )
+
     def list_principal_groups(self, principal_id: str) -> list[PrincipalRecord]:
         response = self._request("list_principal_groups", principal_id=principal_id)
         return [codec.principal_from_pb(g) for g in response.groups]

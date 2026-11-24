@@ -229,6 +229,21 @@ class IAMStoreContract(ABC):
         with pytest.raises(IAMNotFoundError):
             store.add_group_member(sales.id, new_id("usr"))
 
+    def test_a_member_s_joining_date_is_kept(self, store: IAMStore):
+        sales = store.create_principal(group())
+        bob = store.create_principal(user())
+        carol = store.create_principal(user("carol"))
+        before = datetime.now(UTC) - timedelta(seconds=1)
+        store.add_group_member(sales.id, bob.id)
+        first = store.group_member_dates(sales.id)[bob.id]
+        assert first is not None and first >= before and first.tzinfo is not None
+        store.add_group_member(sales.id, bob.id)  # idempotent: the date stays
+        store.add_group_member(sales.id, carol.id)
+        dates = store.group_member_dates(sales.id)
+        assert set(dates) == {bob.id, carol.id} and dates[bob.id] == first
+        store.remove_group_member(sales.id, bob.id)
+        assert set(store.group_member_dates(sales.id)) == {carol.id}
+
     def test_group_markers_round_trip(self, store: IAMStore):
         made = store.create_principal(
             replace(group("ws-1 workspace"), owner_scope=WS, membership_of=WS)

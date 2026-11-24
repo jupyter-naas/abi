@@ -49,6 +49,8 @@ class IAMStoreMemory(IAMStore):
         self._principals: dict[str, PrincipalRecord] = {}
         self._links: dict[tuple[str, str], str] = {}
         self._members: set[tuple[str, str]] = set()
+        # When each member joined its group.
+        self._member_dates: dict[tuple[str, str], datetime] = {}
         self._mappings: set[GroupMapping] = set()
         self._policies: dict[str, Policy] = {}
         self._attachments: dict[str, Attachment] = {}
@@ -200,6 +202,7 @@ class IAMStoreMemory(IAMStore):
             if (group_id, member_id) not in self._members:
                 self._write()
                 self._members.add((group_id, member_id))
+                self._member_dates[(group_id, member_id)] = datetime.now(UTC)
 
     def remove_group_member(self, group_id: str, member_id: str) -> bool:
         with self._lock:
@@ -207,11 +210,20 @@ class IAMStoreMemory(IAMStore):
                 return False
             self._write()
             self._members.discard((group_id, member_id))
+            self._member_dates.pop((group_id, member_id), None)
             return True
 
     def list_group_members(self, group_id: str) -> list[str]:
         with self._lock:
             return sorted(m for g, m in self._members if g == group_id)
+
+    def group_member_dates(self, group_id: str) -> dict[str, datetime | None]:
+        with self._lock:
+            return {
+                m: self._member_dates.get((g, m))
+                for g, m in self._members
+                if g == group_id
+            }
 
     def groups_of(self, member_id: str) -> list[str]:
         with self._lock:

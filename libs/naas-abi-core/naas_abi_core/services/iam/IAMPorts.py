@@ -695,6 +695,11 @@ class IAMStore(ABC):
     def list_group_members(self, group_id: str) -> list[str]: ...
 
     @abstractmethod
+    def group_member_dates(self, group_id: str) -> dict[str, datetime | None]:
+        """When each member of ``group_id`` joined it, by member id; None for a
+        membership made before the store kept the date."""
+
+    @abstractmethod
     def memberships_of(self, member_id: str) -> list[Membership]:
         """The membership groups ``member_id`` is a static member of, with the
         container each makes it a member of, by group id. Any status: the
@@ -1467,6 +1472,11 @@ class IIAMService(ABC):
 
     @abstractmethod
     def list_group_members(self, group_id: str) -> list[str]: ...
+
+    @abstractmethod
+    def list_group_member_dates(self, group_id: str) -> dict[str, datetime | None]:
+        """When each member of ``group_id`` joined it (``iam:GetGroup``, as its
+        members are read); None for a membership made before the date was kept."""
 
     @abstractmethod
     def list_principal_groups(self, principal_id: str) -> list[PrincipalRecord]:

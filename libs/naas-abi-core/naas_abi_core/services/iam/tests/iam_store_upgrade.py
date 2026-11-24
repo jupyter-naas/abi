@@ -148,7 +148,7 @@ def check_upgrade(
     again = open_store()
     try:
         assert again.get_principal(bound.id).owner_scope == "abi:org-1:-"
-        assert SCHEMA_VERSION == 7
+        assert SCHEMA_VERSION == 8
         assert again.legacy_scope_sets() == []
     finally:
         again.close()
@@ -353,7 +353,7 @@ def check_upgrade_from_5(
     try:
         assert again.list_placements()[1] == Placement("document", "nexus-ws-1", WS)
         assert set(again.rewrite_names(_Rewriter()).values()) == {0}
-        assert SCHEMA_VERSION == 7
+        assert SCHEMA_VERSION == 8
     finally:
         again.close()
 

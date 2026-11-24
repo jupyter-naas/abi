@@ -2224,6 +2224,10 @@ class IAMService(IIAMService, PolicySource):
         self._require_group("iam:GetGroup", group_id)
         return self.store.list_group_members(group_id)
 
+    def list_group_member_dates(self, group_id: str) -> dict[str, datetime | None]:
+        self._require_group("iam:GetGroup", group_id)
+        return self.store.group_member_dates(group_id)
+
     def list_principal_groups(self, principal_id: str) -> list[PrincipalRecord]:
         """The groups of ``principal_id`` the caller may read: each decided as
         ``list_group_members`` decides it, so a membership is shown to whoever
