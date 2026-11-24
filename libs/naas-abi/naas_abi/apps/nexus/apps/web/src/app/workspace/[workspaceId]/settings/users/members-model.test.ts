@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  accessEditable,
   levelLabel,
   memberCellValues,
   memberSearchTexts,
@@ -38,30 +37,38 @@ describe('a member of the workspace', () => {
     expect(levelLabel('viewer')).toBe('Viewer');
   });
 
-  it('is changed here only by a manager, never themselves nor someone reaching it through the organization', () => {
-    const row = readWorkspaceMember(raw());
-    expect(accessEditable(row, { canManage: true, selfId: 'usr_me' })).toBe(true);
-    expect(accessEditable(row, { canManage: false, selfId: 'usr_me' })).toBe(false);
-    expect(accessEditable(row, { canManage: true, selfId: 'usr_bob' })).toBe(false);
-    expect(accessEditable({ ...row, source: 'organization' }, { canManage: true, selfId: 'usr_me' })).toBe(false);
-  });
-
-  it('gives each column the texts its filter and facets see', () => {
-    const ann = readWorkspaceMember(raw({ user_id: 'a', name: 'Ann', email: 'ann@example.com', role: 'admin' }));
+  it('reads their roles, and gives each column the texts its filter and facets see', () => {
+    const ann = readWorkspaceMember(
+      raw({
+        user_id: 'a',
+        principal_id: 'usr_a',
+        name: 'Ann',
+        email: 'ann@example.com',
+        roles: [
+          { kind: 'group', id: 'grp_1', name: 'Alpha workspace', implied: true },
+          { kind: 'policy', id: 'pol_1', name: 'Alpha reports', scope: 'abi:nexus:organization/o/nexus:workspace/w' },
+          { kind: 'nonsense', id: 'x' },
+        ],
+      })
+    );
+    expect(ann.principalId).toBe('usr_a');
+    expect(ann.roles).toEqual([
+      { kind: 'group', id: 'grp_1', name: 'Alpha workspace', scope: null, implied: true },
+      { kind: 'policy', id: 'pol_1', name: 'Alpha reports', scope: 'abi:nexus:organization/o/nexus:workspace/w', implied: false },
+    ]);
     expect(memberCellValues(ann, 'member')).toEqual(['Ann', 'ann@example.com']);
-    expect(memberCellValues(ann, 'level')).toEqual(['Member']);
-    expect(memberCellValues(ann, 'admin')).toEqual(['Admin']);
+    expect(memberCellValues(ann, 'role')).toEqual(['Alpha workspace', 'Alpha reports']);
     expect(memberCellValues(ann, 'joined')).toEqual(['2026-11-01']);
-    const old = readWorkspaceMember(raw({ role: 'viewer', level: null, created_at: null }));
-    expect(memberCellValues(old, 'level')).toEqual(['—']);
-    expect(memberCellValues(old, 'admin')).toEqual(['Not admin']);
+    const old = readWorkspaceMember(raw({ role: 'viewer', level: null, created_at: null, principal_id: null }));
+    expect(old.principalId).toBeNull();
+    expect(memberCellValues(old, 'role')).toEqual(['No role']);
     expect(memberCellValues(old, 'joined')).toEqual(['No date']);
   });
 
-  it('is found by any column, by Invited, and by Via organization', () => {
+  it('is found by any column, by their level and by Invited', () => {
     const row = readWorkspaceMember(raw({ status: 'invited', source: 'organization' }));
     const texts = memberSearchTexts(row).join(' ');
-    for (const word of ['Bob', 'bob@example.com', 'Member', 'Not admin', 'Invited', 'Via organization']) {
+    for (const word of ['Bob', 'bob@example.com', 'Member', 'Invited']) {
       expect(texts).toContain(word);
     }
   });
@@ -75,8 +82,7 @@ describe('a member of the workspace', () => {
     const ids = (sorted: WorkspaceMemberRow[]) => sorted.map((r) => r.user_id);
     expect(ids(sortMembers(rows, 'member', 'asc'))).toEqual(['a', 'b', 'c']);
     expect(ids(sortMembers(rows, 'member', 'desc'))).toEqual(['c', 'b', 'a']);
-    expect(ids(sortMembers(rows, 'level', 'asc'))).toEqual(['a', 'c', 'b']);
-    expect(ids(sortMembers(rows, 'admin', 'asc'))).toEqual(['a', 'b', 'c']);
+    expect(ids(sortMembers(rows, 'role', 'asc'))).toEqual(['a', 'b', 'c']);
     expect(ids(sortMembers(rows, 'joined', 'asc'))).toEqual(['c', 'b', 'a']);
     expect(ids(sortMembers(rows, 'joined', 'desc'))).toEqual(['b', 'c', 'a']);
   });

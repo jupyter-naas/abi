@@ -34,6 +34,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     InferenceServerCreateInput,
     InferenceServerRecord,
     InferenceServerUpdateInput,
+    MemberRole,
     WorkspaceCandidateRecord,
     WorkspaceCreateInput,
     WorkspaceMemberRecord,
@@ -116,10 +117,14 @@ class WorkspaceService:
 
     async def get_workspace_role(self, user_id: str, workspace_id: str) -> str | None:
         """The highest role the user holds in the workspace: their own there, or the
-        one below the organization their org role (owner, admin) carries."""
+        one below the organization their org role (owner, admin) carries; a platform
+        admin's is admin everywhere (``builtin.platform_admin`` covers every container,
+        with no group of the workspace)."""
         scope = await self._scope(workspace_id)
         if scope is None:
             return None
+        if user_id in await self.memberships.platform_admins():
+            return "admin"
         org = org_of(scope)
         held = await self.memberships.roles_of(user_id)
         wide = held.get(org_below(org)) if org is not None else None
@@ -129,6 +134,8 @@ class WorkspaceService:
         self, user_id: str, workspaces: list[WorkspaceRecord]
     ) -> list[str | None]:
         """``get_workspace_role`` of each workspace, from one read of the user's roles."""
+        if user_id in await self.memberships.platform_admins():
+            return ["admin" for _ in workspaces]
         held = await self.memberships.roles_of(user_id)
         return [
             best(
@@ -301,6 +308,14 @@ class WorkspaceService:
             ),
             key=lambda record: record.email or "",
         )
+        held = await self.memberships.roles_at(
+            scope, [record.principal_id for record in records if record.principal_id]
+        )
+        for record in records:
+            record.roles = [
+                MemberRole(role.kind, role.id, role.name, role.scope, role.implied)
+                for role in held.get(record.principal_id or "", [])
+            ]
         return records
 
     async def directory_entry(self, workspace_id: str, user_id: str) -> DirectoryEntry | None:

@@ -613,7 +613,7 @@ async def list_organizations(
     rows = await service.list_organizations(user_id=current_user.id)
     # Each organization with the caller's role there, read once from IAM: the account
     # menu decides Organization Settings from this one answer.
-    roles = await service.memberships.scopes_of(current_user.id, level="org")
+    roles = await service.organization_roles(current_user.id, [row.id for row in rows])
     return [Organization(**row.__dict__, current_user_role=roles.get(row.id)) for row in rows]
 
 

@@ -14,6 +14,7 @@ import {
 import { workspaceAccessScope } from '@/components/access/access-scope';
 import { accessSection } from '@/components/access/access-sections';
 import { PersonPage } from '@/components/access/people/person-page';
+import { WorkspaceMemberRole } from '@/components/people/workspace-member-role';
 import { SettingsPageHeader } from '@/components/settings/settings-ui';
 import { Button } from '@/components/ui/button';
 import { workspaceOrganization } from '@/components/shell/settings-nav';
@@ -116,6 +117,11 @@ export function WorkspacePerson() {
         title="Member"
         description="Their roles and policies at every level, and their groups, as IAM lets you see them"
         actions={<RefreshButton onClick={() => setNonce((n) => n + 1)} />}
+      />
+      <WorkspaceMemberRole
+        workspaceId={workspaceId}
+        principalId={personId}
+        onChanged={() => setNonce((n) => n + 1)}
       />
       {scope ? (
         <PersonPage

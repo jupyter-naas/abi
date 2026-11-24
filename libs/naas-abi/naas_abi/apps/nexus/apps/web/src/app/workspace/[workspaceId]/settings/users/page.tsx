@@ -1,14 +1,12 @@
 'use client';
 
 import { Suspense, useCallback, useState, useEffect, useMemo } from 'react';
-import { Plus, Shield, Trash2, AlertCircle, Mail, ChevronDown, ChevronUp, Filter } from 'lucide-react';
+import { Plus, Pencil, Trash2, AlertCircle, Mail, ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
-import { Select } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
 import { AddPeopleDialog } from '@/components/people/add-people-dialog';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
@@ -22,16 +20,10 @@ import {
   addedNotice,
   candidateLabel,
   createPeopleApi,
-  LEVELS,
-  LEVEL_EVERYWHERE_NOTE,
-  LEVEL_LABELS,
-  type Level,
 } from '@/lib/people';
 import {
   MEMBER_COLUMNS,
-  accessEditable,
   joinedDay,
-  levelLabel,
   memberCellValues,
   memberSearchTexts,
   readWorkspaceMember,
@@ -87,7 +79,9 @@ function Members() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   // Back from the create page: who was added (worded here, never taken from the URL as is).
-  const [inviteNotice, setInviteNotice] = useState(() => addedNotice(search) ?? '');
+  const [inviteNotice, setInviteNotice] = useState(
+    () => addedNotice(search) ?? search.get('notice')?.slice(0, 500) ?? ''
+  );
   const [actionError, setActionError] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   // Said once: a reload does not say it again.
@@ -160,30 +154,6 @@ function Members() {
       setActionError(
         error instanceof Error ? error.message : 'Failed to remove member'
       );
-    }
-  };
-
-  // A level is the person's, in all their workspaces; the admin toggle is this workspace's
-  // ("<W> admins"). IAM decides: a workspace's admins may change the level of its people.
-  const handleChange = async (member: Member, change: { level?: Level; admin?: boolean }) => {
-    if (!canManage) return;
-    setActionError('');
-    try {
-      const done = await peopleApi.updateWorkspaceMember(workspaceId, member.user_id, change);
-      setMembers((current) =>
-        current.map((m) =>
-          m.user_id === member.user_id
-            ? { ...m, level: done.level ?? change.level ?? m.level, admin: change.admin ?? done.admin }
-            : m
-        )
-      );
-      if (change.level) {
-        setInviteNotice(
-          `${member.name} is now a ${LEVEL_LABELS[change.level]} in all of their workspaces.`
-        );
-      }
-    } catch (error: unknown) {
-      setActionError(error instanceof Error ? error.message : 'Failed to change this member');
     }
   };
 
@@ -316,7 +286,7 @@ function Members() {
                   const sorted = sortKey === column.id;
                   const active = !isBlank(filters[column.id]);
                   return (
-                    <th key={column.id} title={column.id === 'level' ? LEVEL_EVERYWHERE_NOTE : undefined}>
+                    <th key={column.id}>
                       <div className="org-settings-users-th">
                         <button
                           type="button"
@@ -383,7 +353,6 @@ function Members() {
               {filteredMembers.map((member) => {
                 const initial = (member.name || member.email || '?').charAt(0).toUpperCase();
                 const inherited = member.source === 'organization';
-                const editable = accessEditable(member, { canManage, selfId: authUser?.id });
                 return (
                   <tr key={member.id}>
                     <td>
@@ -395,14 +364,6 @@ function Members() {
                           <p className="flex items-center gap-2 font-medium">
                             {member.name}
                             <InvitedBadge status={member.status} />
-                            {inherited && (
-                              <span
-                                className="border border-border px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wide text-muted-foreground"
-                                title="Organization admins reach every workspace of the organization. Manage them in Organization > Users."
-                              >
-                                via organization
-                              </span>
-                            )}
                           </p>
                           <p className="flex items-center gap-2 text-xs text-muted-foreground">
                             {member.email}
@@ -421,47 +382,50 @@ function Members() {
                         </div>
                       </div>
                     </td>
-                    <td>
-                      {editable ? (
-                        <Select
-                          value={member.level ?? ''}
-                          onChange={(e) => void handleChange(member, { level: e.target.value as Level })}
-                          className="h-8 w-32"
-                          aria-label={`Level of ${member.name}`}
-                          title={LEVEL_EVERYWHERE_NOTE}
-                          data-field="level"
-                        >
-                          {member.level === null && <option value="">—</option>}
-                          {LEVELS.map((level) => (
-                            <option key={level} value={level}>
-                              {LEVEL_LABELS[level]}
-                            </option>
-                          ))}
-                        </Select>
-                      ) : (
-                        <span>{levelLabel(member.level)}</span>
-                      )}
-                    </td>
-                    <td>
-                      {editable ? (
-                        <span data-field="admin">
-                          <Checkbox
-                            aria-label={`${member.name} administers this workspace`}
-                            checked={member.admin}
-                            onCheckedChange={(on) => void handleChange(member, { admin: on })}
-                          />
-                        </span>
-                      ) : member.admin ? (
-                        <span className="flex items-center gap-2 text-primary">
-                          <Shield size={14} />
-                          Admin
-                        </span>
-                      ) : (
+                    <td data-field="role">
+                      {member.roles.length === 0 ? (
                         <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <span className="flex flex-wrap gap-1">
+                          {member.roles.map((role) => (
+                            <span
+                              key={`${role.kind}:${role.id}:${role.scope ?? ''}`}
+                              data-role={role.kind}
+                              title={
+                                role.kind === 'policy'
+                                  ? `Policy attached to them${role.scope ? ` at ${role.scope}` : ''}`
+                                  : role.implied
+                                    ? 'They reach this workspace through their admins group'
+                                    : 'Group'
+                              }
+                              className={
+                                role.kind === 'group'
+                                  ? 'border border-border bg-muted/60 px-1.5 py-0.5 text-[11px]'
+                                  : 'border border-dashed border-primary/60 px-1.5 py-0.5 text-[11px] text-primary'
+                              }
+                            >
+                              {role.name}
+                            </span>
+                          ))}
+                        </span>
                       )}
                     </td>
                     <td className="text-muted-foreground">{joinedDay(member) || '—'}</td>
-                    <td className="text-right">
+                    <td className="whitespace-nowrap text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() =>
+                          router.push(
+                            `/workspace/${workspaceId}/settings/users/${encodeURIComponent(member.principalId ?? member.user_id)}`
+                          )
+                        }
+                        title="Edit their roles"
+                        aria-label={`Edit the roles of ${member.name}`}
+                        data-action="edit"
+                      >
+                        <Pencil size={14} />
+                      </Button>
                       {canManage && !inherited && member.user_id !== authUser?.id && (
                         <Button
                           variant="destructive-ghost"

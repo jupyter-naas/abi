@@ -356,6 +356,90 @@ async def test_the_member_list_of_one_scope_reads_that_scope_alone(world, monkey
 
 
 @pytest.mark.asyncio
+async def test_a_role_is_the_groups_and_policies_that_bear_on_the_workspace(world):
+    """Workspace settings › Users › Role: each person's groups owned by the platform, the
+    workspace's organization or the workspace itself, and the policies attached to them
+    there (or everywhere); never another workspace's."""
+    await _team(world)
+    await MEMBERSHIPS.grant("member", "member", workspace_container("org-1", "ws-2"))
+    with as_service_account("api"):
+        reports = world.iam.create_policy(
+            "Alpha reports",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Allow",
+                        "actions": ["nexus:UseFeature"],
+                        "resources": ["${scope}/nexus:feature/chat"],
+                    }
+                ],
+            },
+        )
+        world.iam.attach_policy(reports.id, world.principal("member"), world.W)
+        elsewhere = world.iam.create_policy(
+            "Beta reports",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Allow",
+                        "actions": ["nexus:UseFeature"],
+                        "resources": ["${scope}/nexus:feature/chat"],
+                    }
+                ],
+            },
+        )
+        world.iam.attach_policy(
+            elsewhere.id, world.principal("member"), workspace_container("org-1", "ws-2")
+        )
+        # Kept in step with their groups, never given by hand: not a role.
+        shared = world.iam.create_policy(
+            "workspace.ws-2.graphs.read",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Allow",
+                        "actions": ["triple_store:Query"],
+                        "resources": ["abi:triple_store:graph/shared"],
+                    }
+                ],
+            },
+        )
+        world.iam.attach_policy(shared.id, world.principal("member"))
+        world.iam.attach_policy(reports.id, world.principal("member"), ORG)
+        copy = world.iam.create_policy(
+            "Alpha reports",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Allow",
+                        "actions": ["nexus:UseFeature"],
+                        "resources": ["${scope}/nexus:feature/chat"],
+                    }
+                ],
+            },
+        )
+        world.iam.attach_policy(copy.id, world.principal("member"), ORG)
+    people = {p: world.principal(p) for p in ("member", "viewer", "wadmin", "oadmin")}
+    roles = await MEMBERSHIPS.roles_at(world.W, list(people.values()))
+    names = {p: [r.name for r in roles[people[p]]] for p in people}
+    # The workspace's group first, then what counts: an admin's group (the organization's
+    # before the workspace's), else their level; then policies. Never what is automatic
+    # ("<O> people", Workspace admins), nor the level of an admin.
+    assert names["member"] == ["Alpha workspace", "Members", "Alpha reports"]
+    assert names["viewer"] == ["Alpha workspace", "Viewers"]
+    assert names["wadmin"] == ["Alpha workspace", "Alpha admins"]
+    assert names["oadmin"] == ["Alpha workspace", "Acme admins"]
+    implied = {p: [r.name for r in roles[people[p]] if r.implied] for p in people}
+    assert implied["member"] == [] and implied["oadmin"] == ["Alpha workspace"]
+    kinds = {r.name: r.kind for r in roles[people["member"]]}
+    assert kinds == {"Alpha reports": "policy", "Alpha workspace": "group", "Members": "group"}
+
+
+@pytest.mark.asyncio
 async def test_the_people_gateway_joins_and_leaves_the_groups(world):
     """The people service's ``AccessGateway`` (#1589): seats in the groups, checked
     as the inviting person, and the level."""

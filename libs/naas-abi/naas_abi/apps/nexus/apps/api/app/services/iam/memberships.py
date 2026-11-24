@@ -73,7 +73,7 @@ from naas_abi_core.services.iam.IAMService import (
     attachment_resource,
     group_resource,
 )
-from naas_abi_core.services.iam.names import is_membership_scope, within_owner
+from naas_abi_core.services.iam.names import container_of_scope, is_membership_scope, within_owner
 from starlette.concurrency import run_in_threadpool
 
 _T = TypeVar("_T")
@@ -125,6 +125,35 @@ class Member:
     # Their level ("member", "viewer"), one choice for every container; None when
     # they are in no level group (a role of before, held directly).
     level: str | None = None
+
+
+@dataclass(frozen=True)
+class RoleRef:
+    """One of a person's roles at a container (Workspace settings › Users › Role): a group
+    they are a member of (``kind`` "group"), or a policy attached to them (``kind`` "policy",
+    at ``scope``; None: unscoped)."""
+
+    kind: str
+    id: str
+    name: str
+    scope: str | None = None
+    # The container's own group, shown for everyone who reaches it, held or not (an
+    # admin reaches it through "<W> admins" or their organization's admins).
+    implied: bool = False
+
+
+@dataclass(frozen=True)
+class RoleGroups:
+    """The groups a container's Role is made of (Users › Role): its own group ("<W>
+    workspace"), its admins group, the level groups; and the groups never offered there
+    (``elsewhere``: its organization's people and admins, managed in Organization ›
+    Users, and Workspace admins, kept in step with the admins groups)."""
+
+    own: str | None = None
+    admins: str | None = None
+    members: str | None = None
+    viewers: str | None = None
+    elsewhere: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -590,6 +619,193 @@ class Memberships:
                 if (is_org_container(c.name) or is_workspace_container(c.name))
                 and (org_id is None or org_of(c.name) == org_id)
             )
+
+        return await self._run(work)
+
+    async def role_groups(self, scope: str) -> RoleGroups:
+        """The groups of ``scope``'s Role (``RoleGroups``), as ``api``."""
+        org = org_of(scope)
+        org_scope = org_container(org) if org is not None else None
+        grouped = await self._grouped_of([scope, *([org_scope] if org_scope else [])])
+        here = grouped.get(scope)
+        there = grouped.get(org_scope) if org_scope else None
+
+        def work(iam: Any) -> RoleGroups:
+            levels = LEVELS.peek(iam)
+            elsewhere = {
+                g
+                for g in (
+                    there.members_group_id if there else None,
+                    there.admins_group_id if there else None,
+                    levels.workspace_admins if levels else None,
+                    levels.platform_admins if levels else None,
+                )
+                if g
+            }
+            return RoleGroups(
+                own=str(here.members_group_id) if here and here.members_group_id else None,
+                admins=str(here.admins_group_id) if here and here.admins_group_id else None,
+                members=levels.members if levels else None,
+                viewers=levels.viewers if levels else None,
+                elsewhere=frozenset(str(g) for g in elsewhere),
+            )
+
+        return await self._run(work)
+
+    async def held_at(
+        self, scope: str, principal_id: str
+    ) -> tuple[set[str], dict[str, str | None]]:
+        """What ``principal_id`` holds that bears on the container ``scope``, as a change
+        of their Role reads it: the groups they are in that the platform, ``scope``'s
+        organization or ``scope`` owns, and the policies attached to them at ``scope``,
+        at a container holding it, at ``${my workspaces}`` or unscoped (policy -> the
+        scope it is attached at). Only what is kept in step with their groups is left out
+        (it follows them); as ``api``."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam.access_model import (
+            COMPANIONS,
+            GRAPH_GRANT_INFIX,
+            GRAPH_GRANT_PREFIX,
+        )
+
+        def work(iam: Any) -> tuple[set[str], dict[str, str | None]]:
+            groups = {
+                str(g.id)
+                for g in iam.list_principal_groups(principal_id)
+                if g.status != "deleted" and within_owner(g.owner_scope, scope)
+            }
+            policies: dict[str, str | None] = {}
+            for attachment in iam.list_attachments(principal_id=principal_id):
+                where = attachment.scope
+                if not (
+                    where is None
+                    or is_membership_scope(where)
+                    or within_owner(container_of_scope(where), scope)
+                ):
+                    continue
+                policy_id = str(attachment.policy_id)
+                if policy_id in COMPANIONS or policy_id in policies:
+                    continue
+                try:
+                    name = str(iam.get_policy(policy_id).name)
+                except (IAMNotFoundError, ResourceNotFoundError):
+                    name = ""
+                if name.startswith(GRAPH_GRANT_PREFIX) and GRAPH_GRANT_INFIX in name:
+                    continue
+                policies[policy_id] = where
+            return groups, policies
+
+        return await self._run(work)
+
+    async def roles_at(self, scope: str, principal_ids: Sequence[str]) -> dict[str, list[RoleRef]]:
+        """What counts of each person's roles at the container ``scope`` (Users › Role),
+        in this order:
+
+        1. ``scope``'s own group ("<W> workspace"), for everyone who reaches it: held, or
+           ``implied`` for an admin who reaches it through an admins group;
+        2. what gives them their place: their organization's admins group, else
+           ``scope``'s admins group, else their level (Members, Viewers);
+        3. the other groups they are in that the platform, ``scope``'s organization or
+           ``scope`` owns (capability groups, groups made by an admin; never another
+           workspace's);
+        4. the policies attached to them at ``scope``, at a container holding it, at
+           ``${my workspaces}`` or unscoped: a name once.
+
+        What is automatic is left out: "<O> people", Workspace admins, the level of an
+        admin, and the policies kept in step with groups (core's companions of the
+        platform roles, a workspace's shared-graph grants). Two reads a person, as ``api``."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam.access_model import (
+            COMPANIONS,
+            GRAPH_GRANT_INFIX,
+            GRAPH_GRANT_PREFIX,
+        )
+
+        org = org_of(scope)
+        org_scope = org_container(org) if org is not None else None
+        grouped = await self._grouped_of([scope, *([org_scope] if org_scope else [])])
+        here = grouped.get(scope)
+        there = grouped.get(org_scope) if org_scope else None
+        own_group = here.members_group_id if here else None
+        here_admins = here.admins_group_id if here else None
+        org_admins = there.admins_group_id if there else None
+
+        def kept_in_step(policy_id: str, name: str) -> bool:
+            return policy_id in COMPANIONS or (
+                name.startswith(GRAPH_GRANT_PREFIX) and GRAPH_GRANT_INFIX in name
+            )
+
+        def bears(attachment_scope: str | None) -> bool:
+            if attachment_scope is None or is_membership_scope(attachment_scope):
+                return True
+            return within_owner(container_of_scope(attachment_scope), scope)
+
+        def work(iam: Any) -> dict[str, list[RoleRef]]:
+            levels = LEVELS.peek(iam)
+            level_groups = {levels.members, levels.viewers} if levels else set()
+            automatic = {
+                g
+                for g in (
+                    there.members_group_id if there else None,
+                    levels and levels.workspace_admins,
+                )
+                if g
+            }
+            own_name = ""
+            if own_group:
+                try:
+                    own_name = iam.get_group(own_group).name
+                except (IAMNotFoundError, ResourceNotFoundError):
+                    own_name = ""
+            names: dict[str, str] = {}
+
+            def policy_name(policy_id: str) -> str:
+                if policy_id not in names:
+                    try:
+                        names[policy_id] = iam.get_policy(policy_id).name
+                    except (IAMNotFoundError, ResourceNotFoundError):
+                        names[policy_id] = policy_id
+                return names[policy_id]
+
+            def rank(ref: RoleRef) -> int:
+                if ref.kind == "policy":
+                    return 4
+                if ref.id == own_group:
+                    return 0
+                if ref.id in (org_admins, here_admins):
+                    return 1
+                return 2 if ref.id in level_groups else 3
+
+            found: dict[str, list[RoleRef]] = {}
+            for principal_id in dict.fromkeys(principal_ids):
+                groups = [
+                    g
+                    for g in iam.list_principal_groups(principal_id)
+                    if g.status != "deleted" and within_owner(g.owner_scope, scope)
+                ]
+                held = {str(g.id) for g in groups}
+                hidden = set(automatic)
+                if org_admins and org_admins in held:
+                    hidden |= level_groups | ({here_admins} if here_admins else set())
+                elif here_admins and here_admins in held:
+                    hidden |= level_groups
+                refs: dict[tuple[str, str], RoleRef] = {}
+                if own_group and own_name:
+                    refs[("group", own_group)] = RoleRef(
+                        "group", own_group, own_name, implied=own_group not in held
+                    )
+                for group in groups:
+                    key = ("group", str(group.id))
+                    if key not in refs and str(group.id) not in hidden:
+                        refs[key] = RoleRef("group", str(group.id), group.name)
+                for attachment in iam.list_attachments(principal_id=principal_id):
+                    if not bears(attachment.scope):
+                        continue
+                    name = policy_name(attachment.policy_id)
+                    key = ("policy", name)
+                    if key in refs or kept_in_step(str(attachment.policy_id), name):
+                        continue
+                    refs[key] = RoleRef("policy", attachment.policy_id, name, attachment.scope)
+                found[principal_id] = sorted(refs.values(), key=lambda r: (rank(r), r.name.lower()))
+            return found
 
         return await self._run(work)
 
