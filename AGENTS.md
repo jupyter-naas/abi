@@ -402,6 +402,24 @@ Consequences:
 - Large data belongs in object storage or a download at runtime, not in a published package.
 - Deleted PyPI releases are gone for good and their filenames cannot be reused, so deleting is a last resort. The size is the thing to keep down.
 
+## Decision: container images and `:latest`
+
+`build_nexus_web_container.yml` built `linux/arm64` under QEMU, where `pnpm build` sometimes crashed (`qemu: uncaught target signal 4`) and hung until GitHub cancelled the job at 6 hours, publishing nothing (naas-abi 4.1.2, 5.0.1, 7.0.0). Both image workflows also moved `:latest` for any release whose commit main contains, so an older release that finished last, or was built again, took it back.
+
+Decision:
+
+- Only `naas-abi-v*` releases build images (`ghcr.io/jupyter-naas/nexus-web`, `ghcr.io/jupyter-naas/abi/abi`). The other packages' releases skip both workflows.
+- nexus-web is one image index for `linux/amd64` and `linux/arm64`, each built natively (`ubuntu-24.04`, `ubuntu-24.04-arm`) and pushed by digest, then joined and tagged by a `merge` job that needs both builds and checks both platforms are in it. No QEMU. The abi image is amd64 only.
+- A release moves `:latest` only when main contains its commit **and** it is the highest published, non-draft, non-prerelease `naas-abi-vX.Y.Z` release, compared numerically. The rule is `.github/scripts/release_is_latest.sh`, shared by both workflows and run right before tagging; a failed GitHub API call fails the job instead of moving `:latest`.
+- Every job of both workflows has `timeout-minutes` (nexus-web prepare 5, build 30, merge 10; abi 45).
+
+Consequences:
+
+- If either nexus-web build fails, no tag is created or moved, and no single-platform image is published under a tag.
+- Building an old release again republishes its version tags and leaves `:latest` alone; building the newest again moves `:latest` to the rebuilt image.
+- `deploy_api.yml` (disabled by hand) runs after every successful abi build. Whoever turns it back on must gate it on the same rule, or it will run after a build that did not move `abi:latest`.
+- Tests: `tests/unit/test_container_images.py`.
+
 ## Quick Cheat Sheet
 
 ```bash
