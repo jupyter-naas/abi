@@ -522,6 +522,55 @@ def test_a_deny_of_the_chain_needs_no_cover():
     assert sales.first_uncovered(every_graph, W, parents=[two_no_hr]) is None
 
 
+def test_a_chain_deny_is_taken_in_its_exact_form_below_a_container():
+    """Below a container (``O/*``), the wider forms of a chain Deny would take
+    names the evaluator lets through: ``${scope}`` the containers under O,
+    ``${scope}/x*`` every name with an x. Only the exact ones are taken."""
+    query = "triple_store:Query"
+    below = f"{O}/*"
+    every_graph = [_grant([query], ["${scope}/triple_store:graph/*"])]
+    giver = Holdings(
+        [_side(READER, _deny([query], [f"{O}/*"], "pol_lead"))], _registry()
+    )
+    for denied in ("${scope}", "${scope}/tri*"):
+        chain = [every_graph[0], _grant([query], [denied], effect="Deny")]
+        found = giver.first_uncovered(every_graph, below, parents=[chain])
+        assert found is not None and found.reason != grants.TOO_COSTLY
+
+
+def test_many_denies_of_the_giver_cost_no_more_than_their_overlaps(monkeypatch):
+    """A Deny of the giver that misses the grant is ruled out by the pruned
+    overlap search: only one that meets it is searched against the chain's
+    Denies, so many of them, with a chain Deny, add no costlier searches."""
+    query = "triple_store:Query"
+    every_graph = [_grant([query], ["${scope}/triple_store:graph/*"])]
+    no_hr = [
+        every_graph[0],
+        _grant([query], ["${scope}/triple_store:graph/hr*"], effect="Deny"),
+    ]
+    denies = [
+        _deny([query], [f"{W2}/triple_store:graph/g{i}*"], f"pol_{i}")
+        for i in range(200)
+    ]
+    held = Holdings(
+        [_side(READER, *denies, _deny([query], [f"{W}/triple_store:graph/hr"]))],
+        _registry(),
+    )
+    searched: list[tuple[str, ...]] = []
+    covered = grants.covered
+
+    def counting(grant, others, within=grants.EVERYTHING, bounds=()):
+        searched.append(tuple(bounds[-1]) if bounds else ())
+        return covered(grant, others, within, bounds)
+
+    monkeypatch.setattr(grants, "covered", counting)
+    assert held.first_uncovered(every_graph, W, parents=[no_hr]) is None
+    # Against the chain's Denies: the one Deny of the giver that meets the grant.
+    against_chain = [b for b in searched if any("hr" in p for p in b)]
+    assert len(against_chain) == 1
+    assert len(searched) < 10
+
+
 def test_what_a_sub_policy_of_the_giver_holds_is_bounded_by_its_chain():
     """Its patterns within the chain's, as far as one embeds the other."""
     child = _grant(["triple_store:*"], ["${scope}/triple_store:graph/*"])
