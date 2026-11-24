@@ -6,9 +6,7 @@ import {
   Network,
   Globe,
   Cpu,
-  Download,
   KeyRound,
-  Shield,
   Users,
   UsersRound,
   Workflow,
@@ -57,8 +55,6 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       { href: '/settings/general', label: 'General', icon: Globe }, // the Organization's and Platform's icon
       { href: '/settings/users', label: 'Users', icon: Users },
       { href: '/settings/analytics', label: 'Analytics', icon: BarChart3, needs: 'analytics' },
-      { href: '/settings/secrets', label: 'Secrets', icon: Shield },
-      { href: '/settings/export', label: 'Data Export', icon: Download },
     ],
   },
   {
