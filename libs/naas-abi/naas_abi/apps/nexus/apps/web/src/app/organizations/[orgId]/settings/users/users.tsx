@@ -6,7 +6,6 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Plus,
-  Shield,
   UserCircle,
   AlertCircle,
   Trash2,
@@ -22,15 +21,13 @@ import {
 import { getApiUrl } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore, type OrganizationMember } from '@/stores/organization';
+import { RoleChips } from '@/components/people/role-chips';
 import { InvitedBadge, ResendButton } from '@/components/people/member-status';
 import { createPeopleApi } from '@/lib/people';
 import {
-  orgUserRoleLabel,
-  orgUserRoleRank,
   removableFromOrganization,
   removalConfirmation,
   workspacesBody,
-  WORKSPACE_ACCESS_ONLY,
 } from './users-model';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -86,41 +83,6 @@ function summarizeWorkspaces(names: string[], visible = 2) {
   };
 }
 
-function roleBadge(user: Pick<OrganizationMember, 'role' | 'source' | 'orgAdmin' | 'level'>) {
-  const label = orgUserRoleLabel(user);
-  if (label === WORKSPACE_ACCESS_ONLY) {
-    // Linked through a workspace only, with no level known (a role of before).
-    return (
-      <span className="org-settings-users-role-none" data-role="none">
-        <span aria-hidden>—</span>
-        <span
-          className="org-settings-users-badge org-settings-users-badge-member"
-          title="They only reach the workspaces they were added to."
-        >
-          {WORKSPACE_ACCESS_ONLY}
-        </span>
-      </span>
-    );
-  }
-  if (label === 'Org admin') {
-    return (
-      <span className="org-settings-users-badge org-settings-users-badge-admin" data-role="org-admin">
-        <Shield size={12} />
-        Org admin
-      </span>
-    );
-  }
-  return (
-    <span
-      className="org-settings-users-badge org-settings-users-badge-member"
-      data-role={label.toLowerCase()}
-      title="Their level, in all their workspaces"
-    >
-      <UserCircle size={12} />
-      {label}
-    </span>
-  );
-}
 
 function memberPhotoUrl(avatar?: string) {
   if (!avatar) return '';
@@ -410,7 +372,10 @@ export default function OrgUsersPage() {
           (value, index, all) => all.indexOf(value) === index
         );
       }
-      if (columnId === 'role') return [orgUserRoleLabel(user)];
+      if (columnId === 'role') {
+        const names = [...new Set(user.roles.map((r) => r.name))];
+        return names.length > 0 ? names : ['No role'];
+      }
       const names = assignedNamesByUser[user.userId] || [];
       return names.length > 0 ? names : ['No workspaces'];
     },
@@ -447,7 +412,7 @@ export default function OrgUsersPage() {
       if (sortKey === 'user') {
         cmp = (a.name || a.email || '').localeCompare(b.name || b.email || '');
       } else if (sortKey === 'role') {
-        cmp = orgUserRoleRank(a) - orgUserRoleRank(b);
+        cmp = a.roles.map((r) => r.name).join(' ').localeCompare(b.roles.map((r) => r.name).join(' '));
       } else {
         cmp =
           (assignedNamesByUser[a.userId]?.length || 0) -
@@ -493,7 +458,7 @@ export default function OrgUsersPage() {
   const columns: { id: ColumnId; label: string }[] = [
     { id: 'user', label: 'User' },
     { id: 'workspaces', label: 'Workspaces' },
-    { id: 'role', label: 'Access' },
+    { id: 'role', label: 'Role' },
   ];
 
   const hasActiveFilters = columns.some((column) => !isBlank(columnFilters[column.id]));
@@ -502,7 +467,7 @@ export default function OrgUsersPage() {
     const rows = visibleMembers.map((user) => ({
       name: user.name || 'Unknown',
       email: user.email || user.userId,
-      role: orgUserRoleLabel(user),
+      role: user.roles.map((r) => r.name).join('; '),
       groups: (assignedNamesByUser[user.userId] || []).join('; '),
     }));
     const date = new Date().toISOString().slice(0, 10);
@@ -686,12 +651,13 @@ export default function OrgUsersPage() {
                       </th>
                     );
                   })}
+                  <th aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>
                 {visibleMembers.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="org-settings-users-no-match">
+                    <td colSpan={4} className="org-settings-users-no-match">
                       No users match the current search and filters
                     </td>
                   </tr>
@@ -797,8 +763,10 @@ export default function OrgUsersPage() {
                         )}
                       </td>
                       <td>
+                        <RoleChips roles={user.roles} />
+                      </td>
+                      <td>
                         <div className="org-settings-users-row-end">
-                          {roleBadge(user)}
                           {canManage ? (
                             <span className="org-settings-users-row-actions">
                               <button

@@ -54,10 +54,12 @@ from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import (
     MemberRolesInput,
     RoleChange,
     RoleOptionsView,
+    RoleRefView,
     change_roles,
     held_roles,
     role_groups_of,
     role_options,
+    roles_of_people,
 )
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     InvalidPolicyError,
@@ -103,6 +105,8 @@ class AdminUser(BaseModel):
     organizations: list[AdminUserOrganization] = Field(default_factory=list)
     provider: str | None = None
     warning: str | None = None
+    # Platform › Users › Role: their groups and policies at the platform.
+    roles: list[RoleRefView] = Field(default_factory=list)
 
 
 class AdminUserUpdate(BaseModel):
@@ -295,8 +299,13 @@ async def list_users(
     current_user: User = Depends(get_current_user_required),
     service: AccountService = Depends(get_account_service),
 ) -> list[AdminUser]:
-    """Every account, and everyone invited who has none yet."""
-    return [admin_user(a) for a in await _answer(service.list(actor=current_user.id))]
+    """Every account, and everyone invited who has none yet, with their Role at the
+    platform."""
+    users = [admin_user(a) for a in await _answer(service.list(actor=current_user.id))]
+    roles = await roles_of_people(PLATFORM, [u.principal_id for u in users if u.principal_id])
+    for user in users:
+        user.roles = roles.get(str(user.principal_id), []) if user.principal_id else []
+    return users
 
 
 @router.post(

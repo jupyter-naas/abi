@@ -7,6 +7,8 @@ made as Nexus makes them (``container_defaults``), and every membership given th
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import widen_offer
@@ -457,6 +459,51 @@ async def test_the_role_groups_of_an_organization_and_of_the_platform(world):
     at_platform, _ = await MEMBERSHIPS.held_at(PLATFORM, member)
     assert ws.own in at_org and org.members in at_org
     assert ws.own not in at_platform and org.members in at_platform
+
+
+@pytest.mark.asyncio
+async def test_a_member_joined_when_they_entered_the_workspace_s_groups(world):
+    """Users › Joined: the earliest a person entered the workspace's own or admins group."""
+    before = datetime.now(UTC) - timedelta(seconds=1)
+    await _team(world)
+    since = {m.user_id: m.since for m in await MEMBERSHIPS.members(world.W)}
+    assert set(since) == {"viewer", "member", "wadmin"}
+    assert all(at is not None and at >= before for at in since.values()), since
+
+
+@pytest.mark.asyncio
+async def test_an_organization_s_admins_read_and_write_its_workspaces_shared_graphs(world):
+    """An organization's admins are admins of each of its workspaces, with no "<W>
+    admins": its shared graphs' grants follow them too."""
+    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
+        GraphGrants,
+    )
+
+    await _team(world)
+    readers, writers = await GraphGrants._holders(world.W)
+    oadmin, member = world.principal("oadmin"), world.principal("member")
+    assert oadmin in readers and oadmin in writers
+    assert member in readers and member not in writers
+
+
+@pytest.mark.asyncio
+async def test_a_role_at_the_organization_and_at_the_platform(world):
+    """Organization › Users and Platform › Users › Role: the organization's people first
+    and its admins for an org admin (no level); at the platform, Platform admins for a
+    platform admin (no level), else their level."""
+    await _team(world)
+    people = {p: world.principal(p) for p in ("member", "oadmin", "root")}
+    with as_service_account("api"):  # as the access move leaves a platform admin
+        world.iam.add_group_member(LEVELS.get(world.iam).platform_admins, people["root"])
+    at_org = await MEMBERSHIPS.roles_at(ORG, list(people.values()))
+    names = {p: [r.name for r in at_org[people[p]]] for p in people}
+    assert names["oadmin"] == ["Acme people", "Acme admins"]
+    assert names["member"][:1] == ["Acme people"] and "Members" in names["member"]
+    assert "Alpha workspace" not in names["member"]  # the Workspaces column says it
+    at_platform = await MEMBERSHIPS.roles_at(PLATFORM, list(people.values()))
+    names = {p: [r.name for r in at_platform[people[p]]] for p in people}
+    assert names["root"][:1] == ["Platform admins"] and "Members" not in names["root"]
+    assert names["member"] == ["Members"]
 
 
 @pytest.mark.asyncio

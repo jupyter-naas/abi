@@ -255,6 +255,9 @@ class WorkspaceMember(BaseModel):
     level: str | None = None
     # Users › Role: their groups and policies that bear on the workspace.
     roles: list[MemberRoleView] = Field(default_factory=list)
+    # Users › Joined: for a membership made before IAM kept its date (or by the access
+    # move itself), the access move's date: they joined before it (``created_at`` None).
+    joined_before: datetime | None = None
 
 
 class MemberProfileInput(BaseModel):
@@ -767,12 +770,41 @@ async def list_workspace_members(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
+    db: AsyncSession = Depends(get_db),
 ) -> list[WorkspaceMember]:
     rows = await service.list_workspace_members(workspace_id=workspace_id)
-    return [_member_view(row) for row in rows]
+    moved_at = await _access_moved_at(db)
+    return [_member_view(row, moved_at=moved_at) for row in rows]
 
 
-def _member_view(row: WorkspaceMemberRecord) -> WorkspaceMember:
+async def _access_moved_at(db: AsyncSession) -> datetime | None:
+    """When the access move (``access_model_v1``) was applied, or None."""
+    from sqlalchemy import text
+
+    try:
+        async with db.begin_nested():  # a failed read leaves the request's transaction usable
+            row = (
+                await db.execute(
+                    text("SELECT applied_at FROM iam_migrations WHERE name = :name"),
+                    {"name": "access_model_v1"},
+                )
+            ).first()
+    except Exception:  # no such table: a store from before the moves
+        return None
+    if row is None or row[0] is None:
+        return None
+    at = row[0]
+    return at if at.tzinfo else at.replace(tzinfo=UTC)
+
+
+def _member_view(
+    row: WorkspaceMemberRecord, *, moved_at: datetime | None = None
+) -> WorkspaceMember:
+    joined, before = row.created_at, None
+    if joined is not None and joined.tzinfo is None:
+        joined = joined.replace(tzinfo=UTC)
+    if moved_at is not None and (joined is None or joined <= moved_at):
+        joined, before = None, moved_at
     return WorkspaceMember(
         id=row.id,
         workspace_id=row.workspace_id,
@@ -780,7 +812,8 @@ def _member_view(row: WorkspaceMemberRecord) -> WorkspaceMember:
         role=row.role,
         email=row.email,
         name=row.name,
-        created_at=row.created_at,
+        created_at=joined,
+        joined_before=before,
         source=row.source,
         principal_id=row.principal_id,
         status=row.status,

@@ -580,6 +580,10 @@ async def test_a_role_another_one_already_gives_goes_and_is_said(nexus_db):
             "alice left Workspace ws-b admins: an admin of its organization (org-1): "
             "their role reaches every workspace of it"
         ]
+        # Out of "<W> admins", an organization's admin still writes its shared graphs.
+        assert not [
+            c for c in report.changes if c.user_id == "alice" and c.reason == "shared_graphs"
+        ]
         records = {r.container: r for r in await _defaults(nexus_db)}
         org1 = org_container("org-1")
         with as_service_account("engine"):

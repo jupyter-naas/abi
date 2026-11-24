@@ -26,6 +26,8 @@ export type WorkspaceMemberRow = {
   /** They administer this workspace ("<W> admins"). */
   admin: boolean;
   joinedAt: Date | null;
+  /** For a membership older than its date (made before the access move): they joined before this. */
+  joinedBefore: Date | null;
   /** 'organization': they reach it through their org admin role; managed in Organization › Users. */
   source: 'workspace' | 'organization';
   status: MemberStatus;
@@ -64,6 +66,7 @@ export function readWorkspaceMember(m: Record<string, unknown>): WorkspaceMember
     // An owner of before administers it too: Owner is no longer assigned.
     admin: role === 'admin' || role === 'owner',
     joinedAt: typeof m.created_at === 'string' && m.created_at ? new Date(m.created_at) : null,
+    joinedBefore: typeof m.joined_before === 'string' && m.joined_before ? new Date(m.joined_before) : null,
     source: m.source === 'organization' ? 'organization' : 'workspace',
     status: memberStatus(m.status),
     roles: readRoles(m.roles),
@@ -88,9 +91,17 @@ export const NO_ROLE = 'No role';
 export const NO_DATE = 'No date';
 const INVITED = 'Invited';
 
-/** `YYYY-MM-DD` of the day they joined; '' when unknown. */
-export function joinedDay(row: Pick<WorkspaceMemberRow, 'joinedAt'>): string {
-  return row.joinedAt && !Number.isNaN(row.joinedAt.getTime()) ? row.joinedAt.toISOString().slice(0, 10) : '';
+const day = (at: Date | null) => (at && !Number.isNaN(at.getTime()) ? at.toISOString().slice(0, 10) : '');
+
+/** `YYYY-MM-DD` of the day they joined, "before YYYY-MM-DD" for a membership older than its date; '' when unknown. */
+export function joinedDay(row: Pick<WorkspaceMemberRow, 'joinedAt' | 'joinedBefore'>): string {
+  if (day(row.joinedAt)) return day(row.joinedAt);
+  return day(row.joinedBefore) ? `before ${day(row.joinedBefore)}` : '';
+}
+
+/** The day to sort by: the day they joined, else the day they joined before. */
+function joinedSortDay(row: Pick<WorkspaceMemberRow, 'joinedAt' | 'joinedBefore'>): string {
+  return day(row.joinedAt) || day(row.joinedBefore);
 }
 
 /** The texts of a cell, as the column filters and their facets see them. */
@@ -118,13 +129,14 @@ export type SortDir = 'asc' | 'desc';
 
 function sortText(row: WorkspaceMemberRow, column: MemberColumnId): string {
   if (column === 'member') return (row.name || row.email).toLowerCase();
+  if (column === 'joined') return joinedSortDay(row);
   return memberCellValues(row, column).join(' ').toLowerCase();
 }
 
 /** Sorted by a column, those with no date last whichever way; ties by email. */
 export function sortMembers(rows: WorkspaceMemberRow[], column: MemberColumnId, dir: SortDir): WorkspaceMemberRow[] {
   const sign = dir === 'asc' ? 1 : -1;
-  const undated = (row: WorkspaceMemberRow) => (column === 'joined' && !joinedDay(row) ? 1 : 0);
+  const undated = (row: WorkspaceMemberRow) => (column === 'joined' && !joinedSortDay(row) ? 1 : 0);
   return [...rows].sort(
     (a, b) =>
       undated(a) - undated(b) ||

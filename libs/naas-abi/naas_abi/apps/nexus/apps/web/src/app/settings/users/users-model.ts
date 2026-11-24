@@ -1,3 +1,4 @@
+import type { RoleChip } from '@/components/people/role-chips';
 /**
  * Platform Settings › Users: the pure part (the rows' cells, filters, sort and
  * export, the person's page, the delete confirmation, the API's words).
@@ -34,6 +35,8 @@ export interface AdminUser {
   provider: string | null;
   /** What the identity provider could not follow, after a change. */
   warning?: string | null;
+  /** Their Role at the platform (groups, then policies attached to them). */
+  roles?: RoleChip[];
 }
 
 export interface InviteOutcome {
@@ -98,14 +101,14 @@ export type UserAccess = {
   capabilities: { id: string; name: string; owner_scope: string }[];
 };
 
-export type ColumnId = 'user' | 'iam' | 'status' | 'superadmin' | 'organizations' | 'created';
+export type ColumnId = 'user' | 'iam' | 'status' | 'organizations' | 'role' | 'created';
 
 export const COLUMNS: { id: ColumnId; label: string }[] = [
   { id: 'user', label: 'User' },
   // The IAM id is not a column: it stays in the search, the export and the person's page.
   { id: 'status', label: 'Status' },
-  { id: 'superadmin', label: 'Platform admin' },
   { id: 'organizations', label: 'Organizations' },
+  { id: 'role', label: 'Role' },
   { id: 'created', label: 'Created' },
 ];
 
@@ -113,8 +116,7 @@ export const SIGNED_IN = 'Signed in';
 export const INVITED = 'Invited, not yet';
 export const DEACTIVATED = 'Deactivated';
 export const ACTIVE = 'Active';
-export const PLATFORM_ADMIN = 'Platform admin';
-export const NOT_PLATFORM_ADMIN = 'Not platform admin';
+export const NO_ROLE = 'No role';
 export const NO_ORGANIZATION = 'No organization';
 /** The Created column's value for an invitation with no date. */
 export const NO_DATE = 'No date';
@@ -142,8 +144,8 @@ export function cellValues(user: AdminUser, column: ColumnId): string[] {
       return [user.principal_id || NO_IAM_ID];
     case 'status':
       return [statusLabel(user), user.deactivated ? DEACTIVATED : ACTIVE];
-    case 'superadmin':
-      return [user.is_superadmin ? PLATFORM_ADMIN : NOT_PLATFORM_ADMIN];
+    case 'role':
+      return user.roles && user.roles.length > 0 ? [...new Set(user.roles.map((r) => r.name))] : [NO_ROLE];
     case 'organizations':
       return user.organizations.length > 0
         ? [...new Set(user.organizations.map((o) => o.name || o.id))].sort((a, b) => a.localeCompare(b))
@@ -191,8 +193,8 @@ export const EXPORT_HEADERS = [
   'IAM ID',
   'Status',
   'Deactivated',
-  'Platform admin',
   'Organizations',
+  'Role',
   'Created',
   'Identity provider',
 ] as const;
@@ -204,8 +206,8 @@ export function exportRow(user: AdminUser): string[] {
     user.principal_id ?? '',
     statusLabel(user),
     user.deactivated ? 'yes' : 'no',
-    user.is_superadmin ? 'yes' : 'no',
     user.organizations.map((o) => `${o.name || o.id} (${o.role})`).join('; '),
+    (user.roles ?? []).map((r) => r.name).join('; '),
     createdDay(user),
     user.provider ?? '',
   ];

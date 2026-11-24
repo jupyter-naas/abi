@@ -34,6 +34,7 @@ a new organization or workspace are written as ``api`` for no user.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -73,7 +74,12 @@ from naas_abi_core.services.iam.IAMService import (
     attachment_resource,
     group_resource,
 )
-from naas_abi_core.services.iam.names import container_of_scope, is_membership_scope, within_owner
+from naas_abi_core.services.iam.names import (
+    container_of_scope,
+    is_below,
+    is_membership_scope,
+    within_owner,
+)
 from starlette.concurrency import run_in_threadpool
 
 _T = TypeVar("_T")
@@ -371,6 +377,7 @@ class _Reading:
         self._groups: dict[str, Any] = {}
         self._members: dict[str, list[str]] = {}
         self._containers: dict[str, list[str]] = {}
+        self._dates: dict[str, dict[str, datetime | None]] = {}
         self._levels: Levels | None = None
 
     def group(self, group_id: str) -> Any:
@@ -390,6 +397,16 @@ class _Reading:
                 except (IAMNotFoundError, ResourceNotFoundError):
                     self._members[group_id] = []
         return self._members[group_id]
+
+    def dates(self, group_id: str) -> dict[str, datetime | None]:
+        """When each member joined ``group_id`` (None: before IAM kept the date)."""
+        if group_id not in self._dates:
+            with as_service_account("api"):
+                try:
+                    self._dates[group_id] = dict(self.iam.list_group_member_dates(group_id))
+                except (IAMNotFoundError, ResourceNotFoundError, NotImplementedError):
+                    self._dates[group_id] = {}
+        return self._dates[group_id]
 
     def containers(self, principal_id: str) -> list[str]:
         """The containers ``principal_id`` is a member of (its membership groups)."""
@@ -488,6 +505,8 @@ class Memberships:
     def __init__(self, authz: Authz = AUTHZ) -> None:
         self._authz = authz
         self._listeners: list[RolesListener] = []
+        # The organizations' fan-outs to their workspaces still running (kept alive).
+        self._background: set[asyncio.Task[None]] = set()
         # Whether a (legacy) Nexus user id is a user Nexus has; set where the
         # users live (the application's startup). None: every id is vouched for.
         self.known_user: Callable[[str], Awaitable[bool]] | None = None
@@ -526,12 +545,29 @@ class Memberships:
             await CONTAINER_DEFAULTS.sync_scope(scope)
         workspace = workspace_of(scope) if is_workspace_container(scope) else None
         if workspace is None:
+            # An organization's roles reach each of its workspaces (its admins are
+            # theirs): what follows who belongs to them follows, in the background.
+            org = org_of(scope) if (is_org_container(scope) or is_below(scope)) else None
+            if org is not None and not dropped and self._listeners:
+                task = asyncio.create_task(self._notify_workspaces_of(org))
+                self._background.add(task)
+                task.add_done_callback(self._background.discard)
             return
+        await self._tell(workspace, dropped, scope)
+
+    async def _tell(self, workspace: str, dropped: bool, scope: str) -> None:
         for listener in list(self._listeners):
             try:
                 await listener(workspace, dropped)
             except Exception:  # noqa: BLE001 - a derived view never fails the change
                 logger.exception(f"Roles listener {listener!r} failed for {scope}")
+
+    async def _notify_workspaces_of(self, org_id: str) -> None:
+        for container in await self._containers(org_id):
+            if is_workspace_container(container):
+                workspace = workspace_of(container)
+                if workspace:
+                    await self._tell(workspace, False, container)
 
     # -- users and principals ----------------------------------------------------
 
@@ -784,10 +820,15 @@ class Memberships:
             GRAPH_GRANT_PREFIX,
         )
 
-        org = org_of(scope)
+        org = org_of(scope) if scope != PLATFORM else None
         org_scope = org_container(org) if org is not None else None
-        grouped = await self._grouped_of([scope, *([org_scope] if org_scope else [])])
+        grouped = (
+            await self._grouped_of([scope, *([org_scope] if org_scope else [])])
+            if scope != PLATFORM
+            else {}
+        )
         here = grouped.get(scope)
+        # At a workspace its organization's; at the organization its own (the same).
         there = grouped.get(org_scope) if org_scope else None
         own_group = here.members_group_id if here else None
         here_admins = here.admins_group_id if here else None
@@ -806,6 +847,10 @@ class Memberships:
         def work(iam: Any) -> dict[str, list[RoleRef]]:
             levels = LEVELS.peek(iam)
             level_groups = {levels.members, levels.viewers} if levels else set()
+            # At the platform, its admins group is what gives a platform admin their place.
+            place = here_admins or (
+                levels.platform_admins if scope == PLATFORM and levels else None
+            )
             automatic = {
                 g
                 for g in (
@@ -821,21 +866,44 @@ class Memberships:
                 except (IAMNotFoundError, ResourceNotFoundError):
                     own_name = ""
             names: dict[str, str] = {}
+            # Read from the store the service reads (in the engine): a list of a hundred
+            # people asks no decision per group of each (the route authorized its caller).
+            store = getattr(iam, "store", None)
+            group_records: dict[str, Any] = {}
 
             def policy_name(policy_id: str) -> str:
                 if policy_id not in names:
                     try:
-                        names[policy_id] = iam.get_policy(policy_id).name
+                        found = (store or iam).get_policy(policy_id)
+                        names[policy_id] = found.name if found is not None else policy_id
                     except (IAMNotFoundError, ResourceNotFoundError):
                         names[policy_id] = policy_id
                 return names[policy_id]
+
+            def groups_of(principal_id: str) -> list[Any]:
+                if store is None:
+                    return list(iam.list_principal_groups(principal_id))
+                found = []
+                for group_id in store.groups_of(principal_id):
+                    if group_id not in group_records:
+                        try:
+                            group_records[group_id] = store.get_principal(group_id)
+                        except (IAMNotFoundError, ResourceNotFoundError):
+                            group_records[group_id] = None
+                    group = group_records[group_id]
+                    if group is not None and group.kind == "group":
+                        found.append(group)
+                return found
+
+            def attachments_of(principal_id: str) -> list[Any]:
+                return list((store or iam).list_attachments(principal_id=principal_id))
 
             def rank(ref: RoleRef) -> int:
                 if ref.kind == "policy":
                     return 4
                 if ref.id == own_group:
                     return 0
-                if ref.id in (org_admins, here_admins):
+                if ref.id in (org_admins, place):
                     return 1
                 return 2 if ref.id in level_groups else 3
 
@@ -843,14 +911,18 @@ class Memberships:
             for principal_id in dict.fromkeys(principal_ids):
                 groups = [
                     g
-                    for g in iam.list_principal_groups(principal_id)
+                    for g in groups_of(principal_id)
                     if g.status != "deleted" and within_owner(g.owner_scope, scope)
                 ]
                 held = {str(g.id) for g in groups}
                 hidden = set(automatic)
                 if org_admins and org_admins in held:
-                    hidden |= level_groups | ({here_admins} if here_admins else set())
-                elif here_admins and here_admins in held:
+                    # At a workspace, its own admins group is theirs anyway; at the
+                    # organization, it is the organization's admins group itself.
+                    hidden |= level_groups | (
+                        {here_admins} if here_admins and here_admins != org_admins else set()
+                    )
+                elif place and place in held:
                     hidden |= level_groups
                 refs: dict[tuple[str, str], RoleRef] = {}
                 if own_group and own_name:
@@ -861,7 +933,7 @@ class Memberships:
                     key = ("group", str(group.id))
                     if key not in refs and str(group.id) not in hidden:
                         refs[key] = RoleRef("group", str(group.id), group.name)
-                for attachment in iam.list_attachments(principal_id=principal_id):
+                for attachment in attachments_of(principal_id):
                     if not bears(attachment.scope):
                         continue
                     name = policy_name(attachment.policy_id)
@@ -971,12 +1043,17 @@ class Memberships:
             )
             known = reading.levels_of(people | admins)
             wide = wide_scope(container)
+            joined: dict[str, datetime] = {}
+            for group_id in (record.members_group_id, record.admins_group_id):
+                for principal, at in (reading.dates(str(group_id)) if group_id else {}).items():
+                    if at is not None:
+                        joined[principal] = min(at, joined.get(principal, at))
             for principal in sorted(people | admins):
                 add(
                     container,
                     principal,
                     "admin" if principal in admins else known.get(principal, VIEWER),
-                    None,
+                    joined.get(principal),
                 )
                 if wide is not None and principal in admins:
                     add(wide, principal, "admin", None)

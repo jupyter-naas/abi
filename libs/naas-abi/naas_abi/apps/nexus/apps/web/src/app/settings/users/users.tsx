@@ -66,6 +66,7 @@ import {
   type SortDir,
 } from './users-model';
 import { PlatformHolders } from './platform-holders';
+import { RoleChips } from '@/components/people/role-chips';
 import './users.css';
 
 type Can = (action: string) => boolean;
@@ -334,21 +335,15 @@ function UserRow({
             </span>
           )}
         </td>
-        <td data-field="superadmin">
-          {user.is_superadmin ? (
-            <span className="platform-users-badge is-superadmin">
-              <Crown size={12} /> Platform admin
-            </span>
-          ) : (
-            <span className="platform-users-muted">No</span>
-          )}
-        </td>
         <td data-field="organizations">
           {user.organizations.length > 0 ? (
             organizations.join(', ')
           ) : (
             <span className="platform-users-muted">{NO_ORGANIZATION}</span>
           )}
+        </td>
+        <td>
+          <RoleChips roles={user.roles ?? []} />
         </td>
         <td>{createdDay(user)}</td>
         <td className="platform-users-actions-cell">{actions}</td>

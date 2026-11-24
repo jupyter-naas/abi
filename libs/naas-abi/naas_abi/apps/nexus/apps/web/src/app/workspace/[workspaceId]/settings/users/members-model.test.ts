@@ -63,6 +63,9 @@ describe('a member of the workspace', () => {
     expect(old.principalId).toBeNull();
     expect(memberCellValues(old, 'role')).toEqual(['No role']);
     expect(memberCellValues(old, 'joined')).toEqual(['No date']);
+    const moved = readWorkspaceMember(raw({ created_at: null, joined_before: '2026-11-24T09:00:00Z' }));
+    expect(moved.joinedBefore?.toISOString().startsWith('2026-11-24')).toBe(true);
+    expect(memberCellValues(moved, 'joined')).toEqual(['before 2026-11-24']);
   });
 
   it('is found by any column, by their level and by Invited', () => {

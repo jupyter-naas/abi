@@ -26,7 +26,14 @@ const user = (over: Partial<AdminUser>): AdminUser => ({
   ...over,
 });
 
-const ADMIN = user({ id: 'usr_admin', principal_id: 'usr_admin', email: 'admin@example.com', name: 'Admin', is_superadmin: true });
+const ADMIN = user({
+  id: 'usr_admin',
+  principal_id: 'usr_admin',
+  email: 'admin@example.com',
+  name: 'Admin',
+  is_superadmin: true,
+  roles: [{ kind: 'group', id: 'grp_pa', name: 'Platform admins' }],
+});
 const BOB = user({
   id: 'usr_bob',
   principal_id: 'usr_bob',
@@ -100,7 +107,7 @@ async function render(props: Partial<Parameters<typeof PlatformUsers>[0]> & { fe
 }
 
 describe('PlatformUsers', () => {
-  it('lists every account and invitation with its status, superadmin and organizations, not its IAM id', async () => {
+  it('lists every account and invitation with its status, organizations and Role, not its IAM id', async () => {
     const { fetcher } = api();
     await render({ fetcher });
     const rows = [...mounted!.host.querySelectorAll('tr[data-user]')].map((r) => r.getAttribute('data-user'));
@@ -108,7 +115,9 @@ describe('PlatformUsers', () => {
     expect(row('usr_bob').textContent).not.toContain('usr_bob');
     expect(row('usr_bob').querySelector('[data-field="status"]')?.textContent).toBe('Signed in');
     expect(row('usr_bob').querySelector('[data-field="organizations"]')?.textContent).toBe('Acme');
-    expect(row('usr_admin').querySelector('[data-field="superadmin"]')?.textContent).toContain('Platform admin');
+    expect(row('usr_admin').querySelector('[data-field="role"]')?.textContent).toBe('Platform admins');
+    const headers = [...mounted!.host.querySelectorAll('thead th')].map((th) => th.textContent?.trim());
+    expect(headers.indexOf('Role')).toBe(headers.indexOf('Organizations') + 1);
     expect(row('invited:new@example.com').querySelector('[data-field="status"]')?.textContent).toBe('Invited, not yet');
     expect(row('invited:new@example.com').textContent).not.toContain('None yet');
   });

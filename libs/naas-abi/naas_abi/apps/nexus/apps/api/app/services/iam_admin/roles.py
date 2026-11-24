@@ -273,3 +273,32 @@ async def change_roles(
     for policy_id, at in change.detach:
         await iam_answer(service.detach(user, policy_id, principal_id, at))
     return change
+
+
+class RoleRefView(BaseModel):
+    """One of a person's roles in a Users list: a group (``kind`` "group") or a policy
+    attached to them (``kind`` "policy", at ``scope``); ``implied``: the container's own
+    group, shown for an admin who reaches it otherwise."""
+
+    kind: str
+    id: str
+    name: str
+    scope: str | None = None
+    implied: bool = False
+
+
+async def roles_of_people(scope: str, principal_ids: Sequence[str]) -> dict[str, list[RoleRefView]]:
+    """Each person's Role at ``scope`` as a Users list shows it (``Memberships.roles_at``)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+    wanted = [p for p in principal_ids if p]
+    if not wanted:
+        return {}
+    found = await MEMBERSHIPS.roles_at(scope, wanted)
+    return {
+        principal: [
+            RoleRefView(kind=r.kind, id=r.id, name=r.name, scope=r.scope, implied=r.implied)
+            for r in refs
+        ]
+        for principal, refs in found.items()
+    }

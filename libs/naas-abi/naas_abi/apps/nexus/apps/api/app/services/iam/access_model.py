@@ -1260,6 +1260,13 @@ def _sync_graph_grants(iam: Any, inputs: Inputs, outcome: Outcome) -> list[str]:
             continue
         people = set(iam.list_group_members(str(record.members_group_id)))
         admins = set(iam.list_group_members(str(record.admins_group_id)))
+        # Its organization's admins are its admins too (they hold no "<W> admins").
+        org = org_of(container)
+        org_record = outcome.records.get(org_container(org)) if org is not None else None
+        if org_record is not None and org_record.admins_group_id:
+            admins |= {
+                p for p in iam.list_group_members(str(org_record.admins_group_id)) if is_user(p)
+            }
         for kind, holders in ((READ, people | admins), (WRITE, admins)):
             policy_id = by_name.get(policy_name(workspace, kind))
             if policy_id is None:

@@ -42,10 +42,12 @@ from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import (
     RoleChange,
     RoleOptionsView,
     RoleOptionView,
+    RoleRefView,
     change_roles,
     held_roles,
     role_groups_of,
     role_options,
+    roles_of_people,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations import domain_proof
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
@@ -339,6 +341,8 @@ class OrganizationMember(BaseModel):
     user_created: bool = False
     sign_in_email_sent: bool = False
     workspace_member_id: str | None = None
+    # Users › Role: their groups and policies at the organization.
+    roles: list[RoleRefView] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _org_admin_of_role(self) -> OrganizationMember:
@@ -1090,7 +1094,13 @@ async def list_org_members(
     service: OrganizationService = Depends(get_organization_service),
 ) -> list[OrganizationMember]:
     rows = await service.list_members(org_id=org_id)
-    return [OrganizationMember(**row.__dict__) for row in rows]
+    roles = await roles_of_people(
+        org_container(org_id), [str(r.principal_id) for r in rows if r.principal_id]
+    )
+    return [
+        OrganizationMember(**row.__dict__, roles=roles.get(str(row.principal_id), []))
+        for row in rows
+    ]
 
 
 def _invite_profile(invite: OrganizationMemberInvite) -> dict[str, str]:

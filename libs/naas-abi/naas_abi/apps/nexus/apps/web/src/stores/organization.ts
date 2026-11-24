@@ -3,6 +3,7 @@
  * Manages organization branding (public, pre-auth) and org membership (authed).
  */
 
+import { readRoleChips, type RoleChip } from '@/components/people/role-chips';
 import { create } from 'zustand';
 import { getApiUrl } from '@/lib/config';
 import { invalidateOrgBranding } from '@/lib/org-branding';
@@ -110,6 +111,8 @@ export interface OrganizationMember {
   serviceLine?: string;
   country?: string;
   interest?: string;
+  /** Their Role at the organization (groups, then policies attached to them). */
+  roles: RoleChip[];
 }
 
 /** Sent with Create user: the account name (new accounts only) and the member profile. */
@@ -145,6 +148,7 @@ function mapMember(m: any): OrganizationMember {
     // An older row has no source: it holds an org role.
     source: m.source === 'workspace' ? 'workspace' : 'organization',
     status: memberStatus(m.status),
+    roles: readRoleChips(m.roles),
     email: m.email,
     name: m.name,
     createdAt: m.created_at,
