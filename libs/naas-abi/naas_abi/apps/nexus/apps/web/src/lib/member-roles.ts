@@ -216,7 +216,8 @@ export function createMemberRolesApi(fetcher: Fetcher = defaultFetcher): MemberR
     },
     async member(workspaceId, principalId) {
       const rows = await answer<Record<string, unknown>[]>(
-        await fetcher(roleBase({ kind: 'workspace', id: workspaceId })),
+        // The list alone: their Role is read from `held`.
+        await fetcher(`${roleBase({ kind: 'workspace', id: workspaceId })}?roles=false`),
         'Could not load the members'
       );
       const row = (Array.isArray(rows) ? rows : []).find((r) => r.principal_id === principalId);

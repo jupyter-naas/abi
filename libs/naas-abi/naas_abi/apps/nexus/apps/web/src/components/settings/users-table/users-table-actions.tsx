@@ -28,14 +28,23 @@ export function UsersReloadButton({ onReload, busy = false }: { onReload: () => 
 export function UsersExportMenu({
   onExport,
   disabled = false,
+  title,
 }: {
   onExport: (format: UsersExportFormat) => void;
   disabled?: boolean;
+  /** Why it is disabled, when it is. */
+  title?: string;
 }) {
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
-        <button type="button" className="org-settings-users-secondary-button" data-action="export" disabled={disabled}>
+        <button
+          type="button"
+          className="org-settings-users-secondary-button"
+          data-action="export"
+          disabled={disabled}
+          title={title}
+        >
           <Download size={16} />
           Export
           <ChevronDown size={14} />

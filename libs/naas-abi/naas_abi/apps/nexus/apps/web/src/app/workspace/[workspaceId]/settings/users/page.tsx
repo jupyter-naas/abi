@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useState, useEffect, useMemo } from 'react';
 import { Plus, Pencil, Trash2, AlertCircle, Mail, ChevronDown, ChevronUp, Filter } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth';
+import { authFetch, useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,13 @@ import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopo
 import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-table-filter';
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
+import {
+  RolesLoadingNote,
+  RolesPending,
+  rolesBatchFrom,
+  useProgressiveRoles,
+} from '@/components/settings/users-table/use-progressive-roles';
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
 import type { FacetBucket } from '@/lib/graph-query/types';
 import { matchesSearch } from '@/app/settings/lib/search';
@@ -107,7 +114,8 @@ function Members() {
 
   const refreshMembers = async () => {
     const { authFetch } = await import('@/stores/auth');
-    const response = await authFetch(`/api/workspaces/${workspaceId}/members`);
+    // The list comes alone; each one's Role follows, the page shown first.
+    const response = await authFetch(`/api/workspaces/${workspaceId}/members?roles=false`);
     if (!response.ok) {
       throw new Error(await readApiError(response, 'Failed to load members'));
     }
@@ -161,10 +169,32 @@ function Members() {
     }
   };
 
+  const fetchRoles = useMemo(
+    () => rolesBatchFrom(`/api/workspaces/${encodeURIComponent(workspaceId)}/members/roles`, authFetch),
+    [workspaceId]
+  );
+  const roles = useProgressiveRoles(
+    useMemo(() => members.map((m) => m.principalId), [members]),
+    fetchRoles
+  );
+  const withRoles = useMemo(
+    () =>
+      members.map((m) => ({
+        ...m,
+        roles: ((m.principalId ? roles.found[m.principalId] : undefined) ?? []).map((r) => ({
+          kind: r.kind,
+          id: r.id,
+          name: r.name,
+          scope: r.scope ?? null,
+          implied: r.implied === true,
+        })),
+      })),
+    [members, roles.found]
+  );
   const filteredMembers = useMemo(
     () =>
       sortMembers(
-        members.filter(
+        withRoles.filter(
           (member) =>
             matchesSearch(memberSearchTexts(member), searchQuery) &&
             MEMBER_COLUMNS.every((column) =>
@@ -174,12 +204,15 @@ function Members() {
         sortKey,
         sortDir
       ),
-    [members, searchQuery, filters, sortKey, sortDir]
+    [withRoles, searchQuery, filters, sortKey, sortDir]
   );
+  // A page of them; the search, the filters and the sort reach every row.
+  const paged = usePagedRows(filteredMembers, JSON.stringify([searchQuery, filters, sortKey, sortDir]));
+  roles.show(paged.pageRows.map((m) => m.principalId));
   const loadFacets = useCallback(
     async (columnId: string, query: string): Promise<FacetBucket[]> => {
       const needle = query.trim().toLowerCase();
-      return countFacets(members.flatMap((member) => memberCellValues(member, columnId as MemberColumnId))).filter(
+      return countFacets(withRoles.flatMap((member) => memberCellValues(member, columnId as MemberColumnId))).filter(
         (bucket) => bucket.value.toLowerCase().includes(needle)
       );
     },
@@ -213,7 +246,11 @@ function Members() {
         description="Manage who has access to this workspace"
         actions={
           <>
-            <UsersExportMenu onExport={exportVisible} disabled={filteredMembers.length === 0} />
+            <UsersExportMenu
+              onExport={exportVisible}
+              disabled={filteredMembers.length === 0 || !roles.done}
+              title={roles.done ? undefined : 'Available once every role is read'}
+            />
             <Button
               onClick={() => setAddOpen(true)}
               disabled={!canManage}
@@ -289,6 +326,7 @@ function Members() {
             </>
           }
         />
+        <RolesLoadingNote roles={roles} />
         <div className="org-settings-users-table-wrap">
           <table className="org-settings-users-table">
             <thead>
@@ -361,7 +399,7 @@ function Members() {
                   </td>
                 </tr>
               )}
-              {filteredMembers.map((member) => {
+              {paged.pageRows.map((member) => {
                 const initial = (member.name || member.email || '?').charAt(0).toUpperCase();
                 const inherited = member.source === 'organization';
                 const personHref = `/workspace/${workspaceId}/settings/users/${encodeURIComponent(
@@ -406,7 +444,9 @@ function Members() {
                       </div>
                     </td>
                     <td data-field="role">
-                      {member.roles.length === 0 ? (
+                      {member.principalId && roles.of(member.principalId) === undefined ? (
+                        <RolesPending />
+                      ) : member.roles.length === 0 ? (
                         <span className="text-muted-foreground">—</span>
                       ) : (
                         <span className="flex flex-wrap gap-1">
@@ -464,6 +504,7 @@ function Members() {
         </div>
         </div>
       )}
+      <TablePager total={filteredMembers.length} paged={paged} />
 
       {/* Invitations made before people were created at once: listed until they are migrated. */}
       <PendingInvitations scope="workspaces" id={workspaceId} canManage={canManage} />

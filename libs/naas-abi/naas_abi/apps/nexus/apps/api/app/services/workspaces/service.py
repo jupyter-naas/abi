@@ -259,10 +259,13 @@ class WorkspaceService:
     async def get_workspace_stats(self, workspace_id: str) -> WorkspaceStatsRecord | None:
         return await self.adapter.get_workspace_stats(workspace_id=workspace_id)
 
-    async def list_workspace_members(self, workspace_id: str) -> list[WorkspaceMemberRecord]:
+    async def list_workspace_members(
+        self, workspace_id: str, *, with_roles: bool = True
+    ) -> list[WorkspaceMemberRecord]:
         """The workspace's members, then the owners and admins of its organization
         who reach it through their org role (``source: "organization"``, read-only:
-        that access is managed in Organization > Users)."""
+        that access is managed in Organization > Users). ``with_roles``: each one's
+        Role here (``roles``); without it, the list alone."""
         scope = await self._scope(workspace_id)
         if scope is None:
             return []
@@ -308,6 +311,8 @@ class WorkspaceService:
             ),
             key=lambda record: record.email or "",
         )
+        if not with_roles:
+            return records
         held = await self.memberships.roles_at(
             scope, [record.principal_id for record in records if record.principal_id]
         )

@@ -8,6 +8,7 @@ import { PlatformUsers } from './users';
 import type { AdminUser, Deletion } from './users-model';
 
 type Call = { url: string; method: string; body: unknown };
+const LIST = '/api/admin/users?roles=false';
 type Answer = { status: number; body: unknown };
 
 const user = (over: Partial<AdminUser>): AdminUser => ({
@@ -59,8 +60,18 @@ function api(answers: Record<string, (call: Call) => Answer> = {}, users: AdminU
     calls.push(call);
     const answer =
       answers[`${method} ${url}`]?.(call) ??
-      (method === 'GET' && url === '/api/admin/users'
-        ? { status: 200, body: users }
+      // The list comes without the roles, then the roles a page at a time.
+      (method === 'GET' && url === LIST
+        ? { status: 200, body: users.map((u) => ({ ...u, roles: [] })) }
+        : method === 'GET' && url.startsWith('/api/admin/users/roles?')
+          ? {
+              status: 200,
+              body: Object.fromEntries(
+                new URLSearchParams(url.split('?')[1])
+                  .getAll('principal')
+                  .map((p) => [p, users.find((u) => u.principal_id === p)?.roles ?? []])
+              ),
+            }
         : method === 'GET' && url === '/api/invitations/providers'
           ? {
               status: 200,
@@ -252,7 +263,7 @@ describe('PlatformUsers', () => {
     expect(calls.filter((c) => c.method === 'DELETE').map((c) => c.url)).toEqual([
       '/api/admin/users/usr_bob?confirm=bob%40example.com',
     ]);
-    expect(calls.filter((c) => c.method === 'GET' && c.url === '/api/admin/users')).toHaveLength(2);
+    expect(calls.filter((c) => c.method === 'GET' && c.url === LIST)).toHaveLength(2);
     // The row is gone: what the provider could not do is said above the table.
     expect(document.querySelector('[data-field="page-notice"]')?.textContent).toBe(
       'bob@example.com: builtin could not be reached'
@@ -289,7 +300,7 @@ describe('PlatformUsers', () => {
   });
 
   it('says why the list could not be read', async () => {
-    const { fetcher } = api({ 'GET /api/admin/users': () => ({ status: 403, body: { detail: 'Not allowed to list users' } }) });
+    const { fetcher } = api({ [`GET ${LIST}`]: () => ({ status: 403, body: { detail: 'Not allowed to list users' } }) });
     await render({ fetcher });
     expect(mounted!.host.querySelector('[role="alert"]')?.textContent).toBe('Not allowed to list users');
   });

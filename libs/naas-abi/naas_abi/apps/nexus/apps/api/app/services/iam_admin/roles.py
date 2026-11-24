@@ -332,6 +332,23 @@ class RoleRefView(BaseModel):
     implied: bool = False
 
 
+# Users › Role of a page of people at a time: the lists come first without it (an index).
+ROLES_BATCH_MAX: Final = 100
+
+
+async def roles_of_batch(scope: str, principal_ids: Sequence[str]) -> dict[str, list[RoleRefView]]:
+    """Users › Role of the people asked (at most ``ROLES_BATCH_MAX``), each by their IAM
+    id, as their list shows it: a list reads its people first (``roles=false``), then
+    their Role a page at a time. Only what bears on ``scope`` is given, which whoever
+    lists its people may read."""
+    wanted = list(dict.fromkeys(p for p in principal_ids if p))
+    if len(wanted) > ROLES_BATCH_MAX:
+        raise HTTPException(
+            status_code=422, detail=f"Ask the roles of {ROLES_BATCH_MAX} people at most"
+        )
+    return await roles_of_people(scope, wanted)
+
+
 async def roles_of_people(scope: str, principal_ids: Sequence[str]) -> dict[str, list[RoleRefView]]:
     """Each person's Role at ``scope`` as a Users list shows it (``Memberships.roles_at``)."""
     from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS

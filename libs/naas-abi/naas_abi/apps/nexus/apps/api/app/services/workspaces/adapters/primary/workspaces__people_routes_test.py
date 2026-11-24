@@ -256,6 +256,26 @@ async def test_a_workspace_only_person_is_never_given_an_org_role(api) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("base", ["/api/workspaces/ws-1/members", "/api/organizations/org-1/members"])
+async def test_the_people_come_alone_and_their_roles_a_page_at_a_time(api, base) -> None:
+    """Users reads its people first (``roles=false``), then their Role a page at a time
+    (``GET …/members/roles``), as the full list gives it."""
+    async with api.as_("admin") as http:
+        full = (await http.get(base)).json()
+        index = (await http.get(f"{base}?roles=false")).json()
+        principals = [row["principal_id"] for row in index if row["principal_id"]]
+        query = "&".join(f"principal={p}" for p in principals)
+        roles = await http.get(f"{base}/roles?{query}")
+    assert [row["user_id"] for row in index] == [row["user_id"] for row in full]
+    assert all(row["roles"] == [] for row in index)
+    assert roles.status_code == 200, roles.text
+    assert any(row["roles"] for row in full)
+    for row in full:
+        if row["principal_id"]:
+            assert roles.json().get(row["principal_id"], []) == row["roles"], row["user_id"]
+
+
+@pytest.mark.asyncio
 async def test_nobody_outside_the_directory_is_found(api) -> None:
     async with api.as_("admin") as http:
         outsider = await http.post("/api/workspaces/ws-1/members", json={"user_id": "outsider"})

@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
@@ -38,6 +38,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import (
     KEEP,
+    ROLES_BATCH_MAX,
     HeldRolesView,
     MemberRolesInput,
     RoleChange,
@@ -48,6 +49,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import (
     held_roles,
     role_groups_of,
     role_options,
+    roles_of_batch,
     roles_of_people,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations import domain_proof
@@ -1091,15 +1093,20 @@ async def sync_org_member_workspaces(
 )
 async def list_org_members(
     org_id: str,
+    roles: bool = Query(True, description="With each one's Role; false: the list alone."),
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> list[OrganizationMember]:
+    """The organization's people, with their Role in it (``roles=false``: without it,
+    read then a page at a time from ``GET …/members/roles``)."""
     rows = await service.list_members(org_id=org_id)
-    roles = await roles_of_people(
+    if not roles:
+        return [OrganizationMember(**row.__dict__) for row in rows]
+    found = await roles_of_people(
         org_container(org_id), [str(r.principal_id) for r in rows if r.principal_id]
     )
     return [
-        OrganizationMember(**row.__dict__, roles=roles.get(str(row.principal_id), []))
+        OrganizationMember(**row.__dict__, roles=found.get(str(row.principal_id), []))
         for row in rows
     ]
 
@@ -1167,6 +1174,25 @@ async def org_member_role_options(
                 )
             )
     return await role_options(current_user, container, groups, listed_at=container, more=more)
+
+
+@router.get(
+    "/{org_id}/members/roles",
+    dependencies=[
+        guard(
+            "ListOrganizationMembers",
+            org="org_id",
+            literal="-",
+            denied="Only admins can list organization members",
+        )
+    ],
+)
+async def org_members_roles(
+    org_id: str,
+    principal: list[str] = Query(default_factory=list, max_length=ROLES_BATCH_MAX),
+) -> dict[str, list[RoleRefView]]:
+    """Organization › Users › Role of the people asked by their IAM id (a page of them)."""
+    return await roles_of_batch(org_container(org_id), principal)
 
 
 @router.get(

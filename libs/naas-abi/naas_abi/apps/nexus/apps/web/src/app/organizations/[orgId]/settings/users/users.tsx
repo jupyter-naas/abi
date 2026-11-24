@@ -17,7 +17,7 @@ import {
   Mail,
 } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
-import { useAuthStore } from '@/stores/auth';
+import { authFetch, useAuthStore } from '@/stores/auth';
 import { useOrganizationStore, type OrganizationMember } from '@/stores/organization';
 import { RoleChips } from '@/components/people/role-chips';
 import { InvitedBadge, ResendButton } from '@/components/people/member-status';
@@ -28,6 +28,8 @@ import {
   workspacesBody,
 } from './users-model';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
+import { isOrgAdminRole } from '../lib/nav';
+import { readOrganization } from '@/lib/organization-resource';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
 import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
@@ -45,6 +47,13 @@ import {
   type UsersExportFormat,
 } from '@/components/settings/users-table/users-table-export';
 import { UsersExportMenu, UsersReloadButton } from '@/components/settings/users-table/users-table-actions';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
+import {
+  RolesLoadingNote,
+  RolesPending,
+  rolesBatchFrom,
+  useProgressiveRoles,
+} from '@/components/settings/users-table/use-progressive-roles';
 import '../components/org-settings-components.css';
 import './users.css';
 
@@ -110,9 +119,37 @@ export default function OrgUsersPage() {
     membersLoading,
   } = useOrganizationStore();
 
-  const members = membersCache[orgId] || [];
+  // The list comes alone (`roles: false`); each one's Role follows, the page shown first.
+  const listed = useMemo(() => membersCache[orgId] || [], [membersCache, orgId]);
+  const fetchRoles = useMemo(
+    () => rolesBatchFrom(`/api/organizations/${encodeURIComponent(orgId)}/members/roles`, authFetch),
+    [orgId]
+  );
+  const [rolesGeneration, setRolesGeneration] = useState(0);
+  const roles = useProgressiveRoles(
+    useMemo(() => listed.map((m) => m.principalId ?? null), [listed]),
+    fetchRoles,
+    rolesGeneration
+  );
+  const members = useMemo(
+    () => listed.map((m) => ({ ...m, roles: (m.principalId ? roles.found[m.principalId] : undefined) ?? [] })),
+    [listed, roles.found]
+  );
   const myMembership = members.find((m) => m.userId === authUser?.id);
-  const canManage = !!myMembership?.orgAdmin;
+  // Their role in the organization, as IAM gives it: a platform admin is its admin without
+  // being one of its people (their platform role covers every organization).
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void readOrganization(orgId)
+      .then(async (response) => (response.ok ? ((await response.json()).current_user_role ?? null) : null))
+      .then((role) => live && setViewerRole(role))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [orgId]);
+  const canManage = !!myMembership?.orgAdmin || isOrgAdminRole(viewerRole);
 
   const [actionError, setActionError] = useState('');
   const [actionNotice, setActionNotice] = useState('');
@@ -211,7 +248,7 @@ export default function OrgUsersPage() {
 
   useEffect(() => {
     if (orgId) {
-      void fetchMembers(orgId);
+      void fetchMembers(orgId, { roles: false });
       void loadMemberWorkspaces();
     }
   }, [orgId, fetchMembers, loadMemberWorkspaces]);
@@ -314,7 +351,8 @@ export default function OrgUsersPage() {
     try {
       // Every group of the organization; 409 for its last org admin, said as the API words it.
       await removeFromOrganization(orgId, user.userId);
-      await Promise.all([fetchMembers(orgId), loadMemberWorkspaces()]);
+      await Promise.all([fetchMembers(orgId, { roles: false }), loadMemberWorkspaces()]);
+      setRolesGeneration((n) => n + 1);
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Failed to remove user';
@@ -422,6 +460,9 @@ export default function OrgUsersPage() {
     });
     return rows;
   }, [filteredMembers, sortKey, sortDir, assignedNamesByUser]);
+  // A page of them; the search, the filters and the sort reach every row.
+  const paged = usePagedRows(visibleMembers, JSON.stringify([search, columnFilters, sortKey, sortDir]));
+  roles.show(paged.pageRows.map((m) => m.principalId ?? null));
 
   const loadFacets = useCallback(
     async (columnId: string, search: string): Promise<FacetBucket[]> => {
@@ -479,7 +520,8 @@ export default function OrgUsersPage() {
     if (!orgId) return;
     setReloading(true);
     try {
-      await Promise.all([fetchMembers(orgId), loadMemberWorkspaces()]);
+      await Promise.all([fetchMembers(orgId, { roles: false }), loadMemberWorkspaces()]);
+      setRolesGeneration((n) => n + 1);
     } finally {
       setReloading(false);
     }
@@ -495,7 +537,11 @@ export default function OrgUsersPage() {
           actions={
             <>
               <UsersReloadButton onReload={() => void reloadUsers()} busy={reloading} />
-              <UsersExportMenu onExport={exportVisibleUsers} disabled={visibleMembers.length === 0} />
+              <UsersExportMenu
+                onExport={exportVisibleUsers}
+                disabled={visibleMembers.length === 0 || !roles.done}
+                title={roles.done ? undefined : 'Available once every role is read'}
+              />
               {canManage ? (
                 <button
                   type="button"
@@ -540,6 +586,7 @@ export default function OrgUsersPage() {
           placeholder="Search name, email, role, workspace, organization, country..."
           label="Search users"
         />
+        <RolesLoadingNote roles={roles} />
 
         {(hasActiveFilters || search.trim()) && (
           <p className="org-settings-users-filter-meta">
@@ -642,7 +689,7 @@ export default function OrgUsersPage() {
                     </td>
                   </tr>
                 )}
-                {visibleMembers.map((user) => {
+                {paged.pageRows.map((user) => {
                   const assignedNames = assignedNamesByUser[user.userId] || [];
                   const summary = summarizeWorkspaces(assignedNames);
                   const isPickerOpen = openPickerUserId === user.userId;
@@ -743,7 +790,11 @@ export default function OrgUsersPage() {
                         )}
                       </td>
                       <td>
-                        <RoleChips roles={user.roles} />
+                        {user.principalId && roles.of(user.principalId) === undefined ? (
+                          <RolesPending />
+                        ) : (
+                          <RoleChips roles={user.roles} />
+                        )}
                       </td>
                       <td>
                         <div className="org-settings-users-row-end">
@@ -786,6 +837,7 @@ export default function OrgUsersPage() {
             </table>
           )}
         </div>
+        <TablePager total={visibleMembers.length} paged={paged} />
 
         <p className="org-settings-footnote">
           Click a user to open their organization profile. Create user adds the

@@ -56,14 +56,17 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_of
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import (
     KEEP,
+    ROLES_BATCH_MAX,
     HeldRolesView,
     MemberRolesInput,
     RoleChange,
     RoleOptionsView,
+    RoleRefView,
     change_roles,
     held_roles,
     role_groups_of,
     role_options,
+    roles_of_batch,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
@@ -769,11 +772,14 @@ async def get_workspace_stats(
 @router.get("/{workspace_id}/members", dependencies=[guard("ListWorkspaceMembers", literal="-")])
 async def list_workspace_members(
     workspace_id: str,
+    roles: bool = Query(True, description="With each one's Role; false: the list alone."),
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
     db: AsyncSession = Depends(get_db),
 ) -> list[WorkspaceMember]:
-    rows = await service.list_workspace_members(workspace_id=workspace_id)
+    """The workspace's members, with their Role here (``roles=false``: without it,
+    read then a page at a time from ``GET …/members/roles``)."""
+    rows = await service.list_workspace_members(workspace_id=workspace_id, with_roles=roles)
     moved_at = await _access_moved_at(db)
     return [_member_view(row, moved_at=moved_at) for row in rows]
 
@@ -846,10 +852,25 @@ async def member_role_options(
     return await role_options(current_user, container, groups, listed_at=container)
 
 
+@router.get(
+    "/{workspace_id}/members/roles",
+    dependencies=[guard("ListWorkspaceMembers", literal="-")],
+)
+async def members_roles(
+    workspace_id: str,
+    principal: list[str] = Query(default_factory=list, max_length=ROLES_BATCH_MAX),
+) -> dict[str, list[RoleRefView]]:
+    """Workspace › Users › Role of the people asked by their IAM id (a page of them)."""
+    container = await authz.AUTHZ.container_of(workspace_id)
+    if container is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return await roles_of_batch(container, principal)
+
+
 async def _member_row(
     service: WorkspaceService, workspace_id: str, user_id: str
 ) -> tuple[WorkspaceMemberRecord, str]:
-    rows = await service.list_workspace_members(workspace_id=workspace_id)
+    rows = await service.list_workspace_members(workspace_id=workspace_id, with_roles=False)
     row = next((m for m in rows if m.user_id == user_id), None)
     container = await authz.AUTHZ.container_of(workspace_id)
     if row is None or not row.principal_id or container is None:

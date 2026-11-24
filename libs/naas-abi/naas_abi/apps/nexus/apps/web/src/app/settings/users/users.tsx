@@ -16,7 +16,7 @@ import {
   Trash2,
   UserCircle,
 } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth';
+import { authFetch, useAuthStore } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
@@ -30,6 +30,13 @@ import {
   type UsersExportFormat,
 } from '@/components/settings/users-table/users-table-export';
 import { UsersExportMenu, UsersReloadButton } from '@/components/settings/users-table/users-table-actions';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
+import {
+  RolesLoadingNote,
+  RolesPending,
+  rolesBatchFrom,
+  useProgressiveRoles,
+} from '@/components/settings/users-table/use-progressive-roles';
 import { matchesSearch } from '../lib/search';
 import { countFacets } from '../lib/page-helpers';
 import {
@@ -39,6 +46,7 @@ import {
   listUsers,
   reactivateUser,
   updateUser,
+  USERS_API,
   type Fetcher,
 } from './users-api';
 import {
@@ -149,6 +157,7 @@ function UserRow({
   user,
   can,
   self,
+  rolesPending = false,
   fetcher,
   navigate,
   onChanged,
@@ -157,6 +166,8 @@ function UserRow({
   user: AdminUser;
   can: Can;
   self: boolean;
+  /** Their Role is still being read: a placeholder stands in. */
+  rolesPending?: boolean;
   fetcher?: Fetcher;
   navigate: (href: string) => void;
   /** The list changed; `notice` is what the provider could not follow, to show above it. */
@@ -341,7 +352,7 @@ function UserRow({
           )}
         </td>
         <td>
-          <RoleChips roles={user.roles ?? []} />
+          {rolesPending ? <RolesPending /> : <RoleChips roles={user.roles ?? []} />}
         </td>
         <td>{createdDay(user)}</td>
         <td className="platform-users-actions-cell">{actions}</td>
@@ -474,7 +485,7 @@ export function PlatformUsers({
 
   useEffect(() => {
     let live = true;
-    void listUsers(fetcher).then((answer) => {
+    void listUsers(fetcher, { roles: false }).then((answer) => {
       if (!live) return;
       if (answer.ok) {
         setUsers(answer.data ?? []);
@@ -493,7 +504,17 @@ export function PlatformUsers({
     []
   );
 
-  const all = useMemo(() => users ?? [], [users]);
+  // The list comes alone; each one's Role follows, the page shown first.
+  const fetchRoles = useMemo(() => rolesBatchFrom(`${USERS_API}/roles`, fetcher ?? authFetch), [fetcher]);
+  const roles = useProgressiveRoles(
+    useMemo(() => (users ?? []).map((u) => u.principal_id), [users]),
+    fetchRoles,
+    nonce + reloads
+  );
+  const all = useMemo(
+    () => (users ?? []).map((u) => ({ ...u, roles: (u.principal_id ? roles.found[u.principal_id] : undefined) ?? [] })),
+    [users, roles.found]
+  );
   const visible = useMemo(
     () =>
       sortUsers(
@@ -507,6 +528,9 @@ export function PlatformUsers({
       ),
     [all, search, filters, sortKey, sortDir]
   );
+  // A page of them; the search, the filters and the sort reach every row.
+  const paged = usePagedRows(visible, JSON.stringify([search, filters, sortKey, sortDir]));
+  roles.show(paged.pageRows.map((u) => u.principal_id));
 
   const loadFacets = useCallback(
     async (columnId: string, query: string): Promise<FacetBucket[]> => {
@@ -544,7 +568,11 @@ export function PlatformUsers({
           actions={
             <>
               <UsersReloadButton onReload={() => reload()} />
-              <UsersExportMenu onExport={exportVisible} disabled={visible.length === 0} />
+              <UsersExportMenu
+                onExport={exportVisible}
+                disabled={visible.length === 0 || !roles.done}
+                title={roles.done ? undefined : 'Available once every role is read'}
+              />
               {can(USER_ACTIONS.invite) && (
                 <Link href={NEW_USER_PATH} className="org-settings-primary-button" data-action="invite">
                   <Plus size={16} />
@@ -574,6 +602,7 @@ export function PlatformUsers({
           placeholder="Search name, email, IAM ID, status, organization…"
           label="Search users"
         />
+        <RolesLoadingNote roles={roles} />
 
         {filtered && (
           <p className="org-settings-users-filter-meta">
@@ -673,12 +702,13 @@ export function PlatformUsers({
                     </td>
                   </tr>
                 )}
-                {visible.map((user) => (
+                {paged.pageRows.map((user) => (
                   <UserRow
                     key={user.id}
                     user={user}
                     can={can}
                     self={isSelf(user, selfId)}
+                    rolesPending={!!user.principal_id && roles.of(user.principal_id) === undefined}
                     fetcher={fetcher}
                     navigate={navigate}
                     onChanged={reload}
@@ -689,6 +719,7 @@ export function PlatformUsers({
             </table>
           ) : null}
         </div>
+        <TablePager total={visible.length} paged={paged} />
 
         <p className="org-settings-footnote">
           A row opens the person&apos;s page, where their roles, groups and policies at every level are seen,
