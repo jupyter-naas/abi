@@ -19,6 +19,19 @@ async def test_the_role_is_the_one_iam_holds(team) -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_platform_admin_administers_every_workspace(team) -> None:
+    """``builtin.platform_admin`` covers every container: their role in a workspace is
+    admin, with no group of it (the access move leaves them none)."""
+    team.platform_admin("root")
+    service = WorkspaceService(adapter=SimpleNamespace())
+
+    assert await service.get_workspace_role(user_id="root", workspace_id="ws-1") == "admin"
+    rows = [SimpleNamespace(id="ws-1", organization_id="org-1")]
+    assert await service.effective_roles("root", rows) == ["admin"]
+    assert await service.effective_roles("member", rows) == ["member"]
+
+
+@pytest.mark.asyncio
 async def test_require_workspace_access_raises_when_missing_role(team) -> None:
     service = WorkspaceService(adapter=SimpleNamespace())
 

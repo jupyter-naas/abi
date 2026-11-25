@@ -3,9 +3,9 @@
 import './access-base.css';
 import './access.css';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { AccessBadgeContext, AccessHeaderSlotContext } from './access-list';
+import { AccessBadgeContext, AccessHeaderSlotContext, AccessInstanceContext } from './access-list';
 import { createIamAdminApi, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { InviteProviders } from '@/lib/invitations';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
@@ -70,6 +70,9 @@ export type AccessPageProps = {
   headerSlot?: HTMLElement | null;
   /** Told the count badge of the list shown (null: none), for the page title. */
   onBadge?: (badge: string | null) => void;
+  /** Told whether an instance's page is shown (a row clicked opens it before the address
+   *  follows): its level hides the list's header for it. */
+  onInstance?: (open: boolean) => void;
 };
 
 /**
@@ -94,7 +97,18 @@ export function AccessPage({
   loadProviders,
   headerSlot = null,
   onBadge,
+  onInstance,
 }: AccessPageProps) {
+  // An instance's page is shown alone: what the view says, else (before it says) the address.
+  const [instance, setInstance] = useState<boolean | null>(null);
+  const reportInstance = useCallback(
+    (open: boolean) => {
+      setInstance(open);
+      onInstance?.(open);
+    },
+    [onInstance],
+  );
+  const alone = instance ?? !!focus;
   const client = useMemo(() => api ?? createIamAdminApi(), [api]);
   const people = useMemo(() => directory ?? createAccessDirectory(), [directory]);
   const chosen = scopes[Math.min(picked, scopes.length - 1)];
@@ -116,7 +130,8 @@ export function AccessPage({
 
   if (!scope) return null;
 
-  const picker = scopes.length > 1 && (
+  // The scope picker is the list's: an instance's page is shown alone.
+  const picker = scopes.length > 1 && !alone && (
     <label className="access-scope-picker">
       <span>Manage</span>
       <select
@@ -176,6 +191,7 @@ export function AccessPage({
   }
 
   return (
+    <AccessInstanceContext.Provider value={reportInstance}>
     <AccessBadgeContext.Provider value={onBadge ?? null}>
     <AccessHeaderSlotContext.Provider value={headerSlot}>
       <div className="access-tab" data-scope={scope.value ?? 'platform'} data-section={section}>
@@ -184,5 +200,6 @@ export function AccessPage({
       </div>
     </AccessHeaderSlotContext.Provider>
     </AccessBadgeContext.Provider>
+    </AccessInstanceContext.Provider>
   );
 }

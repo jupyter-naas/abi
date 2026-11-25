@@ -197,15 +197,20 @@ class FakePeopleService:
             provider=NEXUS,
         )
 
-    async def add_existing(self, *, user_id: str, grant: Grant, by: Any) -> AddedUser:
+    async def add_existing(
+        self, *, user_id: str, grant: Grant, by: Any, notify: bool = True
+    ) -> AddedUser:
         self.calls.append(
-            ("add_existing", {"user_id": user_id, "grant": grant, "by": getattr(by, "id", by)})
+            (
+                "add_existing",
+                {"user_id": user_id, "grant": grant, "by": getattr(by, "id", by), "notify": notify},
+            )
         )
         user = self.users.get(user_id)
         if user is None:
             raise UnknownUserError(user_id)
-        await self._real().add_existing(user_id=user_id, grant=grant, by=by)
-        return AddedUser(**user.__dict__, sign_in_email_sent=self.sent)
+        await self._real().add_existing(user_id=user_id, grant=grant, by=by, notify=notify)
+        return AddedUser(**user.__dict__, sign_in_email_sent=self.sent and notify)
 
     async def set_level(
         self, *, user_id: str, level: str, by: Any, where: Sequence[str] = ()

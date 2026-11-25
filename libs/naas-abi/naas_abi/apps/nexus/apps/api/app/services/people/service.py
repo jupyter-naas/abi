@@ -429,16 +429,19 @@ class PeopleService:
     # Adding someone who exists, changing a level
     # =========================================================================
 
-    async def add_existing(self, *, user_id: str, grant: Grant, by: Actor) -> AddedUser:
-        """Give an existing person ``grant`` on behalf of ``by`` and tell them.
-        The answer is the person, and whether the mail telling them was sent."""
+    async def add_existing(
+        self, *, user_id: str, grant: Grant, by: Actor, notify: bool = True
+    ) -> AddedUser:
+        """Give an existing person ``grant`` on behalf of ``by`` and, with ``notify``,
+        tell them. The answer is the person, and whether the mail telling them was
+        sent."""
         user = await self.store.get(user_id)
         if user is None:
             raise UnknownUserError(user_id)
         access = await self._plan(grant)
         if access is not None:
             await self._apply(user.id, access, by)
-        sent = await self._notify(user, by, access, organization_id=None)
+        sent = await self._notify(user, by, access, organization_id=None) if notify else False
         return AddedUser(
             id=user.id,
             email=user.email,

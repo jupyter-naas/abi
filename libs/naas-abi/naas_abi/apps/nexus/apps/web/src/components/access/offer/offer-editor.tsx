@@ -25,9 +25,7 @@ import {
   itemName,
   modulesOf,
   offerChanges,
-  unsavedCount,
   wholeModule,
-  type OfferDrafts,
 } from './offer-model';
 import './offer.css';
 
@@ -80,15 +78,18 @@ export type WorkspaceOfferEditorProps = {
   offerApi?: OfferApi;
   featureApi?: FeatureAccessApi;
   nonce?: number;
+  /** Told after each switch is saved: "<W> access" has a new revision. */
+  onChanged?: () => void;
 };
 
 /**
- * "<W> access" as the workspace's offer: its features, then its agents, apps, workflows and
- * pipelines by module, each a toggle (a module offered whole, or item by item). Everyone in
- * "<W> workspace" reaches what is on; their level decides what they do with it. Saved in one
- * write of "<W> access" as the caller (`PUT /offer`) and, for features, General's
- * (`PUT /feature-access`, Everyone or Nobody). IAM says what may change: the policy's
- * `editable`, a feature row's `editable`, and the modules it lets the caller give here.
+ * "<W> access" as the workspace's offer (its policy page › Configuration): its features, then
+ * its agents, apps, workflows and pipelines by module, each a toggle (a module offered whole, or
+ * item by item). Everyone in "<W> workspace" reaches what is on; their level decides what they
+ * do with it. Each toggle is saved at once, as the caller: a write of "<W> access" (`PUT
+ * /offer`) or, for a feature, General's (`PUT /feature-access`, Everyone or Nobody), which
+ * writes the same policy. IAM says what may change: the policy's `editable`, a feature row's
+ * `editable`, and the modules it lets the caller give here.
  */
 export function WorkspaceOfferEditor({
   workspaceId,
@@ -99,18 +100,17 @@ export function WorkspaceOfferEditor({
   offerApi = DEFAULT_OFFER_API,
   featureApi = DEFAULT_FEATURE_API,
   nonce = 0,
+  onChanged,
 }: WorkspaceOfferEditorProps) {
   const [offer, setOffer] = useState<OfferState | null>(null);
   const [features, setFeatures] = useState<FeatureAccessState | null>(null);
   const [publishers, setPublishers] = useState<PublishersView | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<OfferDrafts>({});
-  const [featureDrafts, setFeatureDrafts] = useState<Record<string, boolean>>({});
   const [featureErrors, setFeatureErrors] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState<string | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [items, setItems] = useState<Record<string, Items>>({});
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -129,8 +129,7 @@ export function WorkspaceOfferEditor({
   }, [api, featureApi, offerApi, scope, workspaceId]);
 
   useEffect(() => {
-    setDrafts({});
-    setFeatureDrafts({});
+    setNotice(null);
     void load();
   }, [load, nonce]);
 
@@ -167,7 +166,6 @@ export function WorkspaceOfferEditor({
   if (policyId && offer.access_policy?.id !== policyId) return null;
 
   const editable = offer.editable;
-  const pending = unsavedCount(offer.offered, drafts, featureRows, featureDrafts);
   const who = workspaceGroupName(workspaceName || 'this workspace');
 
   const toggleOpen = (kind: OfferKind, module: string) => {
@@ -177,35 +175,41 @@ export function WorkspaceOfferEditor({
     if (next && !items[key]) void loadItems(kind, module);
   };
 
-  const setDraft = (kind: OfferKind, module: string, name: string, on: boolean) => {
-    setSaved(false);
-    setDrafts((current) => ({ ...current, [draftKey(kind, module, name)]: on }));
-  };
-
-  const save = async () => {
+  // Each toggle is saved at once; the switches wait for the answer.
+  const saveNow = async (write: () => Promise<boolean>, done: string) => {
     setSaving(true);
     setError(null);
+    setNotice(null);
     try {
-      const changes = offerChanges(offer.offered, drafts);
-      const toFeatures = featureChanges(featureRows, featureDrafts);
-      if (changes.length) {
-        setOffer(await offerApi.save(workspaceId, changes));
-        setDrafts({});
+      if (await write()) {
+        setNotice(done);
+        onChanged?.();
       }
-      if (toFeatures.length) {
-        const next = await featureApi.save(workspaceId, toFeatures);
-        const refused = next.errors ?? {};
-        setFeatures(next);
-        setFeatureErrors(refused);
-        setFeatureDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => refused[key])));
-      }
-      setSaved(true);
     } catch (e) {
       setError(message(e, 'Could not save the offer.'));
     } finally {
       setSaving(false);
     }
   };
+
+  const toggleItem = (kind: OfferKind, module: string, name: string, label: string, on: boolean) =>
+    void saveNow(async () => {
+      const changes = offerChanges(offer.offered, { [draftKey(kind, module, name)]: on });
+      if (changes.length === 0) return false;
+      setOffer(await offerApi.save(workspaceId, changes));
+      return true;
+    }, `${label} ${on ? 'added to' : 'removed from'} the offer.`);
+
+  const toggleFeature = (key: string, label: string, on: boolean) =>
+    void saveNow(async () => {
+      const changes = featureChanges(featureRows, { [key]: on });
+      if (changes.length === 0) return false;
+      const next = await featureApi.save(workspaceId, changes);
+      const refused = next.errors ?? {};
+      setFeatures(next);
+      setFeatureErrors(refused);
+      return !refused[key];
+    }, `${label} ${on ? 'added to' : 'removed from'} the offer.`);
 
   return (
     <section className="access-offer" aria-label="Workspace offer" data-offer={offer.workspace_id}>
@@ -225,6 +229,11 @@ export function WorkspaceOfferEditor({
         )}
       </header>
       {error && <p className="access-policy-error" role="alert">{error}</p>}
+      {notice && (
+        <p className="access-policy-notice" role="status" data-offer-notice="">
+          {notice}
+        </p>
+      )}
 
       <div className="access-offer-section" data-offer-section="features">
         <h4 className="access-offer-heading">Features</h4>
@@ -235,7 +244,7 @@ export function WorkspaceOfferEditor({
         ) : (
           <ul className="access-offer-list">
             {featureRows.map((row) => {
-              const on = featureDrafts[row.key] ?? row.choice === 'everyone';
+              const on = row.choice === 'everyone';
               const disabled = !row.editable || saving || (!row.offered && !on);
               return (
                 <li key={row.key} className="access-offer-row" data-offer-feature={row.key}>
@@ -243,10 +252,7 @@ export function WorkspaceOfferEditor({
                     label={`Offer ${row.label}`}
                     on={on}
                     disabled={disabled}
-                    onChange={(next) => {
-                      setSaved(false);
-                      setFeatureDrafts((current) => ({ ...current, [row.key]: next }));
-                    }}
+                    onChange={(next) => toggleFeature(row.key, row.label, next)}
                   />
                   <span className="access-offer-name">{row.label}</span>
                   {!row.offered && <span className="access-offer-note">Not offered by the organization</span>}
@@ -273,7 +279,7 @@ export function WorkspaceOfferEditor({
             ) : (
               <ul className="access-offer-list">
                 {ofKind.map(({ module, grantable }) => {
-                  const whole = wholeModule(offer.offered, kind, module, drafts);
+                  const whole = wholeModule(offer.offered, kind, module, {});
                   const key = `${kind}|${module}`;
                   const shown = items[key];
                   return (
@@ -283,7 +289,7 @@ export function WorkspaceOfferEditor({
                           label={`Offer every ${label.toLowerCase().replace(/s$/, '')} of ${module}`}
                           on={whole}
                           disabled={!editable || saving || (!grantable && !whole)}
-                          onChange={(next) => setDraft(kind, module, WHOLE_MODULE, next)}
+                          onChange={(next) => toggleItem(kind, module, WHOLE_MODULE, `Every ${label.toLowerCase().replace(/s$/, '')} of ${module}`, next)}
                         />
                         <span className="access-offer-name">{module}</span>
                         <span className="access-offer-note">{whole ? 'Whole module' : 'Item by item'}</span>
@@ -309,9 +315,9 @@ export function WorkspaceOfferEditor({
                                 <li key={item.name} className="access-offer-row" data-offer-item={`${module}/${item.name}`}>
                                   <OfferSwitch
                                     label={`Offer ${item.label}`}
-                                    on={isOffered(offer.offered, kind, module, item.name, drafts)}
+                                    on={isOffered(offer.offered, kind, module, item.name, {})}
                                     disabled={!editable || saving || whole}
-                                    onChange={(next) => setDraft(kind, module, item.name, next)}
+                                    onChange={(next) => toggleItem(kind, module, item.name, item.label, next)}
                                   />
                                   <span className="access-offer-name">{item.label}</span>
                                 </li>
@@ -332,32 +338,6 @@ export function WorkspaceOfferEditor({
         );
       })}
 
-      <footer className="access-offer-footer">
-        <span className="access-policy-muted" role="status">
-          {pending === 0 ? (saved ? 'Saved' : 'No unsaved change') : `${pending} unsaved change${pending === 1 ? '' : 's'}`}
-        </span>
-        <button
-          type="button"
-          className="platform-users-button"
-          disabled={saving || pending === 0}
-          onClick={() => {
-            setDrafts({});
-            setFeatureDrafts({});
-            setFeatureErrors({});
-          }}
-        >
-          Discard
-        </button>
-        <button
-          type="button"
-          className="platform-users-button platform-users-button-primary"
-          data-action="save-offer"
-          disabled={saving || pending === 0}
-          onClick={() => void save()}
-        >
-          {saving ? 'Saving…' : 'Save offer'}
-        </button>
-      </footer>
     </section>
   );
 }

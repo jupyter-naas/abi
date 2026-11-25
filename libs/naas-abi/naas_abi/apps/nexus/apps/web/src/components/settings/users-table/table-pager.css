@@ -1,0 +1,57 @@
+/* Under a settings table: the rows shown, the page size, Previous and Next. */
+.settings-table-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.settings-table-pager-controls {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.settings-table-pager-size {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-table-pager-size select {
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--background-hex);
+  font-size: var(--font-size-xs);
+  color: var(--foreground-hex);
+}
+
+.settings-table-pager-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--background-hex);
+  font-size: var(--font-size-xs);
+  color: var(--foreground-hex);
+  cursor: pointer;
+}
+
+.settings-table-pager-button:hover:not(:disabled) {
+  background-color: var(--muted-bg-hex);
+}
+
+.settings-table-pager-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}

@@ -8,6 +8,7 @@ import { PlatformUsers } from './users';
 import type { AdminUser, Deletion } from './users-model';
 
 type Call = { url: string; method: string; body: unknown };
+const LIST = '/api/admin/users?roles=false';
 type Answer = { status: number; body: unknown };
 
 const user = (over: Partial<AdminUser>): AdminUser => ({
@@ -26,7 +27,14 @@ const user = (over: Partial<AdminUser>): AdminUser => ({
   ...over,
 });
 
-const ADMIN = user({ id: 'usr_admin', principal_id: 'usr_admin', email: 'admin@example.com', name: 'Admin', is_superadmin: true });
+const ADMIN = user({
+  id: 'usr_admin',
+  principal_id: 'usr_admin',
+  email: 'admin@example.com',
+  name: 'Admin',
+  is_superadmin: true,
+  roles: [{ kind: 'group', id: 'grp_pa', name: 'Platform admins' }],
+});
 const BOB = user({
   id: 'usr_bob',
   principal_id: 'usr_bob',
@@ -52,8 +60,18 @@ function api(answers: Record<string, (call: Call) => Answer> = {}, users: AdminU
     calls.push(call);
     const answer =
       answers[`${method} ${url}`]?.(call) ??
-      (method === 'GET' && url === '/api/admin/users'
-        ? { status: 200, body: users }
+      // The list comes without the roles, then the roles a page at a time.
+      (method === 'GET' && url === LIST
+        ? { status: 200, body: users.map((u) => ({ ...u, roles: [] })) }
+        : method === 'GET' && url.startsWith('/api/admin/users/roles?')
+          ? {
+              status: 200,
+              body: Object.fromEntries(
+                new URLSearchParams(url.split('?')[1])
+                  .getAll('principal')
+                  .map((p) => [p, users.find((u) => u.principal_id === p)?.roles ?? []])
+              ),
+            }
         : method === 'GET' && url === '/api/invitations/providers'
           ? {
               status: 200,
@@ -100,7 +118,7 @@ async function render(props: Partial<Parameters<typeof PlatformUsers>[0]> & { fe
 }
 
 describe('PlatformUsers', () => {
-  it('lists every account and invitation with its status, superadmin and organizations, not its IAM id', async () => {
+  it('lists every account and invitation with its status, organizations and Role, not its IAM id', async () => {
     const { fetcher } = api();
     await render({ fetcher });
     const rows = [...mounted!.host.querySelectorAll('tr[data-user]')].map((r) => r.getAttribute('data-user'));
@@ -108,7 +126,9 @@ describe('PlatformUsers', () => {
     expect(row('usr_bob').textContent).not.toContain('usr_bob');
     expect(row('usr_bob').querySelector('[data-field="status"]')?.textContent).toBe('Signed in');
     expect(row('usr_bob').querySelector('[data-field="organizations"]')?.textContent).toBe('Acme');
-    expect(row('usr_admin').querySelector('[data-field="superadmin"]')?.textContent).toContain('Platform admin');
+    expect(row('usr_admin').querySelector('[data-field="role"]')?.textContent).toBe('Platform admins');
+    const headers = [...mounted!.host.querySelectorAll('thead th')].map((th) => th.textContent?.trim());
+    expect(headers.indexOf('Role')).toBe(headers.indexOf('Organizations') + 1);
     expect(row('invited:new@example.com').querySelector('[data-field="status"]')?.textContent).toBe('Invited, not yet');
     expect(row('invited:new@example.com').textContent).not.toContain('None yet');
   });
@@ -243,7 +263,7 @@ describe('PlatformUsers', () => {
     expect(calls.filter((c) => c.method === 'DELETE').map((c) => c.url)).toEqual([
       '/api/admin/users/usr_bob?confirm=bob%40example.com',
     ]);
-    expect(calls.filter((c) => c.method === 'GET' && c.url === '/api/admin/users')).toHaveLength(2);
+    expect(calls.filter((c) => c.method === 'GET' && c.url === LIST)).toHaveLength(2);
     // The row is gone: what the provider could not do is said above the table.
     expect(document.querySelector('[data-field="page-notice"]')?.textContent).toBe(
       'bob@example.com: builtin could not be reached'
@@ -280,7 +300,7 @@ describe('PlatformUsers', () => {
   });
 
   it('says why the list could not be read', async () => {
-    const { fetcher } = api({ 'GET /api/admin/users': () => ({ status: 403, body: { detail: 'Not allowed to list users' } }) });
+    const { fetcher } = api({ [`GET ${LIST}`]: () => ({ status: 403, body: { detail: 'Not allowed to list users' } }) });
     await render({ fetcher });
     expect(mounted!.host.querySelector('[role="alert"]')?.textContent).toBe('Not allowed to list users');
   });

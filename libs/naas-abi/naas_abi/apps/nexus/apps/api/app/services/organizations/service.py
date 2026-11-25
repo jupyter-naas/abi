@@ -242,7 +242,17 @@ class OrganizationService:
         self.defaults = defaults
 
     async def get_organization_role(self, user_id: str, org_id: str) -> str | None:
+        """Their role at the organization; a platform admin's is admin everywhere
+        (``builtin.platform_admin`` covers every container, with no group of it)."""
+        if user_id in await self.memberships.platform_admins():
+            return "admin"
         return await self.memberships.role_at(user_id, org_container(org_id))
+
+    async def organization_roles(self, user_id: str, org_ids: list[str]) -> dict[str, str]:
+        """``get_organization_role`` of each organization, from one read."""
+        if user_id in await self.memberships.platform_admins():
+            return dict.fromkeys(org_ids, "admin")
+        return await self.memberships.scopes_of(user_id, level="org")
 
     async def require_organization_access(self, user_id: str, org_id: str) -> str:
         role = await self.get_organization_role(user_id=user_id, org_id=org_id)

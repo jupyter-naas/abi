@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The pages of the person's own say "Private to <name>" in a view and ask the server for nothing:
- * chat history, My Files, coding environments, the workspace's secrets, the account's API keys.
+ * chat history, My Files, coding environments, the account's API keys.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
@@ -13,7 +13,6 @@ import { PrivateGate, PrivateToPerson } from './private-to-person';
 
 vi.mock('@/lib/config', () => ({ getApiUrl: () => 'https://api.example.test' }));
 // The pages' own content is not under test: a marker stands in, and says when it was rendered.
-vi.mock('@/components/settings/secrets-panel', () => ({ SecretsPanel: () => createElement('p', { 'data-secrets': '' }, 'secrets') }));
 vi.mock('@/app/account/api-keys/api-keys', () => ({ default: () => createElement('p', { 'data-keys': '' }, 'keys') }));
 
 vi.mock('next/navigation', () => ({
@@ -24,7 +23,6 @@ vi.mock('next/navigation', () => ({
 }));
 
 import CodeWorkspacesPage from '@/app/workspace/[workspaceId]/code/workspaces/page';
-import SecretsPage from '@/app/workspace/[workspaceId]/settings/secrets/page';
 import ApiKeysPage from '@/app/account/api-keys/page';
 
 const VIEW = {
@@ -76,16 +74,6 @@ describe('the placeholder', () => {
 });
 
 describe('the private pages', () => {
-  it('the workspace’s secrets', async () => {
-    mounted = await mount(SecretsPage, {});
-    expect(mounted.host.querySelector('[data-secrets]')).not.toBeNull();
-    await mounted.unmount();
-    inView();
-    mounted = await mount(SecretsPage, {});
-    expect(mounted.host.querySelector('[data-secrets]')).toBeNull();
-    expect(text()).toContain('Private to Carol');
-  });
-
   it('the account’s API keys', async () => {
     mounted = await mount(ApiKeysPage, {});
     expect(mounted.host.querySelector('[data-keys]')).not.toBeNull();

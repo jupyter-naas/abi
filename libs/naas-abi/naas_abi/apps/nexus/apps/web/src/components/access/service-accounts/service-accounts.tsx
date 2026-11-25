@@ -16,6 +16,7 @@ import {
   useListControls,
   type ListColumn,
 } from '../access-list';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 import { isServiceAccountPolicy } from '../builtins';
 import { OneTimeSecretPanel, useOneTimeSecret } from './one-time-secret';
 import './service-accounts.css';
@@ -81,6 +82,7 @@ export function ServiceAccountsView({ api, can, nonce }: PlatformViewProps) {
     initialSort: 'name',
   });
   useAccessBadge(accounts?.length ?? null, 'service account');
+  const paged = usePagedRows(list.visible, list.pageKey);
 
   if (accounts === null) {
     return error ? <p className="access-source-note" role="alert">{error}</p> : <p className="access-empty">Loading…</p>;
@@ -151,7 +153,7 @@ export function ServiceAccountsView({ api, can, nonce }: PlatformViewProps) {
         <table className="org-settings-users-table" aria-label="Service accounts">
           <ListHead columns={columns} controls={list} />
           <tbody>
-            {list.visible.map((account) => (
+            {paged.pageRows.map((account) => (
               <Fragment key={account.id}>
                 <tr
                   data-service-account={account.name ?? account.id}
@@ -257,6 +259,7 @@ export function ServiceAccountsView({ api, can, nonce }: PlatformViewProps) {
           </tbody>
         </table>
       </div>
+      <TablePager total={list.visible.length} paged={paged} />
       {deleting && (
         <div className="access-sa-confirm platform-users-deletion" role="dialog" aria-label="Delete service account">
           <p>

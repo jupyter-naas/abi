@@ -1,8 +1,4 @@
-'use client';
-
-import { PlatformAccess } from '../../platform-access';
-
-/** A policy's page: who holds it and at which level, then its document. */
+/** A policy's page: shown by the section's layout (the address names it), without a remount. */
 export default function PlatformPolicyPage() {
-  return <PlatformAccess section="policies" />;
+  return null;
 }

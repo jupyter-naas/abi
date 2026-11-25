@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
@@ -29,11 +29,28 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MEMBERSHIPS,
     LastOrgAdminError,
     MembershipDenied,
+    UnknownUserError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     PLATFORM,
     org_container,
     workspace_of,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import (
+    KEEP,
+    ROLES_BATCH_MAX,
+    HeldRolesView,
+    MemberRolesInput,
+    RoleChange,
+    RoleOptionsView,
+    RoleOptionView,
+    RoleRefView,
+    change_roles,
+    held_roles,
+    role_groups_of,
+    role_options,
+    roles_of_batch,
+    roles_of_people,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations import domain_proof
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
@@ -327,6 +344,8 @@ class OrganizationMember(BaseModel):
     user_created: bool = False
     sign_in_email_sent: bool = False
     workspace_member_id: str | None = None
+    # Users › Role: their groups and policies at the organization.
+    roles: list[RoleRefView] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _org_admin_of_role(self) -> OrganizationMember:
@@ -613,7 +632,7 @@ async def list_organizations(
     rows = await service.list_organizations(user_id=current_user.id)
     # Each organization with the caller's role there, read once from IAM: the account
     # menu decides Organization Settings from this one answer.
-    roles = await service.memberships.scopes_of(current_user.id, level="org")
+    roles = await service.organization_roles(current_user.id, [row.id for row in rows])
     return [Organization(**row.__dict__, current_user_role=roles.get(row.id)) for row in rows]
 
 
@@ -1074,11 +1093,22 @@ async def sync_org_member_workspaces(
 )
 async def list_org_members(
     org_id: str,
+    roles: bool = Query(True, description="With each one's Role; false: the list alone."),
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> list[OrganizationMember]:
+    """The organization's people, with their Role in it (``roles=false``: without it,
+    read then a page at a time from ``GET …/members/roles``)."""
     rows = await service.list_members(org_id=org_id)
-    return [OrganizationMember(**row.__dict__) for row in rows]
+    if not roles:
+        return [OrganizationMember(**row.__dict__) for row in rows]
+    found = await roles_of_people(
+        org_container(org_id), [str(r.principal_id) for r in rows if r.principal_id]
+    )
+    return [
+        OrganizationMember(**row.__dict__, roles=found.get(str(row.principal_id), []))
+        for row in rows
+    ]
 
 
 def _invite_profile(invite: OrganizationMemberInvite) -> dict[str, str]:
@@ -1102,6 +1132,165 @@ async def _sync_member_drive(
     await user_drive_profile.sync_user_drive_profile_safely(
         db, object_storage, user_id, datetime.now(UTC)
     )
+
+
+async def _org_workspace_groups(
+    service: OrganizationService, org_id: str
+) -> list[tuple[str, str | None, str | None, str, str]]:
+    workspaces = await service.list_all_workspaces(org_id=org_id)
+    return await MEMBERSHIPS.workspace_groups(org_id, [w.id for w in workspaces])
+
+
+@router.get(
+    "/{org_id}/members/role-options",
+    dependencies=[
+        guard(
+            "ListOrganizationMembers",
+            org="org_id",
+            literal="-",
+            denied="Only admins can list organization members",
+        )
+    ],
+)
+async def org_member_role_options(
+    org_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+) -> RoleOptionsView:
+    """What a member's Role in the organization may hold, as the caller may give it:
+    the levels, its people and admins groups, its workspaces' groups (to place them
+    there), its other groups the caller lists, and the policies the caller may attach
+    here."""
+    container = org_container(org_id)
+    groups = await role_groups_of(container)
+    more: list[RoleOptionView] = []
+    for ws, own, admins, own_name, admins_name in await _org_workspace_groups(service, org_id):
+        if own:
+            more.append(RoleOptionView(kind="group", id=own, name=own_name, workspace=ws))
+        if admins:
+            more.append(
+                RoleOptionView(
+                    kind="group", id=admins, name=admins_name, workspace=ws, administers=True
+                )
+            )
+    return await role_options(current_user, container, groups, listed_at=container, more=more)
+
+
+@router.get(
+    "/{org_id}/members/roles",
+    dependencies=[
+        guard(
+            "ListOrganizationMembers",
+            org="org_id",
+            literal="-",
+            denied="Only admins can list organization members",
+        )
+    ],
+)
+async def org_members_roles(
+    org_id: str,
+    principal: list[str] = Query(default_factory=list, max_length=ROLES_BATCH_MAX),
+) -> dict[str, list[RoleRefView]]:
+    """Organization › Users › Role of the people asked by their IAM id (a page of them)."""
+    return await roles_of_batch(org_container(org_id), principal)
+
+
+@router.get(
+    "/{org_id}/members/{user_id}/roles",
+    dependencies=[
+        guard(
+            "ListOrganizationMembers",
+            org="org_id",
+            literal="-",
+            denied="Only admins can view member details",
+        )
+    ],
+)
+async def org_member_roles(org_id: str, user_id: str) -> HeldRolesView:
+    """What a member holds in the organization (its groups and its workspaces'), as a
+    change of their Role starts from."""
+    try:
+        principal = await MEMBERSHIPS.principal_id(user_id)
+    except UnknownUserError as exc:
+        raise HTTPException(status_code=404, detail="Member not found") from exc
+    container = org_container(org_id)
+    return await held_roles(container, principal, await role_groups_of(container))
+
+
+@router.put(
+    "/{org_id}/members/{user_id}/roles",
+    dependencies=[
+        guard(
+            "UpdateOrganizationMember",
+            org="org_id",
+            id="user_id",
+            denied="Only admins can update member roles",
+        )
+    ],
+)
+async def set_org_member_roles(
+    org_id: str,
+    user_id: str,
+    body: MemberRolesInput,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+    people: PeopleServicePort = Depends(get_people_service),
+) -> MemberRolesInput:
+    """Make a member's Role in the organization the groups and policies asked: their
+    level, the org admin seat and their workspaces (each with its admins group) all or
+    nothing through the people service (the last org admin stays), the other groups
+    and the policies attached here as the caller."""
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot change your own access")
+    try:
+        principal = await MEMBERSHIPS.principal_id(user_id)
+    except UnknownUserError as exc:
+        raise HTTPException(status_code=404, detail="Member not found") from exc
+    container = org_container(org_id)
+    groups = await role_groups_of(container)
+    ws_groups = await _org_workspace_groups(service, org_id)
+    wanted = set(body.groups)
+
+    def placed(source: set[str]) -> dict[str, bool]:
+        return {
+            ws: bool(admins and admins in source)
+            for ws, own, admins, _o, _a in ws_groups
+            if (own and own in source) or (admins and admins in source)
+        }
+
+    async def seats(change: RoleChange, held: set[str]) -> set[str]:
+        desired, current = placed(wanted), placed(held)
+        workspaces = (
+            None
+            if desired == current
+            else [WorkspaceAccess(id=ws, admin=admin) for ws, admin in sorted(desired.items())]
+        )
+        level = None if change.level in (KEEP, None) else str(change.level)
+        if level is not None or change.admin is not None or workspaces is not None:
+            with people_errors(_member_denied):
+                await people.change_access(
+                    user_id=user_id,
+                    organization_id=org_id,
+                    by=current_user,
+                    level=level,
+                    org_admin=change.admin,
+                    workspaces=workspaces,
+                    among=[ws for ws, *_rest in ws_groups],
+                )
+        return {g for _ws, own, admins, _o, _a in ws_groups for g in (own, admins) if g}
+
+    held, _ = await MEMBERSHIPS.held_at(container, principal)
+    await change_roles(
+        user=current_user,
+        scope=container,
+        principal_id=principal,
+        body=body,
+        groups=groups,
+        reaches_otherwise=bool(held & groups.elsewhere),
+        attach_at=container,
+        seats=seats,
+    )
+    return await held_roles(container, principal, groups)
 
 
 @router.get(

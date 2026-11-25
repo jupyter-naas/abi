@@ -114,6 +114,12 @@ class EngineIamGateway(IamGateway):
             return True
         iam = self._iam()
         with as_service_account("api"):
+            # Since the access model (#1583) a membership is a membership group's,
+            # and the person holds no attachment of their own there.
+            if any(
+                within(as_container(m.container), top) for m in iam.list_memberships(principal_id)
+            ):
+                return True
             attachments = iam.list_attachments(principal_id=principal_id)
         return any(
             a.scope is not None and within(as_container(container_of_scope(a.scope)), top)

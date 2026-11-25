@@ -3,6 +3,7 @@ from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     KNOWN_FEATURE_KEYS,
     enabled_feature_catalog,
     feature_enabled,
+    offer_choices,
     offered_features,
     parse_feature_overrides,
 )
@@ -35,6 +36,13 @@ class TestOfferedFeatures:
         config = FeatureFlagsConfig(enabled_features=["chat", "graph"])
 
         assert offered_features(config) == enabled_feature_catalog(config) == ["chat", "graph"]
+
+    def test_a_pinned_feature_is_no_choice_of_an_offer(self) -> None:
+        # Settings stays with whoever administers the workspace: an offer never switches it.
+        config = FeatureFlagsConfig(enabled_features=["chat", "settings", "graph"])
+
+        assert offer_choices(config) == ["chat", "graph"]
+        assert "settings" in offered_features(config)
 
     def test_saved_overrides_parse_for_the_move_and_drop_unknown_keys(self) -> None:
         assert parse_feature_overrides('{"maps": false, "graph": true}') == {

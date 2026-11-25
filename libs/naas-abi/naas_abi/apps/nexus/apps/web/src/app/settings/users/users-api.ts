@@ -40,9 +40,10 @@ const json = (method: string, body: unknown): RequestInit => ({
 
 const userUrl = (id: string) => `${USERS_API}/${encodeURIComponent(id)}`;
 
-/** Every account of the platform, and those invited who have none yet. */
-export function listUsers(fetcher: Fetcher = authFetch) {
-  return call<AdminUser[]>(fetcher, USERS_API);
+/** Every account of the platform, and those invited who have none yet; `roles: false`: without
+ *  each one's Role (read then a page at a time, `${USERS_API}/roles`). */
+export function listUsers(fetcher: Fetcher = authFetch, { roles = true }: { roles?: boolean } = {}) {
+  return call<AdminUser[]>(fetcher, roles ? USERS_API : `${USERS_API}?roles=false`);
 }
 
 export function inviteUser(

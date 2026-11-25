@@ -1,9 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { AttachablePolicy, AttachmentView, PrincipalKind } from '@/lib/iam-admin/types';
 import type { AccessDirectory } from '../access-directory';
+import { AccessHeaderAction, AccessHeaderSlotContext } from '../access-list';
+import { SettingsSection } from '@/components/settings/settings-ui';
 import type { AccessNavigation } from '../access-props';
 import type { AccessScope } from '../access-scope';
 import { offeredTo, type PrincipalChoice } from '../attachments/attach-form';
@@ -14,6 +17,10 @@ import '../attachments/attachments.css';
 import '../holdings/holdings.css';
 import { isRoleCompanion, principalKindOf, roleOfPolicy } from '../roles/role-change';
 import { useActionsAt, useContainerNames } from './policy-owners';
+import { AttachDialog, type AttachCandidate } from './attach-dialog';
+
+// What an IAM id looks like: a person's, a group's or a service account's.
+const IAM_ID = /^(usr|grp|sa)_[A-Za-z0-9]+$/;
 
 const message = (e: unknown) => (e instanceof IamAdminError || e instanceof Error ? e.message : String(e));
 
@@ -37,6 +44,7 @@ export function PolicyAttachments({
   nonce = 0,
   scope,
   directory,
+  boundOf,
 }: {
   api: IamAdminApi;
   policyId: string;
@@ -49,10 +57,14 @@ export function PolicyAttachments({
   /** The page's scope, where the policy is attached from here; without it, nothing is. */
   scope?: AccessScope;
   directory?: AccessDirectory;
+  /** A workspace's offer ("<W> access"): the workspace group it bounds. Its holding is the
+   *  workspace's ceiling, not a grant: shown read-only, nothing detached or attached here. */
+  boundOf?: string | null;
 }) {
   const [items, setItems] = useState<AttachmentView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -75,7 +87,8 @@ export function PolicyAttachments({
   const actionsAt = useActionsAt(api, scopes, here, can, nonce);
   // A role is a membership only for a user (changed as on Members); a group or a service
   // account holds it as a plain attachment, detached here like any other.
-  const membership = (kind: PrincipalKind) => isRoleCompanion(policyId) || (!!roleOfPolicy(policyId) && kind === 'user');
+  const membership = (kind: PrincipalKind) =>
+    !!boundOf || isRoleCompanion(policyId) || (!!roleOfPolicy(policyId) && kind === 'user');
 
   const detach = async (a: AttachmentView) => {
     try {
@@ -88,9 +101,21 @@ export function PolicyAttachments({
   };
 
   if (items === null) return null;
+  // Its "+ Attach" sits in the section's header, as a group's "+ Attach policies".
   return (
-    <section className="access-policy-attachments" aria-label="Who holds it">
-      <h4 className="access-policy-subheading">Held by</h4>
+    <AccessHeaderSlotContext.Provider value={actionsSlot}>
+    <SettingsSection
+      title="Held by"
+      description="Who holds it, at every level you may list."
+      actions={<span ref={setActionsSlot} className="access-instance-actions-slot" data-held-actions="" />}
+    >
+    <div className="access-policy-attachments" role="region" aria-label="Who holds it" data-held-by="">
+      {boundOf && (
+        <p className="access-policy-muted" data-held-bound="">
+          Everyone in {boundOf} reaches what is offered here: this is the workspace&apos;s offer, changed in
+          Configuration. Read-only.
+        </p>
+      )}
       {error && (
         <p className="access-policy-error" role="alert">
           {error}
@@ -150,7 +175,7 @@ export function PolicyAttachments({
           </table>
         </div>
       )}
-      {scope && directory && can('iam:AttachPolicy') && (
+      {scope && directory && !boundOf && can('iam:AttachPolicy') && (
         <AttachToPrincipal
           api={api}
           policyId={policyId}
@@ -161,7 +186,9 @@ export function PolicyAttachments({
           onAttached={() => void load()}
         />
       )}
-    </section>
+    </div>
+    </SettingsSection>
+    </AccessHeaderSlotContext.Provider>
   );
 }
 
@@ -185,13 +212,14 @@ async function principalsOf(
     // A member's IAM id (an account linked from the old login has another id in Nexus).
     if (m.inherited) continue;
     const id = m.principalId ?? m.userId;
-    seen.set(id, { id, label: m.name || m.email || id, kind: 'user' });
+    seen.set(id, { id, label: m.name || m.email || id, kind: 'user', email: m.email || null });
   }
   for (const p of [...groups, ...accounts]) seen.set(p.id, { id: p.id, label: principalLabel(p, p.id), kind: p.kind });
   return [...seen.values()];
 }
 
-/** The policy, attached at the page's scope to a principal picked or typed. */
+/** The policy, attached at the page's scope to someone picked in a search (`AttachDialog`),
+ *  opened by "+ Attach" in the header of Held by. */
 function AttachToPrincipal({
   api,
   policyId,
@@ -211,10 +239,8 @@ function AttachToPrincipal({
 }) {
   const [policy, setPolicy] = useState<AttachablePolicy | null | undefined>(undefined);
   const [choices, setChoices] = useState<PrincipalChoice[]>([]);
-  const [principalId, setPrincipalId] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const listId = useId();
+  const [open, setOpen] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,71 +256,55 @@ function AttachToPrincipal({
   }, [api, policyId, scope, directory, can, nonce]);
 
   const offered = useMemo(() => (policy ? choices.filter((c) => offeredTo(policy, c)) : []), [policy, choices]);
-  const target = principalId.trim();
-  const typed = offered.find((c) => c.id === target) ?? (target ? { id: target, label: target, kind: principalKindOf(target) } : undefined);
-  const allowed = !!policy && !!typed && offeredTo(policy, typed);
+  // An IAM id typed that is not listed (a service account, someone of another level).
+  const typed = useCallback(
+    (id: string): AttachCandidate | null => {
+      if (!IAM_ID.test(id)) return null;
+      const candidate = { id, label: id, kind: principalKindOf(id) };
+      return policy && offeredTo(policy, candidate) ? candidate : null;
+    },
+    [policy]
+  );
 
   if (!policy || isRoleCompanion(policyId)) return null;
 
-  const submit = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.attach({ policy_id: policyId, principal_id: target, scope: scope.value });
-      setPrincipalId('');
-      onAttached();
-    } catch (e) {
-      setError(message(e));
-    } finally {
-      setBusy(false);
-    }
+  const attach = async (candidate: AttachCandidate) => {
+    await api.attach({ policy_id: policyId, principal_id: candidate.id, scope: scope.value });
+    setOpen(false);
+    setNotice(`Attached to ${candidate.label} at ${scope.label}.`);
+    onAttached();
   };
 
   return (
-    <form
-      className="access-att-form"
-      aria-label="Attach this policy"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void submit();
-      }}
-    >
-      <label className="access-att-field">
-        <span>Attach to</span>
-        <input
-          type="text"
-          className="access-att-input"
-          aria-label="Attach to"
-          list={listId}
-          autoComplete="off"
-          placeholder={roleOfPolicy(policyId) ? 'A group or a service account id' : 'A person, a group or a service account id'}
-          value={principalId}
-          onChange={(event) => setPrincipalId(event.target.value)}
-        />
-        <datalist id={listId}>
-          {offered.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
-          ))}
-        </datalist>
-      </label>
-      <span className="access-att-scope">at {scope.label}</span>
-      <button type="submit" className="access-att-button access-att-button-primary" disabled={busy || !allowed}>
-        Attach
-      </button>
-      {target && typed && !offeredTo(policy, typed) && (
-        <p className="access-att-error" role="status">
-          {roleOfPolicy(policyId)
-            ? 'A role is a membership: change it on Members.'
-            : 'This policy is not attached to this kind of principal.'}
+    <>
+      <AccessHeaderAction>
+        <button
+          type="button"
+          className="org-settings-primary-button"
+          data-action="attach"
+          onClick={() => {
+            setNotice(null);
+            setOpen(true);
+          }}
+        >
+          <Plus size={16} />
+          Attach
+        </button>
+      </AccessHeaderAction>
+      {notice && (
+        <p className="access-policy-notice" role="status" data-attach-notice="">
+          {notice}
         </p>
       )}
-      {error && (
-        <p className="access-att-error" role="alert">
-          {error}
-        </p>
-      )}
-    </form>
+      <AttachDialog
+        open={open}
+        title={roleOfPolicy(policyId) ? 'Attach this role' : 'Attach this policy'}
+        where={scope.label}
+        candidates={offered}
+        typed={typed}
+        onClose={() => setOpen(false)}
+        onAttach={attach}
+      />
+    </>
   );
 }

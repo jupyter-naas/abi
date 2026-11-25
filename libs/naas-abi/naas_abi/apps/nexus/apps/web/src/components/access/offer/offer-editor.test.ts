@@ -122,29 +122,64 @@ describe('WorkspaceOfferEditor', () => {
     expect(document.querySelector('textarea')).toBeNull();
   });
 
-  it('lists a module’s items on demand and saves every toggle in one write', async () => {
+  it('lists a module’s items on demand and saves each toggle at once', async () => {
     const parts = setup();
-    await render(parts);
-    await mounted!.click(button('Agents of acme.people') ?? null);
-    await mounted!.flush();
+    const onChanged = vi.fn();
+    mounted = await mount(WorkspaceOfferEditor, {
+      workspaceId: 'ws-1',
+      scope: WS,
+      workspaceName: 'Sales',
+      api: parts.api,
+      offerApi: parts.offerApi as unknown as OfferApi,
+      featureApi: parts.featureApi as unknown as FeatureAccessApi,
+      onChanged,
+    });
+    await mounted.flush();
+    await mounted.click(button('Agents of acme.people') ?? null);
+    await mounted.flush();
     expect(parts.api.resources).toHaveBeenCalledWith({ scope: WS, service: 'module', type: 'agent', module: 'acme.people', limit: 200 });
     expect(switchOf('[data-offer-item="acme.people/Coach"]')?.getAttribute('aria-checked')).toBe('true');
 
-    await mounted!.click(switchOf('[data-offer-item="acme.people/Recruiter"]'));
-    await mounted!.click(switchOf('[data-offer-item="acme.people/Coach"]'));
-    await mounted!.click(switchOf('[data-offer-section="workflows"] [data-offer-module="acme.sales"]'));
-    await mounted!.click(switchOf('[data-offer-feature="maps"]'));
-    expect(document.body.textContent).toContain('4 unsaved changes');
-
-    await mounted!.click(button('Save offer') ?? null);
-    await mounted!.flush();
-    expect(parts.offerApi.save).toHaveBeenCalledTimes(1);
-    expect(parts.offerApi.save).toHaveBeenCalledWith('ws-1', [
+    await mounted.click(switchOf('[data-offer-item="acme.people/Recruiter"]'));
+    await mounted.flush();
+    expect(parts.offerApi.save).toHaveBeenLastCalledWith('ws-1', [
       { kind: 'agents', module: 'acme.people', name: 'Recruiter', offered: true },
-      { kind: 'agents', module: 'acme.people', name: 'Coach', offered: false },
+    ]);
+    expect(document.querySelector('[data-offer-notice]')?.textContent).toBe('Recruiter added to the offer.');
+
+    await mounted.click(switchOf('[data-offer-section="workflows"] [data-offer-module="acme.sales"]'));
+    await mounted.flush();
+    expect(parts.offerApi.save).toHaveBeenLastCalledWith('ws-1', [
       { kind: 'workflows', module: 'acme.sales', name: '*', offered: false },
     ]);
+
+    await mounted.click(switchOf('[data-offer-feature="maps"]'));
+    await mounted.flush();
     expect(parts.featureApi.save).toHaveBeenCalledWith('ws-1', [{ feature: 'maps', choice: 'everyone' }]);
+    expect(document.querySelector('[data-offer-notice]')?.textContent).toBe('Maps added to the offer.');
+    // Each save tells the page: "<W> access" has a new revision. No Save button is left.
+    expect(onChanged).toHaveBeenCalledTimes(3);
+    expect(button('Save offer')).toBeUndefined();
+  });
+
+  it('says a refusal of a feature at its row, and tells nothing changed', async () => {
+    const parts = setup();
+    parts.featureApi.save = vi.fn().mockResolvedValue({ ...FEATURES, errors: { maps: 'Not offered by the organization' } });
+    const onChanged = vi.fn();
+    mounted = await mount(WorkspaceOfferEditor, {
+      workspaceId: 'ws-1',
+      scope: WS,
+      api: parts.api,
+      offerApi: parts.offerApi as unknown as OfferApi,
+      featureApi: parts.featureApi as unknown as FeatureAccessApi,
+      onChanged,
+    });
+    await mounted.flush();
+    await mounted.click(switchOf('[data-offer-feature="maps"]'));
+    await mounted.flush();
+    expect(document.querySelector('[data-offer-feature="maps"]')?.textContent).toContain('Not offered by the organization');
+    expect(document.querySelector('[data-offer-notice]')).toBeNull();
+    expect(onChanged).not.toHaveBeenCalled();
   });
 
   it('an item is on with its whole module, and cannot be turned off alone', async () => {

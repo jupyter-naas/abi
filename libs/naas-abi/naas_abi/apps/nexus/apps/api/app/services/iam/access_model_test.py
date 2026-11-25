@@ -553,6 +553,125 @@ async def test_it_waits_for_the_records_of_container_defaults(nexus_db, caplog):
 
 
 @pytest.mark.asyncio
+async def test_a_role_another_one_already_gives_goes_and_is_said(nexus_db):
+    """What another role of theirs already gives goes, and the report names it: an
+    organization's admin holds no admins group of its workspaces; a platform admin
+    holds no organization's or workspace's admins group (as a store moved by a build of
+    before this rule left them: the move run again takes them out). The workspace groups
+    stay (they bound what their people see), and nobody loses a decision for it."""
+    nexus = previous._world()
+    scopes = _containers(previous)
+    nexus.grant("root", "admin", nexus.org("org-1"))
+    nexus.grant("root", "admin", scopes["ws-a"])
+    nexus.grant("alice", "admin", scopes["ws-b"])
+    with nexus.installed():
+        subjects = previous._subjects(nexus)
+        await _policy_tree_world_installed(nexus, nexus_db)
+        before = _matrix(nexus, subjects)
+        report = await _move(nexus_db, nexus)
+        assert report is not None and report.applied
+        changed = _diff(before, _matrix(nexus, subjects))
+        # Everyone's changes are reported but a platform admin's gains: out of the
+        # workspaces' roles, no offer bounds them, and the move does not probe Nexus
+        # agents one by one. They lose nothing.
+        _check_report(report, {k: v for k, v in changed.items() if k[0] != "root"}, before["names"])
+        assert not [k for k, allowed in changed.items() if not allowed and k[0] == "root"]
+        assert report.redundant == [
+            "alice left Workspace ws-b admins: an admin of its organization (org-1): "
+            "their role reaches every workspace of it"
+        ]
+        # Out of "<W> admins", an organization's admin still writes its shared graphs.
+        assert not [
+            c for c in report.changes if c.user_id == "alice" and c.reason == "shared_graphs"
+        ]
+        records = {r.container: r for r in await _defaults(nexus_db)}
+        org1 = org_container("org-1")
+        with as_service_account("engine"):
+            root = str(nexus.iam.resolve_user("root").id)
+            alice = str(nexus.iam.resolve_user("alice").id)
+
+        def members(group_id) -> set:
+            with as_service_account("engine"):
+                return set(nexus.iam.list_group_members(group_id))
+
+        assert alice in members(records[org1].admins_group_id)
+        assert alice not in members(records[scopes["ws-b"]].admins_group_id)
+        assert alice in members(records[scopes["ws-b"]].members_group_id)
+        # A platform admin left in the admins groups (a store moved by a build of before
+        # this rule): written in the store, as IAM of today ties no one there.
+        nexus.iam.store.add_group_member(records[org1].admins_group_id, root)
+        nexus.iam.store.add_group_member(records[scopes["ws-a"]].admins_group_id, root)
+        nexus.iam.invalidate()
+        held = _matrix(nexus, subjects)
+        again = await _move(nexus_db, nexus, force=True)
+        assert again is not None
+        assert sorted(again.redundant) == [
+            "root left ORG-1 admins: " + access_model.PLATFORM_ADMIN_COVERS,
+            "root left Workspace ws-a admins: " + access_model.PLATFORM_ADMIN_COVERS,
+        ]
+        assert root not in members(records[org1].admins_group_id)
+        assert root not in members(records[scopes["ws-a"]].admins_group_id)
+        # Nothing lost: a platform admin may do everything.
+        lost = _diff(held, _matrix(nexus, subjects))
+        assert not [k for k, allowed in lost.items() if not allowed]
+
+
+async def test_an_organization_s_admin_holds_no_level_unless_they_work_outside_it(nexus_db):
+    """An organization's admin needs no level: its admins group gives them every
+    workspace of it, whatever their roles there were. One who works in a workspace of
+    another organization keeps the level it asks. A level left by a build of before this
+    rule goes, and is said, when the move runs again; nobody loses a decision for it."""
+    nexus = previous._world()
+    scopes = _containers(previous)
+    nexus.grant("alice", "admin", scopes["ws-b"])  # in org-1, which she administers
+    nexus.grant("gina", "member", scopes["ws-a"])  # org-2's admin, a Member in org-1
+    with nexus.installed():
+        subjects = previous._subjects(nexus)
+        await _policy_tree_world_installed(nexus, nexus_db)
+        before = _matrix(nexus, subjects)
+        report = await _move(nexus_db, nexus)
+        assert report is not None and report.applied
+        _check_report(report, _diff(before, _matrix(nexus, subjects)), before["names"])
+        with as_service_account("engine"):
+            levels = LEVELS.get(nexus.iam)
+            alice = str(nexus.iam.resolve_user("alice").id)
+            gina = str(nexus.iam.resolve_user("gina").id)
+
+        def members(group_id) -> set:
+            with as_service_account("engine"):
+                return set(nexus.iam.list_group_members(group_id))
+
+        assert alice not in members(levels.members) | members(levels.viewers)
+        assert gina in members(levels.members)
+        # A level left by a build of before this rule: the move run again takes it out.
+        nexus.iam.store.add_group_member(levels.members, alice)
+        nexus.iam.invalidate()
+        held = _matrix(nexus, subjects)
+        again = await _move(nexus_db, nexus, force=True)
+        assert again is not None
+        assert again.redundant == [
+            "alice left Members: an admin of its organizations (org-1): their admins "
+            "group reaches every workspace of them"
+        ]
+        assert alice not in members(levels.members)
+        lost = _diff(held, _matrix(nexus, subjects))
+        assert not [k for k, allowed in lost.items() if not allowed]
+
+
+def test_a_platform_admin_stays_the_admin_of_an_organization_that_has_no_other():
+    org_a, org_b = org_container("a"), org_container("b")
+    by_group = {"grp_a": (org_a, "admins"), "grp_b": (org_b, "admins")}
+    root = access_model.PersonPlan("usr_root", "root", platform_admin=True)
+    ann = access_model.PersonPlan("usr_ann", "ann")
+    plans = {"usr_root": root, "usr_ann": ann}
+    groups = {"usr_root": {"grp_a", "grp_b"}, "usr_ann": {"grp_a"}}
+    access_model._drop_redundant(plans, by_group, groups)
+    # Ann administers "a": root leaves it; nobody else does "b": root stays.
+    assert root.leaves == ["grp_a"] and [g for g, _ in root.redundant] == ["grp_a"]
+    assert ann.leaves == [] and ann.redundant == []
+
+
+@pytest.mark.asyncio
 async def test_the_default_admin_is_made_admin_of_each_workspace_with_none(nexus_db):
     nexus = previous._world()
     with nexus.installed():

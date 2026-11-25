@@ -2,11 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Plus,
-  Shield,
   UserCircle,
   AlertCircle,
   Trash2,
@@ -15,27 +13,25 @@ import {
   ChevronUp,
   ChevronDown,
   Search,
-  Download,
   Pencil,
   Mail,
 } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
-import { useAuthStore } from '@/stores/auth';
+import { authFetch, useAuthStore } from '@/stores/auth';
 import { useOrganizationStore, type OrganizationMember } from '@/stores/organization';
+import { RoleChips } from '@/components/people/role-chips';
 import { InvitedBadge, ResendButton } from '@/components/people/member-status';
 import { createPeopleApi } from '@/lib/people';
 import {
-  orgUserRoleLabel,
-  orgUserRoleRank,
   removableFromOrganization,
   removalConfirmation,
   workspacesBody,
-  WORKSPACE_ACCESS_ONLY,
 } from './users-model';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
+import { isOrgAdminRole } from '../lib/nav';
+import { readOrganization } from '@/lib/organization-resource';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
-import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
 import { ColumnResizeHandle } from '@/components/shell/column-resize-handle';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
@@ -46,9 +42,17 @@ import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-
 import { SearchBox } from '@/components/settings/search-box';
 import { matchesSearch } from '@/app/settings/lib/search';
 import {
-  downloadUsersExport,
+  downloadTableExport,
   type UsersExportFormat,
 } from '@/components/settings/users-table/users-table-export';
+import { UsersExportMenu, UsersReloadButton } from '@/components/settings/users-table/users-table-actions';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
+import {
+  RolesLoadingNote,
+  RolesPending,
+  rolesBatchFrom,
+  useProgressiveRoles,
+} from '@/components/settings/users-table/use-progressive-roles';
 import '../components/org-settings-components.css';
 import './users.css';
 
@@ -86,41 +90,6 @@ function summarizeWorkspaces(names: string[], visible = 2) {
   };
 }
 
-function roleBadge(user: Pick<OrganizationMember, 'role' | 'source' | 'orgAdmin' | 'level'>) {
-  const label = orgUserRoleLabel(user);
-  if (label === WORKSPACE_ACCESS_ONLY) {
-    // Linked through a workspace only, with no level known (a role of before).
-    return (
-      <span className="org-settings-users-role-none" data-role="none">
-        <span aria-hidden>—</span>
-        <span
-          className="org-settings-users-badge org-settings-users-badge-member"
-          title="They only reach the workspaces they were added to."
-        >
-          {WORKSPACE_ACCESS_ONLY}
-        </span>
-      </span>
-    );
-  }
-  if (label === 'Org admin') {
-    return (
-      <span className="org-settings-users-badge org-settings-users-badge-admin" data-role="org-admin">
-        <Shield size={12} />
-        Org admin
-      </span>
-    );
-  }
-  return (
-    <span
-      className="org-settings-users-badge org-settings-users-badge-member"
-      data-role={label.toLowerCase()}
-      title="Their level, in all their workspaces"
-    >
-      <UserCircle size={12} />
-      {label}
-    </span>
-  );
-}
 
 function memberPhotoUrl(avatar?: string) {
   if (!avatar) return '';
@@ -149,9 +118,37 @@ export default function OrgUsersPage() {
     membersLoading,
   } = useOrganizationStore();
 
-  const members = membersCache[orgId] || [];
+  // The list comes alone (`roles: false`); each one's Role follows, the page shown first.
+  const listed = useMemo(() => membersCache[orgId] || [], [membersCache, orgId]);
+  const fetchRoles = useMemo(
+    () => rolesBatchFrom(`/api/organizations/${encodeURIComponent(orgId)}/members/roles`, authFetch),
+    [orgId]
+  );
+  const [rolesGeneration, setRolesGeneration] = useState(0);
+  const roles = useProgressiveRoles(
+    useMemo(() => listed.map((m) => m.principalId ?? null), [listed]),
+    fetchRoles,
+    rolesGeneration
+  );
+  const members = useMemo(
+    () => listed.map((m) => ({ ...m, roles: (m.principalId ? roles.found[m.principalId] : undefined) ?? [] })),
+    [listed, roles.found]
+  );
   const myMembership = members.find((m) => m.userId === authUser?.id);
-  const canManage = !!myMembership?.orgAdmin;
+  // Their role in the organization, as IAM gives it: a platform admin is its admin without
+  // being one of its people (their platform role covers every organization).
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void readOrganization(orgId)
+      .then(async (response) => (response.ok ? ((await response.json()).current_user_role ?? null) : null))
+      .then((role) => live && setViewerRole(role))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [orgId]);
+  const canManage = !!myMembership?.orgAdmin || isOrgAdminRole(viewerRole);
 
   const [actionError, setActionError] = useState('');
   const [actionNotice, setActionNotice] = useState('');
@@ -162,6 +159,7 @@ export default function OrgUsersPage() {
   const [openPickerUserId, setOpenPickerUserId] = useState<string | null>(null);
   const [draftWorkspaceIds, setDraftWorkspaceIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [reloading, setReloading] = useState(false);
   const [sheetQuery, setSheetQuery] = useState('');
   const [search, setSearch] = useState('');
   const [columnFilters, setColumnFilters] = useState<
@@ -249,7 +247,7 @@ export default function OrgUsersPage() {
 
   useEffect(() => {
     if (orgId) {
-      void fetchMembers(orgId);
+      void fetchMembers(orgId, { roles: false });
       void loadMemberWorkspaces();
     }
   }, [orgId, fetchMembers, loadMemberWorkspaces]);
@@ -352,7 +350,8 @@ export default function OrgUsersPage() {
     try {
       // Every group of the organization; 409 for its last org admin, said as the API words it.
       await removeFromOrganization(orgId, user.userId);
-      await Promise.all([fetchMembers(orgId), loadMemberWorkspaces()]);
+      await Promise.all([fetchMembers(orgId, { roles: false }), loadMemberWorkspaces()]);
+      setRolesGeneration((n) => n + 1);
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Failed to remove user';
@@ -410,7 +409,10 @@ export default function OrgUsersPage() {
           (value, index, all) => all.indexOf(value) === index
         );
       }
-      if (columnId === 'role') return [orgUserRoleLabel(user)];
+      if (columnId === 'role') {
+        const names = [...new Set(user.roles.map((r) => r.name))];
+        return names.length > 0 ? names : ['No role'];
+      }
       const names = assignedNamesByUser[user.userId] || [];
       return names.length > 0 ? names : ['No workspaces'];
     },
@@ -447,7 +449,7 @@ export default function OrgUsersPage() {
       if (sortKey === 'user') {
         cmp = (a.name || a.email || '').localeCompare(b.name || b.email || '');
       } else if (sortKey === 'role') {
-        cmp = orgUserRoleRank(a) - orgUserRoleRank(b);
+        cmp = a.roles.map((r) => r.name).join(' ').localeCompare(b.roles.map((r) => r.name).join(' '));
       } else {
         cmp =
           (assignedNamesByUser[a.userId]?.length || 0) -
@@ -457,6 +459,9 @@ export default function OrgUsersPage() {
     });
     return rows;
   }, [filteredMembers, sortKey, sortDir, assignedNamesByUser]);
+  // A page of them; the search, the filters and the sort reach every row.
+  const paged = usePagedRows(visibleMembers, JSON.stringify([search, columnFilters, sortKey, sortDir]));
+  roles.show(paged.pageRows.map((m) => m.principalId ?? null));
 
   const loadFacets = useCallback(
     async (columnId: string, search: string): Promise<FacetBucket[]> => {
@@ -493,20 +498,32 @@ export default function OrgUsersPage() {
   const columns: { id: ColumnId; label: string }[] = [
     { id: 'user', label: 'User' },
     { id: 'workspaces', label: 'Workspaces' },
-    { id: 'role', label: 'Access' },
+    { id: 'role', label: 'Role' },
   ];
 
   const hasActiveFilters = columns.some((column) => !isBlank(columnFilters[column.id]));
 
+  // The table's columns: User (name, email), Workspaces, Role.
   const exportVisibleUsers = (format: UsersExportFormat) => {
-    const rows = visibleMembers.map((user) => ({
-      name: user.name || 'Unknown',
-      email: user.email || user.userId,
-      role: orgUserRoleLabel(user),
-      groups: (assignedNamesByUser[user.userId] || []).join('; '),
-    }));
+    const rows = visibleMembers.map((user) => [
+      user.name || 'Unknown',
+      user.email || user.userId,
+      (assignedNamesByUser[user.userId] || []).join('; '),
+      user.roles.map((r) => r.name).join('; '),
+    ]);
     const date = new Date().toISOString().slice(0, 10);
-    downloadUsersExport(rows, format, `users_${date}`);
+    downloadTableExport(['Name', 'Email', 'Workspaces', 'Role'], rows, format, `users_${date}`, 'Users');
+  };
+
+  const reloadUsers = async () => {
+    if (!orgId) return;
+    setReloading(true);
+    try {
+      await Promise.all([fetchMembers(orgId, { roles: false }), loadMemberWorkspaces()]);
+      setRolesGeneration((n) => n + 1);
+    } finally {
+      setReloading(false);
+    }
   };
 
   return (
@@ -518,39 +535,12 @@ export default function OrgUsersPage() {
           subtitle="Manage who has access to this organization and its workspaces"
           actions={
             <>
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger asChild>
-                  <button
-                    type="button"
-                    className="org-settings-users-secondary-button"
-                    disabled={visibleMembers.length === 0}
-                  >
-                    <Download size={16} />
-                    Export
-                    <ChevronDown size={14} />
-                  </button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content
-                    align="end"
-                    sideOffset={4}
-                    className="org-settings-users-export-menu"
-                  >
-                    <DropdownMenu.Item
-                      className="org-settings-users-export-item"
-                      onSelect={() => exportVisibleUsers('csv')}
-                    >
-                      CSV
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      className="org-settings-users-export-item"
-                      onSelect={() => exportVisibleUsers('xlsx')}
-                    >
-                      Excel (.xlsx)
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Root>
+              <UsersReloadButton onReload={() => void reloadUsers()} busy={reloading} />
+              <UsersExportMenu
+                onExport={exportVisibleUsers}
+                disabled={visibleMembers.length === 0 || !roles.done}
+                title={roles.done ? undefined : 'Available once every role is read'}
+              />
               {canManage ? (
                 <button
                   type="button"
@@ -595,6 +585,7 @@ export default function OrgUsersPage() {
           placeholder="Search name, email, role, workspace, organization, country..."
           label="Search users"
         />
+        <RolesLoadingNote roles={roles} />
 
         {(hasActiveFilters || search.trim()) && (
           <p className="org-settings-users-filter-meta">
@@ -686,17 +677,18 @@ export default function OrgUsersPage() {
                       </th>
                     );
                   })}
+                  <th aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>
                 {visibleMembers.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="org-settings-users-no-match">
+                    <td colSpan={4} className="org-settings-users-no-match">
                       No users match the current search and filters
                     </td>
                   </tr>
                 )}
-                {visibleMembers.map((user) => {
+                {paged.pageRows.map((user) => {
                   const assignedNames = assignedNamesByUser[user.userId] || [];
                   const summary = summarizeWorkspaces(assignedNames);
                   const isPickerOpen = openPickerUserId === user.userId;
@@ -797,8 +789,14 @@ export default function OrgUsersPage() {
                         )}
                       </td>
                       <td>
+                        {user.principalId && roles.of(user.principalId) === undefined ? (
+                          <RolesPending />
+                        ) : (
+                          <RoleChips roles={user.roles} />
+                        )}
+                      </td>
+                      <td>
                         <div className="org-settings-users-row-end">
-                          {roleBadge(user)}
                           {canManage ? (
                             <span className="org-settings-users-row-actions">
                               <button
@@ -838,6 +836,7 @@ export default function OrgUsersPage() {
             </table>
           )}
         </div>
+        <TablePager total={visibleMembers.length} paged={paged} />
 
         <p className="org-settings-footnote">
           Click a user to open their organization profile. Create user adds the
@@ -853,7 +852,6 @@ export default function OrgUsersPage() {
           canManage={canManage}
         />
 
-        <IdpGroupBindings scope="organizations" id={orgId} canManage={canManage} />
       </div>
 
       {openPickerUserId &&

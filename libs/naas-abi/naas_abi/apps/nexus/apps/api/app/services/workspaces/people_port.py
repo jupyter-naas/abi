@@ -103,7 +103,9 @@ class PeopleServicePort(Protocol):
         organization_id: str | None = None,
     ) -> CreateOrLinkResult: ...
 
-    async def add_existing(self, *, user_id: str, grant: Grant, by: Any) -> AddedUser: ...
+    async def add_existing(
+        self, *, user_id: str, grant: Grant, by: Any, notify: bool = True
+    ) -> AddedUser: ...
 
     async def set_level(
         self, *, user_id: str, level: str, by: Any, where: Sequence[str] = ()

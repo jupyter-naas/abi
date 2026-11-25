@@ -26,6 +26,21 @@ async def test_the_role_is_the_one_iam_holds(team) -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_platform_admin_administers_every_organization(team) -> None:
+    """``builtin.platform_admin`` covers every container: their role at an organization
+    is admin, with no group of it."""
+    team.platform_admin("root")
+    service = OrganizationService(adapter=SimpleNamespace())
+
+    assert await service.get_organization_role(user_id="root", org_id="org-1") == "admin"
+    assert await service.organization_roles("root", ["org-1", "org-2"]) == {
+        "org-1": "admin",
+        "org-2": "admin",
+    }
+    assert (await service.organization_roles("admin", ["org-1"])).get("org-1") == "admin"
+
+
+@pytest.mark.asyncio
 async def test_require_organization_access_raises_when_missing_role(team) -> None:
     service = OrganizationService(adapter=SimpleNamespace())
 

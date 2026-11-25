@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import uuid4
 
@@ -85,6 +85,19 @@ class WorkspaceStatsRecord:
     agents: int
 
 
+@dataclass(frozen=True)
+class MemberRole:
+    """One of a member's roles here (Users › Role): a group they are in (``kind``
+    "group") or a policy attached to them (``kind`` "policy", at ``scope``)."""
+
+    kind: str
+    id: str
+    name: str
+    scope: str | None = None
+    # The workspace's own group, shown for an admin who reaches it otherwise.
+    implied: bool = False
+
+
 @dataclass
 class WorkspaceMemberRecord:
     id: str
@@ -104,6 +117,8 @@ class WorkspaceMemberRecord:
     status: str = "active"
     # Their level ("member", "viewer": ``Member.level``), shown as Workspace · Level.
     level: str | None = None
+    # Their groups and policies that bear on the workspace (``Memberships.roles_at``).
+    roles: list[MemberRole] = field(default_factory=list)
 
 
 @dataclass

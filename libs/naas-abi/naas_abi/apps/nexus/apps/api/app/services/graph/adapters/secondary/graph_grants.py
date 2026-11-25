@@ -38,6 +38,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.workspac
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_below, org_of
 from naas_abi.apps.nexus.graph_policy_config import (
     WorkspaceGraphPolicyConfig,
     without_system_graphs,
@@ -255,9 +256,16 @@ class GraphGrants:
 
     @staticmethod
     async def _holders(container: str | None) -> tuple[set[str], set[str]]:
+        """A workspace's people, and its organization's admins, who are its admins too."""
         if container is None:
             return set(), set()
-        return GraphGrants.holders_of(await MEMBERSHIPS.members(container))
+        members = list(await MEMBERSHIPS.members(container))
+        org = org_of(container)
+        if org is not None:
+            members += [
+                m for m in await MEMBERSHIPS.members(org_below(org)) if m.role in ADMIN_ROLES
+            ]
+        return GraphGrants.holders_of(members)
 
     @staticmethod
     def holders_of(members: Iterable[Any]) -> tuple[set[str], set[str]]:
@@ -415,19 +423,25 @@ async def sync_all(db: AsyncSession, *, store: Any = None) -> int:
     ids = [str(row[0]) for row in (await db.execute(text("SELECT id FROM workspaces"))).all()]
     containers = {workspace_id: await AUTHZ.container_of(workspace_id) for workspace_id in ids}
     known = sorted({c for c in containers.values() if c is not None})
+    # Their organizations' admins, below each organization: admins of every workspace.
+    wide = sorted({org_below(org) for c in known if (org := org_of(c)) is not None})
     try:
-        members = await MEMBERSHIPS.members_of(known) if known else {}
+        members = await MEMBERSHIPS.members_of(known + wide) if known else {}
     except Exception:  # noqa: BLE001 - each workspace reads its own, as before
         logger.exception("The workspaces' members could not be read at once: read one by one")
         members = None
     done = 0
     for workspace_id in ids:
         container = containers[workspace_id]
-        holders = (
-            GraphGrants.holders_of(members.get(container, []))
-            if members is not None and container is not None
-            else None
-        )
+        holders = None
+        if members is not None and container is not None:
+            org = org_of(container)
+            org_admins = [
+                m
+                for m in (members.get(org_below(org), []) if org is not None else [])
+                if m.role in ADMIN_ROLES
+            ]
+            holders = GraphGrants.holders_of([*members.get(container, []), *org_admins])
         try:
             await sync_workspace(db, workspace_id, store=store, holders=holders)
             done += 1

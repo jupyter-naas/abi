@@ -217,13 +217,3 @@
   background-color: var(--muted-bg-hex);
 }
 
-.platform-access-summary {
-  display: grid;
-  gap: 0.75rem;
-  margin: 0;
-}
-
-.platform-access-summary dd {
-  margin: 0.25rem 0 0;
-  font-size: 0.875rem;
-}

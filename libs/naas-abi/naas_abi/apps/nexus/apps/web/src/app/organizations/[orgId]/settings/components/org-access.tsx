@@ -67,6 +67,11 @@ export function OrgAccess({ section }: { section: ContainerAccessPage }) {
   const picked = Math.max(0, scopes.findIndex((s) => !!inWorkspace && s.workspaceId === inWorkspace));
   const query = picked > 0 && inWorkspace ? `?in=${encodeURIComponent(inWorkspace)}` : '';
   const navigate = useCallback((href: string) => router.push(href), [router]);
+  // A policy's or a group's page is the page alone: no header of the list (its back link leads to it).
+  const focus = pageFocus(pathname, organizationAccessPath(orgId, section));
+  // What the view shows (a row opens its page before the address follows), else the address.
+  const [instance, setInstance] = useState<boolean | null>(null);
+  const alone = instance ?? !!focus;
   const hrefs = useMemo<AccessHrefs>(
     () => ({
       page: (page, id) => `${organizationAccessPath(orgId, page === 'groups' ? 'groups' : 'policies', id)}${query}`,
@@ -77,6 +82,7 @@ export function OrgAccess({ section }: { section: ContainerAccessPage }) {
 
   return (
     <div className="access-settings-page">
+      {!alone && (
       <OrgSettingsPageHeader
         title={accessSection(section).label}
         badge={badge ?? undefined}
@@ -97,9 +103,11 @@ export function OrgAccess({ section }: { section: ContainerAccessPage }) {
           </>
         }
       />
+      )}
       <AccessPage
         headerSlot={headerSlot}
         onBadge={setBadge}
+        onInstance={setInstance}
         section={section}
         scopes={scopes}
         picked={picked}
@@ -108,7 +116,7 @@ export function OrgAccess({ section }: { section: ContainerAccessPage }) {
           const workspace = scopes[index]?.workspaceId;
           navigate(`${organizationAccessPath(orgId, section)}${workspace ? `?in=${encodeURIComponent(workspace)}` : ''}`);
         }}
-        focus={pageFocus(pathname, organizationAccessPath(orgId, section))}
+        focus={focus}
         hrefs={hrefs}
         navigate={navigate}
         nonce={nonce}

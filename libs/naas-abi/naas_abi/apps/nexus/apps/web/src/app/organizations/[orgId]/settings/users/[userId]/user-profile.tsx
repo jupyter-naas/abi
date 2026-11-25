@@ -1,30 +1,29 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertCircle, ArrowLeft, Camera, RefreshCw, Save, Trash2, X } from 'lucide-react';
+import { AlertCircle, Camera, ChevronDown, RefreshCw, Save, Trash2, X } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { useConfirm } from '@/components/ui/dialogs';
-import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
 import { orgSettingsSectionPath } from '../../lib/nav';
 import { removableFromOrganization, removalConfirmation } from '../users-model';
 import {
-  accessChanges,
-  accessError,
   changedProfileFields,
-  initialAccess,
   saveMemberChanges,
   PROFILE_FIELDS,
-  type AccessDraft,
   type MemberDetails,
   type MemberProfileField,
 } from './member-details';
-import { MemberAccess } from './member-access';
-import { MemberAccessEditor, type OrgWorkspaceChoice } from './member-access-editor';
+import '@/components/access/access-base.css';
+import '@/components/access/access.css';
+import { ViewAsControl } from '@/components/access/people/view-as-control';
+import { SettingsNotice } from '@/components/settings/settings-ui';
+import { PersonBack, PersonInfoSection } from '@/components/access/people/person-info';
+import { MemberRoleSection } from '@/components/people/member-role-section';
+import { UsersReloadButton } from '@/components/settings/users-table/users-table-actions';
 import '@/app/account/profile/profile.css';
 import '../users.css';
 
@@ -50,31 +49,6 @@ function formatError(err: unknown, fallback: string) {
   return fallback;
 }
 
-/** `PATCH …/members/{id}` (org admin, level, capability groups) then `PUT …/members/{id}/workspaces`. */
-async function saveAccess(
-  orgId: string,
-  userId: string,
-  changes: ReturnType<typeof accessChanges>
-): Promise<void> {
-  const base = `/api/organizations/${orgId}/members/${encodeURIComponent(userId)}`;
-  const send = async (path: string, method: string, body: unknown) => {
-    const response = await authFetch(path, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) throw new Error(await readApiError(response, 'Failed to change their access'));
-  };
-  if (changes.member) {
-    const { orgAdmin, level, capabilities } = changes.member;
-    await send(base, 'PATCH', {
-      ...(orgAdmin !== undefined ? { org_admin: orgAdmin } : {}),
-      ...(level ? { level } : {}),
-      ...(capabilities ? { capabilities } : {}),
-    });
-  }
-  if (changes.workspaces) await send(`${base}/workspaces`, 'PUT', { workspaces: changes.workspaces });
-}
 
 async function readApiError(response: Response, fallback: string): Promise<string> {
   try {
@@ -118,13 +92,13 @@ export default function OrgUserProfilePage() {
   const [loadError, setLoadError] = useState('');
   const [refused, setRefused] = useState(false);
   const [draft, setDraft] = useState(emptyDraft);
-  const [access, setAccess] = useState<AccessDraft | null>(null);
-  const [orgWorkspaces, setOrgWorkspaces] = useState<OrgWorkspaceChoice[]>([]);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // Bumped by Reload: their Role is read again too.
+  const [nonce, setNonce] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   /** ``resetForm: false`` refreshes the data (e.g. a new picture) and keeps unsaved edits. */
@@ -150,7 +124,6 @@ export default function OrgUserProfilePage() {
           PROFILE_FIELDS.map((field) => [field, data.organization_profile[field] ?? ''])
         ) as Record<MemberProfileField, string>
       );
-      setAccess(initialAccess(data));
     } catch {
       setLoadError('Failed to load this user. Please try again.');
     } finally {
@@ -162,32 +135,18 @@ export default function OrgUserProfilePage() {
     if (orgId && userId) void load();
   }, [orgId, userId, load]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await authFetch(`/api/organizations/${orgId}/workspaces`);
-        if (response.ok && !cancelled) setOrgWorkspaces((await response.json()) as OrgWorkspaceChoice[]);
-      } catch {
-        // The editor lists the workspaces they are in.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId]);
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading user...</p>;
   if (!details) {
     return (
-      <div className="account-profile-page">
+      <div className="access-instance-page">
+        <PersonBack onClick={() => router.push(orgSettingsSectionPath(orgId, 'users'))} />
+        {refused && <p className="text-sm text-muted-foreground">Only the organization’s admins see its people.</p>}
         {!refused && (
-          <div className="org-settings-users-alert" role="alert">
-            <AlertCircle size={16} />
-            <span>{loadError || 'User not found.'}</span>
-          </div>
+          <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+            {loadError || 'User not found.'}
+          </SettingsNotice>
         )}
-        <MemberAccess orgId={orgId} personId={userId} />
       </div>
     );
   }
@@ -196,17 +155,8 @@ export default function OrgUserProfilePage() {
   const isSelf = member.user_id === authUser?.id;
   const canRemove = removableFromOrganization(member.user_id, authUser?.id);
   const changes = changedProfileFields(orgProfile, draft);
-  const savedAccess = initialAccess(details);
-  const accessDraft = access ?? savedAccess;
-  const accessDiff = accessChanges(savedAccess, accessDraft);
-  const accessChanged = !isSelf && (accessDiff.member !== null || accessDiff.workspaces !== null);
-  const accessProblem = accessChanged ? accessError(accessDraft) : null;
-  const dirty = Object.keys(changes).length > 0 || accessChanged;
-  // Every workspace of the organization, and those they are in that the list has not loaded.
-  const workspaceChoices: OrgWorkspaceChoice[] = [
-    ...orgWorkspaces,
-    ...workspaces.filter((w) => !orgWorkspaces.some((o) => o.id === w.id)).map((w) => ({ id: w.id, name: w.name })),
-  ];
+  // Their Role (level, org admin, workspaces, groups, policies) is saved in its own section.
+  const dirty = Object.keys(changes).length > 0;
   // Always the account name (users.name): an organization cannot rename someone.
   const displayName = account.name || account.email || 'Unknown';
   const orgAvatarUrl = photoUrl(orgProfile.avatar);
@@ -217,7 +167,7 @@ export default function OrgUserProfilePage() {
     try {
       const failed = await saveMemberChanges({
         profile: Object.keys(changes).length > 0 ? () => updateMemberProfile(orgId, member.user_id, changes) : null,
-        access: accessChanged ? () => saveAccess(orgId, member.user_id, accessDiff) : null,
+        access: null,
         // The Users list reads the members' roles from the store.
         refreshed: () => fetchMembers(orgId),
       });
@@ -287,212 +237,231 @@ export default function OrgUserProfilePage() {
   };
 
   return (
-    <div className="account-profile-page">
-      <Link href={orgSettingsSectionPath(orgId, 'users')} className="org-member-detail-back">
-        <ArrowLeft size={14} />
-        Users
-      </Link>
-
-      <AccountPageHeader
-        title={displayName}
-        subtitle="Their profile in this organization. Their account shows these values when it has none of its own."
+    <div className="access-instance-page">
+      {/* The page alone: back to Users, then who it is about (Info), their profile and what they hold. */}
+      <PersonBack onClick={() => router.push(orgSettingsSectionPath(orgId, 'users'))} />
+      <PersonInfoSection
+        id={member.principal_id ?? member.user_id}
+        name={displayName}
+        email={account.email ?? null}
+        image={orgAvatarUrl}
         actions={
-          <div className="org-member-detail-actions">
+          <>
+            {member.principal_id && !isSelf && (
+              <ViewAsControl personId={member.principal_id} name={displayName} workspaceId={null} />
+            )}
+            <UsersReloadButton
+              onReload={() => {
+                setNonce((n) => n + 1);
+                void load({ resetForm: false });
+              }}
+            />
             <button
               type="button"
               onClick={() => void handleRemove()}
               disabled={!canRemove || removing}
               className="org-member-detail-remove-button"
               title={isSelf ? 'You cannot remove yourself' : undefined}
+              data-action="remove-member"
             >
               <Trash2 size={16} />
               {removing ? 'Removing...' : 'Remove from organization'}
             </button>
+          </>
+        }
+      />
+
+      {(error || loadError) && (
+        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+          {error || loadError}
+        </SettingsNotice>
+      )}
+
+      {/* Their profile in this organization first, folded; then where they work. */}
+      <details className="group border border-border bg-card" data-section="profile">
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-foreground">Profile</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Their profile in this organization. Their account shows these values when it has none of its own.
+            </p>
+          </div>
+          <ChevronDown size={16} className="mt-0.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="account-profile-page border-t border-border p-4">
+          <div className="account-profile-avatar-section">
+            <div className="account-profile-avatar-wrapper">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                onChange={(event) => void handleAvatarUpload(event)}
+                className="account-profile-avatar-input"
+              />
+              {orgAvatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={orgAvatarUrl} alt={displayName} className="account-profile-avatar-image" />
+              ) : (
+                <div className="account-profile-avatar-placeholder">
+                  {displayName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="account-profile-avatar-upload-button"
+                title="Upload a picture for this organization"
+              >
+                {uploading ? (
+                  <RefreshCw size={16} className="account-profile-avatar-upload-button-spin" />
+                ) : (
+                  <Camera size={16} />
+                )}
+              </button>
+            </div>
+            <div>
+              <h3 className="account-profile-avatar-info-name">{displayName}</h3>
+              <p className="account-profile-avatar-info-email">{account.email}</p>
+              <p className="account-profile-avatar-info-hint">
+                Organization picture (max 2MB). Their account shows it when it has no picture.
+              </p>
+              {orgAvatarUrl ? (
+                <button
+                  type="button"
+                  onClick={() => void handleAvatarRemove()}
+                  className="account-profile-avatar-remove-button"
+                >
+                  <X size={12} />
+                  Remove picture
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <AccountSectionCard padded stack>
+            <div className="account-profile-form-grid">
+              <div className="account-profile-field">
+                <label className="account-profile-field-label" htmlFor="org-member-name">
+                  Full name
+                </label>
+                <input
+                  id="org-member-name"
+                  type="text"
+                  value={account.name ?? ''}
+                  className="account-profile-field-input"
+                  title="The account name (Account Settings > Profile)"
+                  disabled
+                  readOnly
+                />
+              </div>
+              <div className="account-profile-field">
+                <label className="account-profile-field-label" htmlFor="org-member-email">
+                  Email
+                </label>
+                <input
+                  id="org-member-email"
+                  type="email"
+                  value={account.email ?? ''}
+                  className="account-profile-field-input"
+                  disabled
+                  readOnly
+                />
+              </div>
+              {TEXT_FIELDS.slice(0, 2).map(({ field, label, placeholder }) => (
+                <div key={field} className="account-profile-field">
+                  <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
+                    {label}
+                  </label>
+                  <input
+                    id={`org-member-${field}`}
+                    type="text"
+                    value={draft[field]}
+                    onChange={(event) => setDraft((d) => ({ ...d, [field]: event.target.value }))}
+                    placeholder={placeholder}
+                    className="account-profile-field-input"
+                  />
+                </div>
+              ))}
+              {TEXT_FIELDS.slice(2).map(({ field, label, placeholder }) => (
+                <div key={field} className="account-profile-field">
+                  <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
+                    {label}
+                  </label>
+                  <input
+                    id={`org-member-${field}`}
+                    type="text"
+                    value={draft[field]}
+                    onChange={(event) =>
+                      setDraft((d) => ({
+                        ...d,
+                        [field]:
+                          field === 'interest'
+                            ? event.target.value.slice(0, INTEREST_MAX_LENGTH)
+                            : event.target.value,
+                      }))
+                    }
+                    placeholder={placeholder}
+                    className="account-profile-field-input"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="account-profile-field">
+              <div className="account-profile-bio-header">
+                <label className="account-profile-field-label" htmlFor="org-member-bio">
+                  Bio
+                </label>
+                <span
+                  className={
+                    draft.bio.length > BIO_MAX_LENGTH
+                      ? 'account-profile-bio-count account-profile-bio-count-over'
+                      : 'account-profile-bio-count'
+                  }
+                >
+                  {draft.bio.length} / {BIO_MAX_LENGTH}
+                </span>
+              </div>
+              <textarea
+                id="org-member-bio"
+                value={draft.bio}
+                onChange={(event) =>
+                  setDraft((d) => ({ ...d, bio: event.target.value.slice(0, BIO_MAX_LENGTH) }))
+                }
+                placeholder={account.bio ?? 'Bio in this organization'}
+                rows={8}
+                maxLength={BIO_MAX_LENGTH}
+                className="account-profile-field-textarea"
+              />
+            </div>
+          </AccountSectionCard>
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={() => void handleSave()}
-              disabled={!dirty || saving || accessProblem !== null}
-              title={accessProblem ?? undefined}
+              disabled={!dirty || saving}
               className={
                 saved
                   ? 'account-profile-save-button account-profile-save-button-saved'
                   : 'account-profile-save-button'
               }
+              data-action="save-profile"
             >
               <Save size={16} />
               {saving ? 'Saving...' : saved ? 'Saved!' : 'Save changes'}
             </button>
           </div>
-        }
-      />
-
-      {(error || loadError) && (
-        <div className="org-settings-users-alert" role="alert">
-          <AlertCircle size={16} />
-          <span>{error || loadError}</span>
         </div>
+      </details>
+
+      {!isSelf && (
+        <MemberRoleSection
+          scope={{ kind: 'organization', id: orgId }}
+          userId={member.user_id}
+          nonce={nonce}
+          onChanged={() => void load({ resetForm: false })}
+        />
       )}
-
-      <div className="account-profile-avatar-section">
-        <div className="account-profile-avatar-wrapper">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
-            onChange={(event) => void handleAvatarUpload(event)}
-            className="account-profile-avatar-input"
-          />
-          {orgAvatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={orgAvatarUrl} alt={displayName} className="account-profile-avatar-image" />
-          ) : (
-            <div className="account-profile-avatar-placeholder">
-              {displayName.charAt(0).toUpperCase()}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="account-profile-avatar-upload-button"
-            title="Upload a picture for this organization"
-          >
-            {uploading ? (
-              <RefreshCw size={16} className="account-profile-avatar-upload-button-spin" />
-            ) : (
-              <Camera size={16} />
-            )}
-          </button>
-        </div>
-        <div>
-          <h3 className="account-profile-avatar-info-name">{displayName}</h3>
-          <p className="account-profile-avatar-info-email">{account.email}</p>
-          <p className="account-profile-avatar-info-hint">
-            Organization picture (max 2MB). Their account shows it when it has no picture.
-          </p>
-          {orgAvatarUrl ? (
-            <button
-              type="button"
-              onClick={() => void handleAvatarRemove()}
-              className="account-profile-avatar-remove-button"
-            >
-              <X size={12} />
-              Remove picture
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      <AccountSectionCard padded stack>
-        <div className="account-profile-form-grid">
-          <div className="account-profile-field">
-            <label className="account-profile-field-label" htmlFor="org-member-name">
-              Full name
-            </label>
-            <input
-              id="org-member-name"
-              type="text"
-              value={account.name ?? ''}
-              className="account-profile-field-input"
-              title="The account name (Account Settings > Profile)"
-              disabled
-              readOnly
-            />
-          </div>
-          <div className="account-profile-field">
-            <label className="account-profile-field-label" htmlFor="org-member-email">
-              Email
-            </label>
-            <input
-              id="org-member-email"
-              type="email"
-              value={account.email ?? ''}
-              className="account-profile-field-input"
-              disabled
-              readOnly
-            />
-          </div>
-          {TEXT_FIELDS.slice(0, 2).map(({ field, label, placeholder }) => (
-            <div key={field} className="account-profile-field">
-              <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
-                {label}
-              </label>
-              <input
-                id={`org-member-${field}`}
-                type="text"
-                value={draft[field]}
-                onChange={(event) => setDraft((d) => ({ ...d, [field]: event.target.value }))}
-                placeholder={placeholder}
-                className="account-profile-field-input"
-              />
-            </div>
-          ))}
-          {TEXT_FIELDS.slice(2).map(({ field, label, placeholder }) => (
-            <div key={field} className="account-profile-field">
-              <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
-                {label}
-              </label>
-              <input
-                id={`org-member-${field}`}
-                type="text"
-                value={draft[field]}
-                onChange={(event) =>
-                  setDraft((d) => ({
-                    ...d,
-                    [field]:
-                      field === 'interest'
-                        ? event.target.value.slice(0, INTEREST_MAX_LENGTH)
-                        : event.target.value,
-                  }))
-                }
-                placeholder={placeholder}
-                className="account-profile-field-input"
-              />
-            </div>
-          ))}
-        </div>
-        <div className="account-profile-field">
-          <div className="account-profile-bio-header">
-            <label className="account-profile-field-label" htmlFor="org-member-bio">
-              Bio
-            </label>
-            <span
-              className={
-                draft.bio.length > BIO_MAX_LENGTH
-                  ? 'account-profile-bio-count account-profile-bio-count-over'
-                  : 'account-profile-bio-count'
-              }
-            >
-              {draft.bio.length} / {BIO_MAX_LENGTH}
-            </span>
-          </div>
-          <textarea
-            id="org-member-bio"
-            value={draft.bio}
-            onChange={(event) =>
-              setDraft((d) => ({ ...d, bio: event.target.value.slice(0, BIO_MAX_LENGTH) }))
-            }
-            placeholder={account.bio ?? 'Bio in this organization'}
-            rows={8}
-            maxLength={BIO_MAX_LENGTH}
-            className="account-profile-field-textarea"
-          />
-        </div>
-      </AccountSectionCard>
-
-      <MemberAccessEditor
-        orgId={orgId}
-        draft={accessDraft}
-        onChange={setAccess}
-        workspaces={workspaceChoices}
-        disabled={isSelf || saving}
-      />
-      {accessProblem && (
-        <p className="org-settings-footnote" role="alert" data-access-error>
-          {accessProblem}
-        </p>
-      )}
-      <MemberAccess orgId={orgId} personId={member.principal_id || member.user_id} />
       {confirmDialog}
     </div>
   );

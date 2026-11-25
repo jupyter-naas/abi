@@ -181,11 +181,18 @@ export type WorkspaceAdd = {
   level?: Level | null;
   admin?: boolean;
   capabilities?: readonly string[];
+  /** False: added without an invitation (Invite user's "Add to workspace"). */
+  notify?: boolean;
 };
 
 /** `POST /api/workspaces/{ws}/members`: add someone the search found. */
 export function addMemberBody(add: WorkspaceAdd): Record<string, unknown> {
-  return { user_id: add.userId, admin: add.admin === true, ...accessFields(add.level, add.capabilities) };
+  return {
+    user_id: add.userId,
+    admin: add.admin === true,
+    ...accessFields(add.level, add.capabilities),
+    ...(add.notify === false ? { notify: false } : {}),
+  };
 }
 
 /** Only the profile fields that were filled in, trimmed; undefined when none was. */

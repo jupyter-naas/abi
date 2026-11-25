@@ -375,6 +375,29 @@ async def test_the_platform_admin_lists_every_account(api, team):
 
 
 @pytest.mark.asyncio
+async def test_the_list_comes_alone_and_the_roles_a_page_at_a_time(api, team):
+    """Platform › Users reads its people first (``roles=false``), then their Role a page
+    at a time (``GET /roles``), as the full list gives it; at most a hundred at once."""
+    async with api.as_("root") as http:
+        full = {row["id"]: row for row in (await http.get("/api/admin/users")).json()}
+        index = (await http.get("/api/admin/users?roles=false")).json()
+        assert {row["id"] for row in index} == set(full)
+        assert all(row["roles"] == [] for row in index)
+        principals = [row["principal_id"] for row in index if row["principal_id"]]
+        query = "&".join(f"principal={quote(p)}" for p in principals)
+        roles = await http.get(f"/api/admin/users/roles?{query}")
+        too_many = "&".join(f"principal=p{i}" for i in range(101))
+        refused = await http.get(f"/api/admin/users/roles?{too_many}")
+    assert roles.status_code == 200, roles.text
+    for row in full.values():
+        if row["principal_id"]:
+            assert roles.json().get(row["principal_id"], []) == row["roles"]
+    assert refused.status_code == 422
+    async with api.as_("member") as http:
+        assert (await http.get(f"/api/admin/users/roles?{query}")).status_code == 403
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("user", ["owner", "admin", "member", "stranger"])
 async def test_nobody_else_sees_the_directory(api, user):
     """An organization's owner or admin is no platform admin: no page, no answer."""

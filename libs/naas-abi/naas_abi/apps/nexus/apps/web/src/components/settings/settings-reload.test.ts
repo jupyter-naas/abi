@@ -68,7 +68,7 @@ async function settle() {
   expect(reloadButton().disabled).toBe(false);
 }
 
-const reloadButton = (): HTMLButtonElement => [...mounted!.host.querySelectorAll('button')].find((b) => b.textContent?.includes('Reload'))!;
+const reloadButton = (): HTMLButtonElement => mounted!.host.querySelector<HTMLButtonElement>('button[aria-label="Reload"]')!;
 
 describe('Settings Reload', () => {
   it('a page that reads again on Reload is not remounted: what the user typed stays', async () => {
