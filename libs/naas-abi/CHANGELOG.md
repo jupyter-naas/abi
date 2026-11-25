@@ -121,6 +121,103 @@
 
 <!-- version list -->
 
+## v7.4.0 (2026-11-25)
+
+### Bug Fixes
+
+- **nexus**: A group page's member changes reach what follows them; members named by their accounts
+  ([`065cb8d`](https://github.com/jupyter-naas/abi/commit/065cb8dc4e61397dea397f33ce1af4c0a0293c81))
+
+- **nexus**: A member through a membership group is related to their organization
+  ([`d58c788`](https://github.com/jupyter-naas/abi/commit/d58c78870d9460e877b023128ca61752678cb508))
+
+- **nexus**: A policy's sub-policies apart from its description in Info
+  ([`f7defd9`](https://github.com/jupyter-naas/abi/commit/f7defd99a041ebe7ae3ee82772d87a6b54c658bc))
+
+- **nexus**: Settings is no switch of an offer
+  ([`a63ec5d`](https://github.com/jupyter-naas/abi/commit/a63ec5d1cd46062b7fbbcc1ef7bc56dc02fd89fb))
+
+- **nexus**: The app waits for the workspaces before it shows
+  ([`4d5fbb1`](https://github.com/jupyter-naas/abi/commit/4d5fbb185c7a03984d9ac07916a3b5378412a64e))
+
+- **nexus-web**: The organization's Settings tab reads Organization
+  ([`7c0ad79`](https://github.com/jupyter-naas/abi/commit/7c0ad7909c0cd7380f26297af27adea02ede2172))
+
+### Features
+
+- **iam**: An organization's admin holds no level
+  ([`6f027d8`](https://github.com/jupyter-naas/abi/commit/6f027d89764bf6e82e9b99acafd804573e56e3b9))
+
+- **nexus**: A group's fields as Settings shows them, its policies before its members
+  ([`107bbbc`](https://github.com/jupyter-naas/abi/commit/107bbbcccb5898981a04738ed4e1e147d84dfb9c))
+
+- **nexus**: A group's members say when they joined it
+  ([`81b5f9a`](https://github.com/jupyter-naas/abi/commit/81b5f9a17b207b5fd12357ec376e1ee41afae89f))
+
+- **nexus**: A group's page in three sections, and Create group opens one
+  ([`65c5236`](https://github.com/jupyter-naas/abi/commit/65c52367e34b52eb967f88c984186911aca64990))
+
+- **nexus**: A member's Role at a workspace, shown in Users and changed on their page
+  ([`df640e2`](https://github.com/jupyter-naas/abi/commit/df640e217019615a6b54a785d7bb43bb9f72b59c))
+
+- **nexus**: A person's page manages their workspaces, groups and policies
+  ([`a48b228`](https://github.com/jupyter-naas/abi/commit/a48b2282d8ee1756f63e617bcd431ed54c639519))
+
+- **nexus**: A policy's Held by after its Configuration, its validity at the section's top
+  ([`a203f68`](https://github.com/jupyter-naas/abi/commit/a203f688d65abf2a930e9012b45646cc99b16bb9))
+
+- **nexus**: A policy's page: Discard changes in the header, no Cancel
+  ([`776e9ff`](https://github.com/jupyter-naas/abi/commit/776e9ffd1864195de2db81ec31c2190ca8d3f114))
+
+- **nexus**: A policy's page: Held by under its name, its sub-policies counted
+  ([`3357be0`](https://github.com/jupyter-naas/abi/commit/3357be0ebd9411e24537855d37681b5712a76834))
+
+- **nexus**: A policy's page: its offer as Configuration, Attach from the header
+  ([`830f069`](https://github.com/jupyter-naas/abi/commit/830f069156478609687dc80a182b62bafd5732f5))
+
+- **nexus**: A workspace shows the features it offers, to everyone
+  ([`c6dff61`](https://github.com/jupyter-naas/abi/commit/c6dff616bdd044d71b14f09baed7e4ed7817b102))
+
+- **nexus**: Access lists page by 20; Policies reads every page itself
+  ([`799e9ae`](https://github.com/jupyter-naas/abi/commit/799e9ae45d0e8f5c6e396864b1faed9a44f9527d))
+
+- **nexus**: An instance's page is shown alone, and opens at once
+  ([`ddbd457`](https://github.com/jupyter-naas/abi/commit/ddbd457b0e6ecde9494b7c2a021a4f28cf4d94e2))
+
+- **nexus**: An instance's page opens on its name, then its sections, as Settings shows them
+  ([`456ac5d`](https://github.com/jupyter-naas/abi/commit/456ac5d126b5d24ff595a5cb60e14b26ae82212d))
+
+- **nexus**: Joined, Role in the organization's and the platform's Users, org admins write shared
+  graphs
+  ([`0fd944e`](https://github.com/jupyter-naas/abi/commit/0fd944ed471d5c36901e294f9f24642c0ea51c78))
+
+- **nexus**: Role at an organization and on the platform; Invite user adds or invites
+  ([`a240dad`](https://github.com/jupyter-naas/abi/commit/a240dad604f201acc61963d210b944795917ed26))
+
+- **nexus**: The access move drops the admins groups another role already gives
+  ([`fce5da1`](https://github.com/jupyter-naas/abi/commit/fce5da137ba74fc8dd7b0759d7f068fbb41d2399))
+
+- **nexus**: Users lists page by 20, their people first and roles after
+  ([`3a78303`](https://github.com/jupyter-naas/abi/commit/3a783030bc2e62b9c5fe50d2f6d8b577bda1540f))
+
+- **nexus**: Workspace settings drop Data Export and Secrets
+  ([`1430f75`](https://github.com/jupyter-naas/abi/commit/1430f7583f0de84dd5b653ea6a9af5f5586d4ab3))
+
+- **nexus-web**: Add people adds an existing person at once; Users drops IdP groups and Levels
+  ([`22a60f5`](https://github.com/jupyter-naas/abi/commit/22a60f576b7195c8ccb31b06e69bb813cb6b6a19))
+
+- **nexus-web**: Add people opens a dialog, with Create user when nobody matches
+  ([`936db21`](https://github.com/jupyter-naas/abi/commit/936db216d7c84f84c1c8c9bd358c3e4d25087ae3))
+
+- **nexus-web**: Workspace settings › Users sorts and filters by column, as Platform's
+  ([`b9c9661`](https://github.com/jupyter-naas/abi/commit/b9c9661fc4c8f854dae0d2184f0149c61ba23bf4))
+
+### Performance Improvements
+
+- **nexus**: A workspace's members are read from it, not from the whole deployment
+  ([`7f52979`](https://github.com/jupyter-naas/abi/commit/7f52979395c98b2b07831cce0a1f6a8a31259fe5))
+
+
 ## v7.3.1 (2026-11-23)
 
 ### Bug Fixes
