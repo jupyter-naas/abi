@@ -22,7 +22,9 @@ import {
 } from 'lucide-react';
 import { absoluteTime, compactIri, dayLabel, formatBytes, formatCount, parseJson, tail } from '../data-model';
 import type { ResourceDetail } from '../data-types';
-import { Badge, CopyButton, EmptyState, RelativeTime } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
+import { CopyButton, RelativeTime } from '../data-ui';
 import { JsonTree } from '../viewers/json-tree';
 import type { ServiceView } from './types';
 
@@ -157,7 +159,7 @@ function payloadOf(detail: ResourceDetail): unknown {
 
 export function EventPreview({ detail }: { detail: ResourceDetail }) {
   const payload = payloadOf(detail);
-  if (payload === undefined) return <EmptyState icon={Radio} title="No payload" />;
+  if (payload === undefined) return <EmptyState icon={<Radio size={22} strokeWidth={1.5} />} title="No payload" />;
   const fields =
     payload && typeof payload === 'object' && !Array.isArray(payload)
       ? Object.entries(payload as Record<string, unknown>).filter(

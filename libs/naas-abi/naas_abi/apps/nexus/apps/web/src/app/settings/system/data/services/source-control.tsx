@@ -5,7 +5,8 @@ import './source-control.css';
 import { BookMarked, Building2, GitBranch, Globe, Lock } from 'lucide-react';
 import { detectLanguage, formatBytes } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
-import { Badge, RelativeTime } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { RelativeTime } from '../data-ui';
 import { fileIcon } from './object-storage';
 import { MarkdownView } from './source-control-markdown';
 import type { ServiceView } from './types';
@@ -31,7 +32,7 @@ function RepositoryBadges({ entry }: { entry: ResourceEntry }) {
   return (
     <>
       {a.visibility === 'public' ? (
-        <Badge tone="info">
+        <Badge variant="info">
           <Globe size={11} aria-hidden="true" /> public
         </Badge>
       ) : (
@@ -44,7 +45,7 @@ function RepositoryBadges({ entry }: { entry: ResourceEntry }) {
           <GitBranch size={11} aria-hidden="true" /> {a.default_branch}
         </Badge>
       )}
-      {a.empty === 'yes' && <Badge tone="warn">empty</Badge>}
+      {a.empty === 'yes' && <Badge variant="warning">empty</Badge>}
     </>
   );
 }

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Notice } from '@/components/ui/notice';
 import { unavailableSources, type Tone } from './system-model';
 import type { JobSummary, SourceStatus } from './system-types';
 
@@ -20,9 +21,9 @@ export function Status({ tone, label }: { tone: Tone; label: string }) {
 
 export function SourceNote({ label, reason }: { label: string; reason: string }) {
   return (
-    <p className="system-source-note" role="status">
+    <Notice tone="warning" className="system-source-note">
       <strong>{label} unavailable.</strong> {reason}
-    </p>
+    </Notice>
   );
 }
 
@@ -31,40 +32,10 @@ export function SourceNotes({ sources }: { sources: Record<string, SourceStatus>
   const missing = unavailableSources(sources);
   if (!missing.length) return null;
   return (
-    <div className="system-source-notes">
+    <div className="space-y-2">
       {missing.map((s) => (
         <SourceNote key={s.source} label={s.label} reason={s.reason} />
       ))}
-    </div>
-  );
-}
-
-export function Section({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="system-section">
-      <header className="system-section-header">
-        <h2 className="system-section-title">{title}</h2>
-        {subtitle && <p className="system-section-subtitle">{subtitle}</p>}
-      </header>
-      {children}
-    </section>
-  );
-}
-
-export function Kpi({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
-  return (
-    <div className="system-kpi">
-      <span className="system-kpi-label">{label}</span>
-      <span className="system-kpi-value">{value}</span>
-      {hint !== undefined && <span className="system-kpi-hint">{hint}</span>}
     </div>
   );
 }

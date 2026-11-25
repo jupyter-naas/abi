@@ -44,10 +44,6 @@
   flex-direction: column;
 }
 
-.data-bus-preview > .data-notice {
-  margin-bottom: var(--space-3);
-}
-
 .data-bus-envelope {
   display: flex;
   flex-direction: column;

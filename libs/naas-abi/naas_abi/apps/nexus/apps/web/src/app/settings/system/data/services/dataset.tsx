@@ -5,7 +5,8 @@ import './dataset.css';
 import { Database, KeyRound, Layers, Sheet, Table2 } from 'lucide-react';
 import { formatCount } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
-import { Badge, CopyButton } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { CopyButton } from '../data-ui';
 import { DataGrid } from '../viewers/data-grid';
 import type { ServiceView } from './types';
 

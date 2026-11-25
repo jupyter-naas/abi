@@ -1,8 +1,10 @@
 'use client';
 
+import { Card } from '@/components/ui/card';
+import { KpiCard } from '@/components/ui/kpi-card';
 import { formatCount, sourceLabel } from './system-format';
 import type { Overview } from './system-types';
-import { Kpi, Section, StatusDot } from './system-ui';
+import { StatusDot } from './system-ui';
 
 export function SystemOverview({ overview }: { overview: Overview }) {
   const remoteTotal = Object.values(overview.remote_modules).reduce((n, c) => n + c, 0);
@@ -11,22 +13,22 @@ export function SystemOverview({ overview }: { overview: Overview }) {
 
   return (
     <div className="system-tab-body">
-      <Section title="At a glance">
+      <Card title="At a glance">
         <div className="system-kpis">
-          <Kpi
+          <KpiCard
             label="Kernel services serving"
             value={`${overview.serving_services} / ${overview.kernel_services}`}
             hint={`${overview.service_instances} NATS instances`}
           />
-          <Kpi label="Requests served" value={formatCount(overview.requests)} hint="since each instance started" />
-          <Kpi label="Engine modules" value={overview.engine_modules} />
-          <Kpi label="Remote modules" value={remoteTotal} hint={`${ready} ready of ${remoteTotal}`} />
-          <Kpi
+          <KpiCard label="Requests served" value={formatCount(overview.requests)} hint="since each instance started" />
+          <KpiCard label="Engine modules" value={overview.engine_modules} />
+          <KpiCard label="Remote modules" value={remoteTotal} hint={`${ready} ready of ${remoteTotal}`} />
+          <KpiCard
             label="NATS"
             value={server ? server.version : '–'}
             hint={server ? `${server.connections} connections · up ${server.uptime}` : 'monitoring unavailable'}
           />
-          <Kpi
+          <KpiCard
             label="Tracing"
             value={overview.telemetry?.enabled ? 'On' : 'Off'}
             hint={
@@ -47,14 +49,14 @@ export function SystemOverview({ overview }: { overview: Overview }) {
               )
             }
           />
-          <Kpi
+          <KpiCard
             label="JetStream"
             value={`${overview.jetstream_streams} streams`}
             hint={`${overview.jetstream_consumers} consumers · ${formatCount(overview.jetstream_messages)} messages`}
           />
         </div>
-      </Section>
-      <Section title="Sources" subtitle="Where this dashboard reads from.">
+      </Card>
+      <Card title="Sources" description="Where this dashboard reads from.">
         <ul className="system-sources">
           {Object.entries(overview.sources).map(([source, status]) => (
             <li key={source} className="system-source-row" data-source={source}>
@@ -64,7 +66,7 @@ export function SystemOverview({ overview }: { overview: Overview }) {
             </li>
           ))}
         </ul>
-      </Section>
+      </Card>
     </div>
   );
 }

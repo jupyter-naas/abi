@@ -6,6 +6,10 @@ import type { AgentsApi } from './agents-api';
 import type { AgentRunDetail, AgentRunSummary } from './agents-types';
 import { AgentsTab } from './agents';
 
+// Toasts go to the app's one stack (ui/toast): the test checks what was announced.
+const toast = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }));
+vi.mock('@/components/ui/toast', () => ({ toast }));
+
 const push = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: vi.fn(), push }),
@@ -158,7 +162,7 @@ describe('agents tab', () => {
     await m.flush();
 
     expect(api.cancel).toHaveBeenCalledWith('acme.agents', 'r4');
-    expect(text()).toContain('Cancellation sent to Researcher');
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Cancellation sent to Researcher' }));
   });
 
   it('shows why runs cannot be read', async () => {

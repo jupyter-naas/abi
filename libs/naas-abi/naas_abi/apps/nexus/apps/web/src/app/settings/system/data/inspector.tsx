@@ -18,19 +18,13 @@ import {
 import type { Failure, Result } from './data-api';
 import { absoluteTime, detectLanguage, formatBytes, formatCount } from './data-model';
 import type { AuditEntry, ResourceDetail } from './data-types';
-import {
-  Avatar,
-  Badge,
-  CopyButton,
-  EmptyState,
-  Field,
-  Hint,
-  Notice,
-  RelativeTime,
-  SkeletonRows,
-  StatusPill,
-  useNow,
-} from './data-ui';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Notice } from '@/components/ui/notice';
+import { Loading } from '@/components/ui/spinner';
+import { Tabs } from '@/components/ui/tabs';
+import { Avatar, CopyButton, Hint, Property, RelativeTime, StatusPill, useNow } from './data-ui';
 import type { ServiceView } from './services/types';
 import { CodeView } from './viewers/code-view';
 import { Preview, type PreviewContext } from './viewers/preview';
@@ -99,14 +93,16 @@ function HistoryTab({ load }: { load: () => Promise<Result<{ entries: AuditEntry
       cancelled = true;
     };
   }, [load]);
-  if (failure) return <Notice tone="danger">{failure.reason}</Notice>;
-  if (!entries) return <SkeletonRows rows={3} />;
+  if (failure) return <Notice tone="error">{failure.reason}</Notice>;
+  if (!entries) return <Loading />;
   const grouped = groupHistory(entries);
   if (!grouped.length) {
     return (
-      <EmptyState icon={HistoryIcon} title="No changes from the System app">
-        Changes and reveals made here are recorded in the audit log and listed here.
-      </EmptyState>
+      <EmptyState
+        icon={<HistoryIcon size={22} strokeWidth={1.5} />}
+        title="No changes from the System app"
+        description="Changes and reveals made here are recorded in the audit log and listed here."
+      />
     );
   }
   return (
@@ -117,8 +113,8 @@ function HistoryTab({ load }: { load: () => Promise<Result<{ entries: AuditEntry
           <div className="data-history-body">
             <p className="data-history-line">
               <strong>{e.actor || e.actor_id}</strong> {VERBS[e.operation] ?? e.operation} it
-              {e.outcome === 'failed' && <StatusPill tone="danger" label="failed" />}
-              {e.outcome === 'unknown' && <StatusPill tone="warn" label="no outcome recorded" />}
+              {e.outcome === 'failed' && <StatusPill tone="destructive" label="failed" />}
+              {e.outcome === 'unknown' && <StatusPill tone="warning" label="no outcome recorded" />}
             </p>
             <p className="data-history-meta">
               <RelativeTime iso={e.at} />
@@ -133,15 +129,17 @@ function HistoryTab({ load }: { load: () => Promise<Result<{ entries: AuditEntry
 
 function RawTab({ detail }: { detail: ResourceDetail }) {
   const content = detail.content;
-  if (!content) return <EmptyState icon={FileText} title="No value" />;
+  if (!content) return <EmptyState icon={<FileText size={22} strokeWidth={1.5} />} title="No value" />;
   if (content.encoding === 'masked') {
-    return <EmptyState icon={Lock} title="Value hidden">Reveal it to see the raw value.</EmptyState>;
+    return <EmptyState icon={<Lock size={22} strokeWidth={1.5} />} title="Value hidden" description="Reveal it to see the raw value." />;
   }
   if (content.encoding === 'binary') {
     return (
-      <EmptyState icon={FileText} title="Binary content">
-        {formatBytes(content.size)}. Download it, or open Preview for a hex dump.
-      </EmptyState>
+      <EmptyState
+        icon={<FileText size={22} strokeWidth={1.5} />}
+        title="Binary content"
+        description={`${formatBytes(content.size)}. Download it, or open Preview for a hex dump.`}
+      />
     );
   }
   const language = detectLanguage(detail.entry.name, detail.entry.attributes.media_type, content.text);
@@ -167,25 +165,25 @@ function DetailsTab({ detail }: { detail: ResourceDetail }) {
   const attributes = Object.entries(e.attributes).filter(([k]) => k !== 'summary');
   return (
     <dl className="data-fields">
-      <Field label="Id">
+      <Property label="Id">
         <span className="data-field-copy">
           <code className="data-mono">{e.id}</code>
           <CopyButton value={e.id} label="Copy id" />
         </span>
-      </Field>
-      <Field label="Name">{e.name}</Field>
-      <Field label="Kind">{e.kind === 'container' ? 'Container' : 'Item'}</Field>
-      {e.size !== null && <Field label="Size">{`${formatBytes(e.size)} (${formatCount(e.size)} bytes)`}</Field>}
-      {e.modified && <Field label="Modified">{absoluteTime(e.modified)}</Field>}
+      </Property>
+      <Property label="Name">{e.name}</Property>
+      <Property label="Kind">{e.kind === 'container' ? 'Container' : 'Item'}</Property>
+      {e.size !== null && <Property label="Size">{`${formatBytes(e.size)} (${formatCount(e.size)} bytes)`}</Property>}
+      {e.modified && <Property label="Modified">{absoluteTime(e.modified)}</Property>}
       {attributes.map(([key, value]) => (
-        <Field key={key} label={key.replace(/_/g, ' ')}>
+        <Property key={key} label={key.replace(/_/g, ' ')}>
           <span className="data-field-copy">
             <span className="data-mono">{value}</span>
             <CopyButton value={value} label={`Copy ${key}`} />
           </span>
-        </Field>
+        </Property>
       ))}
-      <Field label="Actions">{e.actions.length ? e.actions.join(', ') : 'none'}</Field>
+      <Property label="Actions">{e.actions.length ? e.actions.join(', ') : 'none'}</Property>
     </dl>
   );
 }
@@ -286,20 +284,20 @@ export function Inspector({
         }}
       />
       {loading && !detail ? (
-        <div className="data-inspector-loading">
-          <SkeletonRows rows={4} />
-        </div>
+        <Loading />
       ) : failure && !detail ? (
         <div className="data-inspector-loading">
           <div className="data-inspector-top">
             <span className="data-spacer" />
-            <button type="button" className="data-icon-button" aria-label="Close" onClick={onClose}>
+            <Button variant="ghost" size="icon" aria-label="Close" onClick={onClose}>
               <X size={16} aria-hidden="true" />
-            </button>
+            </Button>
           </div>
-          <EmptyState icon={AlertTriangle} title={failure.status === 404 ? 'Not found' : 'Could not open it'}>
-            {failure.reason}
-          </EmptyState>
+          <EmptyState
+            icon={<AlertTriangle size={22} strokeWidth={1.5} />}
+            title={failure.status === 404 ? 'Not found' : 'Could not open it'}
+            description={failure.reason}
+          />
         </div>
       ) : detail ? (
         <>
@@ -327,9 +325,9 @@ export function Inspector({
                 )}
               </div>
               <Hint label="Close" shortcut="Esc">
-                <button type="button" className="data-icon-button" aria-label="Close" onClick={onClose}>
+                <Button variant="ghost" size="icon" aria-label="Close" onClick={onClose}>
                   <X size={16} aria-hidden="true" />
-                </button>
+                </Button>
               </Hint>
             </div>
             {(facts.length > 0 || view.badges || readOnly) && (
@@ -344,20 +342,7 @@ export function Inspector({
                 ))}
               </div>
             )}
-            <nav className="data-inspector-tabs" role="tablist" aria-label="Views">
-              {TABS.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === t.id}
-                  className={tab === t.id ? 'data-inspector-tab data-inspector-tab-active' : 'data-inspector-tab'}
-                  onClick={() => setTab(t.id)}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </nav>
+            <Tabs items={TABS} value={tab} onChange={setTab} label="Views" className="data-inspector-tabs border-b-0" />
           </header>
           {revealedUntil !== null && <RevealBar until={revealedUntil} onHide={onHide} />}
           <div className={`data-inspector-body data-inspector-body-${tab}`}>
@@ -370,36 +355,36 @@ export function Inspector({
             <footer className="data-inspector-actions">
               {actions.includes('reveal') &&
                 (revealedUntil !== null ? (
-                  <button type="button" className="data-button" onClick={onHide}>
+                  <Button variant="secondary" size="sm" onClick={onHide}>
                     <EyeOff size={14} aria-hidden="true" /> Hide
-                  </button>
+                  </Button>
                 ) : (
                   <Hint label="Show the value for a while; recorded in the audit log">
-                    <button type="button" className="data-button" onClick={onReveal} disabled={revealing}>
+                    <Button variant="secondary" size="sm" onClick={onReveal} disabled={revealing}>
                       <Eye size={14} aria-hidden="true" /> {revealing ? 'Revealing…' : 'Reveal'}
-                    </button>
+                    </Button>
                   </Hint>
                 ))}
               {actions.includes('download') && (
                 <Hint label="Download" shortcut="D">
-                  <button type="button" className="data-button" onClick={onDownload}>
+                  <Button variant="secondary" size="sm" onClick={onDownload}>
                     <Download size={14} aria-hidden="true" /> Download
-                  </button>
+                  </Button>
                 </Hint>
               )}
               {actions.includes('write') && (
                 <Hint label="Edit the value" shortcut="E">
-                  <button type="button" className="data-button" onClick={onEdit}>
+                  <Button variant="secondary" size="sm" onClick={onEdit}>
                     <Pencil size={14} aria-hidden="true" /> Edit
-                  </button>
+                  </Button>
                 </Hint>
               )}
               <span className="data-spacer" />
               {actions.includes('delete') && (
                 <Hint label="Delete" shortcut="⌘⌫">
-                  <button type="button" className="data-button data-button-danger-ghost" onClick={onDelete}>
+                  <Button variant="destructive-ghost" size="sm" onClick={onDelete}>
                     <Trash2 size={14} aria-hidden="true" /> {view.deleteLabel ?? 'Delete'}
-                  </button>
+                  </Button>
                 </Hint>
               )}
             </footer>

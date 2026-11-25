@@ -64,8 +64,8 @@ describe('discovery view', () => {
       ['STARTING', 1],
     ]);
     expect(leaseTone(600)).toBe('success');
-    expect(leaseTone(30)).toBe('warn');
-    expect(leaseTone(-5)).toBe('danger');
+    expect(leaseTone(30)).toBe('warning');
+    expect(leaseTone(-5)).toBe('destructive');
     expect(leaseLabel(-90)).toBe('expired 2 min ago');
     expect(leaseLabel(null)).toBe('—');
   });
@@ -85,7 +85,7 @@ describe('discovery view', () => {
     const lease = discoveryView.level!(1, 'ops.researcher').columns!.find((c) => c.id === 'lease')!;
     const host = await render(lease.render(detail.entry));
 
-    expect(host.querySelector('.data-discovery-lease-warn')?.textContent).toMatch(/renews within \d+ s/);
+    expect(host.querySelector('.data-discovery-lease-warning')?.textContent).toMatch(/renews within \d+ s/);
   });
 
   it('previews an instance with agents, jobs and dependencies', async () => {

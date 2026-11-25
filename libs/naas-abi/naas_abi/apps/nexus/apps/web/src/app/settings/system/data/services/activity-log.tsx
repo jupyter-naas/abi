@@ -5,7 +5,10 @@ import './activity-log.css';
 import { ArrowLeftRight, CircleUser, Cpu, Globe, ScrollText, UserRound, type LucideIcon } from 'lucide-react';
 import { dayLabel, parseJson } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
-import { Badge, CopyButton, EmptyState, Notice, RelativeTime, type Tone } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Notice } from '@/components/ui/notice';
+import { CopyButton, RelativeTime, type Tone } from '../data-ui';
 import { JsonTree } from '../viewers/json-tree';
 import { LogTime } from './event';
 import type { ServiceView } from './types';
@@ -16,7 +19,7 @@ const KIND_ICONS: Record<string, LucideIcon> = {
   anonymous: Globe,
 };
 
-const KIND_TONES: Record<string, Tone> = { user: 'accent', service: 'info', anonymous: 'neutral' };
+const KIND_TONES: Record<string, Tone> = { user: 'primary', service: 'info', anonymous: 'neutral' };
 
 const SLOW_MS = 1000;
 
@@ -94,7 +97,7 @@ function skippedBody(body: unknown): string | null {
 
 export function RequestPreview({ detail }: { detail: ResourceDetail }) {
   const doc = documentOf(detail);
-  if (!doc) return <EmptyState icon={ScrollText} title="Nothing recorded" />;
+  if (!doc) return <EmptyState icon={<ScrollText size={22} strokeWidth={1.5} />} title="Nothing recorded" />;
   const a = doc.attributes ?? {};
   if (!a.method && !a.path) {
     return (
@@ -144,10 +147,10 @@ export function RequestPreview({ detail }: { detail: ResourceDetail }) {
           </div>
           <div>
             <dt>Signed in</dt>
-            <dd>{a.has_auth_header ? <Badge tone="success">yes</Badge> : <Badge>no</Badge>}</dd>
+            <dd>{a.has_auth_header ? <Badge variant="success">yes</Badge> : <Badge>no</Badge>}</dd>
           </div>
         </dl>
-        {typeof a.error === 'string' && <Notice tone="danger">Raised {a.error}</Notice>}
+        {typeof a.error === 'string' && <Notice tone="error">Raised {a.error}</Notice>}
         {a.user_agent ? <p className="data-activity-log-agent">{String(a.user_agent)}</p> : null}
         {doc.correlation_id && (
           <p className="data-activity-log-correlation">
@@ -179,7 +182,7 @@ export function RequestPreview({ detail }: { detail: ResourceDetail }) {
             {typeof a.content_type === 'string' && <span className="data-activity-log-ctype">{a.content_type}</span>}
           </h4>
           {skipped ? (
-            <Notice>Body {skipped}.</Notice>
+            <Notice tone="info">Body {skipped}.</Notice>
           ) : typeof a.request_body === 'string' ? (
             <pre className="data-text">{a.request_body}</pre>
           ) : (
@@ -223,7 +226,7 @@ export const activityLogView: ServiceView = {
               label: 'Kind',
               width: '96px',
               render: (e) =>
-                e.attributes.kind ? <Badge tone={KIND_TONES[e.attributes.kind] ?? 'neutral'}>{e.attributes.kind}</Badge> : null,
+                e.attributes.kind ? <Badge variant={KIND_TONES[e.attributes.kind] ?? 'neutral'}>{e.attributes.kind}</Badge> : null,
             },
             { id: 'last', label: 'Last active', width: '104px', render: (e) => <RelativeTime iso={e.modified} /> },
           ],
