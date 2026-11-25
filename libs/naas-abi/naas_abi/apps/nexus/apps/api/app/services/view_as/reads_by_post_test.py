@@ -44,6 +44,7 @@ ALLOWED = {
     "/api/view/filters/preview",
     "/api/datasets/{namespace}/query",
     "/api/search/private",
+    "/api/search/web",
     "/api/iam/admin/simulate",
     "/api/apps/access-token",
     "/api/apps/remote-grant",
