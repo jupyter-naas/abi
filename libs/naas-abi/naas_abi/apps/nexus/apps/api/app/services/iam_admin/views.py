@@ -57,6 +57,8 @@ def principal_view(record: PrincipalRecord) -> dict[str, Any]:
         # whether it is a level group ("Viewers", "Members"); core #1584.
         "membership_of": getattr(record, "membership_of", None),
         "level_group": bool(getattr(record, "level_group", False)),
+        # Groups: what it is for (IAM schema 9); None: none.
+        "description": getattr(record, "description", None),
         "created_at": iso(record.created_at),
     }
 

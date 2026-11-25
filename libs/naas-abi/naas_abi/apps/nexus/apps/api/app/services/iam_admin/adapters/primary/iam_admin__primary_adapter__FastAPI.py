@@ -127,10 +127,15 @@ class GroupCreateBody(BaseModel):
     # The owner: the platform, abi: (the default), or a container's name
     # (abi:nexus:organization/<org>, …/nexus:workspace/<ws>).
     scope: str | None = None
+    # What it is for (IAM keeps up to 1000 characters).
+    description: str | None = Field(default=None, max_length=1000)
 
 
 class GroupRenameBody(BaseModel):
-    name: str = Field(min_length=1, max_length=128)
+    """Its new name, its new description (empty: none), or both."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=1000)
 
 
 class IdpMappingBody(BaseModel):
@@ -495,14 +500,17 @@ async def get_group(
 async def create_group(
     body: GroupCreateBody, user: User = Signed, service: IamAdminService = Service
 ) -> dict[str, Any]:
-    return await _call(service.create_group(user, body.name, body.scope))
+    return await _call(service.create_group(user, body.name, body.scope, body.description))
 
 
 @router.patch("/groups/{group_id}", dependencies=[declares("iam:UpdateGroup")])
 async def rename_group(
     group_id: str, body: GroupRenameBody, user: User = Signed, service: IamAdminService = Service
 ) -> dict[str, Any]:
-    return await _call(service.rename_group(user, group_id, body.name.strip()))
+    if body.name is None and body.description is None:
+        raise HTTPException(422, detail="Give a name or a description")
+    name = body.name.strip() if body.name is not None else None
+    return await _call(service.rename_group(user, group_id, name, body.description))
 
 
 @router.delete("/groups/{group_id}", status_code=204, dependencies=[declares("iam:DeleteGroup")])

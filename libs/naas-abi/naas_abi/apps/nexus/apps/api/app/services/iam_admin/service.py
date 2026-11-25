@@ -1005,24 +1005,36 @@ class IamAdminService:
     async def get_group(self, user: Any, group_id: str) -> dict[str, Any]:
         return await self._named(await self._read(user, lambda s: self._group_view(s, group_id)))
 
-    async def create_group(self, user: Any, name: str, scope: str | None = None) -> dict[str, Any]:
-        """A group owned by ``scope`` (a container's name; the platform without one)."""
+    async def create_group(
+        self, user: Any, name: str, scope: str | None = None, description: str | None = None
+    ) -> dict[str, Any]:
+        """A group owned by ``scope`` (a container's name; the platform without one), with
+        what it is for."""
         owner = scope
         return await self._change(
             user,
             "create_group",
             name,
-            lambda s: views.principal_view(s.create_group(name, scope=owner)),
+            lambda s: views.principal_view(
+                s.create_group(name, scope=owner, description=description)
+            ),
             detail=owner or "platform group",
         )
 
-    async def rename_group(self, user: Any, group_id: str, name: str) -> dict[str, Any]:
+    async def rename_group(
+        self, user: Any, group_id: str, name: str | None, description: str | None = None
+    ) -> dict[str, Any]:
+        """Its name, its description, or both (an empty description: none)."""
+
         def rename(session: IIAMService) -> dict[str, Any]:
-            session.update_group(group_id, name=name)
+            session.update_group(group_id, name=name, description=description)
             return self._group_view(session, group_id)
 
+        detail = "; ".join(
+            part for part in (name, "description" if description is not None else None) if part
+        )
         return await self._named(
-            await self._change(user, "update_group", group_id, rename, detail=name)
+            await self._change(user, "update_group", group_id, rename, detail=detail)
         )
 
     async def delete_group(self, user: Any, group_id: str) -> None:

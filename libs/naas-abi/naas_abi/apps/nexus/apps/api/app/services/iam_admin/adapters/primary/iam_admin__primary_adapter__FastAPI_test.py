@@ -575,6 +575,19 @@ def test_a_member_known_by_their_nexus_account_is_named_by_it(world):
     assert asked[-1] == {"member"}
 
 
+def test_a_group_says_what_it_is_for(world):
+    group = post(world, "/groups", name="data-team", description="Who reads the data.").json()
+    assert group["description"] == "Who reads the data."
+    url = f"/api/iam/admin/groups/{group['id']}"
+    described = world.client.patch(url, json={"description": "Analysts."}, headers=as_("root"))
+    assert (described.json()["name"], described.json()["description"]) == ("data-team", "Analysts.")
+    renamed = world.client.patch(url, json={"name": "analysts"}, headers=as_("root")).json()
+    assert (renamed["name"], renamed["description"]) == ("analysts", "Analysts.")
+    cleared = world.client.patch(url, json={"description": ""}, headers=as_("root")).json()
+    assert cleared["description"] is None
+    assert world.client.patch(url, json={}, headers=as_("root")).status_code == 422
+
+
 def test_a_groups_members_say_when_they_joined_it(world):
     group = post(world, "/groups", name="data-team").json()
     member = _principal_id(world, "member")

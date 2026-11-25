@@ -258,7 +258,15 @@ def _group(iam: Any, name: str, *, level: bool, make: bool = True) -> str | None
             and bool(getattr(group, "level_group", False)) == level
         ):
             return str(group.id)
-    return str(iam.create_group(name, level=level).id) if make else None
+    if not make:
+        return None
+    from naas_abi.apps.nexus.apps.api.app.services.iam.group_descriptions import described
+
+    return str(
+        iam.create_group(
+            name, level=level, description=described(name, owner=PLATFORM, level=level)
+        ).id
+    )
 
 
 def find_levels(iam: Any) -> Levels | None:
