@@ -121,6 +121,25 @@
 
 <!-- version list -->
 
+## v7.5.0 (2026-11-25)
+
+### Bug Fixes
+
+- **nexus**: A group's Info without the Owned by field (its owner is under its name)
+  ([`a643f15`](https://github.com/jupyter-naas/abi/commit/a643f153abccd5474e4b48cf7108f82bc7ca1ef4))
+
+- **nexus**: A person's Info without the ID field (their id is under their name)
+  ([`4058519`](https://github.com/jupyter-naas/abi/commit/405851931fa2ccc59c457d72325d61e1fc119693))
+
+### Features
+
+- **nexus**: A group's description on its page
+  ([`3303d47`](https://github.com/jupyter-naas/abi/commit/3303d475f00f4ab80c362a0b715937188368644b))
+
+- **nexus**: The access model's groups say what they are for
+  ([`5183a9e`](https://github.com/jupyter-naas/abi/commit/5183a9e82cf6b28077b8b99032cdeab7994ef582))
+
+
 ## v7.4.0 (2026-11-25)
 
 ### Bug Fixes
