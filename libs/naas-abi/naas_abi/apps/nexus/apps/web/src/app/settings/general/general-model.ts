@@ -3,6 +3,8 @@
  * (the `tenant:` block of the configuration). No React: the middleware reads the path.
  */
 
+import { DEFAULT_LOGO_HEIGHT } from '@/components/tenant-branding';
+
 export const PLATFORM_GENERAL_PATH = '/settings/general';
 
 /** What `GET /api/tenant` answers (the fields this page shows). */
@@ -118,7 +120,7 @@ export function siteIdentitySections(
         { key: 'logo_rectangle_url', label: 'Wide logo', value: image(site.logo_rectangle_url) },
         { key: 'logo_emoji', label: 'Emoji', value: text(site.logo_emoji) },
         // The API always answers a height (48 when the configuration leaves it out).
-        { key: 'logo_height', label: 'Logo height', value: { kind: 'text', text: `${site.logo_height ?? 48}px` } },
+        { key: 'logo_height', label: 'Logo height', value: { kind: 'text', text: `${site.logo_height ?? DEFAULT_LOGO_HEIGHT}px` } },
       ],
     },
     {

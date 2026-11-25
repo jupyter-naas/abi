@@ -38,13 +38,15 @@ export function TenantLogo({
       />
     );
   } else if (tenant.logo_url) {
+    // Square at logo_height, shrinking with its card on a narrow screen:
+    // the width is capped and the height follows it through the aspect ratio.
     logo = (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={tenant.logo_url}
         alt={tenant.tab_title}
-        className="object-contain"
-        style={{ height, width: height, borderRadius: radius }}
+        className="max-w-full object-contain"
+        style={{ width: height, maxWidth: '100%', height: 'auto', aspectRatio: '1 / 1', borderRadius: radius }}
       />
     );
   } else if (emojiFallback && tenant.logo_emoji) {
@@ -89,7 +91,7 @@ export function TenantFooter({
   color: string;
   className?: string;
 }) {
-  const text = tenant.login_footer_text;
+  const text = tenant.login_footer_text?.trim();
   const link = tenantFooterLink(tenant);
   if (!text && !link) return null;
   return (

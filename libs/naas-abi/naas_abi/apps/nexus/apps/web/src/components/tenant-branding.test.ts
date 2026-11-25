@@ -54,6 +54,13 @@ describe('TenantFooter', () => {
     expect([...footer.childNodes].map((n) => n.nodeName)).toEqual(['A']);
   });
 
+  it('treats whitespace-only footer text as unset: no empty line above the link', () => {
+    const footer = render(
+      React.createElement(TenantFooter, { tenant: { login_footer_text: '  ', ...LINK }, color: '#000' })
+    ).querySelector('p')!;
+    expect([...footer.childNodes].map((n) => n.nodeName)).toEqual(['A']);
+  });
+
   it('renders nothing when neither the text nor a link is set', () => {
     expect(render(React.createElement(TenantFooter, { tenant: {}, color: '#000' })).innerHTML).toBe('');
   });
@@ -94,6 +101,21 @@ describe('TenantLogo', () => {
       })
     ).querySelector('img')!;
     expect(img.style.height).toBe('96px');
+  });
+
+  it('keeps the square logo square and within its card on a narrow screen', () => {
+    const img = render(
+      React.createElement(TenantLogo, {
+        tenant: { ...base, logo_url: 'https://example.org/square.png', logo_height: 256 },
+        radius: '8px',
+        primaryColor: '#000',
+      })
+    ).querySelector('img')!;
+    expect(img.style.width).toBe('256px');
+    expect(img.style.maxWidth).toBe('100%');
+    expect(img.style.height).toBe('auto');
+    expect(img.className).toContain('max-w-full');
+    expect(img.style.borderRadius).toBe('8px');
   });
 
   it('shows the emoji tile only where asked, at 48px whatever logo_height says', () => {

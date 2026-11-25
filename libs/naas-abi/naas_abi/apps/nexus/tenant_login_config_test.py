@@ -97,6 +97,8 @@ def test_a_logo_height_out_of_range_is_refused(
         "//example.org/about",
         "https://",
         "https://exa mple.org",
+        "https://[::1",
+        "https://example.org:abc/",
     ],
 )
 def test_a_footer_link_that_is_not_an_absolute_http_url_is_refused(

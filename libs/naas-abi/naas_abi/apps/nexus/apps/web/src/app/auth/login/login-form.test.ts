@@ -261,7 +261,14 @@ describe('the login page branding', () => {
 
     tenantOverrides = { logo_url: 'https://example.org/square.png', logo_height: 96, login_border_radius: '8' };
     await mount();
-    expect([logo().style.height, logo().style.width, logo().style.borderRadius]).toEqual(['96px', '96px', '8px']);
+    // Square, and shrinking with the card on a narrow screen (its height follows the width).
+    expect([logo().style.width, logo().style.maxWidth, logo().style.height, logo().style.borderRadius]).toEqual([
+      '96px',
+      '100%',
+      'auto',
+      '8px',
+    ]);
+    expect(logo().className).toContain('max-w-full');
   });
 
   it('opens the footer link in a new tab', async () => {

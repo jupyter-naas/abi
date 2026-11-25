@@ -22,6 +22,20 @@ MIN_LOGO_HEIGHT = 16
 MAX_LOGO_HEIGHT = 256
 
 
+def _is_absolute_http_url(value: str) -> bool:
+    """An http(s) URL with a host, a valid port if any, and no space or control
+    character. urlsplit raises on a malformed IPv6 host, and reading ``port``
+    on a port that is not a number."""
+    if any(ord(ch) <= 32 for ch in value):
+        return False
+    try:
+        parts = urlsplit(value)
+        _ = parts.port
+    except ValueError:
+        return False
+    return parts.scheme in ("http", "https") and bool(parts.hostname)
+
+
 class TenantLoginConfig(BaseModel):
     """Heading, logo height and footer link of the Nexus login page."""
 
@@ -61,14 +75,7 @@ class TenantLoginConfig(BaseModel):
     @field_validator("login_footer_link_url")
     @classmethod
     def _footer_link_is_http_url(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        parts = urlsplit(value)
-        if (
-            parts.scheme not in ("http", "https")
-            or not parts.hostname
-            or any(ord(ch) <= 32 for ch in value)
-        ):
+        if value is not None and not _is_absolute_http_url(value):
             raise ValueError(
                 "tenant.login_footer_link_url is an absolute http(s) URL "
                 "such as https://example.org/about"
