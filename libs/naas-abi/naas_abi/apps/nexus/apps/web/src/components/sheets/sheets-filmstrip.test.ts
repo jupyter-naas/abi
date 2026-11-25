@@ -14,7 +14,7 @@ describe('SheetsTabStrip', () => {
     expect(src).toContain('aria-label="Sheet tabs"');
     expect(src).toContain('flex-col');
     expect(src).toContain('overflow-y-auto');
-    expect(src).toContain('SheetsTabThumb');
+    expect(src).toContain('OfficePartThumb');
     expect(src).toContain('onReorder');
     expect(src).not.toContain('onInsert');
     expect(src).not.toContain('onDelete');

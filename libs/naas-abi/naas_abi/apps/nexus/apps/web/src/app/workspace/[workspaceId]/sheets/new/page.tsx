@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { SheetsMenuBar } from '@/components/sheets/sheets-menu-bar';
-import { SheetsStatusBar } from '@/components/sheets/sheets-status-bar';
+import { SheetsStatusBar } from '@/components/office/office-status-bar';
 import { sheetsApiErrorMessage, startNewWorkbook } from '@/lib/create-sheets-project';
 
 export default function NewSheetsProjectPage() {

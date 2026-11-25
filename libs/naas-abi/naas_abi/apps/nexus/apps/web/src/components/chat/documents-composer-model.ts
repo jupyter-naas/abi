@@ -1,8 +1,9 @@
+import { DOCUMENTS_KIND } from '@/components/office/office-kinds';
 import {
-  sectionsTreeFileNodes,
-  type DocumentsProjectTree,
-  type SectionsTreeFileNode,
-} from '@/components/shell/sidebar/documents-tree';
+  officeTreeFileNodes,
+  type OfficeProjectTree as DocumentsProjectTree,
+  type OfficeTreeFileNode as SectionsTreeFileNode,
+} from '@/components/shell/sidebar/office-tree';
 
 export type SectionsComposerFile = {
   name: string;
@@ -43,5 +44,5 @@ export function sectionsComposerFiles(
   fallbackPath?: string | null,
 ): SectionsComposerFile[] {
   if (!tree) return sectionsComposerFallbackFiles(fallbackPath);
-  return flattenSectionsComposerFiles(sectionsTreeFileNodes(tree, { documentOpen: true }));
+  return flattenSectionsComposerFiles(officeTreeFileNodes(tree, { fileName: DOCUMENTS_KIND.fileName, open: true }));
 }

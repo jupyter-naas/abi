@@ -14,7 +14,7 @@ import {
   SlidesPreviewFrame,
   type SlidesPreviewFrameHandle,
 } from '@/components/slides/slides-preview-frame';
-import { downloadSlidesHtml, resolveSlidesPreviewAssets } from '@/components/slides/slides-assets';
+import { downloadOfficeHtml as downloadSlidesHtml, resolveSlidesPreviewAssets } from '@/components/office/office-assets';
 import {
   applySlidesTextEdits,
   collectSlidesTextEdits,
@@ -32,7 +32,7 @@ import {
   type SlideLayout,
   type SlideMutationResult,
 } from '@/components/slides/slides-outline';
-import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
+import { SlidesStatusBar } from '@/components/office/office-status-bar';
 import { OfficeCreateLoader } from '@/components/office/office-create-loader';
 import {
   clearOfficeCreate,

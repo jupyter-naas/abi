@@ -50,7 +50,7 @@ export function TreeRow({
   className,
 }: {
   twisty?: ReactNode;
-  /** Shown on hover or focus, and while the row's menu is open. */
+  /** Shown on hover or focus, while the row's menu is open, and always on small (touch) screens. */
   actions?: ReactNode;
   menuOpen?: boolean;
   onContextMenu?: (event: React.MouseEvent) => void;
@@ -66,7 +66,7 @@ export function TreeRow({
       {twisty}
       {children}
       {actions ? (
-        <div className="flex shrink-0 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover/tree-row:opacity-100 group-data-[menu-open]/tree-row:opacity-100">
+        <div className="flex shrink-0 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover/tree-row:opacity-100 group-data-[menu-open]/tree-row:opacity-100 max-md:opacity-100">
           {actions}
         </div>
       ) : null}

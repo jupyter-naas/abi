@@ -10,7 +10,7 @@ import {
   type SheetsEditorMode,
 } from '@/components/sheets/sheets-menu-bar';
 import { WorkbookGrid } from '@/components/sheets/workbook-grid';
-import { downloadSheetsHtml, resolveSheetsPreviewAssets } from '@/components/sheets/sheets-assets';
+import { downloadOfficeHtml as downloadSheetsHtml, resolveSheetsPreviewAssets } from '@/components/office/office-assets';
 import { SHEETS_MANUAL_EDIT_IDLE_MS } from '@/components/sheets/sheets-preview-fit';
 import {
   clampTabIndex,
@@ -22,7 +22,7 @@ import {
   type TabMutationResult,
 } from '@/components/sheets/sheets-outline';
 import { downloadSheetsWorkbookXlsx } from '@/lib/export-sheets-workbook-xlsx';
-import { SheetsStatusBar } from '@/components/sheets/sheets-status-bar';
+import { SheetsStatusBar } from '@/components/office/office-status-bar';
 import {
   openSheetsAgentPane,
   sheetsApiErrorMessage,

@@ -20,6 +20,9 @@ import {
   isValidExplorerEntryName,
   matchesExplorerQuery,
   normalizeExplorerPath,
+  EXPLORER_MENU_FOOTER_PX,
+  EXPLORER_MENU_SIZE,
+  placeExplorerMenu,
 } from './files-explorer';
 
 describe('normalizeExplorerPath', () => {
@@ -270,5 +273,23 @@ describe('explorerWorkspaceChange', () => {
   it('is "switch" when the workspace changed: the cache is dropped', () => {
     expect(explorerWorkspaceChange('ws-1', 'ws-2')).toBe('switch');
     expect(explorerWorkspaceChange(null, 'ws-1')).toBe('switch');
+  });
+});
+
+describe('placeExplorerMenu', () => {
+  it('opens below when the pane has room under the kebab', () => {
+    const placed = placeExplorerMenu({ top: 120, right: 400, bottom: 136 }, { width: 1280, height: 800 });
+    expect(placed.placement).toBe('below');
+    expect(placed.top).toBeGreaterThan(136);
+    expect(placed.left).toBe(400 - 160);
+  });
+
+  it('flips above when the kebab sits on the last row above the footer', () => {
+    const viewport = { width: 1280, height: 800 };
+    const bottom = viewport.height - EXPLORER_MENU_FOOTER_PX - 8;
+    const placed = placeExplorerMenu({ top: bottom - 16, right: 900, bottom }, viewport);
+    expect(placed.placement).toBe('above');
+    expect(placed.top + EXPLORER_MENU_SIZE.height).toBeLessThanOrEqual(viewport.height - EXPLORER_MENU_FOOTER_PX);
+    expect(placed.top).toBeLessThan(bottom);
   });
 });

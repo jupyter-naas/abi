@@ -36,21 +36,14 @@ import { useSecretsStore } from '@/stores/secrets';
 import { dispatchDocumentUpdated, isDocumentsWriteTool, useDocumentsStore } from '@/stores/documents';
 import { dispatchSlidesDeckUpdated, isSlidesWriteTool, useSlidesStore } from '@/stores/slides';
 import { noteAppProjectToolResult, noteAppProjectToolStart } from '@/stores/app-projects';
-import {
-  sectionsDocumentCardFromToolCalls,
-  sectionsDocumentTitleFromToolOutput,
-} from '@/components/documents/documents-card';
-import { DocumentsCardView } from '@/components/documents/documents-deck-card-view';
+import { officeCardFromToolCalls, officeTitleFromToolOutput } from '@/components/office/office-card';
+import { OfficeCardView } from '@/components/office/office-card-view';
+import { DOCUMENTS_KIND, SLIDES_KIND } from '@/components/office/office-kinds';
 import {
   dispatchSheetsWorkbookUpdated,
   isSheetsWriteTool,
   useSheetsStore,
 } from '@/stores/sheets';
-import {
-  slidesDeckCardFromToolCalls,
-  slidesDeckTitleFromToolOutput,
-} from '@/components/slides/slides-deck-card';
-import { SlidesDeckCardView } from '@/components/slides/slides-deck-card-view';
 import { DocumentInfoBlock } from './document-info-block';
 import { DocumentsFilesBlock } from './documents-files-block';
 import { FilesBlock } from './files-block';
@@ -2254,7 +2247,7 @@ export function ChatInterface({
             if (!writeFailed) {
               // Abi names a still-untitled deck after the brief on its first
               // write, so pick the new name up for the pane and sidebar.
-              const deckTitle = slidesDeckTitleFromToolOutput(output);
+              const deckTitle = officeTitleFromToolOutput('slides', output);
               if (deckTitle) useSlidesStore.getState().setSelectedTitle(deckTitle);
               dispatchSlidesDeckUpdated({
                 slug,
@@ -2278,7 +2271,7 @@ export function ChatInterface({
             }
             useDocumentsStore.getState().setAgentWriting(false);
             if (!writeFailed) {
-              const documentTitle = sectionsDocumentTitleFromToolOutput(output);
+              const documentTitle = officeTitleFromToolOutput('documents', output);
               if (documentTitle) useDocumentsStore.getState().setSelectedTitle(documentTitle);
               dispatchDocumentUpdated({
                 slug,
@@ -3919,11 +3912,11 @@ const MessageBubble = React.memo(function MessageBubble({
   // Artifact Abi built during this turn, shown as a card that opens it.
   const messageWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const slidesDeckCard = useMemo(
-    () => (isUser ? null : slidesDeckCardFromToolCalls(message.toolCalls)),
+    () => (isUser ? null : officeCardFromToolCalls('slides', message.toolCalls)),
     [isUser, message.toolCalls],
   );
   const documentsCard = useMemo(
-    () => (isUser ? null : sectionsDocumentCardFromToolCalls(message.toolCalls)),
+    () => (isUser ? null : officeCardFromToolCalls('documents', message.toolCalls)),
     [isUser, message.toolCalls],
   );
   // true = iframe-embeddable → open in preview panel
@@ -4494,13 +4487,17 @@ const MessageBubble = React.memo(function MessageBubble({
 
         {/* Artifact built this turn: opens it on the Slides or Documents surface */}
         {slidesDeckCard && (
-          <SlidesDeckCardView
+          <OfficeCardView
+            kind={SLIDES_KIND}
+            store={useSlidesStore}
             card={slidesDeckCard}
             currentWorkspaceId={messageWorkspaceId ?? ''}
           />
         )}
         {documentsCard && (
-          <DocumentsCardView
+          <OfficeCardView
+            kind={DOCUMENTS_KIND}
+            store={useDocumentsStore}
             card={documentsCard}
             currentWorkspaceId={messageWorkspaceId ?? ''}
           />

@@ -1,3 +1,4 @@
+import type { OfficeCoverFit } from '@/components/office/office-cover-thumb';
 import {
   SLIDES_PDF_FROM_DOM_SCRIPT,
   SLIDES_PDF_FROM_DOM_SCRIPT_ID,
@@ -1275,3 +1276,12 @@ export function applyDocumentsTextEdits(html: string, edits: DocumentsTextEdit[]
   }
   return next;
 }
+
+/** Gallery covers and outline thumbs: a letter page scaled to the thumb's width. */
+export const DOCUMENTS_COVER_FIT: OfficeCoverFit = {
+  width: DOCUMENTS_PAGE_WIDTH,
+  height: DOCUMENTS_PAGE_MIN_HEIGHT,
+  scale: (boxWidth, boxHeight) => computeSectionsPreviewScale(boxWidth, boxHeight, DOCUMENTS_PAGE_WIDTH, 0),
+  readCoverHtml: readDocumentCoverHtml,
+  prepareCoverHtml: prepareSectionsCoverHtml,
+};
