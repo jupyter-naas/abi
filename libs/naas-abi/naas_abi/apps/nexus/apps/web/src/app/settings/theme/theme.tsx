@@ -64,9 +64,12 @@ const MENU_ITEMS: MenuEntry[] = [
   { id: 'grid', label: 'Grid', checked: true },
   { id: 'list', label: 'List', checked: false },
   { id: 'more', kind: 'submenu', label: 'Export', items: [{ id: 'csv', label: 'CSV' }, { id: 'xlsx', label: 'Excel' }] },
+  { id: 'spacing', kind: 'submenu', label: 'Spacing', value: 'Compact', items: [{ id: 'compact', label: 'Compact', checked: true }, { id: 'spacious', label: 'Spacious', checked: false }] },
   { id: 'sep2', kind: 'separator' },
+  { id: 'pin', label: 'Pin (keeps the menu open)', keepOpen: true },
   { id: 'archive', label: 'Archive', destructive: true },
-  { id: 'disabled', label: 'Not available', disabled: true },
+  { id: 'disabled', label: 'Not available', disabled: true, title: 'A disabled row still shows why on hover' },
+  { id: 'why', kind: 'note', label: 'A note says why the rows above are greyed.' },
 ];
 
 function SplitDemo() {
@@ -280,7 +283,7 @@ export default function ThemePage() {
       <Specimen id="menus" entries={sections.menus}>
         <Row label="menu bar">
           <MenuBar label="Demo menus" title="Files">
-            <Menu label="File" items={MENU_ITEMS} />
+            <Menu label="File" items={MENU_ITEMS} testId="theme-menu-file" itemTestIdPrefix="theme-menuitem-" />
             <Menu label="Edit" items={[{ id: 'undo', label: 'Undo', shortcut: '⌘Z' }]} />
             <Menu label="View" disabled title="Nothing to view" items={[]} />
           </MenuBar>
