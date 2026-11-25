@@ -180,8 +180,17 @@ async def ontologies(query: ListingQuery) -> list[ListedResource]:
         return []
     refs: list[str] | None = None
     if workspace is not None:
-        async with AsyncSessionLocal() as db:
-            refs = list((await load_resource_policy(db, workspace, "ontologies")).data["enabled"])
+        # The workspace's offer names its files ("<W> access", ``OfferOntologies``); a
+        # workspace whose access policy is no allow-list yet, its stored list.
+        from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+        offer = await AUTHZ.offer_of(query.container)
+        if offer is not None:
+            refs = sorted(offer.ontologies)
+        else:
+            async with AsyncSessionLocal() as db:
+                saved = await load_resource_policy(db, workspace, "ontologies")
+            refs = list(saved.data["enabled"])
     files = await ServiceRegistry.instance().ontology.list_ontology_files(catalog_refs=refs)
     return [
         ListedResource(

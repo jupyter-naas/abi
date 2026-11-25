@@ -18,6 +18,7 @@ The document is written in sections, one statement each, by ``sid``:
 | ``OfferPipelines`` | ``module:RunPipeline``, ``module:ReadPipelineRuns`` | ``${scope}/module:pipeline/...`` |
 | ``OfferFeatures`` | ``nexus:UseFeature`` | ``${scope}/nexus:feature/<key>`` |
 | ``OfferSearchSources`` | ``nexus:UseSearchSource`` | ``${scope}/nexus:search_source/<id>`` |
+| ``OfferOntologies`` | ``nexus:UseOntology`` | ``${scope}/nexus:ontology_file/<ref>`` |
 
 A section naming more than ``policy.MAX_PATTERNS`` items (IAM's limit for one
 statement) is written in parts: ``OfferAgents``, ``OfferAgents2``, ``OfferAgents3``...
@@ -80,11 +81,14 @@ KIND_OF_TYPE = {type_name: kind for kind, type_name in TYPE_OF_KIND.items()}
 FEATURES_SID = "OfferFeatures"
 USE_SEARCH_SOURCE = "nexus:UseSearchSource"
 SEARCH_SOURCES_SID = "OfferSearchSources"
+USE_ONTOLOGY = "nexus:UseOntology"
+ONTOLOGIES_SID = "OfferOntologies"
 # The sections naming Nexus ids in the workspace (``${scope}/nexus:<type>/<id>``), by
 # the ``Offer`` field they fill: its sid, its action, the resource type.
 ID_SECTIONS: dict[str, tuple[str, str, str]] = {
     "features": (FEATURES_SID, USE_FEATURE, "feature"),
     "search_sources": (SEARCH_SOURCES_SID, USE_SEARCH_SOURCE, "search_source"),
+    "ontologies": (ONTOLOGIES_SID, USE_ONTOLOGY, "ontology_file"),
 }
 OFFER_SIDS = frozenset(
     {*(sid for sid, _ in SECTIONS.values()), *(sid for sid, _a, _t in ID_SECTIONS.values())}
@@ -130,6 +134,8 @@ class Offer:
     features: frozenset[str] = field(default_factory=frozenset)
     # The sources a search reads: a feature (``chat``...) or ``web.<engine>``.
     search_sources: frozenset[str] = field(default_factory=frozenset)
+    # The ontology files it offers, by ref (``module:file.ttl``, as its seed names them).
+    ontologies: frozenset[str] = field(default_factory=frozenset)
 
     @classmethod
     def of(
@@ -142,6 +148,7 @@ class Offer:
         modules: Iterable[str] = (),
         features: Iterable[str] = (),
         search_sources: Iterable[str] = (),
+        ontologies: Iterable[str] = (),
     ) -> Offer:
         """An offer; each of ``modules`` adds every agent, app, workflow and
         pipeline of that module (a shared module offered whole)."""
@@ -153,13 +160,14 @@ class Offer:
             pipelines=frozenset([*pipelines, *whole]),
             features=frozenset(features),
             search_sources=frozenset(search_sources),
+            ontologies=frozenset(ontologies),
         )
 
     def items(self, kind: str) -> frozenset[Item]:
         return getattr(self, kind)
 
     def ids(self, field_name: str) -> frozenset[str]:
-        """The ids of an id section (``ID_SECTIONS``: ``features``, ``search_sources``)."""
+        """The ids of an id section (``ID_SECTIONS``: features, search sources, ontologies)."""
         return getattr(self, field_name)
 
     def is_empty(self) -> bool:
@@ -454,6 +462,7 @@ def seeded_offer(
         effective_seed_apps,
         effective_seed_default_agent,
         effective_seed_modules,
+        effective_seed_ontologies,
         has_seed,
     )
 
@@ -474,7 +483,14 @@ def seeded_offer(
         features=features,
         resolve_agent=resolve_agent or engine_agent_resolver(),
     )
-    return replace(offer, search_sources=default_search_sources()), unresolved
+    return (
+        replace(
+            offer,
+            search_sources=default_search_sources(),
+            ontologies=frozenset(effective_seed_ontologies(slug, catalog_seed)),
+        ),
+        unresolved,
+    )
 
 
 def default_search_sources() -> frozenset[str]:
@@ -500,4 +516,4 @@ def in_offer_form(document: Any) -> bool:
 def instances_only(offer: Offer) -> Offer:
     """``offer`` without its features: what a re-seed adds (the features are the
     Features setting's)."""
-    return replace(offer, features=frozenset(), search_sources=frozenset())
+    return replace(offer, features=frozenset(), search_sources=frozenset(), ontologies=frozenset())

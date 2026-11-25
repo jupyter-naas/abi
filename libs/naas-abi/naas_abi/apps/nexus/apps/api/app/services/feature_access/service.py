@@ -567,6 +567,25 @@ class FeatureAccessService:
         _log.info(f"Search sources of {workspace_id} changed: {detail}")
         return await self.read_offer(user, workspace_id)
 
+    async def set_ontologies(self, user: Any, workspace_id: str, refs: Sequence[str]) -> Offer:
+        """The ontology files the workspace offers (Settings › Ontologies, by ref), in one
+        write of "<W> access" as the caller: IAM refuses a file beyond the organization's
+        offer (422) or one the caller does not hold (403). Answers the offer after."""
+        wanted = frozenset(str(r).strip() for r in refs if str(r).strip())
+        _container, record = await self._where(workspace_id)
+        access_id = getattr(record, "access_policy_id", None)
+        await self._set_offer(
+            user,
+            workspace_id,
+            access_id,
+            "workspace-offer.ontologies",
+            workspace_id,
+            lambda offer: replace(offer, ontologies=wanted),
+        )
+        _log.info(f"Ontologies of {workspace_id}: {len(wanted)} offered")
+        policy = await run_in_threadpool(self._gateway.policy, access_id)
+        return offer_of(policy.document)
+
     async def _change(
         self,
         user: Any,

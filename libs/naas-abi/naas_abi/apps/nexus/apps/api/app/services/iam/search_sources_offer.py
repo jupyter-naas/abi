@@ -23,11 +23,10 @@ import json
 import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
 from typing import Any
 
+from naas_abi.apps.nexus.apps.api.app.services.iam import offer_moves
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
-    is_org_container,
     is_workspace_container,
     workspace_of,
 )
@@ -41,19 +40,12 @@ from naas_abi.apps.nexus.apps.api.app.services.search.sources import default_sou
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 
 MIGRATION_NAME = "search_sources_offer_v1"
-_MARKER_TABLE = (
-    "CREATE TABLE IF NOT EXISTS iam_migrations ("
-    "name VARCHAR(128) PRIMARY KEY, "
-    "applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
-    "report TEXT)"
-)
 
 
 @dataclass
@@ -119,14 +111,6 @@ def apply(
     return report
 
 
-async def _recorded(db: AsyncSession) -> bool:
-    await db.execute(text(_MARKER_TABLE))
-    found = await db.execute(
-        text("SELECT 1 FROM iam_migrations WHERE name = :n"), {"n": MIGRATION_NAME}
-    )
-    return found.first() is not None
-
-
 async def _switched_off(db: AsyncSession) -> dict[str, list[str]]:
     rows = (await db.execute(text("SELECT workspace_id, settings FROM search_settings"))).all()
     found: dict[str, list[str]] = {}
@@ -142,21 +126,9 @@ async def _switched_off(db: AsyncSession) -> dict[str, list[str]]:
 async def migrate(db: AsyncSession, iam: Any) -> Report | None:
     """Once: the sources section in every recorded access policy. None when it was
     recorded already."""
-    if await _recorded(db):
+    if await offer_moves.recorded(db, MIGRATION_NAME):
         return None
-    rows = (
-        await db.execute(
-            text(
-                "SELECT container, access_policy_id FROM container_defaults "
-                "WHERE access_policy_id IS NOT NULL"
-            )
-        )
-    ).all()
-    policies = {
-        str(c): str(p)
-        for c, p in rows
-        if is_org_container(str(c)) or is_workspace_container(str(c))
-    }
+    policies = await offer_moves.access_policies(db)
     switched_off = await _switched_off(db)
     report = await run_in_threadpool(apply, iam, policies, switched_off)
     if report.failed:
@@ -166,18 +138,7 @@ async def migrate(db: AsyncSession, iam: Any) -> Report | None:
             report.failed,
         )
         return report
-    try:
-        await db.execute(
-            text("INSERT INTO iam_migrations (name, applied_at, report) VALUES (:n, :at, :r)"),
-            {
-                "n": MIGRATION_NAME,
-                "at": datetime.now(UTC).replace(tzinfo=None),
-                "r": json.dumps(report.to_dict()),
-            },
-        )
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()  # another process recorded it first
+    await offer_moves.record(db, MIGRATION_NAME, report.to_dict())
     if report.written:
         from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 

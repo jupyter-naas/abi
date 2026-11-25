@@ -22,6 +22,9 @@ from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.services.feature_access.runtime import (
+    get_feature_access_service,
+)
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary import graph_iam
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
     sync_workspace,
@@ -46,9 +49,11 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.res
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.resource_access import (
     PolicyConflictError,
     ResourceAccessService,
+    ResourcePolicy,
     validate_policy,
 )
 from naas_abi.apps.nexus.graph_policy_config import NEXUS_GRAPH, SCHEMA_GRAPH
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -150,6 +155,23 @@ async def assignment_catalog(
     ]
 
 
+async def _offered_ontologies(workspace_id: str) -> ResourcePolicy | None:
+    """The workspace's ontologies as its offer names them ("<W> access",
+    ``OfferOntologies``); None when its access policy is no allow-list yet (the stored
+    list is still the one)."""
+    container = await authz.container_of(workspace_id)
+    offer = await authz.offer_of(container) if container else None
+    if offer is None:
+        return None
+    return ResourcePolicy({"enabled": sorted(offer.ontologies)}, 1, None)
+
+
+async def _load(db: AsyncSession, workspace_id: str, kind: Kind) -> ResourcePolicy:
+    if kind == "ontologies" and (offered := await _offered_ontologies(workspace_id)):
+        return offered
+    return await load_resource_policy(db, workspace_id, kind)
+
+
 def editor_payload(kind: Kind, saved, catalog: list[dict]) -> dict:
     data = dict(saved.data)
     if kind == "ontologies":
@@ -229,7 +251,7 @@ async def get_assignments(
     ontologies: Any = Depends(get_ontology_service),
     graphs: Any = Depends(get_graph_service),
 ):
-    saved = await load_resource_policy(db, workspace_id, kind)
+    saved = await _load(db, workspace_id, kind)
     catalog = await assignment_catalog(
         kind,
         workspace_id,
@@ -255,7 +277,8 @@ async def save_assignments(
     ontologies: Any = Depends(get_ontology_service),
     graphs: Any = Depends(get_graph_service),
 ):
-    current = await load_resource_policy(db, workspace_id, kind)
+    offered = await _offered_ontologies(workspace_id) if kind == "ontologies" else None
+    current = offered or await load_resource_policy(db, workspace_id, kind)
     # Every ontology file, listed once: the catalog, and the words of a refusal.
     entries = await _ontology_entries(ontologies) if kind == "ontologies" else None
     catalog = await assignment_catalog(
@@ -289,13 +312,22 @@ async def save_assignments(
             raise ValueError("Select resources from the available catalog.")
         if kind == "graphs":
             await _require_graph_rights(user, current.data, data)
-        saved = await ResourceAccessService(ResourcePolicyPostgres(db)).save(
-            workspace_id,
-            kind,
-            data,
-            body.revision,
-            user.id,
-        )
+        if offered is not None:
+            # The workspace's offer: written as the caller, IAM's rules applying.
+            offer = await get_feature_access_service().set_ontologies(
+                user, workspace_id, data["enabled"]
+            )
+            saved = ResourcePolicy({"enabled": sorted(offer.ontologies)}, 1, None)
+        else:
+            saved = await ResourceAccessService(ResourcePolicyPostgres(db)).save(
+                workspace_id,
+                kind,
+                data,
+                body.revision,
+                user.id,
+            )
+    except PermissionDeniedError as exc:
+        raise HTTPException(403, str(exc)) from exc
     except PolicyConflictError as exc:
         raise HTTPException(409, str(exc)) from exc
     except (ValueError, ValidationError) as exc:

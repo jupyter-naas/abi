@@ -702,3 +702,64 @@ async def test_the_move_writes_the_sources_each_workspace_kept_on(world):
     # Once written, a pass leaves it: an admin's later choice is theirs.
     again = search_sources_offer.apply(world.iam, policies, {})
     assert not again.written and sorted(again.kept) == sorted(policies)
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_offers_its_ontologies_and_its_levels_read_them_there(world):
+    """An ontology file is read where the workspace's offer names it, within the
+    organization's (which allows every file, as its admins could assign any)."""
+    await _team(world)
+    w_access = world.record.access_policy_id
+    with as_service_account("api"):
+        o_access = world.iam.get_policy(w_access).parent_id
+        org = world.iam.get_policy(o_access)
+        doc = org.document.to_dict()
+        doc["statements"].append(
+            {
+                "sid": "Ontologies",
+                "effect": "Allow",
+                "actions": ["nexus:UseOntology"],
+                "resources": ["${scope}/nexus:ontology_file/*"],
+            }
+        )
+        world.iam.update_policy(o_access, expected_revision=org.revision, document=doc)
+        widen_offer(world.iam, w_access, Offer.of(ontologies=["bfo:bfo-core.ttl"]))
+    use = "nexus:UseOntology"
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource
+
+    file = nexus_resource("ontology_file", container=world.W, id="bfo:bfo-core.ttl")
+    other = nexus_resource("ontology_file", container=world.W, id="acme:Sales.ttl")
+    assert _can(world, "member", use, file) and _can(world, "wadmin", use, file)
+    assert not _can(world, "member", use, other)
+    # A Viewer reads no ontology (no ontology feature at their level).
+    assert not _can(world, "viewer", use, file)
+
+
+@pytest.mark.asyncio
+async def test_the_move_writes_each_workspaces_ontologies_and_lets_its_organization_allow_any(
+    world,
+):
+    from naas_abi.apps.nexus.apps.api.app.services.iam import ontologies_offer
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource
+
+    await _team(world)
+    w_access = world.record.access_policy_id
+    with as_service_account("api"):
+        o_access = world.iam.get_policy(w_access).parent_id
+    policies = {ORG: o_access, world.W: w_access}
+    report = ontologies_offer.apply(world.iam, policies, {"ws-1": ["bfo:bfo-core.ttl"]})
+    assert sorted(report.written) == sorted(policies) and not report.failed
+    use = "nexus:UseOntology"
+
+    def reads(ref: str) -> bool:
+        return _can(
+            world, "member", use, nexus_resource("ontology_file", container=world.W, id=ref)
+        )
+
+    assert reads("bfo:bfo-core.ttl") and not reads("acme:Sales.ttl")
+    # The organization allows any file: its admins may offer another one in W.
+    with as_service_account("api"):
+        widen_offer(world.iam, w_access, Offer.of(ontologies=["acme:Sales.ttl"]))
+    assert reads("acme:Sales.ttl")
+    again = ontologies_offer.apply(world.iam, policies, {})
+    assert not again.written

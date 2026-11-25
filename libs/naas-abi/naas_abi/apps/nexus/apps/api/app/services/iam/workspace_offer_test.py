@@ -255,3 +255,17 @@ def test_search_sources_are_a_section_of_their_own():
         Offer.of(search_sources=["maps"])
     ).search_sources == {"chat"}
     assert not Offer.of(search_sources=["chat"]).is_empty()
+
+
+def test_ontologies_are_a_section_named_by_their_refs():
+    offer = Offer.of(ontologies=["adqcc:AdqccOntology.ttl", "bfo:bfo-core.ttl"])
+    document = offer_document(offer)
+    assert [s["sid"] for s in document["statements"]] == ["OfferOntologies"]
+    assert document["statements"][0]["actions"] == ["nexus:UseOntology"]
+    assert offer_of(document) == offer
+    many = Offer.of(ontologies=[f"m:o{i:03}.ttl" for i in range(MAX_PATTERNS + 5)])
+    assert [s["sid"] for s in offer_document(many)["statements"]] == [
+        "OfferOntologies",
+        "OfferOntologies2",
+    ]
+    assert offer_of(offer_document(many)) == many

@@ -182,6 +182,10 @@ COMPANIONS = frozenset({roles.PLATFORM_MEMBER, roles.PLATFORM_VIEWER, roles.PLAT
 GRAPH_GRANT_PREFIX = "workspace."
 GRAPH_GRANT_INFIX = ".graphs."
 
+# The actions a workspace's offer names item by item beside its features (search
+# sources, ontology files), which the level policies grant by type.
+OFFER_SECTION_ACTIONS = frozenset({"nexus:UseSearchSource", "nexus:UseOntology"})
+
 # Why a decision changed: (label, intended). Intended: the narrowings and widenings
 # the ADR lists; the others are what the model is, named so none is silent.
 REASONS: dict[str, tuple[str, bool]] = {
@@ -208,6 +212,10 @@ REASONS: dict[str, tuple[str, bool]] = {
         False,
     ),
     "level_instances": ("The level's agents and apps, within what the workspace offers", False),
+    "offer_sections": (
+        "The level's search sources and ontology files, within what the workspace offers",
+        True,
+    ),
     "module_actions": ("A module's declared actions are not part of a workspace's offer", False),
     "shared_graphs": (
         "Shared graphs: read for the workspace's people, write for its admins",
@@ -1583,6 +1591,8 @@ def reason_of(
         and f"/{service}:" in resource
     ):
         return "module_actions"
+    if action in OFFER_SECTION_ACTIONS:
+        return "offer_sections"
     if action == USE_FEATURE and not after and plan.level == VIEWER:
         return "viewer_features"
     if action == USE_FEATURE:

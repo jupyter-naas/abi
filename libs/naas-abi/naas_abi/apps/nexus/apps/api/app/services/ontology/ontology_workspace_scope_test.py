@@ -292,6 +292,25 @@ class HttpScopeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await http._catalog_refs_for_workspace("allowed"), [])
             self.assertEqual(load.call_args.args[1:], ("allowed", "ontologies"))
 
+    async def test_the_offer_names_the_ontologies_iam_lets_the_caller_use(self) -> None:
+        """Where the workspace's access policy is an allow-list, its ``OfferOntologies``
+        is what is read, each ref decided by IAM (``UseOntology``); the stored list is
+        not read."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+        from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import Offer
+
+        offered = Offer.of(ontologies=["bfo:bfo-core.ttl", "acme:Sales.ttl"])
+        allowed = AsyncMock(return_value={"bfo:bfo-core.ttl"})
+        with (
+            patch.object(AUTHZ, "container_of", AsyncMock(return_value="ws-container")),
+            patch.object(AUTHZ, "offer_of", AsyncMock(return_value=offered)),
+            patch.object(AUTHZ, "allowed_ids", allowed),
+            patch.object(http, "_stored_refs", AsyncMock(side_effect=AssertionError)),
+        ):
+            refs = await http._catalog_refs_for_workspace("ws-1", SimpleNamespace(id="bob"))
+        self.assertEqual(refs, ["bfo:bfo-core.ttl"])
+        self.assertEqual(allowed.call_args.args, ("UseOntology",))
+
     async def asyncSetUp(self) -> None:
         self.nexus = knowledge_team()
         self.nexus.__enter__()

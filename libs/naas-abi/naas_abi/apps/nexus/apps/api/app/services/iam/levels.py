@@ -189,6 +189,17 @@ def search_sources_statement() -> dict[str, Any]:
     }
 
 
+def ontologies_statement() -> dict[str, Any]:
+    """Every ontology file, by type, for a level that reads ontologies: the workspace's
+    offer names which (``OfferOntologies``)."""
+    return {
+        "sid": "Ontologies",
+        "effect": "Allow",
+        "actions": ["nexus:UseOntology"],
+        "resources": ["${scope}/nexus:ontology_file/*"],
+    }
+
+
 def level_document(name: str) -> PolicyDocument:
     """The document of a generic level policy (``VIEWER_ACCESS``, ``MEMBER_ACCESS``,
     ``WORKSPACE_ADMIN_ACCESS``): its features, the module scopes it uses and the
@@ -200,6 +211,8 @@ def level_document(name: str) -> PolicyDocument:
     ]
     if "search" in level_features(name):
         statements.append(search_sources_statement())
+    if "ontology" in level_features(name):
+        statements.append(ontologies_statement())
     return PolicyDocument.from_dict({"version": POLICY_VERSION, "statements": statements})
 
 

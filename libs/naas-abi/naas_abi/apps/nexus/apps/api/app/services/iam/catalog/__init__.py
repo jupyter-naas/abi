@@ -66,7 +66,9 @@ SERVICE = "nexus"
 #     deprecated (kept for ``delete_container``, which Nexus calls as ``api``).
 # 18: search sources (``search_source``, ``UseSearchSource``): no role's, granted by the
 #     level policies and bounded by each workspace's offer; ``SetSearchScope`` deprecated.
-VERSION = 18
+# 19: ontology files (``ontology_file``, ``UseOntology``): no role's, granted by the
+#     level policies and bounded by each workspace's offer (``OfferOntologies``).
+VERSION = 19
 
 _MODULES = (
     organizations,
