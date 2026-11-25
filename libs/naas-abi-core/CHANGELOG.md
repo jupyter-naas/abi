@@ -24,6 +24,14 @@
 
 <!-- version list -->
 
+## v6.3.0 (2026-11-25)
+
+### Features
+
+- **iam**: A group keeps when each member joined it
+  ([`13af77c`](https://github.com/jupyter-naas/abi/commit/13af77c7ef044da1fa55628437519e0cf9119c8d))
+
+
 ## v6.2.1 (2026-11-23)
 
 ### Bug Fixes
