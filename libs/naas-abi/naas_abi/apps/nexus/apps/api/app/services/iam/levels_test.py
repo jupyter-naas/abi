@@ -763,3 +763,23 @@ async def test_the_move_writes_each_workspaces_ontologies_and_lets_its_organizat
     assert reads("acme:Sales.ttl")
     again = ontologies_offer.apply(world.iam, policies, {})
     assert not again.written
+
+
+@pytest.mark.asyncio
+async def test_a_viewer_given_the_chat_feature_is_not_shown_a_chat_they_cannot_use(world):
+    """Chatting is writing a conversation, which the Viewer level never does: a policy
+    giving a Viewer the chat feature does not show them the chat (every message would
+    be refused). A Member is shown it."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.user_features import user_feature_flags
+
+    await _team(world)
+    world.allow("viewer", ["nexus:UseFeature"], ["${scope}/nexus:feature/chat"], world.W)
+    assert _can(world, "viewer", "nexus:UseFeature", f"{world.W}/nexus:feature/chat")
+
+    async def chat(user: str) -> bool:
+        flags = await user_feature_flags(SimpleUser(user), [("org-1", "ws-1")], ["chat"])
+        assert flags is not None
+        return flags["ws-1"]["chat"]
+
+    assert await chat("member") is True
+    assert await chat("viewer") is False

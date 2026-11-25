@@ -19,6 +19,10 @@ _log = logging.getLogger(__name__)
 
 # Shown as IAM says, whatever the workspace offers: who administers it keeps its settings.
 ALWAYS_SHOWN: Final = frozenset({"settings"})
+# A feature shown only to whoever may also do what it is for: chatting is writing a
+# conversation, which a Viewer's level never does, whatever a policy gives of the
+# feature (the chat and its agents would be shown, then every message refused).
+NEEDS: Final = {"chat": ("nexus:CreateConversation", "conversation")}
 
 
 async def user_feature_flags(
@@ -68,6 +72,16 @@ async def user_feature_flags(
         offer = offers.get(workspace_id)
         return key in ALWAYS_SHOWN or offer is None or key in offer.features
 
+    user_id = str(getattr(user, "id", user))
+    needs = {
+        (workspace_id, key): nexus_resource(
+            type_name, container=workspace_container(org_id, workspace_id), id=(user_id, "-")
+        )
+        for org_id, workspace_id in workspaces
+        for key, (_action, type_name) in NEEDS.items()
+        if key in keys
+    }
+
     def run() -> dict[str, dict[str, bool]] | None:
         try:
             iam = runtime.iam()
@@ -78,12 +92,21 @@ async def user_feature_flags(
         try:
             with use_call_context(ctx):
                 allowed = set(iam.filter("nexus:UseFeature", list(names.values())).allowed)
+                for key, (action, _type) in NEEDS.items():
+                    wanted = [name for (_ws, k), name in needs.items() if k == key]
+                    if wanted:
+                        allowed |= {("needs", n) for n in iam.filter(action, wanted).allowed}
         except Exception:  # noqa: BLE001 - shown only: fail closed, never a 500
             _log.warning("Feature flags could not be read from IAM: shown off", exc_info=True)
             allowed = set()
         return {
             workspace_id: {
-                key: names.get((workspace_id, key)) in allowed and shown(workspace_id, key)
+                key: names.get((workspace_id, key)) in allowed
+                and shown(workspace_id, key)
+                and (
+                    (workspace_id, key) not in needs
+                    or ("needs", needs[(workspace_id, key)]) in allowed
+                )
                 for key in KNOWN_FEATURE_KEYS
             }
             for _, workspace_id in workspaces
