@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react';
 import { IamAdminError } from '@/lib/iam-admin/api';
+import { ConfirmDialog } from '@/components/ui/dialogs';
 import { listAllGroups } from '@/lib/iam-admin/batched';
 import type { AttachmentView, GroupView, PrincipalView } from '@/lib/iam-admin/types';
 import { NO_PROVIDERS, fetchInviteProviders, type InviteProviders } from '@/lib/invitations';
@@ -284,29 +285,19 @@ export function GroupsView({
         </table>
       </div>
       <TablePager total={list.visible.length} paged={paged} />
-      {deleting && (
-        <div className="access-group-confirm platform-users-deletion" role="dialog" aria-label="Delete group">
-          <p>
-            Delete <strong>{deleting.name ?? deleting.id}</strong>? Its members lose what it gave them.
-          </p>
-          <div className="access-group-actions">
-            <button type="button" className="platform-users-button" onClick={() => setDeleting(null)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="platform-users-button platform-users-button-danger"
-              onClick={() => {
-                const target = deleting;
-                setDeleting(null);
-                void act(() => api.deleteGroup(target.id));
-              }}
-            >
-              Delete group
-            </button>
-          </div>
-        </div>
-      )}
+      {/* A modal, wherever the row was: never below the pager, out of sight (UX-05). */}
+      <ConfirmDialog
+        open={deleting !== null}
+        title={`Delete ${deleting?.name ?? deleting?.id ?? 'this group'}?`}
+        description="Its members lose what it gave them. Its policies stay, attached to no one through it."
+        confirmLabel="Delete group"
+        onCancel={() => setDeleting(null)}
+        onConfirm={() => {
+          const target = deleting;
+          setDeleting(null);
+          if (target) void act(() => api.deleteGroup(target.id));
+        }}
+      />
     </div>
   );
 }

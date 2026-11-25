@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { IamAdminError } from '@/lib/iam-admin/api';
+import { useConfirm } from '@/components/ui/dialogs';
 import type { DeclaredCatalog, ManifestStatus, ManifestView, PolicyDocument } from '@/lib/iam-admin/types';
 import type { AccessViewProps, PlatformViewProps } from '../access-props';
 import {
@@ -73,6 +74,8 @@ function ManifestCard({
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // An approval gives the module what it asks for, at once: asked first (UX-01).
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const decide = async (call: () => Promise<unknown>) => {
     setBusy(true);
@@ -95,6 +98,7 @@ function ManifestCard({
 
   return (
     <article className="access-approval-card" data-manifest={manifest.sha256}>
+      {confirmDialog}
       <header className="access-approval-header">
         <div>
           <strong>{label}</strong>{' '}
@@ -113,7 +117,17 @@ function ManifestCard({
         <div className="access-approval-actions">
           {can('iam:ApproveManifest') && (
             <>
-              <button type="button" className="access-button access-button-primary" disabled={busy} onClick={() => void decide(() => api.approveManifest(manifest.principal_id, manifest.sha256))}>
+              <button type="button" className="access-button access-button-primary" disabled={busy} onClick={() =>
+                  void (async () => {
+                    const ok = await confirm({
+                      title: `Approve the manifest of ${label}?`,
+                      description: `The module gets what it asks for: ${manifest.document.statements.length} statement${manifest.document.statements.length === 1 ? '' : 's'}, at once. Narrow it first to give less.`,
+                      confirmLabel: 'Approve',
+                      destructive: false,
+                    });
+                    if (ok) await decide(() => api.approveManifest(manifest.principal_id, manifest.sha256));
+                  })()
+                }>
                 Approve
               </button>
               <button type="button" className="access-button" disabled={busy} onClick={() => setMode('narrow')}>

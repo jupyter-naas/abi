@@ -117,6 +117,16 @@ async function render(props: Partial<Parameters<typeof PlatformUsers>[0]> & { fe
   return navigate;
 }
 
+
+/** The confirmation modal's button (it is portalled to the page, out of the list). */
+async function confirmIn(label: string | RegExp) {
+  const button = [...document.body.querySelectorAll('button')].find((b) =>
+    typeof label === 'string' ? b.textContent === label : label.test(b.textContent ?? '') && !b.dataset.action,
+  );
+  expect(button, `a confirmation button ${String(label)}`).toBeDefined();
+  await mounted!.click(button!);
+}
+
 describe('PlatformUsers', () => {
   it('lists every account and invitation with its status, organizations and Role, not its IAM id', async () => {
     const { fetcher } = api();
@@ -177,6 +187,9 @@ describe('PlatformUsers', () => {
     });
     await render({ fetcher });
     await mounted!.click(row('usr_bob').querySelector('[data-action="deactivate"]'));
+    // Asked first, in a modal: nothing is sent before the answer.
+    expect(calls.some((c) => c.url === '/api/admin/users/usr_bob/deactivate')).toBe(false);
+    await confirmIn('Deactivate');
     await mounted!.flush();
     expect(calls.some((c) => c.method === 'POST' && c.url === '/api/admin/users/usr_bob/deactivate')).toBe(true);
     expect(row('usr_bob').querySelector('[data-field="deactivated"]')?.textContent).toBe('Deactivated');
@@ -190,6 +203,7 @@ describe('PlatformUsers', () => {
     });
     await render({ fetcher });
     await mounted!.click(row('invited:new@example.com').querySelector('[data-action="deactivate"]'));
+    await confirmIn('Deactivate');
     await mounted!.flush();
     expect(calls.map((c) => c.url)).toContain('/api/admin/users/invited%3Anew%40example.com/deactivate');
   });
@@ -199,6 +213,7 @@ describe('PlatformUsers', () => {
     const { fetcher } = api({ 'PATCH /api/admin/users/usr_bob': () => ({ status: 400, body: { detail } }) });
     await render({ fetcher });
     await mounted!.click(row('usr_bob').querySelector('[data-action="superadmin"]'));
+    await confirmIn(/platform admin/);
     await mounted!.flush();
     expect(panel('usr_bob')?.querySelector('[role="alert"]')?.textContent).toBe(detail);
   });
