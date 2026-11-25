@@ -19,6 +19,9 @@
       - `login_text_color`, `login_input_color`, `login_border_radius`
       - `login_bg_image_url`
       - `show_terms_footer`, `show_powered_by`, `login_footer_text`
+      - `login_heading`, `logo_height`, `login_footer_link_label`, `login_footer_link_url`
+        (from `TenantLoginConfig` in `naas_abi.apps.nexus.tenant_login_config`, shared by
+        both `TenantConfig` models and validated when the configuration loads)
       - `apps` iterable where each item has: `name`, `url`, `description`, `icon_emoji`
   - `TenantResponse` from `naas_abi.apps.nexus.apps.api.app.services.tenant.tenant__schema`
     - Must provide `ExternalAppResponse` for app entries.
