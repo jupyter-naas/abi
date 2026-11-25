@@ -29,7 +29,12 @@ const KIND_LABEL: Record<string, string> = { user: 'Person', service_account: 'S
 // An IAM id typed for a member: a person's or a service account's.
 const MEMBER_ID = /^(usr|sa)_[A-Za-z0-9]+$/;
 
-type Member = { id: string; label: string; email?: string | null; kind?: PrincipalKind };
+type Member = { id: string; label: string; email?: string | null; kind?: PrincipalKind; joinedAt?: string | null };
+
+/** The day a member joined, as Users shows it (`YYYY-MM-DD`); "—" when IAM did not keep it. */
+function joinedDay(at: string | null | undefined): string {
+  return at ? at.slice(0, 10) : '—';
+}
 
 /**
  * A group's page in Access › Groups, or the page of a group to be (`groupId` null, Create group):
@@ -177,7 +182,7 @@ export function GroupPage({
 
   const members: Member[] = isNew
     ? draftMembers
-    : group!.members.map((m) => ({ id: m.id, label: memberLabel(m), email: m.email ?? null, kind: m.kind }));
+    : group!.members.map((m) => ({ id: m.id, label: memberLabel(m), email: m.email ?? null, kind: m.kind, joinedAt: m.joined_at ?? null }));
   const inGroup = new Set(members.map((m) => m.id));
   const addable = candidates.filter((c) => !inGroup.has(c.id));
   const heldHere = new Set(
@@ -443,6 +448,7 @@ export function GroupPage({
                 <tr>
                   <th>Member</th>
                   <th>Kind</th>
+                  {!isNew && <th>Joined at</th>}
                   <th aria-label="Actions" />
                 </tr>
               </thead>
@@ -460,6 +466,11 @@ export function GroupPage({
                       <span className="block text-xs text-muted-foreground">{m.email || m.id}</span>
                     </td>
                     <td>{KIND_LABEL[m.kind ?? 'user'] ?? m.kind}</td>
+                    {!isNew && (
+                      <td data-joined={m.joinedAt ?? ''} title={m.joinedAt ? undefined : 'Joined before IAM kept the date'}>
+                        {joinedDay(m.joinedAt)}
+                      </td>
+                    )}
                     <td className="text-right">
                       {changesMembers && (isNew || can('iam:RemoveGroupMember')) &&
                         (isNew ? (

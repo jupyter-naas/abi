@@ -575,6 +575,17 @@ def test_a_member_known_by_their_nexus_account_is_named_by_it(world):
     assert asked[-1] == {"member"}
 
 
+def test_a_groups_members_say_when_they_joined_it(world):
+    group = post(world, "/groups", name="data-team").json()
+    member = _principal_id(world, "member")
+    added = world.client.put(
+        f"/api/iam/admin/groups/{group['id']}/members/{member}", headers=as_("root")
+    ).json()
+    joined = added["members"][0]["joined_at"]
+    assert joined is not None and joined[:4].isdigit() and "T" in joined
+    assert get(world, f"/groups/{group['id']}").json()["members"][0]["joined_at"] == joined
+
+
 def test_a_group_whose_accounts_cannot_be_read_shows_its_members_ids(world):
     _named_by_accounts(world, None)
     group = post(world, "/groups", name="data-team").json()

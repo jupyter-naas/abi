@@ -216,8 +216,11 @@ export type PrincipalView = {
 
 export type IdpMapping = { provider: string; claim_value: string };
 
+/** A group's member: who it is, and when they joined it (null before IAM kept the date). */
+export type GroupMemberView = PrincipalView & { user_id?: string | null; joined_at?: string | null };
+
 export type GroupView = PrincipalView & {
-  members: PrincipalView[];
+  members: GroupMemberView[];
   idp_mappings: IdpMapping[];
 };
 

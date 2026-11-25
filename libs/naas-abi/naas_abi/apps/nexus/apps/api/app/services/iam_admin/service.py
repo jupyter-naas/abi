@@ -981,6 +981,8 @@ class IamAdminService:
 
     def _group_view(self, session: IIAMService, group_id: str) -> dict[str, Any]:
         group = session.get_group(group_id)
+        # When each joined (IAM schema 8); None for a membership older than its date.
+        joined = session.list_group_member_dates(group_id)
         members = []
         for member_id in session.list_group_members(group_id):
             record = self._gateway.principal(member_id)
@@ -988,7 +990,11 @@ class IamAdminService:
                 # A person Nexus knows: their account, which names them (``_named``).
                 nexus = record.issuer == LEGACY_NEXUS_ISSUER and record.subject
                 members.append(
-                    {**views.principal_view(record), "user_id": record.subject if nexus else None}
+                    {
+                        **views.principal_view(record),
+                        "user_id": record.subject if nexus else None,
+                        "joined_at": views.iso(joined.get(member_id)),
+                    }
                 )
         mappings = [
             {"provider": m.provider, "claim_value": m.claim_value}

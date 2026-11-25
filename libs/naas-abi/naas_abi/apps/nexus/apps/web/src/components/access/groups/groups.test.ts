@@ -240,6 +240,21 @@ describe('GroupsView at a workspace', () => {
     expect(header?.querySelector('[data-action="save"]')).not.toBeNull();
   });
 
+  it('says when each member joined it', async () => {
+    const withDates = {
+      ...owned,
+      members: [
+        { ...principal({ id: 'usr_bob', name: 'Bob' }), joined_at: '2026-11-20T09:30:00+00:00' },
+        { ...principal({ id: 'usr_old', name: 'Old' }), joined_at: null },
+      ],
+    };
+    await show(workspaceApi({ getGroup: vi.fn(() => Promise.resolve(withDates)) }), owned.id);
+    const headers = [...document.querySelectorAll('[aria-label="Members"] th')].map((th) => th.textContent);
+    expect(headers).toContain('Joined at');
+    expect(document.querySelector('[data-member="usr_bob"] [data-joined]')?.textContent).toBe('2026-11-20');
+    expect(document.querySelector('[data-member="usr_old"] [data-joined]')?.textContent).toBe('—');
+  });
+
   it('renames a group it owns, and shows the new name', async () => {
     const renamed = { ...owned, name: 'Talent' };
     const api = workspaceApi({ renameGroup: vi.fn(() => Promise.resolve(renamed)) });
