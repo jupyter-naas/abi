@@ -8,6 +8,7 @@ from typing import Any, Literal
 from naas_abi.apps.nexus.access_config import NexusMigrationConfig, NexusModelsConfig
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
+from naas_abi.apps.nexus.tenant_login_config import TenantLoginConfig
 from naas_abi.apps.nexus.user_seed_config import UserSeedConfig
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,8 +20,12 @@ ABI_DOCUMENTS_TEMPLATE_NAMESPACE = "abi"
 ABI_SHEETS_TEMPLATE_NAMESPACE = "abi"
 
 
-class TenantConfig(BaseModel):
-    """Tenant branding surfaced to the browser (tab title, favicon, etc.)."""
+class TenantConfig(TenantLoginConfig):
+    """Tenant branding surfaced to the browser (tab title, favicon, etc.).
+
+    The login heading, logo height and footer link come from
+    :class:`TenantLoginConfig`, shared with the other configuration model.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -52,12 +57,6 @@ class TenantConfig(BaseModel):
     show_terms_footer: bool = False
     show_powered_by: bool = False
     login_footer_text: str | None = None
-    # Static login heading. Unset keeps the Welcome typewriter.
-    login_heading: str | None = None
-    # Logo image height in pixels. 48 matches the login page h-12 default.
-    logo_height: int = 48
-    login_footer_link_label: str | None = None
-    login_footer_link_url: str | None = None
     apps: list["ExternalAppConfig"] = Field(default_factory=list)
 
 

@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from naas_abi.apps.nexus.access_config import NexusMigrationConfig, NexusModelsConfig
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
+from naas_abi.apps.nexus.tenant_login_config import TenantLoginConfig
 from naas_abi.apps.nexus.user_seed_config import UserSeedConfig
 
 
@@ -142,8 +143,12 @@ class MarketplaceConfig(BaseModel):
     )
 
 
-class TenantConfig(BaseModel):
-    """Tenant branding surfaced to the browser (tab title, favicon, etc.)."""
+class TenantConfig(TenantLoginConfig):
+    """Tenant branding surfaced to the browser (tab title, favicon, etc.).
+
+    The login heading, logo height and footer link come from
+    :class:`TenantLoginConfig`, shared with the other configuration model.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -172,12 +177,6 @@ class TenantConfig(BaseModel):
     show_terms_footer: bool = False
     show_powered_by: bool = True
     login_footer_text: str | None = None
-    # Static login heading. Unset keeps the Welcome typewriter.
-    login_heading: str | None = None
-    # Logo image height in pixels. 48 matches the login page h-12 default.
-    logo_height: int = 48
-    login_footer_link_label: str | None = None
-    login_footer_link_url: str | None = None
     apps: list["ExternalAppConfig"] = Field(default_factory=list)
 
 
@@ -653,6 +652,15 @@ class ABIModule(BaseModule):
                 tenant:
                     tab_title: "My Portal"
                     favicon_url: "https://example.com/favicon.ico"
+                    # Login page: a static heading in place of the Welcome
+                    # typewriter, the logo image height (16 to 256 px,
+                    # default 48), and a footer link under the footer text
+                    # (label and absolute http(s) URL, set together).
+                    login_heading: "Acme Platform"
+                    logo_height: 96
+                    login_footer_text: "Acme Research operates this platform."
+                    login_footer_link_label: "Grant 123"
+                    login_footer_link_url: "https://example.org/grant/123"
                 # Extra Slides seed trees. Additive: ABI's own seeds are
                 # always served, under the reserved "abi" namespace.
                 slides_template_sources:
