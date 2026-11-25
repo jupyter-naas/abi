@@ -340,6 +340,20 @@ SUBJECT_TTL_SECONDS = 600
 REVISION_CHECK_SECONDS = 2
 
 
+# A group's description: a sentence or two of what it is for (``update_group``).
+MAX_GROUP_DESCRIPTION = 1000
+
+
+def _group_description(description: str | None) -> str | None:
+    """A description as stored: trimmed, None when empty; one too long is refused."""
+    text = (description or "").strip()
+    if len(text) > MAX_GROUP_DESCRIPTION:
+        raise ValueError(
+            f"A group's description is at most {MAX_GROUP_DESCRIPTION} characters"
+        )
+    return text or None
+
+
 class IAMService(IIAMService, PolicySource):
     def __init__(
         self,
@@ -1796,6 +1810,7 @@ class IAMService(IIAMService, PolicySource):
         scope: str | None = None,
         membership_of: str | None = None,
         level: bool = False,
+        description: str | None = None,
     ) -> PrincipalRecord:
         """A group owned by ``scope``: the platform (``abi:``, the default) or a
         registered container. Its name carries the owner, so whoever may
@@ -1804,6 +1819,7 @@ class IAMService(IIAMService, PolicySource):
         level group, which only the platform's grants mark (``mark_group``)."""
         if not name:
             raise ValueError("A group needs a name")
+        described = _group_description(description)
         owner = validate_owner_scope(scope) if scope is not None else PLATFORM_SCOPE
         group_id = new_id("grp")
         self.require("iam:CreateGroup", group_resource(group_id, owner))
@@ -1820,6 +1836,7 @@ class IAMService(IIAMService, PolicySource):
                 owner_scope=owner,
                 membership_of=membership_of,
                 level_group=level,
+                description=described,
             )
         )
         self._changed()
@@ -2093,18 +2110,30 @@ class IAMService(IIAMService, PolicySource):
             after,
         )
 
-    def update_group(self, group_id: str, *, name: str) -> PrincipalRecord:
-        """Rename a group, decided on its name at its owner scope like the rest
-        of its CRUD. A deleted group is not found; the same name changes
+    def update_group(
+        self, group_id: str, *, name: str | None = None, description: str | None = None
+    ) -> PrincipalRecord:
+        """Rename a group or change its description (what is given; an empty
+        description: none), decided on its name at its owner scope like the rest
+        of its CRUD. A deleted group is not found; the same values change
         nothing."""
-        if not name or not name.strip():
+        if name is None and description is None:
+            raise ValueError("Nothing to change: give a name or a description")
+        if name is not None and not name.strip():
             raise ValueError("A group needs a name")
         group = self._require_group("iam:UpdateGroup", group_id)
         if group.status == "deleted":
             raise IAMNotFoundError(f"Group {group_id} not found")
-        if group.name == name:
+        changed = replace(
+            group,
+            name=group.name if name is None else name,
+            description=group.description
+            if description is None
+            else _group_description(description),
+        )
+        if changed == group:
             return group
-        record = self.store.update_principal(replace(group, name=name))
+        record = self.store.update_principal(changed)
         self._changed()
         return record
 

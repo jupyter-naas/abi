@@ -22,6 +22,7 @@ from naas_abi_core.services.iam.IAMPorts import (
 )
 from naas_abi_core.services.iam.IAMService import (
     LEGACY_NEXUS_ISSUER,
+    MAX_GROUP_DESCRIPTION,
     IAMService,
     attachment_resource,
 )
@@ -387,6 +388,23 @@ def test_a_group_is_renamed_and_keeps_its_members(h):
     h.admin("delete_group", sales.id)
     with pytest.raises(IAMNotFoundError):
         h.admin("update_group", sales.id, name="again")
+
+
+def test_a_group_says_what_it_is_for(h):
+    """A description at its creation, changed apart from its name, cleared when empty."""
+    with as_service_account("engine"):
+        sales = h.iam.create_group("sales", description="The sales team: its tools.")
+    assert h.admin("get_group", sales.id).description == "The sales team: its tools."
+    described = h.admin("update_group", sales.id, description="  Who sells.  ")
+    assert (described.name, described.description) == ("sales", "Who sells.")
+    renamed = h.admin("update_group", sales.id, name="revenue")
+    assert (renamed.name, renamed.description) == ("revenue", "Who sells.")
+    assert h.admin("update_group", sales.id, description="").description is None
+    assert h.group("plain").description is None
+    with pytest.raises(ValueError):
+        h.admin("update_group", sales.id, description="x" * (MAX_GROUP_DESCRIPTION + 1))
+    with pytest.raises(ValueError):
+        h.admin("update_group", sales.id)  # nothing to change
 
 
 # -- policies ---------------------------------------------------------------------------------
