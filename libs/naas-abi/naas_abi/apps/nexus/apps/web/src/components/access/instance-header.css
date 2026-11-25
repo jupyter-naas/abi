@@ -72,3 +72,12 @@
 .access-instance-page .account-profile-field-input-readonly:focus {
   box-shadow: none;
 }
+
+/* A group's description spans its Info row. */
+.access-group-description-field {
+  grid-column: 1 / -1;
+}
+
+.access-group-description {
+  resize: vertical;
+}

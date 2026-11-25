@@ -211,6 +211,8 @@ export type PrincipalView = {
   membership_of?: string | null;
   /** Groups: a level group ("Viewers", "Members"). */
   level_group?: boolean;
+  /** Groups: what it is for; null: none. */
+  description?: string | null;
   created_at: string | null;
 };
 
