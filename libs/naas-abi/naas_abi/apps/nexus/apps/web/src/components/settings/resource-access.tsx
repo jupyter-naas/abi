@@ -19,6 +19,7 @@ import {
   SettingsSection,
   settingsTable,
 } from '@/components/settings/settings-ui';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 
 type Kind = 'ontologies' | 'graphs';
 type Policy = {
@@ -201,6 +202,9 @@ export function ResourceAccessEditor({
     if (availabilityFilter === 'unavailable' && item.available) return false;
     return `${item.name} ${item.description}`.toLowerCase().includes(search.toLowerCase());
   });
+  // 20 a page: the search and the filters reach every row, and a change of them goes back to
+  // the first page (a checkbox ticked under a filter does not).
+  const paged = usePagedRows(rows, JSON.stringify([search, accessFilter, availabilityFilter]));
   const enabledCount =
     kind === 'ontologies'
       ? (draft.enabled || []).length
@@ -328,7 +332,7 @@ export function ResourceAccessEditor({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((item) => {
+                  {paged.pageRows.map((item) => {
                     const owned = !!draft.include_owned && !!item.owned;
                     const readable =
                       !!draft.read_all ||
@@ -336,7 +340,7 @@ export function ResourceAccessEditor({
                       !!draft.read?.includes(item.id) ||
                       !!draft.write?.includes(item.id);
                     return (
-                      <tr key={item.id} className={settingsTable.row}>
+                      <tr key={item.id} data-resource={item.id} className={settingsTable.row}>
                         <td className={settingsTable.td}>
                           <p className="break-words font-medium">{item.name}</p>
                           <p className="break-words text-xs text-muted-foreground">{item.description}</p>
@@ -400,6 +404,7 @@ export function ResourceAccessEditor({
                 </p>
               )}
             </div>
+            <TablePager total={rows.length} paged={paged} />
             <p className="text-xs leading-relaxed text-muted-foreground">
               {snapshot.updated_by
                 ? 'Admin changes are saved for this workspace.'

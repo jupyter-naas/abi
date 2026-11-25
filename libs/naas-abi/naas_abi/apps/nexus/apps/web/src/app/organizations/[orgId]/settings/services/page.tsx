@@ -15,6 +15,7 @@ import {
   countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 import { buildServiceUrl, resolveServiceHost } from '@/lib/docker-services';
 import { describePlatformServices, type ConfiguredService } from '@/lib/platform-services';
 import { authFetch } from '@/stores/auth';
@@ -67,9 +68,6 @@ export default function ServicesSettingsPage() {
     };
   }, []);
 
-  if (state.status === 'loading') return <SettingsLoading />;
-  if (state.status === 'forbidden') return <ServicesForbidden />;
-
   const host = resolveServiceHost();
   const services = describePlatformServices(state.status === 'ready' ? state.services : []).map((service) => ({
     ...service,
@@ -89,6 +87,13 @@ export default function ServicesSettingsPage() {
         .includes(query)
     );
   });
+  // 20 a page: the search and the filters reach every service, and a change of them goes back to
+  // the first page.
+  const paged = usePagedRows(filteredServices, JSON.stringify([searchQuery, providerFilter, webUiFilter]));
+
+  if (state.status === 'loading') return <SettingsLoading />;
+  if (state.status === 'forbidden') return <ServicesForbidden />;
+
   const servicePath = (webUiId: string) => `${orgSettingsSectionPath(orgId, 'services')}/${webUiId}`;
 
   return (
@@ -151,12 +156,13 @@ export default function ServicesSettingsPage() {
                   </td>
                 </tr>
               )}
-              {filteredServices.map((service) => {
+              {paged.pageRows.map((service) => {
                 const Icon = service.icon;
                 const webUi = service.webUi;
                 return (
                   <tr
                     key={service.id}
+                    data-service={service.id}
                     className={cn(settingsTable.row, webUi && 'cursor-pointer')}
                     onClick={webUi ? () => router.push(servicePath(webUi.id)) : undefined}
                     title={webUi ? `Open ${webUi.label}` : undefined}
@@ -219,6 +225,7 @@ export default function ServicesSettingsPage() {
             </tbody>
           </table>
         </div>
+        <TablePager total={filteredServices.length} paged={paged} />
       </div>
     </div>
   );

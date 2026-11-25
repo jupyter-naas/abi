@@ -24,6 +24,7 @@ import {
   countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 
 const iconMap = {
   bot: Bot,
@@ -182,6 +183,9 @@ export default function AgentsPage() {
       );
     })
     .sort((a, b) => a.name.localeCompare(b.name));
+  // 20 a page: the search and the filter reach every agent, and a change of them goes back to
+  // the first page.
+  const paged = usePagedRows(filteredAgents, JSON.stringify([searchQuery, modelFilter]));
 
   if (!mounted) {
     return <SettingsLoading label="Loading agents…" />;
@@ -313,9 +317,10 @@ export default function AgentsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredAgents.map((agent) => (
+                  paged.pageRows.map((agent) => (
                     <tr
                       key={agent.id}
+                      data-agent={agent.id}
                       onClick={() => handleOpenAgentEditor(agent.id)}
                       className={cn(settingsTable.row, 'cursor-pointer')}
                     >
@@ -412,6 +417,7 @@ export default function AgentsPage() {
               </tbody>
             </table>
           </div>
+          <TablePager total={filteredAgents.length} paged={paged} />
         </div>
       )}
       {confirmDialog}

@@ -15,6 +15,7 @@ import {
   countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 
 const CATEGORY_BADGE: Record<string, 'primary' | 'warning' | 'neutral'> = {
   core: 'primary',
@@ -85,6 +86,9 @@ export default function AppsSettingsPage() {
       })
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [installedApps, searchQuery, categoryFilter]);
+  // 20 a page: the search and the filter reach every app, and a change of them goes back to
+  // the first page.
+  const paged = usePagedRows(filteredApps, JSON.stringify([searchQuery, categoryFilter]));
 
   if (!mounted) {
     return <SettingsLoading label="Loading apps…" />;
@@ -144,8 +148,8 @@ export default function AppsSettingsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredApps.map((app) => (
-                    <tr key={app.app_id} className={settingsTable.row}>
+                  paged.pageRows.map((app) => (
+                    <tr key={app.app_id} data-app={app.app_id} className={settingsTable.row}>
                       <td className={cn(settingsTable.td, 'align-top')}>
                         <div className="flex min-h-[3.25rem] items-center gap-3">
                           <AppLogo app={app} />
@@ -188,6 +192,7 @@ export default function AppsSettingsPage() {
               </tbody>
             </table>
           </div>
+          <TablePager total={filteredApps.length} paged={paged} />
         </div>
       )}
     </div>

@@ -28,6 +28,7 @@ import {
   countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 
 const getApiBase = () => getApiUrl();
 
@@ -302,6 +303,12 @@ export function ModelsPanel() {
     });
     return sorted;
   }, [filteredModels, sortKey, sortDirection, providersById]);
+  // 20 a page: the search, the filters and the sort reach every model, and a change of them goes
+  // back to the first page.
+  const paged = usePagedRows(
+    sortedModels,
+    JSON.stringify([searchQuery, providerFilter, statusFilter, sortKey, sortDirection]),
+  );
 
   const renderSortIcon = (key: SortKey) => {
     if (sortKey !== key) {
@@ -496,11 +503,12 @@ export function ModelsPanel() {
                     </td>
                   </tr>
                 ) : (
-                  sortedModels.map((model) => {
+                  paged.pageRows.map((model) => {
                     const provider = providersById.get(model.provider_id);
                     return (
                       <tr
                         key={`${model.provider_id}-${model.canonical_id}`}
+                        data-model={model.canonical_id}
                         onClick={() => openModel(model)}
                         className={cn(settingsTable.row, 'cursor-pointer')}
                       >
@@ -519,6 +527,7 @@ export function ModelsPanel() {
               </tbody>
             </table>
           </div>
+          <TablePager total={sortedModels.length} paged={paged} />
         </div>
       )}
 

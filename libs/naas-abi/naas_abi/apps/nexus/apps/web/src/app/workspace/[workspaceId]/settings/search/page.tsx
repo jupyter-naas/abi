@@ -33,6 +33,7 @@ import { authFetch } from '@/stores/auth';
 import { isFeatureEnabled, type FeatureKey } from '@/lib/feature-access';
 import { FEATURE_SCOPES, WEB_ENGINES, webEngineScopeId } from '@/lib/search-scopes';
 import { useSearchTopicsStore } from '@/stores/search-topics';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 import { useWorkspaceStore } from '@/stores/workspace';
 
 const SOURCE_LABEL: Record<SearchTopic['source'], string> = { builtin: 'Built-in', override: 'Customized', custom: 'Custom' };
@@ -102,6 +103,35 @@ function SearchSettings() {
     select(clean);
   };
 
+  // One list for the table: topics, Nexus features and web engines, each with what the filters need.
+  const query = searchQuery.trim().toLowerCase();
+  const matches = (group: string, on: boolean, ...texts: string[]) =>
+    (groupFilter === 'all' || groupFilter === group) &&
+    (statusFilter === 'all' || (statusFilter === 'enabled') === on) &&
+    (!query || texts.some(text => text.toLowerCase().includes(query)));
+  const featureRows = FEATURE_SCOPES.map(scope => {
+    const available = featureOn(scope.feature);
+    return { scope, available, on: available && !disabledScopes.includes(scope.id) };
+  });
+  const engineRows = WEB_ENGINES.map(engine => {
+    const id = webEngineScopeId(engine.id);
+    return { engine, id, on: !disabledScopes.includes(id) };
+  });
+  const shownTopics = topics.filter(t => matches('Custom', t.enabled, t.plural_label, t.id));
+  const shownFeatures = featureRows.filter(r => matches('Workspace', r.on, r.scope.label, r.scope.id, r.scope.description));
+  const shownEngines = engineRows.filter(r => matches('Web', r.on, r.engine.label, r.id, r.engine.description));
+  const totalRows = topics.length + featureRows.length + engineRows.length;
+  const shownEntries: TableEntry[] = [
+    ...shownTopics.map(topic => ({ kind: 'topic' as const, topic })),
+    ...shownFeatures.map(row => ({ kind: 'feature' as const, ...row })),
+    ...shownEngines.map(row => ({ kind: 'engine' as const, ...row })),
+  ];
+  const shownRows = shownEntries.length;
+  const enabledRows = topics.filter(t => t.enabled).length + featureRows.filter(r => r.on).length + engineRows.filter(r => r.on).length;
+  // 20 a page: the search and the filters reach every entry, and a change of them goes back to
+  // the first page.
+  const paged = usePagedRows(shownEntries, JSON.stringify([searchQuery, groupFilter, statusFilter]));
+
   if (selectedId) {
     return (
       <div className="space-y-6">
@@ -134,26 +164,6 @@ function SearchSettings() {
     );
   }
 
-  // One list for the table: topics, Nexus features and web engines, each with what the filters need.
-  const query = searchQuery.trim().toLowerCase();
-  const matches = (group: string, on: boolean, ...texts: string[]) =>
-    (groupFilter === 'all' || groupFilter === group) &&
-    (statusFilter === 'all' || (statusFilter === 'enabled') === on) &&
-    (!query || texts.some(text => text.toLowerCase().includes(query)));
-  const featureRows = FEATURE_SCOPES.map(scope => {
-    const available = featureOn(scope.feature);
-    return { scope, available, on: available && !disabledScopes.includes(scope.id) };
-  });
-  const engineRows = WEB_ENGINES.map(engine => {
-    const id = webEngineScopeId(engine.id);
-    return { engine, id, on: !disabledScopes.includes(id) };
-  });
-  const shownTopics = topics.filter(t => matches('Custom', t.enabled, t.plural_label, t.id));
-  const shownFeatures = featureRows.filter(r => matches('Workspace', r.on, r.scope.label, r.scope.id, r.scope.description));
-  const shownEngines = engineRows.filter(r => matches('Web', r.on, r.engine.label, r.id, r.engine.description));
-  const totalRows = topics.length + featureRows.length + engineRows.length;
-  const shownRows = shownTopics.length + shownFeatures.length + shownEngines.length;
-  const enabledRows = topics.filter(t => t.enabled).length + featureRows.filter(r => r.on).length + engineRows.filter(r => r.on).length;
 
   return (
     <div className="space-y-6">
@@ -224,55 +234,65 @@ function SearchSettings() {
             {!loading && shownRows === 0 && (
               <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">No entries match the current search and filters</td></tr>
             )}
-            {shownTopics.map(t => (
-              <tr key={t.id} onClick={() => select(t.id)} className={cn(settingsTable.row, 'cursor-pointer')}>
-                <td className={settingsTable.td}>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted"><TopicIcon name={t.icon} /></div>
-                    <div className="min-w-0">
-                      <div className={cn('font-medium', !t.enabled && 'text-muted-foreground')}>{t.plural_label}</div>
-                      <div className="font-mono text-xs text-muted-foreground">{t.id}</div>
+            {paged.pageRows.map(entry => {
+              if (entry.kind === 'feature') {
+                const { scope, available, on } = entry;
+                return (
+                  <ScopeRow key={scope.id} icon={scope.icon} name={scope.label} id={scope.id} group="Workspace" type="Nexus feature"
+                    description={available ? scope.description : `${scope.description} — the ${scope.label} feature is off in this workspace`}>
+                    <EnabledSwitch label={scope.label} on={on} busy={toggling === scope.id}
+                      disabled={!canEdit || !available} onChange={() => void toggleScope(scope.id, !on)} />
+                  </ScopeRow>
+                );
+              }
+              if (entry.kind === 'engine') {
+                const { engine, id, on } = entry;
+                return (
+                  <ScopeRow key={id} icon={engine.icon} name={engine.label} id={id} group="Web" type="Web engine" description={`${engine.description} — the query leaves Nexus`}>
+                    <EnabledSwitch label={engine.label} on={on} busy={toggling === id}
+                      disabled={!canEdit} onChange={() => void toggleScope(id, !on)} />
+                  </ScopeRow>
+                );
+              }
+              const t = entry.topic;
+              return (
+                <tr key={t.id} data-entry={t.id} onClick={() => select(t.id)} className={cn(settingsTable.row, 'cursor-pointer')}>
+                  <td className={settingsTable.td}>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted"><TopicIcon name={t.icon} /></div>
+                      <div className="min-w-0">
+                        <div className={cn('font-medium', !t.enabled && 'text-muted-foreground')}>{t.plural_label}</div>
+                        <div className="font-mono text-xs text-muted-foreground">{t.id}</div>
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td className={settingsTable.td}><GroupBadge group="Custom" /></td>
-                <td className={cn(settingsTable.td, 'text-muted-foreground')}>{drafts.has(t.id) ? 'Draft' : SOURCE_LABEL[t.source]}</td>
-                <td className={settingsTable.td} onClick={e => e.stopPropagation()}>
-                  <EnabledSwitch
-                    label={t.plural_label}
-                    on={t.enabled}
-                    busy={toggling === t.id}
-                    disabled={!canEdit || drafts.has(t.id)}
-                    onChange={() => void toggleEnabled(t)}
-                  />
-                </td>
-              </tr>
-            ))}
-
-            {shownFeatures.map(({ scope, available, on }) => {
-              return (
-                <ScopeRow key={scope.id} icon={scope.icon} name={scope.label} id={scope.id} group="Workspace" type="Nexus feature"
-                  description={available ? scope.description : `${scope.description} — the ${scope.label} feature is off in this workspace`}>
-                  <EnabledSwitch label={scope.label} on={on} busy={toggling === scope.id}
-                    disabled={!canEdit || !available} onChange={() => void toggleScope(scope.id, !on)} />
-                </ScopeRow>
-              );
-            })}
-
-            {shownEngines.map(({ engine, id, on }) => {
-              return (
-                <ScopeRow key={id} icon={engine.icon} name={engine.label} id={id} group="Web" type="Web engine" description={`${engine.description} — the query leaves Nexus`}>
-                  <EnabledSwitch label={engine.label} on={on} busy={toggling === id}
-                    disabled={!canEdit} onChange={() => void toggleScope(id, !on)} />
-                </ScopeRow>
+                  </td>
+                  <td className={settingsTable.td}><GroupBadge group="Custom" /></td>
+                  <td className={cn(settingsTable.td, 'text-muted-foreground')}>{drafts.has(t.id) ? 'Draft' : SOURCE_LABEL[t.source]}</td>
+                  <td className={settingsTable.td} onClick={e => e.stopPropagation()}>
+                    <EnabledSwitch
+                      label={t.plural_label}
+                      on={t.enabled}
+                      busy={toggling === t.id}
+                      disabled={!canEdit || drafts.has(t.id)}
+                      onChange={() => void toggleEnabled(t)}
+                    />
+                  </td>
+                </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      <TablePager total={shownRows} paged={paged} />
     </div>
   );
 }
+
+/** A row of the table: a topic, a Nexus feature or a web engine. */
+type TableEntry =
+  | { kind: 'topic'; topic: SearchTopic }
+  | { kind: 'feature'; scope: (typeof FEATURE_SCOPES)[number]; available: boolean; on: boolean }
+  | { kind: 'engine'; engine: (typeof WEB_ENGINES)[number]; id: string; on: boolean };
 
 function GroupBadge({ group }: { group: 'Custom' | 'Workspace' | 'Web' }) {
   return <Badge variant="outline">{group}</Badge>;
@@ -283,7 +303,7 @@ function ScopeRow({ icon, name, id, group, type, description, children }: {
   icon: string; name: string; id: string; group: 'Workspace' | 'Web'; type: string; description: string; children: React.ReactNode;
 }) {
   return (
-    <tr className={settingsTable.row}>
+    <tr data-entry={id} className={settingsTable.row}>
       <td className={settingsTable.td}>
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted"><TopicIcon name={icon} /></div>

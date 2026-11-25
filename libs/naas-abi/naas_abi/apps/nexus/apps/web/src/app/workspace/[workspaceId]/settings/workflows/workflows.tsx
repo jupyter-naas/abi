@@ -15,6 +15,7 @@ import {
   countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 import {
   fetchWorkflowSettings,
   filterWorkflows,
@@ -52,6 +53,9 @@ export default function WorkflowsSettingsPage() {
 
   const all = useMemo(() => items ?? [], [items]);
   const shown = useMemo(() => filterWorkflows(all, { query, type }), [all, query, type]);
+  // 20 a page: the search and the filter reach every item, and a change of them goes back to
+  // the first page.
+  const paged = usePagedRows(shown, JSON.stringify([query, type]));
 
   return (
     <div className="space-y-6">
@@ -109,8 +113,8 @@ export default function WorkflowsSettingsPage() {
                     </td>
                   </tr>
                 ) : (
-                  shown.map((item) => (
-                    <tr key={workflowKey(item)} className={settingsTable.row}>
+                  paged.pageRows.map((item) => (
+                    <tr key={workflowKey(item)} data-workflow={workflowKey(item)} className={settingsTable.row}>
                       <td className={cn(settingsTable.td, 'align-top')}>
                         <p className="font-medium">{item.display_name}</p>
                         {item.description ? (
@@ -129,6 +133,7 @@ export default function WorkflowsSettingsPage() {
               </tbody>
             </table>
           </div>
+          <TablePager total={shown.length} paged={paged} />
         </div>
       )}
     </div>

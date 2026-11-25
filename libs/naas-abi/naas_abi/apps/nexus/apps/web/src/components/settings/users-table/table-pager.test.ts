@@ -54,4 +54,13 @@ describe('a settings table, a page at a time', () => {
     expect(rows()).toEqual(['row-14', 'row-140', 'row-141']);
     expect(q('[data-pager]')).toBeNull(); // no more than a page
   });
+
+  it('stays on the first page when the search is cleared', async () => {
+    mounted = await mount(Table, { rows: ROWS });
+    await mounted.click(q('[data-action="next-page"]'));
+    await mounted.type(q('[data-field="search"]'), 'row-1');
+    await mounted.type(q('[data-field="search"]'), '');
+    expect(q('[data-field="rows-shown"]')?.textContent).toBe('Rows 1–20 of 141');
+    expect(rows()[0]).toBe('row-1');
+  });
 });
