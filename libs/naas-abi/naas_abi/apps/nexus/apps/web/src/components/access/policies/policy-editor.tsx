@@ -580,20 +580,6 @@ export function PolicyEditor({
         )}
       </SettingsSection>
 
-      {/* Who holds it, under its name and description. */}
-      {policy && can && (
-        <PolicyAttachments
-          api={api}
-          policyId={policy.id}
-          here={ownerOf(scope)}
-          can={can}
-          open={open}
-          nonce={nonce}
-          scope={scope}
-          directory={directory}
-          boundOf={offerOf}
-        />
-      )}
       {newParent && !policy && (
         <p className={parentRefused ? 'access-policy-error' : 'access-policy-muted'} role={parentRefused ? 'alert' : 'status'} data-parent-verdict="">
           {parentRefused
@@ -639,6 +625,21 @@ export function PolicyEditor({
 
       <SettingsSection
         title="Configuration"
+        // What IAM says of the document, at the section's top right (its errors stay below).
+        actions={
+          mode !== 'configuration' && !readOnly ? (
+            validation.pending ? (
+              <span className="access-policy-muted" data-policy-validity="pending">
+                Checking with IAM…
+              </span>
+            ) : verdict?.valid && !saveError ? (
+              // Valid is not granted: once a save was refused, the refusal alone speaks.
+              <span className="access-policy-ok" data-policy-validity="valid">
+                <CheckCircle2 size={14} /> Valid policy.
+              </span>
+            ) : undefined
+          ) : undefined
+        }
         description={
           configuration
             ? 'What the workspace offers, switched here; Advanced, Builder and Code show its document.'
@@ -715,13 +716,6 @@ export function PolicyEditor({
               </ul>
             )}
             {validation.failure && <p className="access-policy-error">{validation.failure}</p>}
-            {/* Valid is not granted: once a save was refused, the refusal alone speaks. */}
-            {verdict?.valid && !validation.pending && !saveError && (
-              <p className="access-policy-ok">
-                <CheckCircle2 size={14} /> Valid policy.
-              </p>
-            )}
-            {validation.pending && <p className="access-policy-muted">Checking with IAM…</p>}
           </div>
         )}
   
@@ -747,6 +741,21 @@ export function PolicyEditor({
         )}
         </div>
       </SettingsSection>
+
+      {/* Who holds it, after what it allows. */}
+      {policy && can && (
+        <PolicyAttachments
+          api={api}
+          policyId={policy.id}
+          here={ownerOf(scope)}
+          can={can}
+          open={open}
+          nonce={nonce}
+          scope={scope}
+          directory={directory}
+          boundOf={offerOf}
+        />
+      )}
     </section>
     </AccessHeaderSlotContext.Provider>
   );
