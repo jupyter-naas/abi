@@ -3,7 +3,7 @@
  * (the `tenant:` block of the configuration). No React: the middleware reads the path.
  */
 
-import { DEFAULT_LOGO_HEIGHT } from '@/components/tenant-branding';
+import { DEFAULT_LOGO_HEIGHT } from '@/lib/tenant-logo';
 
 export const PLATFORM_GENERAL_PATH = '/settings/general';
 

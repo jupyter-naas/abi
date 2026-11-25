@@ -1,7 +1,7 @@
 import type { TenantConfig } from '@/contexts/tenant-context';
+import { DEFAULT_LOGO_HEIGHT } from '@/lib/tenant-logo';
 
-/** The logo image height when `tenant.logo_height` is unset (the former `h-12`). */
-export const DEFAULT_LOGO_HEIGHT = 48;
+export { DEFAULT_LOGO_HEIGHT };
 
 type TenantLogoFields = Pick<
   TenantConfig,
