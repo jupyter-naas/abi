@@ -19,6 +19,7 @@ import {
   countLabel,
   settingsTable,
 } from '@/components/settings/settings-ui';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 import { useSkillsStore, type SkillScope } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
 
@@ -75,6 +76,9 @@ export default function SkillsSettingsPage() {
       );
     });
   }, [skills, searchQuery, scopeFilter, statusFilter]);
+  // 20 a page: the search and the filters reach every skill, and a change of them goes back to
+  // the first page.
+  const paged = usePagedRows(filteredSkills, JSON.stringify([searchQuery, scopeFilter, statusFilter]));
   const enabledCount = skills.filter((s) => s.enabled).length;
 
   const handleAddSkill = async () => {
@@ -264,11 +268,12 @@ export default function SkillsSettingsPage() {
                 </td>
               </tr>
             ) : (
-              filteredSkills.map((skill) => {
+              paged.pageRows.map((skill) => {
                 const canModify = skill.scope !== 'user' || skill.userId === currentUserId;
                 return (
                   <tr
                     key={skill.id}
+                    data-skill={skill.slug}
                     onClick={() => router.push(`/workspace/${workspaceId}/settings/skills/${skill.id}`)}
                     className={cn(settingsTable.row, 'cursor-pointer')}
                   >
@@ -320,6 +325,7 @@ export default function SkillsSettingsPage() {
           </tbody>
         </table>
       </div>
+      <TablePager total={filteredSkills.length} paged={paged} />
       {confirmDialog}
     </div>
   );

@@ -49,6 +49,7 @@ import {
 } from '@/app/workspace/[workspaceId]/maps/lib/maps-feed-visibility';
 import { resolveMapsPinImageUrl } from '@/app/workspace/[workspaceId]/maps/lib/maps-pin-image-url';
 import { MapsSettingsBasemapsSection } from '@/app/workspace/[workspaceId]/maps/components/maps-settings-basemaps-section';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 
 const NEW = 'new';
 const SEEDED_FEED_HINT = 'Provided by the deployment: hide its layers, or narrow its Access, instead of deleting it';
@@ -197,6 +198,55 @@ function MapsSettings() {
     </div>
   );
 
+  // ── Overview rows (read before an item's page returns: the pager's hook comes first) ──
+  const shownCount = all.filter(
+    (e) => !hidden.includes(e.id) && !hiddenFeeds.includes(e.feedId ?? e.id),
+  ).length;
+  const feedsById = new Map(feeds.map((feed) => [feed.id, feed]));
+  // Every feed with its layers (records, built-ins, graph layers); a record
+  // whose layers are not listed yet still gets its row.
+  const feedRows = feedVisibilityRows(all, hiddenFeeds);
+  for (const feed of feeds) {
+    if (feedRows.some((row) => row.id === feed.id)) continue;
+    feedRows.push({
+      id: feed.id,
+      title: feed.title,
+      group: layoutGroup(feed),
+      source: feedTypeLabel(feed),
+      layers: layersByFeed.get(feed.id)?.length ?? 0,
+      shown: !hiddenFeeds.includes(feed.id),
+      logoUrl: feed.logo_url,
+    });
+  }
+  // Deployment feeds this workspace may not use (e.g. set to "No workspace"):
+  // listed so their access can be given back.
+  const unavailableFeeds = (permissions.data?.items ?? []).filter(
+    (item) => item.kind === 'layout' && item.owner === '' && !feeds.some((feed) => feed.id === item.item_id),
+  );
+  const feedFilter = { search: feedSearch, group: groupFilter, status: statusFilter };
+  const listedFeedRows = filterFeedRows(feedRows, feedFilter);
+  // Unavailable feeds count as disabled and belong to no group.
+  const listedUnavailable = filterFeedRows(
+    unavailableFeeds.map((item) => ({
+      item, id: item.item_id, title: item.title, group: '', source: 'API feed' as FeedSource, shown: false,
+    })),
+    feedFilter,
+  ).map(({ item }) => item);
+  const groupOptions = [...new Map(feedRows.map((row) => [row.group.toLowerCase(), row.group])).values()];
+  const feedTotal = feedRows.length + unavailableFeeds.length;
+  // Bulk actions apply to the listed feeds that would change.
+  const listedOff = listedFeedRows.filter((row) => !row.shown).map((row) => row.id);
+  const listedOn = listedFeedRows.filter((row) => row.shown).map((row) => row.id);
+  const bulkBusy = busyId === 'feed:bulk';
+  const feedListed = listedFeedRows.length + listedUnavailable.length;
+  // One list for the table, a page at a time: the search and the filters reach every feed, and a
+  // change of them goes back to the first page.
+  const listedEntries = [
+    ...listedFeedRows.map((row) => ({ row, unavailable: null })),
+    ...listedUnavailable.map((item) => ({ row: null, unavailable: item })),
+  ];
+  const paged = usePagedRows(listedEntries, JSON.stringify([feedSearch, groupFilter, statusFilter]));
+
   // ── One feed ──────────────────────────────────────────────────────────────
   if (selectedFeed) {
     const creating = selectedFeed === NEW;
@@ -314,47 +364,6 @@ function MapsSettings() {
   }
 
   // ── Overview ──────────────────────────────────────────────────────────────
-  const shownCount = all.filter(
-    (e) => !hidden.includes(e.id) && !hiddenFeeds.includes(e.feedId ?? e.id),
-  ).length;
-  const feedsById = new Map(feeds.map((feed) => [feed.id, feed]));
-  // Every feed with its layers (records, built-ins, graph layers); a record
-  // whose layers are not listed yet still gets its row.
-  const feedRows = feedVisibilityRows(all, hiddenFeeds);
-  for (const feed of feeds) {
-    if (feedRows.some((row) => row.id === feed.id)) continue;
-    feedRows.push({
-      id: feed.id,
-      title: feed.title,
-      group: layoutGroup(feed),
-      source: feedTypeLabel(feed),
-      layers: layersByFeed.get(feed.id)?.length ?? 0,
-      shown: !hiddenFeeds.includes(feed.id),
-      logoUrl: feed.logo_url,
-    });
-  }
-  // Deployment feeds this workspace may not use (e.g. set to "No workspace"):
-  // listed so their access can be given back.
-  const unavailableFeeds = (permissions.data?.items ?? []).filter(
-    (item) => item.kind === 'layout' && item.owner === '' && !feeds.some((feed) => feed.id === item.item_id),
-  );
-  const feedFilter = { search: feedSearch, group: groupFilter, status: statusFilter };
-  const listedFeedRows = filterFeedRows(feedRows, feedFilter);
-  // Unavailable feeds count as disabled and belong to no group.
-  const listedUnavailable = filterFeedRows(
-    unavailableFeeds.map((item) => ({
-      item, id: item.item_id, title: item.title, group: '', source: 'API feed' as FeedSource, shown: false,
-    })),
-    feedFilter,
-  ).map(({ item }) => item);
-  const groupOptions = [...new Map(feedRows.map((row) => [row.group.toLowerCase(), row.group])).values()];
-  const feedTotal = feedRows.length + unavailableFeeds.length;
-  // Bulk actions apply to the listed feeds that would change.
-  const listedOff = listedFeedRows.filter((row) => !row.shown).map((row) => row.id);
-  const listedOn = listedFeedRows.filter((row) => row.shown).map((row) => row.id);
-  const bulkBusy = busyId === 'feed:bulk';
-  const feedListed = listedFeedRows.length + listedUnavailable.length;
-
   return (
     <div className="min-w-0 space-y-6">
       {confirmDialog}
@@ -458,7 +467,27 @@ function MapsSettings() {
               {!loading && feedTotal > 0 && feedListed === 0 && (
                 <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">No feeds match these filters</td></tr>
               )}
-              {listedFeedRows.map((row) => {
+              {paged.pageRows.map(({ row, unavailable: item }) => {
+                if (item) {
+                  return (
+                    <tr key={`unavailable:${item.item_id}`} data-feed={item.item_id} className={settingsTable.row}>
+                      <td className={cn(settingsTable.td, 'max-w-0')}>
+                        <div className="truncate font-medium text-muted-foreground" title={item.title}>{item.title}</div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          <span className="font-mono">{item.item_id}</span> · seeded · not available in this workspace
+                        </div>
+                      </td>
+                      <td className={cn(settingsTable.td, 'text-muted-foreground')}>—</td>
+                      <td className={cn(settingsTable.td, 'text-muted-foreground')}>—</td>
+                      <td className={cn(settingsTable.td, 'max-w-0 text-xs')}>
+                        <MapsAccessCell workspaceId={workspaceId} kind="layout" itemId={item.item_id} permissions={permissions} />
+                      </td>
+                      <td className={cn(settingsTable.td, 'text-muted-foreground')}>—</td>
+                      <td className={settingsTable.td} />
+                    </tr>
+                  );
+                }
+                if (!row) return null;
                 const feed = feedsById.get(row.id);
                 const logo = resolveMapsPinImageUrl(row.logoUrl);
                 const busy = busyId === `feed:${row.id}`;
@@ -466,6 +495,7 @@ function MapsSettings() {
                 return (
                   <tr
                     key={row.id}
+                    data-feed={row.id}
                     onClick={feed ? () => go({ feed: feed.id }) : undefined}
                     className={cn(settingsTable.row, feed && 'cursor-pointer')}
                   >
@@ -527,26 +557,10 @@ function MapsSettings() {
                   </tr>
                 );
               })}
-              {listedUnavailable.map((item) => (
-                <tr key={`unavailable:${item.item_id}`} className={settingsTable.row}>
-                  <td className={cn(settingsTable.td, 'max-w-0')}>
-                    <div className="truncate font-medium text-muted-foreground" title={item.title}>{item.title}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      <span className="font-mono">{item.item_id}</span> · seeded · not available in this workspace
-                    </div>
-                  </td>
-                  <td className={cn(settingsTable.td, 'text-muted-foreground')}>—</td>
-                  <td className={cn(settingsTable.td, 'text-muted-foreground')}>—</td>
-                  <td className={cn(settingsTable.td, 'max-w-0 text-xs')}>
-                    <MapsAccessCell workspaceId={workspaceId} kind="layout" itemId={item.item_id} permissions={permissions} />
-                  </td>
-                  <td className={cn(settingsTable.td, 'text-muted-foreground')}>—</td>
-                  <td className={settingsTable.td} />
-                </tr>
-              ))}
             </tbody>
           </table>
         </div>
+        <TablePager total={feedListed} paged={paged} />
       </SettingsSection>
 
       <MapsSettingsBasemapsSection workspaceId={workspaceId} canEdit={canEdit} permissions={permissions} />
