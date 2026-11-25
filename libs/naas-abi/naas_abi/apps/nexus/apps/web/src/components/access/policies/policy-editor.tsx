@@ -30,12 +30,12 @@ import type { AccessDirectory } from '../access-directory';
 import type { AccessNavigation } from '../access-props';
 import { AccessHeaderAction, AccessHeaderSlotContext } from '../access-list';
 import { InstanceHeader } from '../instance-header';
-import { SettingsSection } from '@/components/settings/settings-ui';
 import { PolicyAttachments } from './policy-attachments';
 import { ownedBy, ownerLabel, type PolicyOwner } from './policy-owners';
 import { PolicyText } from './policy-text';
 import { StatementEditor } from './statement-editor';
 import { usePolicyValidation, VALIDATION_DELAY_MS } from './use-policy-validation';
+import { Card } from '@/components/ui/card';
 
 // `configuration`: the policy's own settings (a workspace's offer), when its page gives some.
 type Mode = 'configuration' | 'builder' | 'visual' | 'text';
@@ -463,7 +463,7 @@ export function PolicyEditor({
       )}
       {/* Info (no title of its own: the page's is above): its name and description, then what
           it derives from and what derives from it. */}
-      <SettingsSection>
+      <Card>
         <div className="account-profile-form-grid">
           <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="policy-name">
@@ -578,7 +578,7 @@ export function PolicyEditor({
             </ul>
           </div>
         )}
-      </SettingsSection>
+      </Card>
 
       {newParent && !policy && (
         <p className={parentRefused ? 'access-policy-error' : 'access-policy-muted'} role={parentRefused ? 'alert' : 'status'} data-parent-verdict="">
@@ -623,7 +623,7 @@ export function PolicyEditor({
         </AccessHeaderAction>
       )}
 
-      <SettingsSection
+      <Card
         title="Configuration"
         // What IAM says of the document, at the section's top right (its errors stay below).
         actions={
@@ -740,7 +740,7 @@ export function PolicyEditor({
           </div>
         )}
         </div>
-      </SettingsSection>
+      </Card>
 
       {/* Who holds it, after what it allows. */}
       {policy && can && (

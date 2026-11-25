@@ -5,22 +5,16 @@ import { useParams } from 'next/navigation';
 import { Workflow } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import {
-  SettingsEmpty,
-  SettingsFilterSelect,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-  countLabel,
-  settingsTable,
-} from '@/components/settings/settings-ui';
+import { SettingsFilterSelect, SettingsPageHeader, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
 import {
   fetchWorkflowSettings,
   filterWorkflows,
   workflowKey,
   type WorkflowSetting,
 } from './workflows-model';
+import { Notice } from '@/components/ui/notice';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
 
 /**
  * Workspace settings › Workflows: the workflows and pipelines of the workspace's modules,
@@ -61,12 +55,12 @@ export default function WorkflowsSettingsPage() {
         description="The workflows and pipelines of this workspace's modules. Who runs each is decided by policies, on Roles & permissions."
       />
 
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+      {error && <Notice tone="error">{error}</Notice>}
 
       {items === null ? (
-        <SettingsLoading label="Loading workflows…" />
+        <Loading label="Loading workflows…" />
       ) : all.length === 0 ? (
-        <SettingsEmpty
+        <EmptyState framed
           icon={<Workflow size={40} className="opacity-40" />}
           title="No workflows in this workspace"
           description="The modules of this workspace run no workflow or pipeline."

@@ -6,15 +6,13 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input, Select, Textarea } from '@/components/ui/input';
-import {
-  SettingsField,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsSection,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader } from '@/components/settings/settings-ui';
 import { useSkillsStore, type SkillScope } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
+import { Notice } from '@/components/ui/notice';
+import { Loading } from '@/components/ui/spinner';
+import { Field } from '@/components/ui/field';
+import { Card } from '@/components/ui/card';
 
 export default function SkillEditorPage() {
   const params = useParams();
@@ -84,7 +82,7 @@ export default function SkillEditorPage() {
   };
 
   if (!skill) {
-    return <SettingsLoading label="Loading skill…" />;
+    return <Loading label="Loading skill…" />;
   }
 
   return (
@@ -111,16 +109,16 @@ export default function SkillEditorPage() {
         }
       />
 
-      {!canModify && <SettingsNotice>Only the creator can modify this private skill.</SettingsNotice>}
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+      {!canModify && <Notice>Only the creator can modify this private skill.</Notice>}
+      {error && <Notice tone="error">{error}</Notice>}
 
-      <SettingsSection>
+      <Card>
         <div className="grid gap-4">
           <div className="grid grid-cols-2 gap-4">
-            <SettingsField label="Name">
+            <Field label="Name">
               <Input type="text" value={name} onChange={(e) => setName(e.target.value)} disabled={!canModify} />
-            </SettingsField>
-            <SettingsField label="Slug">
+            </Field>
+            <Field label="Slug">
               <Input
                 type="text"
                 value={slug}
@@ -128,21 +126,21 @@ export default function SkillEditorPage() {
                 disabled={!canModify}
                 className="font-mono"
               />
-            </SettingsField>
+            </Field>
           </div>
-          <SettingsField label="Description">
+          <Field label="Description">
             <Input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={!canModify}
             />
-          </SettingsField>
-          <SettingsField label="Prompt">
+          </Field>
+          <Field label="Prompt">
             <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={!canModify} rows={12} />
-          </SettingsField>
+          </Field>
           <div className="flex items-end gap-6">
-            <SettingsField label="Visibility">
+            <Field label="Visibility">
               <Select
                 value={scope}
                 onChange={(e) => setScope(e.target.value as SkillScope)}
@@ -153,7 +151,7 @@ export default function SkillEditorPage() {
                 <option value="workspace">Workspace</option>
                 <option value="organization">Organization</option>
               </Select>
-            </SettingsField>
+            </Field>
             <Checkbox
               checked={enabled}
               onCheckedChange={setEnabled}
@@ -163,7 +161,7 @@ export default function SkillEditorPage() {
             />
           </div>
         </div>
-      </SettingsSection>
+      </Card>
     </div>
   );
 }

@@ -2,9 +2,9 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { SettingsLoading } from '@/components/settings/settings-ui';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
 import { ACCESS_ITEMS, holds } from '../lib/nav';
+import { Loading } from '@/components/ui/spinner';
 
 /** Platform › Access: the first of its pages the caller holds (an old Roles & permissions
  *  link that named no section lands here). */
@@ -22,5 +22,5 @@ export default function PlatformAccessIndex() {
       </p>
     );
   }
-  return <SettingsLoading />;
+  return <Loading />;
 }

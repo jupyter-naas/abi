@@ -9,18 +9,12 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
 import { Input, Select, Textarea } from '@/components/ui/input';
-import {
-  SettingsField,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsFilterSelect,
-  SettingsSection,
-  SettingsTableToolbar,
-  countLabel,
-  settingsTable,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsFilterSelect, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
 import { useSkillsStore, type SkillScope } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
+import { Notice } from '@/components/ui/notice';
+import { Field } from '@/components/ui/field';
+import { Card } from '@/components/ui/card';
 
 const SCOPE_LABELS: Record<SkillScope, string> = {
   user: 'Private',
@@ -138,18 +132,18 @@ export default function SkillsSettingsPage() {
       />
 
       {showAddForm && (
-        <SettingsSection title="Add New Skill">
+        <Card title="Add New Skill">
           <div className="grid gap-4">
             <div className="grid grid-cols-2 gap-4">
-              <SettingsField label="Name *">
+              <Field label="Name *">
                 <Input
                   type="text"
                   value={newSkill.name}
                   onChange={(e) => setNewSkill({ ...newSkill, name: e.target.value })}
                   placeholder="Weekly report"
                 />
-              </SettingsField>
-              <SettingsField label="Slug">
+              </Field>
+              <Field label="Slug">
                 <Input
                   type="text"
                   value={newSkill.slug}
@@ -157,25 +151,25 @@ export default function SkillsSettingsPage() {
                   placeholder="weekly-report (defaults from name)"
                   className="font-mono"
                 />
-              </SettingsField>
+              </Field>
             </div>
-            <SettingsField label="Description">
+            <Field label="Description">
               <Input
                 type="text"
                 value={newSkill.description}
                 onChange={(e) => setNewSkill({ ...newSkill, description: e.target.value })}
                 placeholder="One sentence describing what this skill does"
               />
-            </SettingsField>
-            <SettingsField label="Prompt *">
+            </Field>
+            <Field label="Prompt *">
               <Textarea
                 value={newSkill.prompt}
                 onChange={(e) => setNewSkill({ ...newSkill, prompt: e.target.value })}
                 placeholder="The reusable prompt the agent will apply when this skill is invoked"
                 rows={5}
               />
-            </SettingsField>
-            <SettingsField label="Visibility">
+            </Field>
+            <Field label="Visibility">
               <Select
                 value={newSkill.scope}
                 onChange={(e) => setNewSkill({ ...newSkill, scope: e.target.value as SkillScope })}
@@ -185,8 +179,8 @@ export default function SkillsSettingsPage() {
                 <option value="workspace">Workspace</option>
                 <option value="organization">Organization</option>
               </Select>
-            </SettingsField>
-            {formError && <SettingsNotice tone="error">{formError}</SettingsNotice>}
+            </Field>
+            {formError && <Notice tone="error">{formError}</Notice>}
             <div className="flex justify-end gap-2">
               <Button
                 variant="secondary"
@@ -200,13 +194,13 @@ export default function SkillsSettingsPage() {
               <Button onClick={handleAddSkill}>Add Skill</Button>
             </div>
           </div>
-        </SettingsSection>
+        </Card>
       )}
 
       {actionError && (
-        <SettingsNotice tone="error" icon={<XCircle size={14} />}>
+        <Notice tone="error" icon={<XCircle size={14} />}>
           {actionError}
-        </SettingsNotice>
+        </Notice>
       )}
 
       <SettingsTableToolbar

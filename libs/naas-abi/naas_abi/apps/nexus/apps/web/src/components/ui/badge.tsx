@@ -9,19 +9,24 @@ export const badgeVariants = cva(
       variant: {
         neutral: 'bg-muted text-muted-foreground',
         primary: 'bg-primary/10 text-primary',
+        success: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+        info: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
         destructive: 'bg-destructive/10 text-destructive',
         warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
         outline: 'border border-border text-muted-foreground',
       },
+      /** Identifiers, prefixes, encodings: monospace. */
+      mono: { true: 'font-mono', false: '' },
     },
-    defaultVariants: { variant: 'neutral' },
+    defaultVariants: { variant: 'neutral', mono: false },
   }
 );
 
 export function Badge({
   className,
   variant,
+  mono,
   ...props
 }: HTMLAttributes<HTMLSpanElement> & VariantProps<typeof badgeVariants>) {
-  return <span className={cn(badgeVariants({ variant }), className)} {...props} />;
+  return <span className={cn(badgeVariants({ variant, mono }), className)} {...props} />;
 }

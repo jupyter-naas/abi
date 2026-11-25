@@ -26,6 +26,7 @@ import {
   MessagesSquare,
   Network,
   PackageCheck,
+  Palette,
   Radar,
   Radio,
   ScrollText,
@@ -52,6 +53,7 @@ import {
 import { PLATFORM_DRIVES_PATH } from '../drives/drives-model';
 import { PLATFORM_GENERAL_PATH } from '../general/general-model';
 import { PLATFORM_ORGANIZATIONS_PATH } from '../organizations/organizations-model';
+import { PLATFORM_THEME_PATH } from '../theme/theme-model';
 import { PLATFORM_USERS_PATH } from '../users/users-model';
 import { PLATFORM_TABLES_PATH } from './tables';
 import { safeDecode } from './page-helpers';
@@ -165,6 +167,15 @@ export const GENERAL_ITEM: PlatformSettingsNavItem = {
   needs: READ_SYSTEM,
 };
 
+/** The design kit, every component in its states: the reference a new page is built from. */
+export const THEME_ITEM: PlatformSettingsNavItem = {
+  id: 'theme',
+  label: 'Theme',
+  href: PLATFORM_THEME_PATH,
+  icon: Palette,
+  needs: READ_SYSTEM,
+};
+
 export const ORGANIZATIONS_ITEM: PlatformSettingsNavItem = {
   id: 'organizations',
   label: 'Organizations',
@@ -247,6 +258,7 @@ export const DIAGRAMS_ITEM: PlatformSettingsNavItem = {
  * No page is width-capped anymore: the centered column is retired everywhere. */
 const PADDED_ITEM_IDS: ReadonlySet<string> = new Set([
   GENERAL_ITEM.id,
+  THEME_ITEM.id,
   ORGANIZATIONS_ITEM.id,
   USERS_ITEM.id,
   DRIVES_ITEM.id,
@@ -262,7 +274,7 @@ export function laysOutOwnPanes(item: Pick<PlatformSettingsNavItem, 'id'>): bool
 export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
   {
     label: 'Administration',
-    items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM],
+    items: [GENERAL_ITEM, THEME_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM],
   },
   { label: 'Access', items: [...ACCESS_ITEMS, MODELS_ITEM] },
   {

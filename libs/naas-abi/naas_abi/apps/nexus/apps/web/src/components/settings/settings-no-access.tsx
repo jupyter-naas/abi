@@ -1,7 +1,7 @@
 'use client';
 
 import { Lock } from 'lucide-react';
-import { SettingsEmpty } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
 
 /**
  * Settings of a workspace or an organization IAM gives the caller no section of, opened by
@@ -9,7 +9,7 @@ import { SettingsEmpty } from '@/components/settings/settings-ui';
  */
 export function SettingsNoAccess({ of }: { of: 'workspace' | 'organization' }) {
   return (
-    <SettingsEmpty
+    <EmptyState framed
       icon={<Lock size={40} className="opacity-40" />}
       title="You have no access to these settings"
       description={`Your role and policies give you nothing to manage in this ${of}'s settings. Its owners and admins manage them.`}

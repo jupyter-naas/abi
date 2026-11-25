@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ServersPanel } from '@/components/settings/servers-panel';
-import { SettingsFilterSelect, SettingsLoading, SettingsNotice } from '@/components/settings/settings-ui';
+import { SettingsFilterSelect } from '@/components/settings/settings-ui';
 import { authFetch } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { orgSettingsSectionPath } from '../lib/nav';
+import { Notice } from '@/components/ui/notice';
+import { Loading } from '@/components/ui/spinner';
 
 interface OrgWorkspace {
   id: string;
@@ -59,9 +61,9 @@ export default function OrgServersPage() {
     return workspaces[0].id;
   }, [workspaces, requested, currentWorkspaceId]);
 
-  if (workspaces === null) return <SettingsLoading />;
+  if (workspaces === null) return <Loading />;
   if (!selectedId) {
-    return <SettingsNotice tone="error">{error || 'No workspace in this organization.'}</SettingsNotice>;
+    return <Notice tone="error">{error || 'No workspace in this organization.'}</Notice>;
   }
 
   return (

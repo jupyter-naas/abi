@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { Brush, Camera, Check, Palette, Save, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
 import { authFetch } from '@/stores/auth';
 import { readOrganization } from '@/lib/organization-resource';
 import { DEFAULT_THEME, PRESET_COLORS } from '@/stores/workspace';
@@ -25,6 +24,9 @@ import { slugify, WORKSPACE_SLUG } from './slug';
 import '@/app/account/profile/profile.css';
 import '@/app/workspace/[workspaceId]/settings/general/general.css';
 import '../workspaces.css';
+import { Notice } from '@/components/ui/notice';
+import { Field } from '@/components/ui/field';
+import { Card } from '@/components/ui/card';
 
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
@@ -256,7 +258,7 @@ export default function OrgCreateWorkspacePage() {
         }
       />
 
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+      {error && <Notice tone="error">{error}</Notice>}
 
       <div className="account-profile-avatar-section">
         <div className="account-profile-avatar-wrapper">
@@ -415,7 +417,7 @@ export default function OrgCreateWorkspacePage() {
         disabled={creating}
       />
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <Palette size={16} className="text-muted-foreground" />
@@ -424,7 +426,7 @@ export default function OrgCreateWorkspacePage() {
         }
       >
         <div className="space-y-6">
-          <SettingsField label="Primary Color" hint={`Current: ${primaryColor}`}>
+          <Field label="Primary Color" hint={`Current: ${primaryColor}`}>
             <div className="flex flex-wrap gap-3">
               {PRESET_COLORS.map((color) => (
                 <button
@@ -465,9 +467,9 @@ export default function OrgCreateWorkspacePage() {
                 </div>
               </div>
             </div>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label="Accent Color" hint={`Current: ${accentColor || 'Not set'}`}>
+          <Field label="Accent Color" hint={`Current: ${accentColor || 'Not set'}`}>
             <div className="flex flex-wrap gap-3">
               {PRESET_COLORS.map((color) => (
                 <button
@@ -485,9 +487,9 @@ export default function OrgCreateWorkspacePage() {
                 </button>
               ))}
             </div>
-          </SettingsField>
+          </Field>
         </div>
-      </SettingsSection>
+      </Card>
     </div>
   );
 }

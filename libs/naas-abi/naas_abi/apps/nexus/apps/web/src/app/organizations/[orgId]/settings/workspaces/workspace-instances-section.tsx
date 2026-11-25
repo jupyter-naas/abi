@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Package, Search } from 'lucide-react';
-import { SettingsSection } from '@/components/settings/settings-ui';
 import { authFetch } from '@/stores/auth';
+import { Card } from '@/components/ui/card';
 
 export type CatalogOption = { id: string; label: string; kind: string };
 
@@ -168,7 +168,7 @@ export function WorkspaceInstancesSection({
   );
 
   return (
-    <SettingsSection
+    <Card
       title={
         <span className="flex items-center gap-2">
           <Package size={16} className="text-muted-foreground" />
@@ -270,7 +270,7 @@ export function WorkspaceInstancesSection({
           />
         </div>
       )}
-    </SettingsSection>
+    </Card>
   );
 }
 

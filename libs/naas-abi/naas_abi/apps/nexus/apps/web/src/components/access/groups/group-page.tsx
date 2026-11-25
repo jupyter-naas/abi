@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { SettingsSection } from '@/components/settings/settings-ui';
 import { useConfirm } from '@/components/ui/dialogs';
 import { RolePickerDialog } from '@/components/people/role-picker-dialog';
 import { IamAdminError } from '@/lib/iam-admin/api';
@@ -20,6 +19,7 @@ import { AttachDialog, type AttachCandidate } from '../policies/attach-dialog';
 import { useActionsAt, useContainerNames } from '../policies/policy-owners';
 import '../holdings/holdings.css';
 import '@/app/account/profile/profile.css';
+import { Card } from '@/components/ui/card';
 
 const message = (e: unknown) => (e instanceof IamAdminError || e instanceof Error ? e.message : String(e));
 
@@ -355,7 +355,7 @@ export function GroupPage({
       />
       {isNew && <p className="text-sm text-muted-foreground">Name the group, then attach its policies and add its members below.</p>}
 
-      <SettingsSection>
+      <Card>
         <div className="account-profile-form-grid">
           <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="group-name">
@@ -399,9 +399,9 @@ export function GroupPage({
             />
           </div>
         </div>
-      </SettingsSection>
+      </Card>
 
-      <SettingsSection
+      <Card
         title="Policies"
         description={
           isNew
@@ -461,9 +461,9 @@ export function GroupPage({
             empty="Nothing you may list is attached to this group."
           />
         )}
-      </SettingsSection>
+      </Card>
 
-      <SettingsSection
+      <Card
         title="Members"
         description={owned || isNew ? 'Who is in the group: each holds what it holds.' : 'Owned elsewhere: its members change at its level.'}
         actions={
@@ -583,7 +583,7 @@ export function GroupPage({
             )}
           </div>
         )}
-      </SettingsSection>
+      </Card>
 
       {confirmDialog}
       <AttachDialog

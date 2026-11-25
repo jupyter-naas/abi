@@ -20,12 +20,12 @@ import {
 import '@/components/access/access-base.css';
 import '@/components/access/access.css';
 import { ViewAsControl } from '@/components/access/people/view-as-control';
-import { SettingsNotice } from '@/components/settings/settings-ui';
 import { PersonBack, PersonInfoSection } from '@/components/access/people/person-info';
 import { MemberRoleSection } from '@/components/people/member-role-section';
 import { UsersReloadButton } from '@/components/settings/users-table/users-table-actions';
 import '@/app/account/profile/profile.css';
 import '../users.css';
+import { Notice } from '@/components/ui/notice';
 
 const BIO_MAX_LENGTH = 2000;
 const INTEREST_MAX_LENGTH = 1000;
@@ -143,9 +143,9 @@ export default function OrgUserProfilePage() {
         <PersonBack onClick={() => router.push(orgSettingsSectionPath(orgId, 'users'))} />
         {refused && <p className="text-sm text-muted-foreground">Only the organization’s admins see its people.</p>}
         {!refused && (
-          <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+          <Notice tone="error" icon={<AlertCircle size={14} />}>
             {loadError || 'User not found.'}
-          </SettingsNotice>
+          </Notice>
         )}
       </div>
     );
@@ -272,9 +272,9 @@ export default function OrgUserProfilePage() {
       />
 
       {(error || loadError) && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {error || loadError}
-        </SettingsNotice>
+        </Notice>
       )}
 
       {/* Their profile in this organization first, folded; then where they work. */}

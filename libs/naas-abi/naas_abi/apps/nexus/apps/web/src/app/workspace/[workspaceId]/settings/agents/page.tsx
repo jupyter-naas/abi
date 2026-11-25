@@ -13,17 +13,11 @@ import { useConfirm } from '@/components/ui/dialogs';
 import { Input, Textarea } from '@/components/ui/input';
 import { useSettingsReloadGeneration } from '@/components/settings/settings-reload';
 import { usePageState } from '@/hooks/use-page-state';
-import {
-  SettingsEmpty,
-  SettingsField,
-  SettingsLoading,
-  SettingsPageHeader,
-  SettingsFilterSelect,
-  SettingsSection,
-  SettingsTableToolbar,
-  countLabel,
-  settingsTable,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsFilterSelect, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Field } from '@/components/ui/field';
+import { Card } from '@/components/ui/card';
 
 const iconMap = {
   bot: Bot,
@@ -184,7 +178,7 @@ export default function AgentsPage() {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   if (!mounted) {
-    return <SettingsLoading label="Loading agents…" />;
+    return <Loading label="Loading agents…" />;
   }
 
   const resetNewAgent = () => {
@@ -207,18 +201,18 @@ export default function AgentsPage() {
       />
 
       {showAddForm && (
-        <SettingsSection title="Add New Agent">
+        <Card title="Add New Agent">
           <div className="grid gap-4">
             <div className="grid grid-cols-2 gap-4">
-              <SettingsField label="Name *">
+              <Field label="Name *">
                 <Input
                   type="text"
                   value={newAgent.name}
                   onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
                   placeholder="Agent name"
                 />
-              </SettingsField>
-              <SettingsField label="Icon">
+              </Field>
+              <Field label="Icon">
                 <div className="flex gap-2">
                   {iconOptions.map((icon) => {
                     const IconComp = iconMap[icon];
@@ -238,17 +232,17 @@ export default function AgentsPage() {
                     );
                   })}
                 </div>
-              </SettingsField>
+              </Field>
             </div>
-            <SettingsField label="Description">
+            <Field label="Description">
               <Input
                 type="text"
                 value={newAgent.description}
                 onChange={(e) => setNewAgent({ ...newAgent, description: e.target.value })}
                 placeholder="Brief description"
               />
-            </SettingsField>
-            <SettingsField label="System Prompt">
+            </Field>
+            <Field label="System Prompt">
               <Textarea
                 value={newAgent.systemPrompt}
                 onChange={(e) => setNewAgent({ ...newAgent, systemPrompt: e.target.value })}
@@ -256,7 +250,7 @@ export default function AgentsPage() {
                 rows={3}
                 className="resize-none"
               />
-            </SettingsField>
+            </Field>
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={resetNewAgent}>
                 Cancel
@@ -266,11 +260,11 @@ export default function AgentsPage() {
               </Button>
             </div>
           </div>
-        </SettingsSection>
+        </Card>
       )}
 
       {displayAgents.length === 0 ? (
-        <SettingsEmpty
+        <EmptyState framed
           icon={<Bot size={40} className="opacity-40" />}
           title="No agents configured"
           description="Use Add Agent at the top right to create your first agent."

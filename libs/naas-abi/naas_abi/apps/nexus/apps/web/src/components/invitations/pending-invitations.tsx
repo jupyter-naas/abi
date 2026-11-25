@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, Mail, RefreshCw, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
-import { SettingsNotice, SettingsSection, settingsTable } from '@/components/settings/settings-ui';
+import { settingsTable } from '@/components/settings/settings-ui';
 import {
   fetchInvitations,
   invitationRoles,
@@ -13,6 +13,8 @@ import {
   type Invitation,
   type InviteScope,
 } from '@/lib/invitations';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 
 /**
  * The invitations still waiting for their person to sign in, with resend and
@@ -93,19 +95,19 @@ export function PendingInvitations({
   };
 
   return (
-    <SettingsSection
+    <Card
       title="Pending invitations"
       description="Invited people who have not signed in yet. Their roles apply the first time they sign in with this email."
     >
       {error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />} className="mb-4">
+        <Notice tone="error" icon={<AlertCircle size={14} />} className="mb-4">
           {error}
-        </SettingsNotice>
+        </Notice>
       )}
       {notice && (
-        <SettingsNotice tone="info" icon={<Mail size={14} />} className="mb-4">
+        <Notice tone="info" icon={<Mail size={14} />} className="mb-4">
           {notice}
-        </SettingsNotice>
+        </Notice>
       )}
       <div className={settingsTable.wrapper}>
         <table className={settingsTable.table}>
@@ -155,6 +157,6 @@ export function PendingInvitations({
         </table>
       </div>
       {dialog}
-    </SettingsSection>
+    </Card>
   );
 }

@@ -13,12 +13,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import {
-  SettingsEmpty,
-  SettingsField,
-  SettingsNotice,
-  SettingsSection,
-} from '@/components/settings/settings-ui';
 import { getApiUrl } from '@/lib/config';
 import { fetchCurrentBackgroundImage } from '@/lib/home-background';
 import { existingWorkspaceGroups } from '@/lib/workspace-groups';
@@ -37,6 +31,10 @@ import { WorkspaceConfiguration } from './workspace-configuration';
 import { WorkspaceGroupSelect } from '@/app/organizations/[orgId]/settings/workspaces/workspace-group-select';
 import '@/app/account/profile/profile.css';
 import './general.css';
+import { Notice } from '@/components/ui/notice';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Field } from '@/components/ui/field';
+import { Card } from '@/components/ui/card';
 
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
@@ -139,7 +137,7 @@ export default function GeneralSettingsPage() {
   const currentBackgroundUrl = themeBackgroundUrl || driveBackgroundUrl;
 
   if (!workspace || !currentWorkspaceId) {
-    return <SettingsEmpty title="No workspace selected" />;
+    return <EmptyState framed title="No workspace selected" />;
   }
 
   const logoSrc = assetUrl(theme.logoUrl);
@@ -270,7 +268,7 @@ export default function GeneralSettingsPage() {
       />
 
       {(detailsError || logoError) && (
-        <SettingsNotice tone="error">{detailsError || logoError}</SettingsNotice>
+        <Notice tone="error">{detailsError || logoError}</Notice>
       )}
 
       <div className="account-profile-avatar-section">
@@ -402,7 +400,7 @@ export default function GeneralSettingsPage() {
         </div>
       </AccountSectionCard>
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <ImageIcon size={16} className="text-muted-foreground" />
@@ -440,9 +438,9 @@ export default function GeneralSettingsPage() {
             Only workspace owners and admins can change the wallpaper.
           </p>
         )}
-      </SettingsSection>
+      </Card>
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <Palette size={16} className="text-muted-foreground" />
@@ -457,7 +455,7 @@ export default function GeneralSettingsPage() {
         }
       >
         <div className="space-y-6">
-          <SettingsField label="Primary Color" hint={`Current: ${theme.primaryColor}`}>
+          <Field label="Primary Color" hint={`Current: ${theme.primaryColor}`}>
             <div className="flex flex-wrap gap-3">
               {PRESET_COLORS.map((color) => (
                 <button
@@ -498,9 +496,9 @@ export default function GeneralSettingsPage() {
                 </div>
               </div>
             </div>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label="Accent Color" hint={`Current: ${theme.accentColor || 'Not set'}`}>
+          <Field label="Accent Color" hint={`Current: ${theme.accentColor || 'Not set'}`}>
             <div className="flex flex-wrap gap-3">
               {PRESET_COLORS.map((color) => (
                 <button
@@ -518,10 +516,10 @@ export default function GeneralSettingsPage() {
                 </button>
               ))}
             </div>
-          </SettingsField>
+          </Field>
 
         </div>
-      </SettingsSection>
+      </Card>
 
       <PlatformFiles workspaceId={workspace.id} />
 

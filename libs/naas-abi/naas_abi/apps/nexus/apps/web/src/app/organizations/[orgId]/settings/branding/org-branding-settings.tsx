@@ -15,9 +15,9 @@ import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { Checkbox } from '@/components/ui/checkbox';
 import { buttonVariants } from '@/components/ui/button';
-import { SettingsNotice } from '@/components/settings/settings-ui';
 import '../components/org-settings-components.css';
 import './branding.css';
+import { Notice } from '@/components/ui/notice';
 
 const inputClass =
   'h-9 w-full border border-input bg-background px-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/30';
@@ -302,7 +302,7 @@ export const OrgBrandingSettings = forwardRef<
 
   return (
     <div className="org-settings-branding-form">
-      {uploadError && <SettingsNotice tone="error">{uploadError}</SettingsNotice>}
+      {uploadError && <Notice tone="error">{uploadError}</Notice>}
 
       <div className="space-y-6 border bg-card p-6">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">

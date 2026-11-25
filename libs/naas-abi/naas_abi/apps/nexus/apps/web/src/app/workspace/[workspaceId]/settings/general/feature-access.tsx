@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { ownerHref } from '@/components/access/policies/policy-owners';
-import { SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
 import { createFeatureAccessApi, type FeatureAccessApi } from './feature-access-api';
 import {
   changesFrom,
@@ -18,6 +17,8 @@ import {
   type FeatureDraft,
   type FeatureRow,
 } from './feature-access-model';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 
 const DEFAULT_API = createFeatureAccessApi();
 
@@ -88,7 +89,7 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
   const offerHref = access ? ownerHref(access.owner_scope, access.id) : null;
 
   return (
-    <SettingsSection
+    <Card
       title={
         <span className="flex items-center gap-2">
           <SlidersHorizontal size={16} className="text-muted-foreground" />
@@ -110,7 +111,7 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
         </>
       }
     >
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+      {error && <Notice tone="error">{error}</Notice>}
       {!state ? (
         !error && <p className="text-sm text-muted-foreground">Loading features...</p>
       ) : rows.length === 0 ? (
@@ -211,6 +212,6 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
           </div>
         </>
       )}
-    </SettingsSection>
+    </Card>
   );
 }

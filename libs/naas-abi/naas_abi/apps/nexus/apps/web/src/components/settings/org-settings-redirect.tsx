@@ -2,8 +2,8 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { SettingsLoading } from '@/components/settings/settings-ui';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { Loading } from '@/components/ui/spinner';
 
 /**
  * Old workspace settings pages that moved to Organization Settings: send the
@@ -32,5 +32,5 @@ export function OrgSettingsRedirect({
     }
   }, [organizationId, loaded, path, query, router]);
 
-  return <SettingsLoading />;
+  return <Loading />;
 }

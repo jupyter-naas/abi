@@ -6,15 +6,9 @@ import { AppWindow, Globe, Tag, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppsStore, type AppItem } from '@/stores/apps';
 import { Badge } from '@/components/ui/badge';
-import {
-  SettingsEmpty,
-  SettingsLoading,
-  SettingsPageHeader,
-  SettingsFilterSelect,
-  SettingsTableToolbar,
-  countLabel,
-  settingsTable,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsFilterSelect, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
 
 const CATEGORY_BADGE: Record<string, 'primary' | 'warning' | 'neutral'> = {
   core: 'primary',
@@ -87,7 +81,7 @@ export default function AppsSettingsPage() {
   }, [installedApps, searchQuery, categoryFilter]);
 
   if (!mounted) {
-    return <SettingsLoading label="Loading apps…" />;
+    return <Loading label="Loading apps…" />;
   }
 
   return (
@@ -99,9 +93,9 @@ export default function AppsSettingsPage() {
       />
 
       {loading && installedApps.length === 0 ? (
-        <SettingsLoading label="Loading apps…" />
+        <Loading label="Loading apps…" />
       ) : installedApps.length === 0 ? (
-        <SettingsEmpty
+        <EmptyState framed
           icon={<AppWindow size={40} className="opacity-40" />}
           title="No apps in this workspace"
           description="No module of this workspace has an app you may open. Policies on Roles & permissions decide who opens which app."

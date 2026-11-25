@@ -3,7 +3,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronUp, Filter } from 'lucide-react';
-import { SearchBox } from '@/components/settings/search-box';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
 import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-table-filter';
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
@@ -13,6 +12,7 @@ import '@/app/organizations/[orgId]/settings/users/users.css';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 import '@/app/settings/users/users.css';
 import './access-list.css';
+import { SearchBox } from '@/components/ui/search-box';
 
 /**
  * The list pages of Access (Policies, Groups, Service accounts) look like Platform › Users:

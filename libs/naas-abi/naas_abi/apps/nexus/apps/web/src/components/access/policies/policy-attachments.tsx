@@ -6,7 +6,6 @@ import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { AttachablePolicy, AttachmentView, PrincipalKind } from '@/lib/iam-admin/types';
 import type { AccessDirectory } from '../access-directory';
 import { AccessHeaderAction, AccessHeaderSlotContext } from '../access-list';
-import { SettingsSection } from '@/components/settings/settings-ui';
 import type { AccessNavigation } from '../access-props';
 import type { AccessScope } from '../access-scope';
 import { offeredTo, type PrincipalChoice } from '../attachments/attach-form';
@@ -18,6 +17,7 @@ import '../holdings/holdings.css';
 import { isRoleCompanion, principalKindOf, roleOfPolicy } from '../roles/role-change';
 import { useActionsAt, useContainerNames } from './policy-owners';
 import { AttachDialog, type AttachCandidate } from './attach-dialog';
+import { Card } from '@/components/ui/card';
 
 // What an IAM id looks like: a person's, a group's or a service account's.
 const IAM_ID = /^(usr|grp|sa)_[A-Za-z0-9]+$/;
@@ -104,7 +104,7 @@ export function PolicyAttachments({
   // Its "+ Attach" sits in the section's header, as a group's "+ Attach policies".
   return (
     <AccessHeaderSlotContext.Provider value={actionsSlot}>
-    <SettingsSection
+    <Card
       title="Held by"
       description="Who holds it, at every level you may list."
       actions={<span ref={setActionsSlot} className="access-instance-actions-slot" data-held-actions="" />}
@@ -187,7 +187,7 @@ export function PolicyAttachments({
         />
       )}
     </div>
-    </SettingsSection>
+    </Card>
     </AccessHeaderSlotContext.Provider>
   );
 }

@@ -9,16 +9,10 @@ import { useOntologyStore } from '@/stores/ontology';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsFilterSelect,
-  SettingsTableToolbar,
-  countLabel,
-  SettingsSection,
-  settingsTable,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsFilterSelect, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
+import { Loading } from '@/components/ui/spinner';
+import { Card } from '@/components/ui/card';
 
 type Kind = 'ontologies' | 'graphs';
 type Policy = {
@@ -238,22 +232,22 @@ export function ResourceAccessEditor({
         }
       />
       {error && (
-        <SettingsNotice tone="error">
+        <Notice tone="error">
           <span role="alert">{error}</span>
-        </SettingsNotice>
+        </Notice>
       )}
       {saved && (
-        <SettingsNotice tone="success">
+        <Notice tone="success">
           <span role="status">Assignments saved.</span>
-        </SettingsNotice>
+        </Notice>
       )}
       {loading ? (
-        <SettingsLoading label={`Loading ${title.toLowerCase()}…`} />
+        <Loading label={`Loading ${title.toLowerCase()}…`} />
       ) : (
         snapshot && (
           <>
             {kind === 'graphs' && (
-              <SettingsSection title="Workspace access">
+              <Card title="Workspace access">
                 <fieldset className="flex flex-col gap-2.5" disabled={saving}>
                   <Checkbox
                     checked={!!draft.read_all}
@@ -277,7 +271,7 @@ export function ResourceAccessEditor({
                     label="Allow members to create graphs"
                   />
                 </fieldset>
-              </SettingsSection>
+              </Card>
             )}
             <SettingsTableToolbar
               search={search}

@@ -2,10 +2,10 @@
 
 import type { ReactNode } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { SettingsSection } from '@/components/settings/settings-ui';
 import { InstanceHeader } from '../instance-header';
 import '@/app/account/profile/profile.css';
 import './people.css';
+import { Card } from '@/components/ui/card';
 
 /** Back to the list a person's page was opened from: the page is shown alone, with no header
  *  of the list (as a group's and a policy's). */
@@ -63,12 +63,12 @@ export function PersonInfoSection({
         imageAlt={name ?? ''}
         actions={actions}
       />
-      <SettingsSection>
+      <Card>
         <div className="account-profile-form-grid" data-person-info={id}>
           {field('name', 'Name', name ?? 'Loading…')}
           {field('email', 'Email', email ?? '')}
         </div>
-      </SettingsSection>
+      </Card>
     </>
   );
 }

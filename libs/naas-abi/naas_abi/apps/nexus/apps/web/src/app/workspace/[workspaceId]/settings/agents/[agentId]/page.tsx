@@ -9,14 +9,12 @@ import { readAgentRoster, useAgentsStore } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/input';
-import {
-  SettingsEmpty,
-  SettingsField,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsSection,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Field } from '@/components/ui/field';
+import { Card } from '@/components/ui/card';
 
 type ServiceIntent = {
   intent_value: string;
@@ -157,16 +155,16 @@ export default function AgentEditPage() {
   );
 
   if (loading) {
-    return <SettingsLoading label="Loading agent…" />;
+    return <Loading label="Loading agent…" />;
   }
 
   if (error) {
     return (
       <div className="space-y-4">
         {backButton}
-        <SettingsNotice tone="error" icon={<XCircle size={14} />}>
+        <Notice tone="error" icon={<XCircle size={14} />}>
           {error}
-        </SettingsNotice>
+        </Notice>
       </div>
     );
   }
@@ -175,13 +173,13 @@ export default function AgentEditPage() {
     return (
       <div className="space-y-4">
         {backButton}
-        <SettingsEmpty title="Agent not found." />
+        <EmptyState framed title="Agent not found." />
       </div>
     );
   }
 
   const listSection = (title: string, items: string[], empty: string, mono = true) => (
-    <SettingsSection title={title}>
+    <Card title={title}>
       {items.length > 0 ? (
         <ul className="space-y-1">
           {items.map((item) => (
@@ -196,7 +194,7 @@ export default function AgentEditPage() {
           {empty}
         </p>
       )}
-    </SettingsSection>
+    </Card>
   );
 
   return (
@@ -229,42 +227,42 @@ export default function AgentEditPage() {
       />
 
       {saved && (
-        <SettingsNotice tone="success" icon={<CheckCircle size={14} />}>
+        <Notice tone="success" icon={<CheckCircle size={14} />}>
           Agent updated
-        </SettingsNotice>
+        </Notice>
       )}
 
-      <SettingsSection title="General">
+      <Card title="General">
         <div className="space-y-4">
-          <SettingsField label="Name">
+          <Field label="Name">
             <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </SettingsField>
-          <SettingsField label="Description">
+          </Field>
+          <Field label="Description">
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="resize-none" />
-          </SettingsField>
-          <SettingsField label="System Prompt">
+          </Field>
+          <Field label="System Prompt">
             <Textarea
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               rows={12}
               className="min-h-[14rem] resize-y"
             />
-          </SettingsField>
+          </Field>
           <div className="grid grid-cols-2 gap-3">
-            <SettingsField label="Provider">
+            <Field label="Provider">
               <Input value={provider} onChange={(e) => setProvider(e.target.value)} />
-            </SettingsField>
-            <SettingsField label="Model ID">
+            </Field>
+            <Field label="Model ID">
               <Input value={modelId} onChange={(e) => setModelId(e.target.value)} />
-            </SettingsField>
+            </Field>
           </div>
-          <SettingsField label="Logo URL">
+          <Field label="Logo URL">
             <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} />
-          </SettingsField>
+          </Field>
         </div>
-      </SettingsSection>
+      </Card>
 
-      <SettingsSection title="Logo Preview">
+      <Card title="Logo Preview">
         {serviceAgent.logo_url ? (
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 overflow-hidden border border-border bg-white">
@@ -276,9 +274,9 @@ export default function AgentEditPage() {
         ) : (
           <p className="text-sm text-muted-foreground">No logo defined</p>
         )}
-      </SettingsSection>
+      </Card>
 
-      <SettingsSection title="Suggestions">
+      <Card title="Suggestions">
         {serviceAgent.suggestions && serviceAgent.suggestions.length > 0 ? (
           <ul className="space-y-1 text-sm">
             {serviceAgent.suggestions.map((suggestion) => (
@@ -291,9 +289,9 @@ export default function AgentEditPage() {
         ) : (
           <p className="text-sm text-muted-foreground">No suggestions</p>
         )}
-      </SettingsSection>
+      </Card>
 
-      <SettingsSection title="Intents">
+      <Card title="Intents">
         {serviceAgent.intents && serviceAgent.intents.length > 0 ? (
           <div className="space-y-2">
             {serviceAgent.intents.map((intent, index) => (
@@ -311,12 +309,12 @@ export default function AgentEditPage() {
             No intents
           </p>
         )}
-      </SettingsSection>
+      </Card>
 
       {listSection('Tools', tools, 'No tools configured')}
       {listSection('Subagents', subagents, 'No subagents configured')}
 
-      <SettingsSection title="Service Metadata">
+      <Card title="Service Metadata">
         <dl className="grid grid-cols-2 gap-3 text-sm">
           {(
             [
@@ -335,7 +333,7 @@ export default function AgentEditPage() {
             </div>
           ))}
         </dl>
-      </SettingsSection>
+      </Card>
     </div>
   );
 }

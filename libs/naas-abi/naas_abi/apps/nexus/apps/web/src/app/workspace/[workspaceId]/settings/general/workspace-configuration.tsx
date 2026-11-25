@@ -2,15 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { FileCog, Package } from 'lucide-react';
-import {
-  SettingsEmpty,
-  SettingsNotice,
-  SettingsSection,
-} from '@/components/settings/settings-ui';
 import { authFetch } from '@/stores/auth';
 import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { describeModuleResources } from '@/lib/workspace-resources';
 import { FeatureAccess } from './feature-access';
+import { Notice } from '@/components/ui/notice';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Card } from '@/components/ui/card';
 
 interface SeedRow {
   kind: string;
@@ -79,11 +77,11 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
 
   return (
     <>
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+      {error && <Notice tone="error">{error}</Notice>}
 
       <FeatureAccess workspaceId={workspaceId} />
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <Package size={16} className="text-muted-foreground" />
@@ -108,9 +106,9 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
             ))}
           </ul>
         )}
-      </SettingsSection>
+      </Card>
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <FileCog size={16} className="text-muted-foreground" />
@@ -122,7 +120,7 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
         {!config ? (
           !error && <p className="text-sm text-muted-foreground">Loading seeds...</p>
         ) : config.seeds.length === 0 ? (
-          <SettingsEmpty
+          <EmptyState framed
             icon={<FileCog size={20} />}
             title="No config preseeding"
             description="The deployment config does not preload this workspace."
@@ -155,7 +153,7 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
             </table>
           </div>
         )}
-      </SettingsSection>
+      </Card>
     </>
   );
 }

@@ -20,9 +20,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox, radioClass } from '@/components/ui/checkbox';
 import { fieldClass } from '@/components/ui/input';
 import { SettingsReloadButton } from '@/components/settings/settings-reload';
-import {
-  SettingsEmpty, SettingsFilterSelect, SettingsLoading, SettingsNotice, SettingsPageHeader, SettingsTableToolbar, countLabel, settingsTable,
-} from '@/components/settings/settings-ui';
+import { SettingsFilterSelect, SettingsPageHeader, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
 import {
   blankTopic, searchHref,
   type PreviewResult, type QueryRole, type RoleContract, type SearchTopic, type TopicResultRowDef, type TopicSection,
@@ -34,6 +32,9 @@ import { isFeatureEnabled, type FeatureKey } from '@/lib/feature-access';
 import { FEATURE_SCOPES, WEB_ENGINES, webEngineScopeId } from '@/lib/search-scopes';
 import { useSearchTopicsStore } from '@/stores/search-topics';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { Notice } from '@/components/ui/notice';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
 
 const SOURCE_LABEL: Record<SearchTopic['source'], string> = { builtin: 'Built-in', override: 'Customized', custom: 'Custom' };
 
@@ -112,9 +113,9 @@ function SearchSettings() {
           <SettingsReloadButton />
         </div>
         {loading && !selected ? (
-          <SettingsLoading />
+          <Loading />
         ) : !selected ? (
-          <SettingsEmpty title={<>There is no topic “{selectedId}” in this workspace.</>} />
+          <EmptyState framed title={<>There is no topic “{selectedId}” in this workspace.</>} />
         ) : (
           <TopicEditor
             key={`${selected.id}:${selected.source}`}
@@ -171,9 +172,9 @@ function SearchSettings() {
         }
       />
 
-      {error && <SettingsNotice tone="error"><span role="alert">{error}</span></SettingsNotice>}
-      {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
-      {!canEdit && !loading && <SettingsNotice>Only workspace owners and admins can change search topics.</SettingsNotice>}
+      {error && <Notice tone="error"><span role="alert">{error}</span></Notice>}
+      {tableError && <Notice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></Notice>}
+      {!canEdit && !loading && <Notice>Only workspace owners and admins can change search topics.</Notice>}
 
       <SettingsTableToolbar
         search={searchQuery}
@@ -451,13 +452,13 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
           </div>
         )}
       </div>
-      {savedAt && !dirty && <SettingsNotice tone="success"><span role="status">Saved.</span></SettingsNotice>}
+      {savedAt && !dirty && <Notice tone="success"><span role="status">Saved.</span></Notice>}
       {errors.length > 0 && (
-        <SettingsNotice tone="error">
+        <Notice tone="error">
           <ul role="alert" className="list-disc space-y-0.5 pl-4">
             {errors.map((e, i) => <li key={i}>{e}</li>)}
           </ul>
-        </SettingsNotice>
+        </Notice>
       )}
 
       <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-2">

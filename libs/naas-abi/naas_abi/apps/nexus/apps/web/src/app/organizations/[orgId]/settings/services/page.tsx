@@ -6,20 +6,14 @@ import { useParams, useRouter } from 'next/navigation';
 import { ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import {
-  SettingsFilterSelect,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-  countLabel,
-  settingsTable,
-} from '@/components/settings/settings-ui';
+import { SettingsFilterSelect, SettingsPageHeader, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
 import { buildServiceUrl, resolveServiceHost } from '@/lib/docker-services';
 import { describePlatformServices, type ConfiguredService } from '@/lib/platform-services';
 import { authFetch } from '@/stores/auth';
 import { orgSettingsSectionPath } from '../lib/nav';
 import { ServicesForbidden } from './services-forbidden';
+import { Notice } from '@/components/ui/notice';
+import { Loading } from '@/components/ui/spinner';
 
 type LoadState =
   | { status: 'loading' }
@@ -67,7 +61,7 @@ export default function ServicesSettingsPage() {
     };
   }, []);
 
-  if (state.status === 'loading') return <SettingsLoading />;
+  if (state.status === 'loading') return <Loading />;
   if (state.status === 'forbidden') return <ServicesForbidden />;
 
   const host = resolveServiceHost();
@@ -99,7 +93,7 @@ export default function ServicesSettingsPage() {
         description="Platform services set in config.yaml. Open a service with a web UI to manage it inside Nexus."
       />
 
-      {state.status === 'error' && <SettingsNotice tone="error">{state.message}</SettingsNotice>}
+      {state.status === 'error' && <Notice tone="error">{state.message}</Notice>}
 
       <div className="space-y-4">
         <SettingsTableToolbar

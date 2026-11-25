@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { HardDrive } from 'lucide-react';
-import { SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
 import {
   createPlatformFilesApi,
   PlatformFilesError,
@@ -10,6 +9,8 @@ import {
   type PlatformFilesMode,
   type PlatformFilesState,
 } from './platform-files-api';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 
 const DEFAULT_API = createPlatformFilesApi();
 
@@ -70,7 +71,7 @@ export function PlatformFiles({ workspaceId, api = DEFAULT_API }: { workspaceId:
   };
 
   return (
-    <SettingsSection
+    <Card
       title={
         <span className="flex items-center gap-2">
           <HardDrive size={16} className="text-muted-foreground" />
@@ -79,7 +80,7 @@ export function PlatformFiles({ workspaceId, api = DEFAULT_API }: { workspaceId:
       }
       description="The files shared by the whole platform. Whether everyone in this workspace may open them, and change them."
     >
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+      {error && <Notice tone="error">{error}</Notice>}
       {!state ? (
         !error && <p className="text-sm text-muted-foreground">Loading Platform Files...</p>
       ) : (
@@ -106,6 +107,6 @@ export function PlatformFiles({ workspaceId, api = DEFAULT_API }: { workspaceId:
           )}
         </>
       )}
-    </SettingsSection>
+    </Card>
   );
 }

@@ -205,6 +205,16 @@ An administrator sees Nexus as another person, read-only, in one workspace (serv
 
 This is the most opinionated area of the frontend. The choices below exist because NEXUS is a **tenant-branded product UI**, not a single-theme internal tool.
 
+### The design kit (`components/ui`)
+
+Every surface is built from the kit in `apps/web/src/components/ui`: buttons, badges, fields, search box, notice, empty state, loading, card, page header, toolbar, tabs, menus, tree rows, split pane, dialogs (confirm, prompt), toast. Platform Settings › Theme (`/settings/theme`) shows each one in its states; `app/settings/theme/theme-model.test.ts` fails when a kit file is not on that page.
+
+- **Use the kit; do not rebuild it.** No feature-local toast, badge, notice, empty state, dialog shell, table chrome or search field. A variant you need goes into the kit, once, and onto the Theme page.
+- **Inside the kit: Tailwind + `cva` on the theme tokens.** Features compose kit components and lay them out (semantic CSS per the route convention below); they do not override a kit component's look.
+- **`components/settings/settings-ui.tsx` is settings-only**: `SettingsPageHeader` (PageHeader + Reload), the table toolbar and filters, `settingsTable`, `countLabel`.
+- `toast()` from `ui/toast` (one `<Toaster />` in the root layout), `useConfirm` / `usePrompt` from `ui/dialogs` instead of `window.confirm` / `alert` / `prompt`.
+- Decision record: `docs/adr/20261125_nexus_design_kit.md`.
+
 ### Why semantic CSS for product surfaces
 
 Our approach is informed by [Tailwind CSS vs Semantic CSS](https://dev.to/7jw92nvd1klaq1/tailwindcss-vs-semantic-css-411j). That article's core tradeoff: Tailwind wins on prototyping speed; semantic CSS wins on readable markup and explicit control over design.

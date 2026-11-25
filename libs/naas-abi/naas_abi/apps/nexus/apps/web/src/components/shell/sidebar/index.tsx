@@ -28,7 +28,7 @@ import { getWorkspacePath } from './utils';
 import { panelFromPathChange } from '../home-route';
 import { clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
 import { dockShowsLabels } from '@/lib/shell-columns';
-import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
+import { ColumnResizeHandle, useColumnResize } from '@/components/ui/split-pane';
 import { DockProfile } from './dock-profile';
 import { prefetchSectionPanel } from './section-panel';
 import { WorkspaceSwitcher } from '../workspace-switcher';

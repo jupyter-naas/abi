@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFeature } from '@/hooks/use-feature';
-import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
+import { ColumnResizeHandle, useColumnResize } from '@/components/ui/split-pane';
 import { panelSectionOnPage } from '../home-route';
 
 const sectionLoading = () => (

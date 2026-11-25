@@ -33,13 +33,12 @@ import { readOrganization } from '@/lib/organization-resource';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
-import { ColumnResizeHandle } from '@/components/shell/column-resize-handle';
+import { ColumnResizeHandle } from '@/components/ui/split-pane';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
 import type { FacetBucket } from '@/lib/graph-query/types';
 import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-table-filter';
-import { SearchBox } from '@/components/settings/search-box';
 import { matchesSearch } from '@/app/settings/lib/search';
 import {
   downloadTableExport,
@@ -55,6 +54,7 @@ import {
 } from '@/components/settings/users-table/use-progressive-roles';
 import '../components/org-settings-components.css';
 import './users.css';
+import { SearchBox } from '@/components/ui/search-box';
 
 const PANE_WIDTH_DEFAULT = 440;
 const PANE_WIDTH_MIN = 320;
