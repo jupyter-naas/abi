@@ -33,10 +33,37 @@ async def _follow_member(principal_id: str) -> None:
     await run_in_threadpool(work)
 
 
+async def follow_group(group_id: str) -> None:
+    """Its members belong, through the group, to its membership container ("<W> workspace")
+    and to each container it holds a role at: what follows who belongs there (shared
+    graphs, ``MEMBERSHIPS.changed``) follows, as when Nexus moves a person. Read as ``api``:
+    an attachment the caller may not list still gives a place."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime as iam_runtime
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+    from naas_abi_core.engine.call_context import as_service_account
+    from starlette.concurrency import run_in_threadpool
+
+    def places() -> list[str]:
+        iam = iam_runtime.iam()
+        with as_service_account("api"):
+            group = iam.get_group(group_id)
+            found = {a.scope for a in iam.list_attachments(principal_id=group_id) if a.scope}
+        membership_of = getattr(group, "membership_of", None)
+        if membership_of:
+            found.add(membership_of)
+        return sorted(found)
+
+    for scope in await run_in_threadpool(places):
+        await MEMBERSHIPS.changed(scope)
+
+
 def _default() -> IamAdminService:
     from naas_abi.apps.nexus.apps.api.app.core import database
     from naas_abi.apps.nexus.apps.api.app.services.feature_access.adapters.secondary.postgres import (  # noqa: E501
         SqlFeaturePolicyStore,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.iam_admin.adapters.secondary.nexus_accounts import (  # noqa: E501
+        SqlAccountNames,
     )
 
     return IamAdminService(
@@ -45,6 +72,8 @@ def _default() -> IamAdminService:
         managed_from=SqlFeaturePolicyStore(lambda: database.AsyncSessionLocal()).managed_among,
         org_access_of=_org_access_of,
         follow_member=_follow_member,
+        account_names=SqlAccountNames(lambda: database.AsyncSessionLocal()).names_of,
+        follow_group=follow_group,
     )
 
 

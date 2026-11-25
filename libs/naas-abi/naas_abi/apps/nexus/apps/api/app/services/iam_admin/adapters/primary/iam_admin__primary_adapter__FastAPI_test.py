@@ -533,6 +533,121 @@ def test_a_group_has_members_and_an_idp_mapping(world):
     assert group["id"] not in [g["id"] for g in get(world, "/groups").json()["items"]]
 
 
+def _named_by_accounts(world, accounts: dict[str, tuple[str, str]] | None) -> list[set[str]]:
+    """The service names a group's members from these Nexus accounts (``None``: the read
+    fails). Returns the ids asked for, call by call."""
+    asked: list[set[str]] = []
+
+    async def account_names(ids):
+        asked.append(set(ids))
+        if accounts is None:
+            raise RuntimeError("The accounts could not be read")
+        return {i: accounts[i] for i in ids if i in accounts}
+
+    runtime.configure(
+        lambda: IamAdminService(EngineIamGateway(), world.audit, account_names=account_names)
+    )
+    return asked
+
+
+def test_a_member_known_by_their_nexus_account_is_named_by_it(world):
+    """IAM holds no name for a person the access move made from their Nexus account: a group
+    names them as their account does, in every answer that shows its members."""
+    asked = _named_by_accounts(world, {"member": ("Mia Member", "mia@example.com")})
+    group = post(world, "/groups", name="data-team").json()
+    member = _principal_id(world, "member")
+    unknown = _principal_id(world, "no-account")
+
+    def named(view):
+        return {m["id"]: (m["display_name"], m["email"]) for m in view["members"]}
+
+    url = f"/api/iam/admin/groups/{group['id']}/members"
+    added = world.client.put(f"{url}/{member}", headers=as_("root")).json()
+    assert named(added) == {member: ("Mia Member", "mia@example.com")}
+    assert added["members"][0]["user_id"] == "member"
+    world.client.put(f"{url}/{unknown}", headers=as_("root"))
+    assert named(get(world, f"/groups/{group['id']}").json()) == {
+        member: ("Mia Member", "mia@example.com"),
+        unknown: (None, None),
+    }
+    removed = world.client.delete(f"{url}/{unknown}", headers=as_("root")).json()
+    assert named(removed) == {member: ("Mia Member", "mia@example.com")}
+    assert asked[-1] == {"member"}
+
+
+def test_a_group_whose_accounts_cannot_be_read_shows_its_members_ids(world):
+    _named_by_accounts(world, None)
+    group = post(world, "/groups", name="data-team").json()
+    member = _principal_id(world, "member")
+    world.client.put(f"/api/iam/admin/groups/{group['id']}/members/{member}", headers=as_("root"))
+    shown = get(world, f"/groups/{group['id']}")
+    assert shown.status_code == 200
+    assert [(m["id"], m["display_name"]) for m in shown.json()["members"]] == [(member, None)]
+
+
+@pytest.fixture
+def told(world):
+    """What follows who belongs to a workspace (its shared graphs) as the application wires
+    it, each workspace it is told about recorded."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+    heard: list[tuple[str, bool]] = []
+
+    async def listener(workspace_id: str, dropped: bool) -> None:
+        heard.append((workspace_id, dropped))
+
+    MEMBERSHIPS.on_workspace_roles_changed(listener)
+    runtime.configure(
+        lambda: IamAdminService(EngineIamGateway(), world.audit, follow_group=runtime.follow_group)
+    )
+    yield heard
+    MEMBERSHIPS._listeners.remove(listener)
+
+
+def test_who_leaves_a_workspace_group_on_its_page_leaves_what_follows_it(world, told):
+    """Removed from "<W> workspace" on the group's page, a person no longer holds what
+    follows who belongs to W (its shared graphs, ``graph_grants``): as when Nexus moves them."""
+    ws1 = workspace_container("org-1", "ws-1")
+    member = _principal_id(world, "member")
+    with as_service_account("engine"):
+        people = world.nexus.iam.create_group("ws-1 workspace", scope=ws1, membership_of=ws1)
+    url = f"/api/iam/admin/groups/{people.id}/members/{member}"
+
+    assert world.client.put(url, headers=as_("root")).status_code == 200
+    assert told == [("ws-1", False)]
+    assert world.client.delete(url, headers=as_("root")).status_code == 200
+    assert told == [("ws-1", False), ("ws-1", False)]
+
+
+def test_a_group_holding_a_role_at_a_workspace_tells_that_workspace(world, told):
+    """Its members belong to every workspace it holds a role at, not only its own."""
+    ws2 = world.nexus.workspace("org-1", "ws-2")
+    group = post(world, "/groups", name="data-team").json()
+    with as_service_account("engine"):
+        world.nexus.iam.attach_policy("builtin.viewer", group["id"], ws2)
+    member = _principal_id(world, "member")
+    url = f"/api/iam/admin/groups/{group['id']}/members/{member}"
+
+    assert world.client.put(url, headers=as_("root")).status_code == 200
+    assert told == [("ws-2", False)]
+
+
+def test_what_follows_a_group_failing_leaves_its_member_change_made(world):
+    async def failing(group_id: str) -> None:
+        raise RuntimeError("The shared graphs could not follow")
+
+    runtime.configure(
+        lambda: IamAdminService(EngineIamGateway(), world.audit, follow_group=failing)
+    )
+    group = post(world, "/groups", name="data-team").json()
+    member = _principal_id(world, "member")
+    added = world.client.put(
+        f"/api/iam/admin/groups/{group['id']}/members/{member}", headers=as_("root")
+    )
+    assert added.status_code == 200
+    assert [m["id"] for m in added.json()["members"]] == [member]
+
+
 def test_in_a_view_a_group_is_read_inside_the_viewed_container_only(world):
     """The workspace's Roles & permissions page reads each of its groups by id: in a view, only
     those owned inside the viewed container (the platform's and another workspace's are outside)."""
