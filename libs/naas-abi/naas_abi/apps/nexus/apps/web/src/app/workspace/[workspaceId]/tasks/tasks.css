@@ -1,12 +1,17 @@
 /* workspace/tasks — semantic page styles (vanilla CSS, theme tokens).
    The toolbar and layouts come from components/database-view. */
 
-.tasks-page {
-  /* Tasks follow the workspace accent, not the app's default primary color. */
+/* Tasks follow the workspace accent, not the app's default primary color. The dialogs are
+   portalled to <body>, out of .tasks-page, so they declare the same variables. */
+.tasks-page,
+.tasks-dialog {
   --tasks-accent: var(--workspace-accent, #22c55e);
   --tasks-accent-subtle: color-mix(in srgb, var(--tasks-accent) 12%, transparent);
   --tasks-accent-hover: color-mix(in srgb, var(--tasks-accent) 90%, #000);
   --tasks-accent-focus: color-mix(in srgb, var(--tasks-accent) 45%, transparent);
+}
+
+.tasks-page {
   position: relative;
   display: flex;
   height: 100%;

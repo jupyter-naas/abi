@@ -11,6 +11,17 @@
   overflow: hidden;
 }
 
+/* "Go to trace id": an id field, not a stretching search box. */
+.trace-jump input {
+  width: 220px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* "Errors only" stays on one line in the filter row. */
+.trace-errors-toggle {
+  white-space: nowrap;
+}
+
 .trace-filters {
   display: flex;
   flex-wrap: wrap;

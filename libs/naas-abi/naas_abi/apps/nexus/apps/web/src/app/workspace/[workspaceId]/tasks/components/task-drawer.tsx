@@ -315,8 +315,11 @@ export function TaskDrawer({
     >
       <div className="tasks-drawer-fields">
         <label className="tasks-drawer-label" htmlFor="tasks-task-stage">Stage</label>
+        {/* Opening a task focuses the stage, not the title: typing must not edit the title,
+            and a touch keyboard must not pop up. */}
         <select
           id="tasks-task-stage"
+          data-autofocus
           className="tasks-drawer-select"
           value={task.stage}
           onChange={(e) => save({ stage: e.target.value })}

@@ -207,7 +207,7 @@ function FileRows({
                 <span
                   title={node.path}
                   data-testid={`${kind.id}-tree-file`}
-                  className={treeRowClass({ muted: true })}
+                  className={treeRowClass({ inert: true })}
                 >
                   {label}
                 </span>
@@ -299,7 +299,7 @@ export function OfficeTreeView({
                   onToggleDir={onToggleDir}
                 />
               ) : (
-                <p className={cn('ml-3 pl-6', NOTE_CLASS)}>Loading</p>
+                <p className={cn('ml-3', NOTE_CLASS, 'pl-6')}>Loading</p>
               )
             ) : null}
           </li>

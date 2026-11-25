@@ -34,6 +34,10 @@ export function Tabs<T extends string>({
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const enabled = items.map((item, index) => (item.disabled ? -1 : index)).filter((index) => index >= 0);
+  // The tab Tab lands on: the selected one, else the first enabled one (nothing selected must
+  // not take the whole strip out of the keyboard order).
+  const selectedIndex = items.findIndex((item) => item.id === value);
+  const tabStop = selectedIndex >= 0 ? selectedIndex : enabled[0];
   const move = (from: number, step: number | 'first' | 'last') => {
     const at = enabled.indexOf(from);
     const nextIndex =
@@ -64,7 +68,7 @@ export function Tabs<T extends string>({
             type="button"
             role="tab"
             aria-selected={selected}
-            tabIndex={selected ? 0 : -1}
+            tabIndex={index === tabStop ? 0 : -1}
             disabled={item.disabled}
             onClick={() => onChange(item.id)}
             onKeyDown={(event) => {

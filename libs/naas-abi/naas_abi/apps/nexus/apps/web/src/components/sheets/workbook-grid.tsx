@@ -35,6 +35,10 @@ export function WorkbookGrid({ html, workspaceId, selectedIndex, onSelect, onCha
   const [computed, setComputed] = useState<{ html: string; model: Workbook } | null>(null);
   const [history, setHistory] = useState<{ past: string[]; future: string[] }>({ past: [], future: [] });
   const ownHtml = useRef(html);
+  // The workbook as it is now. A change asked through a dialog (delete, rename) is built from
+  // this once the dialog is answered: the agent or a refresh may have changed it meanwhile.
+  const latest = useRef({ html, disabled });
+  latest.current = { html, disabled };
   const [scroll, setScroll] = useState({ top: 0, left: 0 });
   const viewport = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 1000, height: 600 });
@@ -101,10 +105,11 @@ export function WorkbookGrid({ html, workspaceId, selectedIndex, onSelect, onCha
 
   if (!model) return <div className="sheets-grid-empty" role="alert">This workbook has no valid spreadsheet data. Open Code to inspect it or ask SheetsAgent to repair it.</div>;
   const publish = (next: Workbook) => {
-    if (disabled) return;
-    const nextHtml = writeWorkbook(html, next);
-    if (nextHtml === html) return;
-    setHistory(h => ({ past: [...h.past.slice(-49), html], future: [] }));
+    const { html: base, disabled: locked } = latest.current;
+    if (locked) return;
+    const nextHtml = writeWorkbook(base, next);
+    if (nextHtml === base) return;
+    setHistory(h => ({ past: [...h.past.slice(-49), base], future: [] }));
     ownHtml.current = nextHtml; onChange(nextHtml);
   };
   const commit = () => {
@@ -189,14 +194,17 @@ export function WorkbookGrid({ html, workspaceId, selectedIndex, onSelect, onCha
   };
   const inRange = (r: number, c: number) => r >= Math.min(active.row, end.row) && r <= Math.max(active.row, end.row) && c >= Math.min(active.col, end.col) && c <= Math.max(active.col, end.col);
   const changeTab = async (action: 'add' | 'duplicate' | 'delete') => {
-    const next = structuredClone(model);
     if (action === 'delete') {
-      if (next.sheets.length === 1 || !(await confirm({ title: `Delete sheet “${next.sheets[index].name}”?` }))) return;
-      next.sheets.splice(index, 1); onSelect(Math.max(0, index - 1));
-    } else {
-      next.sheets.push({ ...(action === 'duplicate' ? structuredClone(next.sheets[index]) : { rows: [] }), name: uniqueSheetName(next) });
-      onSelect(next.sheets.length - 1);
+      if (model.sheets.length === 1 || !(await confirm({ title: `Delete sheet “${model.sheets[index].name}”?` }))) return;
+      const current = readWorkbook(latest.current.html);
+      if (!current || current.sheets.length <= 1 || index >= current.sheets.length) return;
+      current.sheets.splice(index, 1); onSelect(Math.max(0, index - 1));
+      publish(current);
+      return;
     }
+    const next = structuredClone(model);
+    next.sheets.push({ ...(action === 'duplicate' ? structuredClone(next.sheets[index]) : { rows: [] }), name: uniqueSheetName(next) });
+    onSelect(next.sheets.length - 1);
     publish(next);
   };
   const stats: number[] = [];
@@ -216,7 +224,9 @@ export function WorkbookGrid({ html, workspaceId, selectedIndex, onSelect, onCha
       <button disabled={disabled} onClick={async () => {
         const name = await prompt({ title: 'Sheet name', defaultValue: model.sheets[index].name, confirmLabel: 'Rename' });
         if (name === null) return;
-        try { publish(renameSheet(model, index, name)); } catch (error) { setMessage((error as Error).message); }
+        const current = readWorkbook(latest.current.html);
+        if (!current || index >= current.sheets.length) return;
+        try { publish(renameSheet(current, index, name)); } catch (error) { setMessage((error as Error).message); }
       }}>Rename sheet</button>
       <button onClick={() => void changeTab('duplicate')} disabled={disabled}><Copy size={14} /> Duplicate sheet</button>
       <button onClick={() => void changeTab('delete')} disabled={disabled || model.sheets.length <= 1}><Trash2 size={14} /> Delete sheet</button>

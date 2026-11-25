@@ -15,13 +15,19 @@ const widths = {
 
 export type DialogSize = keyof typeof widths;
 
+/** Open dialogs, oldest first: only the topmost one answers the keyboard. */
+const openDialogs: object[] = [];
+
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * The one dialog, in five widths. Focus moves in (to `[data-autofocus]`, else the first
- * field or button) and back out on close, Tab stays inside, Escape closes (unless a field
- * inside already used it), ⌘/Ctrl+Enter submits when `onSubmit` is given. While an action runs,
+ * field or button) and back out on close, Tab stays inside (and brings back focus that
+ * something else took), Escape closes (unless a field inside already used it), ⌘/Ctrl+Enter
+ * submits when `onSubmit` is given. With dialogs stacked (a confirm over a dialog), only the
+ * topmost one answers the keyboard. Escape is marked handled, and the panel carries
+ * `data-state="open"`, so page-level Escape handlers (leaving Settings) leave it alone. While an action runs,
  * `dismissible={false}` keeps it open (no Escape, backdrop or close button). Other attributes
  * (`data-*`, `id`) go on the dialog element.
  */
@@ -71,11 +77,17 @@ export function Dialog({
       panel.current?.querySelector<HTMLElement>('[data-dialog-body] button, footer button');
     (target ?? panel.current)?.focus();
 
+    const token = {};
+    openDialogs.push(token);
+
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !event.defaultPrevented) {
-        event.stopPropagation();
+      if (openDialogs[openDialogs.length - 1] !== token) return;
+      if (event.key === 'Escape') {
+        if (event.defaultPrevented) return;
+        event.preventDefault();
         close.current();
       } else if (submit.current && (event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        if (event.defaultPrevented) return;
         event.preventDefault();
         submit.current();
       } else if (event.key === 'Tab' && panel.current) {
@@ -83,7 +95,11 @@ export function Dialog({
         if (!focusable.length) return;
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
+        if (!panel.current.contains(document.activeElement)) {
+          // Focus was taken out of the dialog (a closing menu returning it to its trigger).
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        } else if (event.shiftKey && document.activeElement === first) {
           event.preventDefault();
           last.focus();
         } else if (!event.shiftKey && document.activeElement === last) {
@@ -95,6 +111,7 @@ export function Dialog({
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
+      openDialogs.splice(openDialogs.indexOf(token), 1);
       restore?.focus?.();
     };
   }, [open]);
@@ -113,6 +130,7 @@ export function Dialog({
         ref={panel}
         role="dialog"
         aria-modal="true"
+        data-state="open"
         aria-label={rest['aria-label'] ?? (typeof title === 'string' ? title : undefined)}
         aria-labelledby={rest['aria-label'] || typeof title === 'string' ? undefined : titleId}
         tabIndex={-1}

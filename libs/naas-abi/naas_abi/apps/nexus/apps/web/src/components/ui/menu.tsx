@@ -76,24 +76,34 @@ export function MenuItems({ items, itemTestIdPrefix }: { items: MenuEntry[]; ite
             </DropdownMenu.Sub>
           );
         }
-        return (
-          <DropdownMenu.Item
-            key={item.id}
-            disabled={item.disabled}
-            title={item.title}
-            data-testid={testIdOf(item)}
-            onSelect={(event) => {
-              if (item.keepOpen) event.preventDefault();
-              item.onSelect?.();
-            }}
-            className={cn(menuClasses.row, item.destructive && 'text-destructive')}
-          >
+        const row = {
+          disabled: item.disabled,
+          title: item.title,
+          'data-testid': testIdOf(item),
+          onSelect: (event: Event) => {
+            if (item.keepOpen) event.preventDefault();
+            item.onSelect?.();
+          },
+          className: cn(menuClasses.row, item.destructive && 'text-destructive'),
+        };
+        const content = (
+          <>
             {ticks ? (
               <span className="w-3.5 shrink-0">{item.checked ? <Check size={12} className="text-workspace-accent" /> : null}</span>
             ) : null}
             {item.icon}
             <span className="flex-1 truncate">{item.label}</span>
             {item.shortcut ? <span className={menuClasses.shortcut}>{item.shortcut}</span> : null}
+          </>
+        );
+        // A row with a tick is a choice: screen readers announce it checked or not.
+        return item.checked !== undefined ? (
+          <DropdownMenu.CheckboxItem key={item.id} checked={item.checked} {...row}>
+            {content}
+          </DropdownMenu.CheckboxItem>
+        ) : (
+          <DropdownMenu.Item key={item.id} {...row}>
+            {content}
           </DropdownMenu.Item>
         );
       })}

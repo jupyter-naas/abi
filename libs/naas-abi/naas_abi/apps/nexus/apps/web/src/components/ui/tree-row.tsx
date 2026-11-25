@@ -34,10 +34,20 @@ export function TreeTwisty({
 }
 
 /** Classes for the row's main element (link or button), so every tree reads alike. */
-export function treeRowClass({ active, muted }: { active?: boolean; muted?: boolean } = {}) {
+export function treeRowClass({
+  active,
+  muted,
+  inert,
+}: {
+  active?: boolean;
+  muted?: boolean;
+  /** A row that does nothing when clicked: no hover, so it does not pretend to be a link. */
+  inert?: boolean;
+} = {}) {
   return cn(
-    'flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1 text-xs leading-[18px] no-underline transition-colors hover:bg-workspace-accent-10',
-    active ? 'bg-workspace-accent-15 font-medium text-workspace-accent' : muted ? 'text-muted-foreground' : 'text-foreground'
+    'flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1 text-xs leading-[18px] no-underline transition-colors',
+    !inert && 'hover:bg-workspace-accent-10',
+    active ? 'bg-workspace-accent-15 font-medium text-workspace-accent' : muted || inert ? 'text-muted-foreground' : 'text-foreground'
   );
 }
 

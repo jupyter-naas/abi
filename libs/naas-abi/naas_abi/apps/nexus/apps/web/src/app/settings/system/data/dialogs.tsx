@@ -201,6 +201,8 @@ export function EditorDialog({
   const title = editing ? `Edit ${request.entry?.name ?? ''}` : `New ${view.noun.one}`;
   return (
     <Dialog
+      // On the whole dialog: the footer buttons and the panel itself, not only the fields.
+      onKeyDown={saveKey}
       title={title}
       description={
         editing ? (
@@ -231,7 +233,7 @@ export function EditorDialog({
         </>
       }
     >
-      <div className="space-y-3" onKeyDown={saveKey}>
+      <div className="space-y-3">
         {!editing && (
           <label className="data-editor-name">
             <span className="data-editor-name-prefix">{request.parent ? `${request.parentLabel} /` : 'Name'}</span>

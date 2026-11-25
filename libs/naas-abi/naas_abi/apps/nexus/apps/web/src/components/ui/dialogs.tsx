@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback, useId, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -36,6 +36,7 @@ export function PromptDialog({
   onCancel: () => void;
   validate?: (value: string) => string | null; // returns error message or null
 }) {
+  const fieldId = useId();
   const [value, setValue] = useState(defaultValue);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -71,8 +72,9 @@ export function PromptDialog({
         </>
       }
     >
-      <Field label={title} error={error} className="[&>label]:sr-only">
+      <Field label={title} error={error} htmlFor={fieldId} className="[&>label]:sr-only">
         <Input
+          id={fieldId}
           ref={inputRef}
           value={value}
           onChange={(e) => {
@@ -80,7 +82,8 @@ export function PromptDialog({
             setError(null);
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') handleSubmit();
+            // ⌘/Ctrl+Enter is the dialog's own submit: answering here too would submit twice.
+            if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) handleSubmit();
           }}
           placeholder={placeholder}
           aria-invalid={error ? true : undefined}
@@ -128,6 +131,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const fieldId = useId();
   const [typed, setTyped] = useState('');
   useEffect(() => {
     if (open) setTyped('');
@@ -159,12 +163,13 @@ export function ConfirmDialog({
       {description ? <p className="whitespace-pre-line text-muted-foreground">{description}</p> : null}
       {children}
       {confirmText ? (
-        <Field label={<>Type <code className="font-mono">{confirmText}</code> to confirm</>}>
+        <Field label={<>Type <code className="font-mono">{confirmText}</code> to confirm</>} htmlFor={fieldId}>
           <Input
+            id={fieldId}
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') confirm();
+              if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) confirm();
             }}
             autoComplete="off"
             spellCheck={false}
@@ -209,7 +214,10 @@ export function usePrompt() {
       confirmLabel?: string;
     }): Promise<string | null> => {
       return new Promise((resolve) => {
-        setState({
+        // A new question replaces a pending one: the pending one is answered "cancelled".
+        setState((previous) => {
+          previous.resolve?.(null);
+          return {
           open: true,
           title: opts.title,
           description: opts.description,
@@ -217,6 +225,7 @@ export function usePrompt() {
           defaultValue: opts.defaultValue || '',
           confirmLabel: opts.confirmLabel || 'Create',
           resolve,
+          };
         });
       });
     },
@@ -274,7 +283,9 @@ export function useConfirm() {
       confirmText?: string;
     }): Promise<boolean> => {
       return new Promise((resolve) => {
-        setState({
+        setState((previous) => {
+          previous.resolve?.(false);
+          return {
           open: true,
           title: opts.title,
           description: opts.description,
@@ -282,6 +293,7 @@ export function useConfirm() {
           destructive: opts.destructive ?? true,
           confirmText: opts.confirmText,
           resolve,
+          };
         });
       });
     },

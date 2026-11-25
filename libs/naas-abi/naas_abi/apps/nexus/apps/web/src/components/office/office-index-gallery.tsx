@@ -106,7 +106,7 @@ export function OfficeIndexCard({
             kind={kind}
             open={showMenu}
             onOpenChange={setShowMenu}
-            triggerClassName="opacity-0 group-hover/office-card:opacity-100 data-[state=open]:opacity-100 max-md:opacity-100"
+            triggerClassName="opacity-0 focus-visible:opacity-100 group-hover/office-card:opacity-100 data-[state=open]:opacity-100 max-md:opacity-100"
             onRename={() => {
               setEditValue(project.title);
               setRenaming(true);

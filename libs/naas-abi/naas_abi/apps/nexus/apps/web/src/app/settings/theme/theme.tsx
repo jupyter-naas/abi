@@ -316,7 +316,7 @@ export default function ThemePage() {
                 </li>
                 <li>
                   <TreeRow twisty={<TreeTwisty />}>
-                    <span className={treeRowClass({ muted: true })}><FileText size={11} /> <span className="truncate">project.json</span></span>
+                    <span className={treeRowClass({ inert: true })}><FileText size={11} /> <span className="truncate">project.json (inert)</span></span>
                   </TreeRow>
                 </li>
               </ul>
