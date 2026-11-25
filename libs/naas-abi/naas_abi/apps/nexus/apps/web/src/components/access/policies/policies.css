@@ -499,3 +499,8 @@
   flex-direction: column;
   gap: var(--space-3);
 }
+
+/* In Info, the sub-policies sit under the fields, apart from them. */
+.access-policy-editor-sections .access-policy-subs-block {
+  margin-top: var(--space-4);
+}
