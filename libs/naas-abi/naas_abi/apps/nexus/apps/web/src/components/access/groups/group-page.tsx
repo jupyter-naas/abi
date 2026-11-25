@@ -295,24 +295,6 @@ export function GroupPage({
     </button>
   );
 
-  // Fields as Settings shows them (Account › Profile): what cannot change is read-only there.
-  const field = (id: string, label: string, value: string, help?: string) => (
-    <div className="account-profile-field">
-      <label className="account-profile-field-label" htmlFor={`group-${id}`}>
-        {label}
-      </label>
-      <input
-        id={`group-${id}`}
-        type="text"
-        className="account-profile-field-input account-profile-field-input-readonly"
-        aria-label={label}
-        value={value}
-        readOnly
-        aria-readonly="true"
-        title={help}
-      />
-    </div>
-  );
   const nameFixed = !isNew && !renames;
   const ownerName = isNew ? scope.label : levelLabel(group!.owner_scope ?? PLATFORM, names);
 
@@ -387,7 +369,6 @@ export function GroupPage({
               }}
             />
           </div>
-          {field('owner', 'Owned by', ownerName, 'The level that owns it: set when it is made')}
           <div className="account-profile-field access-group-description-field">
             <label className="account-profile-field-label" htmlFor="group-description">
               Description

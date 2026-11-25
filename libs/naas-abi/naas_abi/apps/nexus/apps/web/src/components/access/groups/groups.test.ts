@@ -219,17 +219,16 @@ describe('GroupsView at a workspace', () => {
     expect(document.querySelector('[data-action="add-policies"]')).not.toBeNull();
   });
 
-  it('shows its fields as Settings does, its name the only one that changes', async () => {
+  it('shows its fields as Settings does: its name and its description', async () => {
     await show(workspaceApi(), owned.id);
     const input = (label: string) => document.querySelector(`[aria-label="${label}"]`) as HTMLInputElement;
-    for (const label of ['Group name', 'Owned by']) {
+    for (const label of ['Group name', 'Group description']) {
       expect(input(label).classList.contains('account-profile-field-input')).toBe(true);
       expect(input(label).disabled).toBe(false);
     }
     expect(input('Group name').readOnly).toBe(false);
-    expect(input('Owned by').readOnly).toBe(true);
-    expect(input('Owned by').classList.contains('account-profile-field-input-readonly')).toBe(true);
-    // Its kind and its id are above, beside and under its name: no field of their own.
+    // Its owner, its kind and its id are above, beside and under its name: no field of their own.
+    expect(input('Owned by')).toBeNull();
     expect(input('Kind')).toBeNull();
     expect(input('ID')).toBeNull();
     // Above Info: its name, its id, what it is.
@@ -356,7 +355,7 @@ describe('A group’s page', () => {
     await mounted.flush();
 
     expect(document.querySelector('[data-group-detail="grp_g"]')).not.toBeNull();
-    expect((document.querySelector('[aria-label="Owned by"]') as HTMLInputElement).value).toBe('Workspace ws-1 (acme)');
+    expect(document.querySelector('[data-group-detail] [data-instance-meta]')?.textContent).toContain('Owned by Workspace ws-1 (acme)');
     expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'grp_g' });
     const levels = [...document.querySelectorAll('[data-holding]')].map((r) => r.querySelector('td:nth-child(2)')?.textContent);
     expect(levels).toEqual(['Workspace ws-1 (acme)', 'Project p1 (ws-1, acme)']);
