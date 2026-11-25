@@ -33,6 +33,26 @@ const DEFAULT_OFFER_API = createOfferApi();
 const DEFAULT_FEATURE_API = createFeatureAccessApi();
 const ITEM_LIMIT = 200;
 
+/** How long a read of the offer, its features or its modules is waited for. */
+const READ_TIMEOUT_MS = 20_000;
+
+/** ``read``'s answer, or a failure once it took longer than ``READ_TIMEOUT_MS``. */
+function answered<T>(read: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('the platform did not answer in time')), READ_TIMEOUT_MS);
+    read.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (e: unknown) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 const message = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 
 type Items = { status: 'loading' } | { status: 'ready'; listed: boolean; items: { name: string; label: string }[] } | { status: 'failed'; error: string };
@@ -105,6 +125,8 @@ export function WorkspaceOfferEditor({
   const [offer, setOffer] = useState<OfferState | null>(null);
   const [features, setFeatures] = useState<FeatureAccessState | null>(null);
   const [publishers, setPublishers] = useState<PublishersView | null>(null);
+  // Why the features are not shown: a refusal (theirs to see) or a failure (said, with Retry).
+  const [featuresFailure, setFeaturesFailure] = useState<{ refused: boolean; message: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [featureErrors, setFeatureErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
@@ -112,21 +134,37 @@ export function WorkspaceOfferEditor({
   const [items, setItems] = useState<Record<string, Items>>({});
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
+  const loadFeatures = useCallback(async () => {
+    setFeaturesFailure(null);
     try {
-      const [readOffer, readFeatures, readPublishers] = await Promise.all([
-        offerApi.read(workspaceId),
-        featureApi.read(workspaceId).catch(() => null),
-        api.publishers(scope).catch(() => null),
-      ]);
-      setOffer(readOffer);
-      setFeatures(readFeatures);
-      setPublishers(readPublishers);
+      setFeatures(await answered(featureApi.read(workspaceId)));
+    } catch (e) {
+      setFeatures(null);
+      const refused = (e as { status?: number }).status === 403;
+      setFeaturesFailure({
+        refused,
+        message: refused
+          ? 'You may not read the features of this workspace.'
+          : `The features could not be read: ${message(e, 'the platform did not answer')}.`,
+      });
+    }
+  }, [featureApi, workspaceId]);
+
+  // The offer shows as soon as it is read; its features and its modules' names follow (each
+  // waited for at most READ_TIMEOUT_MS), never holding it back (UX-24).
+  const load = useCallback(async () => {
+    const rest = Promise.allSettled([
+      loadFeatures(),
+      answered(api.publishers(scope)).then(setPublishers, () => setPublishers(null)),
+    ]);
+    try {
+      setOffer(await answered(offerApi.read(workspaceId)));
       setError(null);
     } catch (e) {
       setError(message(e, 'Could not read what this workspace offers.'));
     }
-  }, [api, featureApi, offerApi, scope, workspaceId]);
+    await rest;
+  }, [api, loadFeatures, offerApi, scope, workspaceId]);
 
   useEffect(() => {
     setNotice(null);
@@ -161,7 +199,15 @@ export function WorkspaceOfferEditor({
     [api, scope],
   );
 
-  if (error && !offer) return <p className="access-policy-error" role="alert">{error}</p>;
+  if (error && !offer)
+    return (
+      <p className="access-policy-error" role="alert">
+        {error}{' '}
+        <button type="button" className="access-policy-button" onClick={() => void load()}>
+          Retry
+        </button>
+      </p>
+    );
   if (!offer) return <p className="access-empty">Loading the workspace’s offer…</p>;
   if (policyId && offer.access_policy?.id !== policyId) return null;
 
@@ -238,7 +284,18 @@ export function WorkspaceOfferEditor({
       <div className="access-offer-section" data-offer-section="features">
         <h4 className="access-offer-heading">Features</h4>
         {features === null ? (
-          <p className="access-policy-muted">You may not read the features of this workspace.</p>
+          featuresFailure === null ? (
+            <p className="access-policy-muted">Loading the features…</p>
+          ) : featuresFailure.refused ? (
+            <p className="access-policy-muted">{featuresFailure.message}</p>
+          ) : (
+            <p className="access-policy-error" role="alert">
+              {featuresFailure.message}{' '}
+              <button type="button" className="access-policy-button" onClick={() => void loadFeatures()}>
+                Retry
+              </button>
+            </p>
+          )
         ) : featureRows.length === 0 ? (
           <p className="access-policy-muted">No feature is enabled on this deployment.</p>
         ) : (

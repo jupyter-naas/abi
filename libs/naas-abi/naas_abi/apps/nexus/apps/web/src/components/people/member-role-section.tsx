@@ -230,10 +230,11 @@ export function MemberRoleSection({
       }}
       disabled={!ready || offered.length === 0}
       title={offered.length === 0 ? 'Nothing more you may add' : undefined}
-      aria-label={ADD_LABEL[kind]}
       data-action={`add-${kind}`}
     >
+      {/* A text button, as every section's "+ …" (UX-06): the icon alone said nothing. */}
       <Plus size={14} />
+      {ADD_LABEL[kind]}
     </Button>
   );
 

@@ -32,8 +32,13 @@ export type GroupHoldings = { group: PrincipalView; attachments: AttachmentView[
  * from ``names``, as the viewer may list them), a scope below one as that container "and all
  * below it", an unscoped attachment as everywhere.
  */
+/** The scope a level's policies are held at (core `MY_CONTAINERS_SCOPE`): wherever the person
+ *  belongs. */
+export const MY_WORKSPACES_SCOPE = '${my workspaces}';
+
 export function levelLabel(scope: string | null | undefined, names: Record<string, string> = {}): string {
   if (scope === null || scope === undefined) return 'Everywhere';
+  if (scope === MY_WORKSPACES_SCOPE) return 'Each workspace they belong to';
   const parsed = parseScope(scope);
   if (!parsed) return scope;
   if (!parsed.below) return ownerLabel(scope, names);

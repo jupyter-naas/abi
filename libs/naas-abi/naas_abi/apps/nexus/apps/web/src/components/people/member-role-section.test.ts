@@ -142,6 +142,9 @@ describe('A person’s Groups and Policies', () => {
 
   it('adds several groups picked in the search dialog', async () => {
     const { set } = await render({ groups: ['grp_alpha', 'grp_members'], policies: [] });
+    // A text button, as every section's "+ …": not an icon alone.
+    expect(document.body.querySelector('[data-action="add-groups"]')?.textContent).toBe('Add groups');
+    expect(document.body.querySelector('[data-action="add-policies"]')?.textContent).toBe('Add policies');
     await mounted!.click(document.body.querySelector('[data-action="add-groups"]'));
     expect(dialog()).not.toBeNull();
     const offered = () => [...dialog()!.querySelectorAll('[data-role-option]')].map((li) => li.getAttribute('data-role-option'));

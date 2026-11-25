@@ -36,6 +36,12 @@ async function openAccount(m: Mounted, name: string) {
   await m.flush();
 }
 
+
+/** A button of the confirmation modal (portalled to the page; the row's carry an aria-label). */
+function inModal(name: string): HTMLButtonElement | null {
+  return [...document.body.querySelectorAll('button')].find((b) => b.textContent === name && !b.getAttribute('aria-label')) ?? null;
+}
+
 describe('ServiceAccountsView keys', () => {
   it('shows a new key once, with a warning, and never in the list', async () => {
     const api = setup();
@@ -99,6 +105,8 @@ describe('ServiceAccountsView keys', () => {
     await openAccount(mounted, 'ci');
 
     await mounted.click(buttonNamed('Rotate abi_sk_k1'));
+    expect(api.rotateKey).not.toHaveBeenCalled(); // asked first, in a modal
+    await mounted.click(inModal('Rotate'));
     await mounted.flush();
     expect(api.rotateKey).toHaveBeenCalledWith('sa_1', 'k1');
     expect(document.querySelector('[data-one-time-secret]')?.textContent).toContain(`${SECRET}_ROT`);
@@ -106,8 +114,27 @@ describe('ServiceAccountsView keys', () => {
     expect(document.body.textContent).not.toContain('_ROT');
 
     await mounted.click(buttonNamed('Revoke abi_sk_k1'));
+    expect(api.revokeKey).not.toHaveBeenCalled();
+    await mounted.click(inModal('Revoke'));
     await mounted.flush();
     expect(api.revokeKey).toHaveBeenCalledWith('sa_1', 'k1');
+  });
+
+  it('asks before suspending an account, naming the platform’s own', async () => {
+    const api = setup({
+      listServiceAccounts: vi.fn(() => Promise.resolve({ items: [account({ id: 'sa_engine', name: 'engine', account_kind: 'builtin' })] })),
+      suspend: vi.fn(() => Promise.resolve(account({ id: 'sa_engine', name: 'engine', status: 'suspended' }))),
+    });
+    mounted = await mount(ServiceAccountsView, { api, can: allowAll });
+    await mounted.flush();
+    await mounted.click(buttonNamed('Suspend engine'));
+    expect(document.body.textContent).toContain("one of the platform's own accounts");
+    await mounted.click(inModal('Cancel'));
+    expect(api.suspend).not.toHaveBeenCalled();
+    await mounted.click(buttonNamed('Suspend engine'));
+    await mounted.click(inModal('Suspend'));
+    await mounted.flush();
+    expect(api.suspend).toHaveBeenCalledWith('sa_engine');
   });
 
   it('offers no key buttons without the rights', async () => {

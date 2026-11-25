@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { SettingsSection } from '@/components/settings/settings-ui';
+import { useConfirm } from '@/components/ui/dialogs';
 import { RolePickerDialog } from '@/components/people/role-picker-dialog';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { AttachablePolicy, AttachmentView, GroupView, PrincipalKind, PrincipalView } from '@/lib/iam-admin/types';
@@ -87,6 +88,8 @@ export function GroupPage({
   const [dialog, setDialog] = useState<'members' | 'policies' | null>(null);
   const [creating, setCreating] = useState(false);
   const [madeId, setMadeId] = useState<string | null>(null);
+  // Unmapping an IdP group stops people joining through it: asked first (UX-01).
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const mapsIdp = !isNew && (can('iam:MapIdpGroup') || can('iam:UnmapIdpGroup'));
   const changesMembers = isNew ? can('iam:CreateGroup') : owned;
 
@@ -296,6 +299,12 @@ export function GroupPage({
   );
 
   const nameFixed = !isNew && !renames;
+  // Owned by a level above this page's (the platform's, or an organization's seen from one of
+  // its workspaces): shown here, changed there.
+  const pageScope = scope.value ?? PLATFORM;
+  const ownerScope = group?.owner_scope ?? PLATFORM;
+  const ownedAbove =
+    !isNew && ownerScope !== pageScope && (ownerScope === PLATFORM || pageScope.startsWith(`${ownerScope}/`));
   const ownerName = isNew ? scope.label : levelLabel(group!.owner_scope ?? PLATFORM, names);
 
   return (
@@ -394,8 +403,16 @@ export function GroupPage({
 
       <SettingsSection
         title="Policies"
-        description={isNew ? `The policies it will hold, at ${scope.label}.` : 'The policies it holds, at every level you may list.'}
-        actions={can('iam:AttachPolicy') ? addButton('Attach policies', 'add-policies', () => setDialog('policies'), creating || morePolicies.length === 0) : undefined}
+        description={
+          isNew
+            ? `The policies it will hold, at ${scope.label}.`
+            : ownedAbove
+              ? 'Owned above: its policies change at its level.'
+              : 'The policies it holds, at every level you may list.'
+        }
+        // A group owned above this level (an organization's, seen from a workspace) is read-only
+        // here: its policies change where it is owned, as its members do.
+        actions={!ownedAbove && can('iam:AttachPolicy') ? addButton('Attach policies', 'add-policies', () => setDialog('policies'), creating || morePolicies.length === 0) : undefined}
       >
         {isNew ? (
           draftPolicies.length === 0 ? (
@@ -406,7 +423,7 @@ export function GroupPage({
                 <thead>
                   <tr>
                     <th>Policy</th>
-                    <th>Level</th>
+                    <th title="Where it applies">Scope</th>
                     <th aria-label="Actions" />
                   </tr>
                 </thead>
@@ -440,6 +457,7 @@ export function GroupPage({
             actionsAt={actionsAt}
             here={here}
             onDetach={(a) => void detach(a)}
+            readOnly={ownedAbove}
             empty="Nothing you may list is attached to this group."
           />
         )}
@@ -522,7 +540,16 @@ export function GroupPage({
                     <span className="access-mono">{m.claim_value}</span> from {m.provider}
                   </span>
                   {can('iam:UnmapIdpGroup') && (
-                    <button type="button" className="access-button" aria-label={`Unmap ${m.claim_value}`} onClick={() => void run(() => api.unmapIdpGroup(group!.id, m))}>
+                    <button type="button" className="access-button" aria-label={`Unmap ${m.claim_value}`} onClick={() =>
+                      void (async () => {
+                        const ok = await confirm({
+                          title: `Remove the claim ${m.claim_value} from ${m.provider}?`,
+                          description: 'People whose provider sends it no longer join this group when they sign in.',
+                          confirmLabel: 'Remove',
+                        });
+                        if (ok) await run(() => api.unmapIdpGroup(group!.id, m));
+                      })()
+                    }>
                       Remove
                     </button>
                   )}
@@ -558,6 +585,7 @@ export function GroupPage({
         )}
       </SettingsSection>
 
+      {confirmDialog}
       <AttachDialog
         open={dialog === 'members'}
         title="Add members"

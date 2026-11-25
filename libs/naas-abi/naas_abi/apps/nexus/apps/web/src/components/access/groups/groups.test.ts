@@ -106,6 +106,21 @@ describe('GroupsView', () => {
     expect(api.mapIdpGroup).toHaveBeenCalledWith('grp_1', { provider: 'okta', claim_value: 'eng-admins' });
   });
 
+  it('asks before removing an IdP claim, then unmaps it', async () => {
+    const api = setup();
+    api.getGroup = vi.fn(() =>
+      Promise.resolve(group({ members: [], idp_mappings: [{ provider: 'okta', claim_value: 'Sales' }] })),
+    );
+    await open(api);
+    await mounted!.click(document.querySelector('[aria-label="Unmap Sales"]'));
+    expect(api.unmapIdpGroup).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Remove the claim Sales from okta?');
+    const remove = [...document.body.querySelectorAll('button')].filter((b) => b.textContent === 'Remove' && !b.getAttribute('aria-label')).at(-1);
+    await mounted!.click(remove!);
+    await mounted!.flush();
+    expect(api.unmapIdpGroup).toHaveBeenCalledWith('grp_1', { provider: 'okta', claim_value: 'Sales' });
+  });
+
   it('shows no write controls without the rights', async () => {
     const api = setup();
     await open(api, () => false);
@@ -149,6 +164,26 @@ describe('GroupsView at a workspace', () => {
     await mounted.click(document.querySelector(`[data-group="${groupId}"] button[data-action="open"]`));
     await mounted.flush();
   }
+
+  it('asks in a modal before deleting a group, then deletes it', async () => {
+    const api = workspaceApi({ deleteGroup: vi.fn(() => Promise.resolve(undefined)) });
+    mounted = await mount(GroupsView, { api, can: admin, scope: wsScope, directory: fakeDirectory([member()]) });
+    await mounted.flush();
+    await mounted.click(buttonNamed('Delete Recruiters'));
+    const modalButton = (name: string) =>
+      [...document.body.querySelectorAll('button')].find((b) => b.textContent === name) as HTMLButtonElement | undefined;
+    // The modal is on the page, not in the list's flow.
+    expect(document.body.textContent).toContain('Delete Recruiters?');
+    expect(mounted.host.contains(modalButton('Delete group') ?? null)).toBe(false);
+    await mounted.click(modalButton('Cancel'));
+    expect(api.deleteGroup).not.toHaveBeenCalled();
+    expect(modalButton('Delete group')).toBeUndefined();
+
+    await mounted.click(buttonNamed('Delete Recruiters'));
+    await mounted.click(modalButton('Delete group'));
+    await mounted.flush();
+    expect(api.deleteGroup).toHaveBeenCalledWith('grp_ws');
+  });
 
   it('creates a group owned by the workspace', async () => {
     const api = workspaceApi();
@@ -211,12 +246,15 @@ describe('GroupsView at a workspace', () => {
     expect(document.querySelector('[data-idp-mappings]')).toBeNull();
   });
 
-  it('changes neither the members nor the existence of a group owned above', async () => {
+  it('changes nothing of a group owned above: it is read-only at the workspace', async () => {
     await show(workspaceApi(), fromOrg.id);
     expect(buttonNamed('Delete Org analysts')).toBeNull();
     expect((document.querySelector('[aria-label="Group name"]') as HTMLInputElement).readOnly).toBe(true);
     expect(document.querySelector('[data-action="add-members"]')).toBeNull();
-    expect(document.querySelector('[data-action="add-policies"]')).not.toBeNull();
+    // Its policies change at its level too: nothing attached nor detached from here.
+    expect(document.querySelector('[data-action="add-policies"]')).toBeNull();
+    expect(document.querySelector('[data-group-detail] [aria-label^="Detach"]')).toBeNull();
+    expect(document.querySelector('[data-group-detail] [aria-label^="Role at"]')).toBeNull();
   });
 
   it('shows its fields as Settings does: its name and its description', async () => {

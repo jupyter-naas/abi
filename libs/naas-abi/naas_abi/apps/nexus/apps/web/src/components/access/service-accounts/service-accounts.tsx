@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { KeyRound, Pause, Play, Plus, Trash2 } from 'lucide-react';
 import { IamAdminError } from '@/lib/iam-admin/api';
+import { useConfirm } from '@/components/ui/dialogs';
 import type { KeyView, PolicyView, ServiceAccountView } from '@/lib/iam-admin/types';
 import type { AccessViewProps, PlatformViewProps } from '../access-props';
 import {
@@ -33,6 +34,8 @@ export function ServiceAccountsView({ api, can, nonce }: PlatformViewProps) {
   const [deleting, setDeleting] = useState<ServiceAccountView | null>(null);
   const [typed, setTyped] = useState('');
   const { secret, reveal, dismiss } = useOneTimeSecret();
+  // A suspension stops an account at once (the engine's own included): asked first (UX-01).
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const load = useCallback(async () => {
     try {
@@ -90,6 +93,7 @@ export function ServiceAccountsView({ api, can, nonce }: PlatformViewProps) {
 
   return (
     <div className="access-sa org-settings-users-main">
+      {confirmDialog}
       {can('iam:CreateServiceAccount') && (
         <AccessHeaderAction>
           <button
@@ -192,7 +196,20 @@ export function ServiceAccountsView({ api, can, nonce }: PlatformViewProps) {
                           className="org-settings-users-edit"
                           title="Suspend"
                           aria-label={`Suspend ${account.name ?? account.id}`}
-                          onClick={() => void act(() => api.suspend(account.id))}
+                          onClick={() =>
+                            void (async () => {
+                              const name = account.name ?? account.id;
+                              const ok = await confirm({
+                                title: `Suspend ${name}?`,
+                                description:
+                                  account.account_kind === 'builtin'
+                                    ? `${name} is one of the platform's own accounts: what runs as it stops at once, until it is resumed.`
+                                    : 'Its keys stop working at once, until it is resumed.',
+                                confirmLabel: 'Suspend',
+                              });
+                              if (ok) await act(() => api.suspend(account.id));
+                            })()
+                          }
                         >
                           <Pause size={16} />
                         </button>
@@ -390,6 +407,8 @@ function KeysPane({
   const [keys, setKeys] = useState<KeyView[] | null>(null);
   const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Rotating or revoking a key stops what uses it: asked first (UX-01).
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const load = useCallback(async () => {
     try {
@@ -423,6 +442,7 @@ function KeysPane({
 
   return (
     <div className="access-sa-keys" data-keys-of={label}>
+      {confirmDialog}
       {error && <p className="access-source-note" role="alert">{error}</p>}
       {secret && <OneTimeSecretPanel secret={secret} onClose={dismiss} />}
       {can('iam:CreateKey') && account.status === 'active' && (
@@ -475,7 +495,16 @@ function KeysPane({
                     type="button"
                     className="access-button"
                     aria-label={`Rotate ${key.prefix}`}
-                    onClick={() => void run(() => api.rotateKey(account.id, key.id), `Rotated key for ${label}`)}
+                    onClick={() =>
+                      void (async () => {
+                        const ok = await confirm({
+                          title: `Rotate the key ${key.prefix}…?`,
+                          description: 'A new key is shown once; this one stops working at once. Whatever uses it must take the new one.',
+                          confirmLabel: 'Rotate',
+                        });
+                        if (ok) await run(() => api.rotateKey(account.id, key.id), `Rotated key for ${label}`);
+                      })()
+                    }
                   >
                     Rotate
                   </button>
@@ -485,7 +514,16 @@ function KeysPane({
                     type="button"
                     className="access-button"
                     aria-label={`Revoke ${key.prefix}`}
-                    onClick={() => void run(() => api.revokeKey(account.id, key.id))}
+                    onClick={() =>
+                      void (async () => {
+                        const ok = await confirm({
+                          title: `Revoke the key ${key.prefix}…?`,
+                          description: 'It stops working at once, for good.',
+                          confirmLabel: 'Revoke',
+                        });
+                        if (ok) await run(() => api.revokeKey(account.id, key.id));
+                      })()
+                    }
                   >
                     Revoke
                   </button>

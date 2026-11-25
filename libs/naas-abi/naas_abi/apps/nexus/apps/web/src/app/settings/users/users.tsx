@@ -73,6 +73,7 @@ import {
 } from './users-model';
 import { PlatformHolders } from './platform-holders';
 import { RoleChips } from '@/components/people/role-chips';
+import { useConfirm } from '@/components/ui/dialogs';
 import './users.css';
 
 type Can = (action: string) => boolean;
@@ -178,6 +179,8 @@ function UserRow({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // What changes who may do everything, or who may sign in, is asked first (UX-01).
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const href = personHref(user);
 
   const run = async (work: () => Promise<{ ok: true; data: AdminUser } | { ok: false; error: string }>) => {
@@ -256,11 +259,30 @@ function UserRow({
           disabled={busy}
           title={user.is_superadmin ? 'Remove platform admin' : 'Make platform admin'}
           aria-label={`${user.is_superadmin ? 'Remove platform admin from' : 'Make platform admin'} ${user.email}`}
-          onClick={() => void run(() => updateUser(user.id, { is_superadmin: !user.is_superadmin }, fetcher))}
+          onClick={() =>
+            void (async () => {
+              const ok = await confirm(
+                user.is_superadmin
+                  ? {
+                      title: `Remove platform admin from ${user.email}?`,
+                      description: 'They lose every right on the platform that comes with it.',
+                      confirmLabel: 'Remove platform admin',
+                    }
+                  : {
+                      title: `Make ${user.email} a platform admin?`,
+                      description: 'They may then do everything, everywhere, on the platform.',
+                      confirmLabel: 'Make platform admin',
+                      destructive: false,
+                    },
+              );
+              if (ok) await run(() => updateUser(user.id, { is_superadmin: !user.is_superadmin }, fetcher));
+            })()
+          }
         >
           <Crown size={16} />
         </button>
       )}
+      {confirmDialog}
       {user.deactivated
         ? can(USER_ACTIONS.resume) && (
             <button
@@ -283,7 +305,16 @@ function UserRow({
               disabled={busy}
               title="Deactivate: no sign-in, no API call; data and memberships kept"
               aria-label={`Deactivate ${user.email}`}
-              onClick={() => void run(() => deactivateUser(user.id, fetcher))}
+              onClick={() =>
+                void (async () => {
+                  const ok = await confirm({
+                    title: `Deactivate ${user.email}?`,
+                    description: 'They can no longer sign in nor call the API. Their data and memberships are kept.',
+                    confirmLabel: 'Deactivate',
+                  });
+                  if (ok) await run(() => deactivateUser(user.id, fetcher));
+                })()
+              }
             >
               <Ban size={16} />
             </button>
