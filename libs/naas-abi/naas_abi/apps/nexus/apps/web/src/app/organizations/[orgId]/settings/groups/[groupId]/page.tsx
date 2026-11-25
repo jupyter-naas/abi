@@ -1,8 +1,4 @@
-'use client';
-
-import { OrgAccess } from '../../components/org-access';
-
-/** A group's page: its members, and what it holds at every level. */
+/** A group's page: shown by the section's layout (the address names it), without a remount. */
 export default function OrgGroupPage() {
-  return <OrgAccess section="groups" />;
+  return null;
 }

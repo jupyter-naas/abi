@@ -20,6 +20,7 @@ import {
   wsScope,
 } from '../access-fixtures';
 import { PoliciesView } from './policies';
+import { AccessInstanceContext } from '../access-list';
 
 let mounted: Mounted | null = null;
 afterEach(async () => {
@@ -762,5 +763,90 @@ describe('PoliciesView: a policy owned at another level', () => {
     mounted = await mount(PoliciesView, { api, can: () => true, scope: PLATFORM_ACCESS_SCOPE, directory: EMPTY_DIRECTORY, focus: 'pol_1' });
     await validated();
     expect(document.querySelector('[aria-label="Policy Graph reader"]')).not.toBeNull();
+  });
+
+  it('shows its actions at the right of its title: its page is shown alone, with no header of the list', async () => {
+    await mounted?.unmount();
+    const api = fake({
+      listPolicies: vi.fn().mockResolvedValue({ items: [readerPolicy], next_after: null }),
+      attachable: vi.fn().mockResolvedValue({ items: [readerPolicy] }),
+      listAttachments: vi.fn().mockResolvedValue({ items: [] }),
+    });
+    mounted = await mount(PoliciesView, { api, can: () => true, scope: PLATFORM_ACCESS_SCOPE, directory: EMPTY_DIRECTORY, focus: 'pol_1' });
+    await validated();
+    for (let i = 0; i < 4; i++) await mounted.flush();
+    const header = document.querySelector('[aria-label="Policy Graph reader"] .access-policy-editor-header');
+    expect(header?.querySelector('[data-policy-actions] [data-action="attach"]')).not.toBeNull();
+    expect(document.querySelector('.access-list-actions [data-action="attach"]')).toBeNull();
+  });
+});
+
+describe('PoliciesView follows its address', () => {
+  // The list and a policy's page are one view kept mounted (the section's layout): the address
+  // opens a policy, and going back (a link, the browser) shows the list again.
+  function Routed({ api, start }: { api: ReturnType<typeof fake>; start: string | null }) {
+    const [focus, setFocus] = useState<string | null>(start);
+    return createElement(
+      'div',
+      null,
+      createElement('button', { type: 'button', 'data-test': 'to-list', onClick: () => setFocus(null) }),
+      createElement('button', { type: 'button', 'data-test': 'to-pol_1', onClick: () => setFocus('pol_1') }),
+      createElement(PoliciesView, {
+        api,
+        can: () => true,
+        scope: PLATFORM_ACCESS_SCOPE,
+        directory: EMPTY_DIRECTORY,
+        focus,
+        onFocus: setFocus,
+      })
+    );
+  }
+
+  it('tells its level a policy’s page is shown from the click on, and the list from the Back on', async () => {
+    const api = fake({ getPolicy: vi.fn().mockResolvedValue(readerPolicy) });
+    const told: boolean[] = [];
+    function Level() {
+      return createElement(
+        AccessInstanceContext.Provider,
+        { value: (open: boolean) => told.push(open) },
+        createElement(Routed, { api, start: null })
+      );
+    }
+    mounted = await mount(Level, {});
+    await mounted.flush();
+    expect(told.at(-1)).toBe(false);
+    // The row opens the page in the same render that tells the level: no frame with the list's header.
+    await mounted.click(document.querySelector('[data-policy="pol_1"] button'));
+    expect(document.querySelector('[data-policy-page="pol_1"]')).not.toBeNull();
+    expect(told.at(-1)).toBe(true);
+    await mounted.click(document.querySelector('.access-policy-back'));
+    expect(document.querySelector('[data-policy-page]')).toBeNull();
+    expect(told.at(-1)).toBe(false);
+  });
+
+  it('opens the policy its address names at once, before the list is read', async () => {
+    const api = fake({
+      listPolicies: vi.fn(() => new Promise(() => undefined)),
+      getPolicy: vi.fn().mockResolvedValue(readerPolicy),
+    });
+    mounted = await mount(Routed, { api, start: 'pol_1' });
+    await mounted.flush();
+    expect(api.getPolicy).toHaveBeenCalledWith('pol_1');
+    expect(document.querySelector('[data-policy-page="pol_1"]')).not.toBeNull();
+    expect(mounted.host.textContent).not.toContain('Loading…');
+  });
+
+  it('opens a row without reading it again, and shows the list when the address leaves it', async () => {
+    const api = fake({ getPolicy: vi.fn().mockResolvedValue(readerPolicy) });
+    mounted = await mount(Routed, { api, start: null });
+    await mounted.flush();
+    await mounted.click(document.querySelector('[data-test="to-pol_1"]'));
+    await mounted.flush();
+    expect(document.querySelector('[data-policy-page="pol_1"]')).not.toBeNull();
+    expect(api.listPolicies).toHaveBeenCalledTimes(1); // listed: opened as listed, nothing read again
+    await mounted.click(document.querySelector('[data-test="to-list"]'));
+    await mounted.flush();
+    expect(document.querySelector('[data-policy-page]')).toBeNull();
+    expect(document.querySelector('[data-policy="pol_1"]')).not.toBeNull();
   });
 });

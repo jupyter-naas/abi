@@ -16,8 +16,10 @@ import { accessSection } from '@/components/access/access-sections';
 import '@/components/access/access-base.css';
 import '@/components/access/access.css';
 import { ViewAsControl } from '@/components/access/people/view-as-control';
+import { PersonBack, PersonInfoSection } from '@/components/access/people/person-info';
+import { SettingsReloadButton } from '@/components/settings/settings-reload';
 import { MemberRoleSection, type PersonRef } from '@/components/people/member-role-section';
-import { SettingsBackButton, SettingsPageHeader } from '@/components/settings/settings-ui';
+import { SettingsPageHeader } from '@/components/settings/settings-ui';
 import { useSettingsReloadGeneration } from '@/components/settings/settings-reload';
 import { Button } from '@/components/ui/button';
 import { workspaceOrganization } from '@/components/shell/settings-nav';
@@ -63,6 +65,11 @@ export function WorkspaceAccess({ section }: { section: ContainerAccessPage }) {
   const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
   const [badge, setBadge] = useState<string | null>(null);
   const navigate = useCallback((href: string) => router.push(href), [router]);
+  // A policy's or a group's page is the page alone: no header of the list (its back link leads to it).
+  const focus = pageFocus(pathname, workspaceAccessPath(workspaceId, section));
+  // What the view shows (a row opens its page before the address follows), else the address.
+  const [instance, setInstance] = useState<boolean | null>(null);
+  const alone = instance ?? !!focus;
   const hrefs = useMemo<AccessHrefs>(
     () => ({
       page: (page, id) => workspaceAccessPath(workspaceId, page === 'groups' ? 'groups' : 'policies', id),
@@ -72,6 +79,7 @@ export function WorkspaceAccess({ section }: { section: ContainerAccessPage }) {
   );
   return (
     <div className="access-settings-page">
+      {!alone && (
       <SettingsPageHeader
         title={accessSection(section).label}
         badge={badge ?? undefined}
@@ -83,13 +91,15 @@ export function WorkspaceAccess({ section }: { section: ContainerAccessPage }) {
           </>
         }
       />
+      )}
       {scope ? (
         <AccessPage
           headerSlot={headerSlot}
           onBadge={setBadge}
+          onInstance={setInstance}
           section={section}
           scopes={[scope]}
-          focus={pageFocus(pathname, workspaceAccessPath(workspaceId, section))}
+          focus={focus}
           hrefs={hrefs}
           navigate={navigate}
           nonce={nonce}
@@ -114,15 +124,19 @@ export function WorkspacePerson() {
   const nonce = useSettingsReloadGeneration();
   const [person, setPerson] = useState<PersonRef | null>(null);
   if (!personId) return null;
-  const named = person ? [person.name, person.email].filter((v, i, all) => v && all.indexOf(v) === i).join(' · ') : '';
+  // The page alone: back to Users, then who it is about (Info) and what they hold.
   return (
     <div className="space-y-6">
-      <SettingsPageHeader
-        leading={<SettingsBackButton label="Users" onClick={() => router.push(`/workspace/${workspaceId}/settings/users`)} />}
-        title="Member"
-        description={named || 'Their groups and policies in this workspace'}
+      <PersonBack onClick={() => router.push(`/workspace/${workspaceId}/settings/users`)} />
+      <PersonInfoSection
+        id={personId}
+        name={person?.name ?? null}
+        email={person?.email ?? null}
         actions={
-          person ? <ViewAsControl personId={personId} name={person.name} workspaceId={scope?.workspaceId ?? null} /> : undefined
+          <>
+            <SettingsReloadButton />
+            {person && <ViewAsControl personId={personId} name={person.name} workspaceId={scope?.workspaceId ?? null} />}
+          </>
         }
       />
       <MemberRoleSection

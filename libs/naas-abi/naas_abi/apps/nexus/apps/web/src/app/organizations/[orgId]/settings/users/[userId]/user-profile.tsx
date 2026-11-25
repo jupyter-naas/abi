@@ -20,7 +20,8 @@ import {
 import '@/components/access/access-base.css';
 import '@/components/access/access.css';
 import { ViewAsControl } from '@/components/access/people/view-as-control';
-import { SettingsBackButton, SettingsNotice, SettingsPageHeader } from '@/components/settings/settings-ui';
+import { SettingsNotice } from '@/components/settings/settings-ui';
+import { PersonBack, PersonInfoSection } from '@/components/access/people/person-info';
 import { MemberRoleSection } from '@/components/people/member-role-section';
 import { UsersReloadButton } from '@/components/settings/users-table/users-table-actions';
 import '@/app/account/profile/profile.css';
@@ -139,11 +140,8 @@ export default function OrgUserProfilePage() {
   if (!details) {
     return (
       <div className="space-y-6">
-        <SettingsPageHeader
-          leading={<SettingsBackButton label="Users" href={orgSettingsSectionPath(orgId, 'users')} />}
-          title="Member"
-          description={refused ? 'Only the organization’s admins see its people.' : 'Their workspaces, groups and policies in this organization'}
-        />
+        <PersonBack onClick={() => router.push(orgSettingsSectionPath(orgId, 'users'))} />
+        {refused && <p className="text-sm text-muted-foreground">Only the organization’s admins see its people.</p>}
         {!refused && (
           <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
             {loadError || 'User not found.'}
@@ -238,13 +236,14 @@ export default function OrgUserProfilePage() {
     }
   };
 
-  const named = [displayName, account.email].filter((v, i, all) => v && all.indexOf(v) === i).join(' · ');
   return (
     <div className="space-y-6">
-      <SettingsPageHeader
-        leading={<SettingsBackButton label="Users" href={orgSettingsSectionPath(orgId, 'users')} />}
-        title="Member"
-        description={named}
+      {/* The page alone: back to Users, then who it is about (Info), their profile and what they hold. */}
+      <PersonBack onClick={() => router.push(orgSettingsSectionPath(orgId, 'users'))} />
+      <PersonInfoSection
+        id={member.principal_id ?? member.user_id}
+        name={displayName}
+        email={account.email ?? null}
         actions={
           <>
             {member.principal_id && !isSelf && (

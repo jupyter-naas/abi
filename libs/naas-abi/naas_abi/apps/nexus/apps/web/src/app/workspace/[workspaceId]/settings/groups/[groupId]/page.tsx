@@ -1,8 +1,4 @@
-'use client';
-
-import { WorkspaceAccess } from '../../workspace-access';
-
-/** A group's page: its members and what it holds. */
+/** A group's page: shown by the section's layout (the address names it), without a remount. */
 export default function WorkspaceGroupPage() {
-  return <WorkspaceAccess section="groups" />;
+  return null;
 }

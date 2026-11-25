@@ -28,7 +28,7 @@ import {
 } from './policy-editor-model';
 import type { AccessDirectory } from '../access-directory';
 import type { AccessNavigation } from '../access-props';
-import { AccessHeaderAction } from '../access-list';
+import { AccessHeaderAction, AccessHeaderSlotContext } from '../access-list';
 import { PolicyAttachments } from './policy-attachments';
 import { ownedBy, ownerLabel, type PolicyOwner } from './policy-owners';
 import { PolicyText } from './policy-text';
@@ -123,6 +123,9 @@ export function PolicyEditor({
   const [name, setName] = useState(policy?.name ?? '');
   const [description, setDescription] = useState(policy?.description ?? '');
   const [version, setVersion] = useState(policy?.document.version ?? POLICY_VERSION);
+  // Its actions ("Discard changes", "+ Attach") sit at the right of its title: the page is shown
+  // alone, with no header of the list above it.
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const [statements, setStatements] = useState<EditorStatement[]>(policy ? fromDocument(policy.document) : []);
   const [mode, setMode] = useState<Mode>(configuration ? 'configuration' : 'visual');
   // Until the user picks a view, the editor opens in the builder once it can show the policy.
@@ -408,6 +411,7 @@ export function PolicyEditor({
   );
 
   return (
+    <AccessHeaderSlotContext.Provider value={actionsSlot}>
     <section className="access-policy-editor" aria-label={policy ? `Policy ${policy.name}` : 'New policy'}>
       <header className="access-policy-editor-header">
         <h3 className="access-policy-title">{policy ? policy.name : 'New policy'}</h3>
@@ -417,6 +421,7 @@ export function PolicyEditor({
             {policy?.managed ? 'Managed: IAM writes this policy' : 'Read only'}
           </span>
         )}
+        <span ref={setActionsSlot} className="access-policy-editor-actions" data-policy-actions="" />
       </header>
       {elsewhere && (
         <p className="access-policy-owner" aria-label="Policy owner" data-policy-owner-note="">
@@ -702,6 +707,7 @@ export function PolicyEditor({
         )}
       </footer>
     </section>
+    </AccessHeaderSlotContext.Provider>
   );
 }
 

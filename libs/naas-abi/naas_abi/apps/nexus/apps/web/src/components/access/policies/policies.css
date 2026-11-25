@@ -36,6 +36,14 @@
   gap: var(--space-2);
 }
 
+/* The page's actions ("Discard changes", "+ Attach"), at the right of its title. */
+.access-policy-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
 .access-policy-editor {
   padding: var(--space-4);
   border: 1px solid var(--border-hex);

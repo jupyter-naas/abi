@@ -1,7 +1,4 @@
-'use client';
-
-import { OrgAccess } from '../components/org-access';
-
-export default function OrgAccessPage() {
-  return <OrgAccess section="groups" />;
+/** The groups list: shown by the layout, which keeps it mounted when a group opens. */
+export default function OrgGroupsPage() {
+  return null;
 }

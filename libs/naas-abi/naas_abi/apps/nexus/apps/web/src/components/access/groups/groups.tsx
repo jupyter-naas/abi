@@ -11,6 +11,7 @@ import { NEW_GROUP } from '../access-paths';
 import { GroupPage } from './group-page';
 import {
   AccessHeaderAction,
+  useAccessInstance,
   ListHead,
   ListSearch,
   NameCell,
@@ -66,6 +67,8 @@ export function GroupsView({
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelectedState] = useState<string | null>(focus);
   useEffect(() => setSelectedState(focus), [focus]);
+  // A group's page shown (a click opens it before the address follows): the level hides the list's header.
+  useAccessInstance(selected !== null);
   const setSelected = (id: string | null) => {
     setSelectedState(id);
     onFocus?.(id);

@@ -1,7 +1,4 @@
-'use client';
-
-import { OrgAccess } from '../components/org-access';
-
-export default function OrgAccessPage() {
-  return <OrgAccess section="policies" />;
+/** The policies list: shown by the layout, which keeps it mounted when a policy opens. */
+export default function OrgPoliciesPage() {
+  return null;
 }

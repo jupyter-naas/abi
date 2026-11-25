@@ -1,7 +1,4 @@
-'use client';
-
-import { WorkspaceAccess } from '../workspace-access';
-
+/** The groups list: shown by the layout, which keeps it mounted when a group opens. */
 export default function WorkspaceGroupsPage() {
-  return <WorkspaceAccess section="groups" />;
+  return null;
 }
