@@ -274,3 +274,86 @@ describe('WorkspaceOfferEditor: search sources', () => {
     expect(switchOf('[data-offer-source="chat"]')?.disabled).toBe(true);
   });
 });
+
+describe('WorkspaceOfferEditor: files', () => {
+  const FILES: OfferState = {
+    ...OFFER,
+    files: [
+      {
+        key: 'org_files',
+        label: 'Organization Files',
+        mode: 'read',
+        modes: ['off', 'read', 'write'],
+        choices: ['off', 'read', 'write'],
+        editable: true,
+        reason: null,
+      },
+      {
+        key: 'platform_files',
+        label: 'Platform Files',
+        mode: 'write',
+        modes: ['off', 'read', 'write'],
+        choices: ['off', 'read', 'write'],
+        editable: true,
+        reason: null,
+      },
+      {
+        key: 'system_files',
+        label: 'System Files',
+        mode: 'off',
+        modes: ['off', 'read'],
+        choices: ['off'],
+        editable: false,
+        reason: 'Only a platform admin gives System Files.',
+      },
+    ],
+    my_files: { members: 'write', viewers: 'read' },
+  };
+  const select = (key: string) => document.querySelector(`[data-offer-file="${key}"] select`) as HTMLSelectElement | null;
+  const withFilesFeature = (parts: ReturnType<typeof setup>) => {
+    const features = { ...FEATURES, features: [...FEATURES.features, feature({ key: 'files', label: 'Files', choice: 'everyone' })] };
+    parts.featureApi.read = vi.fn().mockResolvedValue(features);
+    return parts;
+  };
+
+  it('shows Workspace Files as the files feature, the files given outside as modes, and My Files', async () => {
+    await render(withFilesFeature(setup(FILES)));
+    const section = document.querySelector('[data-offer-section="files"]');
+    expect(section?.textContent).toContain('Workspace Files');
+    // The files feature is shown here, not among the features.
+    expect(section?.querySelector('[data-offer-feature="files"] [role="switch"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(document.querySelectorAll('[data-offer-feature="files"]').length).toBe(1);
+    expect(select('org_files')?.value).toBe('read');
+    expect(select('platform_files')?.value).toBe('write');
+    expect([...(select('system_files')?.options ?? [])].map((o) => o.textContent)).toEqual(['Off', 'Read']);
+    expect(select('system_files')?.disabled).toBe(true);
+    expect(document.querySelector('[data-offer-file="system_files"]')?.textContent).toContain('Only a platform admin gives System Files.');
+    expect(document.querySelector('[data-offer-my-files]')?.textContent).toBe(
+      'My Files: every Member writes theirs; Viewers read theirs (a setting of the deployment).',
+    );
+  });
+
+  it('saves a mode in the offer at once, and offers only the modes the caller may choose', async () => {
+    const narrowed: OfferState = {
+      ...FILES,
+      files: FILES.files!.map((row) => (row.key === 'platform_files' ? { ...row, mode: 'read', choices: ['off', 'read'] } : row)),
+    };
+    const parts = setup(FILES);
+    const saveFiles = vi.fn().mockResolvedValue(narrowed);
+    Object.assign(parts.offerApi, { saveFiles });
+    await render(parts);
+    await mounted!.select(select('platform_files'), 'read');
+    await mounted!.flush();
+    expect(saveFiles).toHaveBeenCalledWith('ws-1', { platform_files: 'read' });
+    expect(select('platform_files')?.value).toBe('read');
+    expect(document.querySelector('[data-offer-notice]')?.textContent).toBe('Platform Files: Read.');
+    const write = [...(select('platform_files')?.options ?? [])].find((o) => o.value === 'write');
+    expect(write?.disabled).toBe(true);
+  });
+
+  it('says when Viewers have no My Files, and shows no Organization Files row where the API gives none', async () => {
+    await render(setup({ ...FILES, files: FILES.files!.filter((r) => r.key !== 'org_files'), my_files: { members: 'write', viewers: 'none' } }));
+    expect(select('org_files')).toBeNull();
+    expect(document.querySelector('[data-offer-my-files]')?.textContent).toContain('Viewers have none');
+  });
+});

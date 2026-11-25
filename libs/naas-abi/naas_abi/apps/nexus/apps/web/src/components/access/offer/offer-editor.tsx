@@ -6,6 +6,8 @@ import {
   OFFER_KINDS,
   WHOLE_MODULE,
   createOfferApi,
+  type FileMode,
+  type FileRow,
   type OfferApi,
   type OfferKind,
   type OfferState,
@@ -18,7 +20,7 @@ import {
   createFeatureAccessApi,
   type FeatureAccessApi,
 } from '@/app/workspace/[workspaceId]/settings/general/feature-access-api';
-import type { FeatureAccessState } from '@/app/workspace/[workspaceId]/settings/general/feature-access-model';
+import type { FeatureAccessState, FeatureRow } from '@/app/workspace/[workspaceId]/settings/general/feature-access-model';
 import {
   draftKey,
   featureChanges,
@@ -38,6 +40,10 @@ const SEARCH_SOURCE_ROWS: { id: string; label: string }[] = [
   ...WEB_ENGINES.map((e) => ({ id: webEngineScopeId(e.id), label: `Web · ${e.label}` })),
 ];
 const DEFAULT_FEATURE_API = createFeatureAccessApi();
+
+/** The feature that is Workspace Files, shown in the Files section. */
+const FILES_FEATURE = 'files';
+const FILE_MODE_LABELS: Record<FileMode, string> = { off: 'Off', read: 'Read', write: 'Read and write' };
 const ITEM_LIMIT = 200;
 
 /** How long a read of the offer, its features or its modules is waited for. */
@@ -179,10 +185,12 @@ export function WorkspaceOfferEditor({
   }, [load, nonce]);
 
   const modules = useMemo(() => (offer ? modulesOf(publishers, offer.offered) : []), [offer, publishers]);
-  const featureRows = useMemo(
+  const allFeatureRows = useMemo(
     () => [...(features?.features ?? [])].sort((a, b) => a.label.localeCompare(b.label)),
     [features],
   );
+  const featureRows = useMemo(() => allFeatureRows.filter((row) => row.key !== FILES_FEATURE), [allFeatureRows]);
+  const workspaceFiles = useMemo(() => allFeatureRows.find((row) => row.key === FILES_FEATURE) ?? null, [allFeatureRows]);
 
   const loadItems = useCallback(
     async (kind: OfferKind, module: string) => {
@@ -262,7 +270,7 @@ export function WorkspaceOfferEditor({
 
   const toggleFeature = (key: string, label: string, on: boolean) =>
     void saveNow(async () => {
-      const changes = featureChanges(featureRows, { [key]: on });
+      const changes = featureChanges(allFeatureRows, { [key]: on });
       if (changes.length === 0) return false;
       const next = await featureApi.save(workspaceId, changes);
       const refused = next.errors ?? {};
@@ -270,6 +278,31 @@ export function WorkspaceOfferEditor({
       setFeatureErrors(refused);
       return !refused[key];
     }, `${label} ${on ? 'added to' : 'removed from'} the offer.`);
+
+  const chooseFileMode = (row: FileRow, mode: FileMode) =>
+    void saveNow(async () => {
+      if (mode === row.mode) return false;
+      setOffer(await offerApi.saveFiles(workspaceId, { [row.key]: mode }));
+      return true;
+    }, `${row.label}: ${FILE_MODE_LABELS[mode]}.`);
+
+  const featureRow = (row: FeatureRow, label = row.label) => {
+    const on = row.choice === 'everyone';
+    const disabled = !row.editable || saving || (!row.offered && !on);
+    return (
+      <li key={row.key} className="access-offer-row" data-offer-feature={row.key}>
+        <OfferSwitch label={`Offer ${label}`} on={on} disabled={disabled} onChange={(next) => toggleFeature(row.key, label, next)} />
+        <span className="access-offer-name">{label}</span>
+        {!row.offered && <span className="access-offer-note">Not offered by the organization</span>}
+        {row.offered && !row.editable && row.reason && <span className="access-offer-note">{row.reason}</span>}
+        {featureErrors[row.key] && (
+          <span className="access-policy-error" role="alert">
+            {featureErrors[row.key]}
+          </span>
+        )}
+      </li>
+    );
+  };
 
   return (
     <section className="access-offer" aria-label="Workspace offer" data-offer={offer.workspace_id}>
@@ -313,30 +346,44 @@ export function WorkspaceOfferEditor({
         ) : featureRows.length === 0 ? (
           <p className="access-policy-muted">No feature is enabled on this deployment.</p>
         ) : (
-          <ul className="access-offer-list">
-            {featureRows.map((row) => {
-              const on = row.choice === 'everyone';
-              const disabled = !row.editable || saving || (!row.offered && !on);
-              return (
-                <li key={row.key} className="access-offer-row" data-offer-feature={row.key}>
-                  <OfferSwitch
-                    label={`Offer ${row.label}`}
-                    on={on}
-                    disabled={disabled}
-                    onChange={(next) => toggleFeature(row.key, row.label, next)}
-                  />
-                  <span className="access-offer-name">{row.label}</span>
-                  {!row.offered && <span className="access-offer-note">Not offered by the organization</span>}
-                  {row.offered && !row.editable && row.reason && <span className="access-offer-note">{row.reason}</span>}
-                  {featureErrors[row.key] && (
-                    <span className="access-policy-error" role="alert">
-                      {featureErrors[row.key]}
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <ul className="access-offer-list">{featureRows.map((row) => featureRow(row))}</ul>
+        )}
+      </div>
+
+      <div className="access-offer-section" data-offer-section="files">
+        <h4 className="access-offer-heading">Files</h4>
+        <p className="access-policy-muted">
+          What the people of this workspace open beside its own files. Read and write lets a Member write; a Viewer
+          still only reads.
+        </p>
+        <ul className="access-offer-list">
+          {workspaceFiles && featureRow(workspaceFiles, 'Workspace Files')}
+          {(offer.files ?? []).map((row) => (
+            <li key={row.key} className="access-offer-row" data-offer-file={row.key}>
+              <select
+                className="access-offer-select"
+                aria-label={row.label}
+                value={row.mode}
+                disabled={!row.editable || saving}
+                onChange={(e) => chooseFileMode(row, e.target.value as FileMode)}
+              >
+                {row.modes.map((mode) => (
+                  <option key={mode} value={mode} disabled={!row.choices.includes(mode)}>
+                    {FILE_MODE_LABELS[mode]}
+                  </option>
+                ))}
+              </select>
+              <span className="access-offer-name">{row.label}</span>
+              {!row.editable && row.reason && <span className="access-offer-note">{row.reason}</span>}
+            </li>
+          ))}
+        </ul>
+        {offer.my_files && (
+          <p className="access-policy-muted" data-offer-my-files="">
+            {`My Files: every Member writes theirs; Viewers ${
+              offer.my_files.viewers === 'read' ? 'read theirs' : 'have none'
+            } (a setting of the deployment).`}
+          </p>
         )}
       </div>
 

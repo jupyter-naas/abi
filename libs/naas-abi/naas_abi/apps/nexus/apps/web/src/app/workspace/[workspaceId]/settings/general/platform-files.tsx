@@ -16,7 +16,7 @@ const DEFAULT_API = createPlatformFilesApi();
 const MODES: { value: PlatformFilesMode; label: string; hint: string }[] = [
   { value: 'off', label: 'Off', hint: 'The people of this workspace do not get Platform Files from it' },
   { value: 'read', label: 'Read', hint: 'They list and read Platform Files' },
-  { value: 'write', label: 'Read and write', hint: 'They list, read, write and delete Platform Files' },
+  { value: 'write', label: 'Read and write', hint: 'Members also write and delete Platform Files; Viewers read them' },
 ];
 
 function message(error: unknown, fallback: string): string {
@@ -24,9 +24,10 @@ function message(error: unknown, fallback: string): string {
 }
 
 /**
- * General › Platform Files: Off, Read, or Read and write for everyone in the workspace (the API keeps a
- * platform group in step with its people). Read-only unless the caller is a platform admin; hidden for
- * someone who may not read the workspace's configuration.
+ * General › Platform Files: Off, Read, or Read and write for everyone in the workspace, within each one's
+ * level (the `GivenPlatformFiles` section of the workspace's offer, also shown in its Configuration).
+ * Read-only unless the caller may change it (a platform admin; a workspace admin may narrow it); hidden
+ * for someone who may not read the workspace's configuration.
  */
 export function PlatformFiles({ workspaceId, api = DEFAULT_API }: { workspaceId: string; api?: PlatformFilesApi }) {
   const [state, setState] = useState<PlatformFilesState | null>(null);

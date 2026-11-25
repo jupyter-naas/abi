@@ -12,6 +12,11 @@ workspace's admins, then everyone in the workspace group (S2), each within what
 their level gives. Only… is not a workspace setting any more: a group holding a
 policy for the feature gives it to some people.
 
+Its Files part gives what lies outside the workspace (``iam/given_files``, ADR
+``20261125_offer_gives_outside_resources``): Organization, Platform and System Files,
+each Off, Read or Read and write, as given sections of "<W> access". Whoever holds a
+section may give it; a workspace's admin may narrow or remove one, never add it.
+
 Every write is an ordinary IAM call made as the caller and audited first
 (``iam:UpdatePolicy`` on "<W> access"), so IAM's own rules apply: grant only what
 you hold, within the organization's offer (its parent). On top of them a row
@@ -32,12 +37,22 @@ from naas_abi.apps.nexus.apps.api.app.services.feature_access.port import (
     FeatureChange,
     FeaturePolicyStore,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam import given_files
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource
+from naas_abi.apps.nexus.apps.api.app.services.iam.given_files import (
+    LABELS,
+    MODES,
+    OFF,
+    ORDER,
+    ORG_FILES,
+    Mode,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import PLATFORM, nexus_resource, org_of
 from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     SECTIONS,
     WHOLE_MODULE,
     Offer,
+    OrgFiles,
     offer_of,
     with_offer,
 )
@@ -107,21 +122,37 @@ def offered(chain: Sequence[Policy], resource: str, scope: str) -> bool:
     return True
 
 
-def holds(grantable: Sequence[GrantableCatalog], resource: str, scope: str) -> bool:
-    """Whether the caller may grant ``UseFeature`` on ``resource`` at ``scope``
-    (IAM's ``grantable``, what ``/publishers`` answers): they hold it there."""
+def holds(
+    grantable: Sequence[GrantableCatalog], resource: str, scope: str, action: str = USE_FEATURE
+) -> bool:
+    """Whether the caller may grant ``action`` (``UseFeature`` by default) on
+    ``resource`` at ``scope`` (IAM's ``grantable``, what ``/publishers`` answers): they
+    hold it there."""
     for catalog in grantable:
         for granted in catalog.actions:
-            action = (
+            held = (
                 granted.action if ":" in granted.action else f"{catalog.service}:{granted.action}"
             )
-            if not matches(action, USE_FEATURE):
+            if not matches(held, action):
                 continue
             if any(_expands_to(p, resource, scope) for p in granted.resources) and not any(
                 _expands_to(p, resource, scope) for p in granted.excluded
             ):
                 return True
     return False
+
+
+def holds_statements(grantable: Sequence[GrantableCatalog], statements: Sequence[dict]) -> bool:
+    """Whether the caller holds every action of ``statements`` on each of their
+    resources, at the platform (``grantable`` of ``abi:``): what IAM's held check of a
+    given section asks. A resource pattern is matched as written (``abi:*`` holds
+    ``abi:nexus:platform_file/*``), so it may say less than IAM would, never more."""
+    return all(
+        holds(grantable, resource, PLATFORM, action)
+        for statement in statements
+        for action in statement["actions"]
+        for resource in statement["resources"]
+    )
 
 
 def _actor_id(user: Any) -> str:
@@ -197,6 +228,95 @@ def _offer_json(offer: Offer) -> dict[str, Any]:
         },
         "search_sources": sorted(offer.search_sources),
     }
+
+
+def check_file_changes(changes: Mapping[str, str]) -> None:
+    """Refuse (``ValueError``) no change, an unknown section or a mode it does not have."""
+    if not changes:
+        raise ValueError("Name a file section to change")
+    for key, mode in changes.items():
+        if key not in MODES:
+            raise ValueError(f"{key!r} is not org_files, platform_files or system_files")
+        if mode not in MODES[key]:
+            raise ValueError(f"{LABELS[key]} is one of {', '.join(MODES[key])}, not {mode!r}")
+
+
+def file_mode(offer: Offer, key: str) -> Mode:
+    """The mode ``offer`` gives a file section (``off`` when it gives none)."""
+    if key == ORG_FILES:
+        return offer.org_files.mode if offer.org_files is not None else OFF
+    return getattr(offer, key) or OFF
+
+
+def with_file_mode(offer: Offer, key: str, mode: Mode, organization: str | None) -> Offer:
+    """``offer`` giving the file section ``key`` in ``mode`` (``off``: not at all)."""
+    if key == ORG_FILES:
+        if mode != OFF and not organization:
+            raise ValueError(
+                "This workspace belongs to no organization: it has no Organization Files"
+            )
+        return replace(offer, org_files=OrgFiles(str(organization), mode) if mode != OFF else None)
+    return replace(offer, **{key: mode if mode != OFF else None})
+
+
+def _gives(key: str) -> str:
+    if key == ORG_FILES:
+        return "Only an admin of the organization or a platform admin gives Organization Files."
+    return f"Only a platform admin gives {LABELS[key]}."
+
+
+def file_rows(
+    offer: Offer,
+    *,
+    organization: str | None,
+    grantable: Sequence[GrantableCatalog],
+    access: Policy | None,
+    widen: bool,
+) -> list[dict[str, Any]]:
+    """The Files rows of the offer: each section's mode, the modes the caller may choose
+    (any they hold, and any narrower than the current one) and why they may not change
+    it. No Organization Files row for a workspace in no organization."""
+    rows: list[dict[str, Any]] = []
+    for key in MODES:
+        if key == ORG_FILES and organization is None:
+            continue
+        mode = file_mode(offer, key)
+        choices = [mode]
+        if access is not None and widen:
+            choices = [
+                m
+                for m in MODES[key]
+                if given_files.narrower_or_equal(m, mode)
+                or holds_statements(grantable, given_files.statements(key, m, organization))
+            ]
+        editable = len(choices) > 1
+        reason: str | None = None
+        if access is None:
+            reason = "This workspace has no access policy yet."
+        elif not widen:
+            reason = f"IAM does not let you change {access.name}."
+        elif not editable:
+            reason = _gives(key)
+        rows.append(
+            {
+                "key": key,
+                "label": LABELS[key],
+                "mode": mode,
+                "modes": list(MODES[key]),
+                "choices": sorted(choices, key=ORDER.index),
+                "editable": editable,
+                "reason": reason,
+            }
+        )
+    return rows
+
+
+def my_files_json() -> dict[str, str]:
+    """My Files, a setting of the deployment (``feature_flags.viewer_my_files``):
+    every Member writes theirs; Viewers read theirs, or have none."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.levels import viewer_my_files
+
+    return {"members": "write", "viewers": "read" if viewer_my_files() else "none"}
 
 
 def check_source_changes(changes: Mapping[str, bool]) -> None:
@@ -468,6 +588,8 @@ class FeatureAccessService:
         operation: str,
         resource_id: str,
         change: Callable[[Offer], Offer],
+        *,
+        detail: str = "",
     ) -> None:
         """Rewrite the sections of "<W> access" as the caller, audited first: read
         again here, so a change made meanwhile is kept (and the revision checked)."""
@@ -483,7 +605,7 @@ class FeatureAccessService:
                 document=with_offer(policy.document, wanted),
             )
 
-        await self._change(user, operation, resource_id, write)
+        await self._change(user, operation, resource_id, write, detail=detail)
         AUTHZ.forget_offers()  # what the workspace's lists show (``filter_scopes``)
 
     # -- agents, apps, workflows and pipelines ----------------------------------------
@@ -499,13 +621,23 @@ class FeatureAccessService:
             access = self._gateway.policy(access_id) if access_id else None
             offer = offer_of(access.document) if access is not None else Offer()
             can = self._can(session, container, access_id)
+            widen = access is not None and can["widen"]
             return {
                 "workspace_id": workspace_id,
                 "scope": container,
                 "access_policy": _ref(access) if access is not None else None,
-                "editable": access is not None and can["widen"],
+                "editable": widen,
                 "whole_module": WHOLE_MODULE,
                 "offered": _offer_json(offer),
+                "files": file_rows(
+                    offer,
+                    organization=org_of(container),
+                    # What the caller holds, given grants left out (IAM's ``grantable``).
+                    grantable=session.grantable(PLATFORM) if widen else [],
+                    access=access,
+                    widen=widen,
+                ),
+                "my_files": my_files_json(),
             }
 
         return await run_in_threadpool(snapshot)
@@ -567,6 +699,38 @@ class FeatureAccessService:
         _log.info(f"Search sources of {workspace_id} changed: {detail}")
         return await self.read_offer(user, workspace_id)
 
+    async def set_files(
+        self, user: Any, workspace_id: str, changes: Mapping[str, str]
+    ) -> dict[str, Any]:
+        """Give the workspace's people Organization, Platform or System Files
+        (``{section: mode}``), in one write of "<W> access" as the caller: IAM refuses
+        a section the change widens that the caller does not hold (403); narrowing or
+        removing one needs only the right to change the policy. Answers the offer after."""
+        check_file_changes(changes)
+        container, record = await self._where(workspace_id)
+        organization = org_of(container)
+        if organization is None and changes.get(ORG_FILES, OFF) != OFF:
+            raise ValueError(
+                "This workspace belongs to no organization: it has no Organization Files"
+            )
+
+        def apply(offer: Offer) -> Offer:
+            for key, mode in changes.items():
+                offer = with_file_mode(offer, key, mode, organization)  # type: ignore[arg-type]
+            return offer
+
+        await self._set_offer(
+            user,
+            workspace_id,
+            getattr(record, "access_policy_id", None),
+            "workspace-offer.files",
+            workspace_id,
+            apply,
+            detail=",".join(f"{k}={v}" for k, v in sorted(changes.items())),
+        )
+        _log.info(f"Files given by {workspace_id}: {dict(sorted(changes.items()))}")
+        return await self.read_offer(user, workspace_id)
+
     async def set_ontologies(self, user: Any, workspace_id: str, refs: Sequence[str]) -> Offer:
         """The ontology files the workspace offers (Settings › Ontologies, by ref), in one
         write of "<W> access" as the caller: IAM refuses a file beyond the organization's
@@ -613,5 +777,7 @@ __all__ = [
     "FeatureAccessService",
     "OfferChange",
     "check_changes",
+    "check_file_changes",
     "check_offer_changes",
+    "file_rows",
 ]

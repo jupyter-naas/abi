@@ -783,3 +783,36 @@ async def test_a_viewer_given_the_chat_feature_is_not_shown_a_chat_they_cannot_u
 
     assert await chat("member") is True
     assert await chat("viewer") is False
+
+
+@pytest.mark.asyncio
+async def test_a_viewer_reads_my_files_unless_the_deployment_says_not(world):
+    """My Files is no workspace's to give: every Member writes theirs, and a Viewer
+    reads theirs unless ``feature_flags.viewer_my_files`` is off, which writes a Deny
+    into "Viewer access" (rewritten at the next start)."""
+    await _team(world)
+
+    async def mine(user: str, action: str, of: str = "my_file") -> bool:
+        what = {"my_file": f"{action}MyFile", "user_storage": f"{action}UserStorage"}[of]
+        if action == "List":
+            what = {"my_file": "ListMyFiles", "user_storage": "ListUserStorage"}[of]
+        return await world.authz.allowed(what, user=user, id=(user, "notes.md"))
+
+    assert await mine("viewer", "List") and await mine("viewer", "Get")
+    assert await mine("viewer", "Get", "user_storage")
+    assert not await mine("viewer", "Put")
+    assert await mine("member", "Put") and await mine("wadmin", "Put")
+
+    world.flags.viewer_my_files = False
+    LEVELS.forget()
+    LEVELS.get(world.iam)
+    with as_service_account("api"):
+        viewer = [p for p in world.iam.list_policies(limit=500).items if p.name == VIEWER_ACCESS]
+    assert len(viewer) == 1
+    assert not await mine("viewer", "List") and not await mine("viewer", "Get")
+    assert not await mine("viewer", "Get", "user_storage")
+    assert await mine("member", "Get") and await mine("member", "Put")
+    assert await mine("wadmin", "Put")
+    assert not any(
+        s["effect"] == "Deny" for s in level_document(MEMBER_ACCESS).to_dict()["statements"]
+    )

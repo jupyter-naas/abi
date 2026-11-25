@@ -77,7 +77,7 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import unquote
 
-from naas_abi.apps.nexus.apps.api.app.services.iam import platform_files, runtime
+from naas_abi.apps.nexus.apps.api.app.services.iam import files_offer, runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import NEXUS_CATALOG
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
     CONTAINER_DEFAULTS,
@@ -1723,7 +1723,6 @@ def apply_planned(iam: Any, inputs: Inputs, levels: Levels) -> dict[str, Default
     """The move made on ``iam`` itself, in IAM's thread. Returns the records to
     write."""
     done = apply(iam, inputs, levels, dry_run=False)
-    platform_files.sync_platform_files(iam)
     return done.records
 
 
@@ -1886,11 +1885,11 @@ def named_universe(iam: Any) -> Universe:
 async def convert_drive_flags(
     iam: Any, db: AsyncSession, *, apply: bool = True
 ) -> list[dict[str, Any]]:
-    """The drive flags the holding table kept, converted by Platform Files
-    (``platform_files.convert_legacy_drive_flags``, #1590), which owns that table and
-    drops it: its rows (workspace, flag, action, detail). ``apply=False``: the report
-    alone, nothing changed, the table kept."""
-    changes = await platform_files.convert_legacy_drive_flags(iam, db, apply=apply)
+    """The drive flags the holding table kept, converted into the workspaces' offers
+    (``files_offer.convert_legacy_drive_flags``), which owns that table and drops it:
+    its rows (workspace, flag, action, detail). ``apply=False``: the report alone,
+    nothing changed, the table kept."""
+    changes = await files_offer.convert_legacy_drive_flags(iam, db, apply=apply)
     return [asdict(change) for change in changes]
 
 

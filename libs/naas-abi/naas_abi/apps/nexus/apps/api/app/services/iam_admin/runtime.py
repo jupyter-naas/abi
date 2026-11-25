@@ -19,20 +19,6 @@ AUDIT_PREFIX = "iam."
 Provider = Callable[[], IamAdminService]
 
 
-async def _follow_member(principal_id: str) -> None:
-    """Platform Files follows the person's workspace groups (#1590), as ``api``."""
-    from naas_abi.apps.nexus.apps.api.app.services.iam import platform_files
-    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime as iam_runtime
-    from naas_abi_core.engine.call_context import as_service_account
-    from starlette.concurrency import run_in_threadpool
-
-    def work() -> None:
-        with as_service_account("api"):
-            platform_files.follow(iam_runtime.iam(), principal_id)
-
-    await run_in_threadpool(work)
-
-
 async def follow_group(group_id: str) -> None:
     """Its members belong, through the group, to its membership container ("<W> workspace")
     and to each container it holds a role at: what follows who belongs there (shared
@@ -71,7 +57,6 @@ def _default() -> IamAdminService:
         SqlAdminAuditLog(lambda: database.async_engine, prefix=AUDIT_PREFIX),
         managed_from=SqlFeaturePolicyStore(lambda: database.AsyncSessionLocal()).managed_among,
         org_access_of=_org_access_of,
-        follow_member=_follow_member,
         account_names=SqlAccountNames(lambda: database.AsyncSessionLocal()).names_of,
         follow_group=follow_group,
     )

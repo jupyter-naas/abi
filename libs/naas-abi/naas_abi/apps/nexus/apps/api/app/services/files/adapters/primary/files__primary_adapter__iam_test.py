@@ -342,9 +342,11 @@ def org_body(path: str, workspace_id: str = "ws-1") -> dict[str, str]:
 
 
 @pytest.mark.asyncio
-async def test_the_organization_drive_is_read_by_its_people_and_written_by_its_admins(
+async def test_the_organization_drive_is_read_by_its_viewers_and_written_by_its_members(
     client, org_storage
 ) -> None:
+    """Writing Organization Files is a ``write`` action (catalog 20): its members write
+    them, as a workspace's members write Workspace Files."""
     for user in ("viewer", "member", "admin", "owner"):
         async with client(user) as http:
             listing = await http.get("/api/files/", params=org())
@@ -352,11 +354,10 @@ async def test_the_organization_drive_is_read_by_its_people_and_written_by_its_a
             assert {f["name"] for f in listing.json()["files"]} >= {"policy.md", "operations"}
             read = await http.get("/api/files/policy.md", params=org())
             assert read.json()["content"] == "# org-1 policy", user
-    for user in ("viewer", "member"):
-        async with client(user) as http:
-            assert (await http.post("/api/files/", json=org_body("x.md"))).status_code == 403
-            assert (await http.delete("/api/files/policy.md", params=org())).status_code == 403
-    for user in ("admin", "owner"):
+    async with client("viewer") as http:
+        assert (await http.post("/api/files/", json=org_body("x.md"))).status_code == 403
+        assert (await http.delete("/api/files/policy.md", params=org())).status_code == 403
+    for user in ("member", "admin", "owner"):
         async with client(user) as http:
             assert (await http.post("/api/files/", json=org_body(f"{user}.md"))).status_code == 200
             assert org_storage.get_object(ORG1, f"{user}.md") == b"x"
@@ -404,16 +405,16 @@ async def test_a_workspace_reaches_its_own_organizations_drive_alone(
 
 
 @pytest.mark.asyncio
-async def test_a_policy_at_the_organization_lets_members_write_one_folder(
+async def test_a_policy_at_the_organization_lets_viewers_write_one_folder(
     client, team, org_storage
 ) -> None:
     team.allow(
-        "member",
+        "viewer",
         ["nexus:PutOrgFile", "nexus:DeleteOrgFile"],
         ["${scope}/nexus:file/organization/operations/*"],
         team.org("org-1"),
     )
-    async with client("member") as http:
+    async with client("viewer") as http:
         assert (
             await http.post("/api/files/", json=org_body("operations/new.md"))
         ).status_code == 200

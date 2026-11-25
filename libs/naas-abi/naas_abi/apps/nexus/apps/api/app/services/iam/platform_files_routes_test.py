@@ -1,6 +1,6 @@
 """``/api/workspaces/{id}/platform-files``: read by the workspace's admins as its
-configuration, changed by the platform admin alone (IAM decides: the group is made at
-the platform and attaching is held-checked), 403 for everyone else. And
+configuration, given by the platform admin alone (IAM decides: a write of "<W> access"
+whose ``GivenPlatformFiles`` is held-checked), 403 for everyone else. And
 ``GET /api/files/views`` lists Platform Files for the people of a workspace that gives
 it, decided as the files routes decide it (``may_use_platform_files``)."""
 
@@ -15,19 +15,28 @@ from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.services.feature_access import runtime as offers_runtime
+from naas_abi.apps.nexus.apps.api.app.services.feature_access.service import (
+    FeatureAccessService,
+)
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__dependencies import (  # noqa: E501
     may_use_platform_files,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__FastAPI import (  # noqa: E501
     router as files_router,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import CONTAINER_DEFAULTS
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
-from naas_abi.apps.nexus.apps.api.app.services.iam.platform_files import workspace_platform_files
 from naas_abi.apps.nexus.apps.api.app.services.iam.platform_files_routes import router
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
-from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import Offer
-from naas_abi_core.engine.call_context import use_call_context
+from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import Offer, offer_of
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.adapters.secondary.engine import (
+    EngineIamGateway,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.testing import MemoryAudit
+from naas_abi_core.engine.call_context import as_service_account, use_call_context
 
 PATH = "/api/workspaces/ws-1/platform-files"
 
@@ -51,7 +60,21 @@ def world():
             nexus.user(person)
         nexus.platform_admin("root")
         nexus.W = alpha.container  # type: ignore[attr-defined]
-        yield nexus
+        nexus.alpha = alpha  # type: ignore[attr-defined]
+        previous = offers_runtime.configure(
+            lambda: FeatureAccessService(
+                EngineIamGateway(),
+                None,  # type: ignore[arg-type]
+                MemoryAudit(),
+                container_of=AUTHZ.container_of,
+                defaults_of=CONTAINER_DEFAULTS.record_of,
+                features=lambda: ["files", "chat"],
+            )
+        )
+        try:
+            yield nexus
+        finally:
+            offers_runtime.configure(previous)
 
 
 @pytest_asyncio.fixture
@@ -84,8 +107,9 @@ async def test_the_workspace_admins_read_it_off_and_may_not_change_it(client):
 async def test_only_the_platform_admin_changes_it(client, world):
     for user in ("wadmin", "oadmin", "member"):
         refused = client.put(PATH, json={"mode": "write"}, headers=_as(user))
-        assert refused.status_code == 403, user
-    assert workspace_platform_files(world.iam, "ws-1") == "off"
+        # A member may not even read "<W> access": not found.
+        assert refused.status_code in ((403, 404) if user == "member" else (403,)), user
+    assert _given(world) is None
 
     assert client.get(PATH, headers=_as("root")).json()["can_change"] is True
     saved = client.put(PATH, json={"mode": "write"}, headers=_as("root"))
@@ -93,8 +117,17 @@ async def test_only_the_platform_admin_changes_it(client, world):
     assert saved.json() == {"workspace_id": "ws-1", "mode": "write", "can_change": True}
     assert client.get(PATH, headers=_as("wadmin")).json()["mode"] == "write"
 
-    assert client.put(PATH, json={"mode": "read"}, headers=_as("root")).json()["mode"] == "read"
+    assert _given(world) == "write"
+    # The workspace's admin may narrow it, never widen it back.
+    narrowed = client.put(PATH, json={"mode": "read"}, headers=_as("wadmin"))
+    assert narrowed.json() == {"workspace_id": "ws-1", "mode": "read", "can_change": True}
+    assert client.put(PATH, json={"mode": "write"}, headers=_as("wadmin")).status_code == 403
     assert client.put(PATH, json={"mode": "off"}, headers=_as("root")).json()["mode"] == "off"
+
+
+def _given(world) -> str | None:
+    with as_service_account("api"):
+        return offer_of(world.iam.get_policy(world.alpha.access_policy_id).document).platform_files
 
 
 @pytest.mark.asyncio

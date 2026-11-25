@@ -1,66 +1,49 @@
 """``/api/workspaces/{workspace_id}/platform-files`` (Workspace settings > General ›
-Platform Files): Off, Read, or Read and write (``platform_files``, #1590).
+Platform Files): Off, Read, or Read and write.
 
-Reading is reading the workspace's configuration (``GetWorkspaceConfiguration``, as
-``/feature-access``). Changing it is IAM's own writes made as the caller (a group made
-at the platform, a platform policy attached to it): IAM decides, and only the platform
-admin holds them. The route declares them for the matrix; the check is IAM's, inside
-the call.
+The setting is the ``GivenPlatformFiles`` section of the workspace's offer, "<W> access"
+(``given_files``, ADR ``20261125_offer_gives_outside_resources``), read and written
+through the offer service as the offer's Configuration does
+(``PUT /api/workspaces/{id}/offer/files``). Reading is reading the workspace's
+configuration (``GetWorkspaceConfiguration``). Changing it is a write of "<W> access" as
+the caller: IAM decides, and only who holds Platform Files (the platform admin) gives
+it; a workspace's admin may narrow or remove it.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (  # noqa: E501
     User,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam import platform_files
-from naas_abi.apps.nexus.apps.api.app.services.iam import runtime as iam_runtime
-from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+from naas_abi.apps.nexus.apps.api.app.services.feature_access.adapters.primary.feature_access__primary_adapter__FastAPI import (  # noqa: E501
+    WRITES,
+    _call,
+)
+from naas_abi.apps.nexus.apps.api.app.services.feature_access.runtime import (
+    get_feature_access_service,
+)
+from naas_abi.apps.nexus.apps.api.app.services.feature_access.service import (
+    FeatureAccessService,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.given_files import PLATFORM_FILES
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
-from naas_abi_core.engine.call_context import use_call_context
-from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError, PermissionDeniedError
 from pydantic import BaseModel
-from starlette.concurrency import run_in_threadpool
 
 router = APIRouter()
-T = TypeVar("T")
-
-# The IAM writes a change makes as the caller.
-WRITES = ("iam:CreateGroup", "iam:AttachPolicy")
 
 
-async def _as_caller(user: User, work: Callable[[Any], T]) -> T:
-    """``work(iam)`` in a worker thread, as the caller (Nexus on their behalf)."""
-    context = AUTHZ.context(user)
-
-    def run() -> T:
-        with use_call_context(context):
-            return work(iam_runtime.iam())
-
-    try:
-        return await run_in_threadpool(run)
-    except ValueError as exc:
-        raise HTTPException(422, detail=str(exc)) from exc
-    except PermissionDeniedError as exc:
-        raise HTTPException(403, detail=str(exc)) from exc
-    except IAMNotFoundError as exc:
-        raise HTTPException(404, detail=str(exc)) from exc
-    except iam_runtime.IAMUnavailableError as exc:
-        raise HTTPException(503, detail=str(exc)) from exc
-
-
-def _state(iam: Any, workspace_id: str) -> dict[str, Any]:
+def _state(offer: dict[str, Any]) -> dict[str, Any]:
+    row = next(r for r in offer["files"] if r["key"] == PLATFORM_FILES)
     return {
-        "workspace_id": workspace_id,
-        "mode": platform_files.workspace_platform_files(iam, workspace_id),
-        "can_change": platform_files.may_set(iam),
+        "workspace_id": offer["workspace_id"],
+        "mode": row["mode"],
+        "can_change": row["editable"],
     }
 
 
@@ -77,10 +60,14 @@ class PlatformFilesBody(BaseModel):
         )
     ],
 )
-async def read_platform_files(workspace_id: str, user: User = Depends(get_current_user_required)):
+async def read_platform_files(
+    workspace_id: str,
+    user: User = Depends(get_current_user_required),
+    service: FeatureAccessService = Depends(get_feature_access_service),
+):
     """``{workspace_id, mode, can_change}``: what the workspace gives its people of
     Platform Files (``off``, ``read``, ``write``), and whether the caller may change it."""
-    return await _as_caller(user, lambda iam: _state(iam, workspace_id))
+    return _state(await _call(service.read_offer(user, workspace_id)))
 
 
 @router.put(
@@ -91,12 +78,8 @@ async def save_platform_files(
     workspace_id: str,
     body: PlatformFilesBody,
     user: User = Depends(get_current_user_required),
+    service: FeatureAccessService = Depends(get_feature_access_service),
 ):
-    """Give the workspace's people Platform Files, as the caller: 403 unless a
-    platform admin. Answers the state after."""
-
-    def change(iam: Any) -> dict[str, Any]:
-        platform_files.set_workspace_platform_files(iam, workspace_id, body.mode)
-        return _state(iam, workspace_id)
-
-    return await _as_caller(user, change)
+    """Give the workspace's people Platform Files, as the caller: 403 unless they hold
+    it (or only narrow it). Answers the state after."""
+    return _state(await _call(service.set_files(user, workspace_id, {PLATFORM_FILES: body.mode})))

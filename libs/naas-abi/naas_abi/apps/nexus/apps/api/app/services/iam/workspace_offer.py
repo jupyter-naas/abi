@@ -23,6 +23,12 @@ The document is written in sections, one statement each, by ``sid``:
 A section naming more than ``policy.MAX_PATTERNS`` items (IAM's limit for one
 statement) is written in parts: ``OfferAgents``, ``OfferAgents2``, ``OfferAgents3``...
 
+The **given** sections name files outside W, absolute names only, which IAM gives to
+W's people within their level (``given_files``, ADR
+``20261125_offer_gives_outside_resources``): ``GivenOrgFiles``, ``GivenPlatformFiles``
+and ``GivenSystemFiles``, each a mode, written as its Nexus half and its object storage
+half (``<sid>2``).
+
 An offer of nothing is ``container_defaults.nothing_document`` (an Allow no name
 matches). ``offer_of`` reads the sections back: what the Features and Agents/Apps
 settings change, and what the access migration (S4) writes from a ceiling's old
@@ -43,6 +49,8 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import unquote
 
+from naas_abi.apps.nexus.apps.api.app.services.iam import given_files
+from naas_abi.apps.nexus.apps.api.app.services.iam.given_files import Mode
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import scoped_resource
 from naas_abi_core.services.iam import module_scopes
 from naas_abi_core.services.iam.names import PLATFORM
@@ -91,8 +99,14 @@ ID_SECTIONS: dict[str, tuple[str, str, str]] = {
     "ontologies": (ONTOLOGIES_SID, USE_ONTOLOGY, "ontology_file"),
 }
 OFFER_SIDS = frozenset(
-    {*(sid for sid, _ in SECTIONS.values()), *(sid for sid, _a, _t in ID_SECTIONS.values())}
+    {
+        *(sid for sid, _ in SECTIONS.values()),
+        *(sid for sid, _a, _t in ID_SECTIONS.values()),
+        *given_files.SIDS.values(),
+    }
 )
+# The given sections' ``Offer`` fields (``given_files``).
+GIVEN_FIELDS = tuple(given_files.SIDS)
 
 Item = tuple[str, str]  # (module, name); name ``*`` is the whole module
 
@@ -124,6 +138,32 @@ def _parts(sid: str, actions: list[str], resources: list[str]) -> list[dict[str,
 
 
 @dataclass(frozen=True)
+class OrgFiles:
+    """Organization Files given in the workspace: its organization's, in ``mode``
+    (``read`` or ``write``)."""
+
+    organization: str
+    mode: Mode
+
+
+def _wider_org(a: OrgFiles | None, b: OrgFiles | None) -> OrgFiles | None:
+    if a is None or b is None or a.organization != b.organization:
+        return a or b
+    mode = given_files.wider(a.mode, b.mode)
+    return OrgFiles(a.organization, mode) if mode else None
+
+
+def _org_without(a: OrgFiles | None, b: OrgFiles | None) -> OrgFiles | None:
+    if a is None or b is None or a.organization != b.organization:
+        return a
+    return None if given_files.narrower_or_equal(a.mode, b.mode) else a
+
+
+def _mode_without(a: Mode | None, b: Mode | None) -> Mode | None:
+    return None if a is None or (b and given_files.narrower_or_equal(a, b)) else a
+
+
+@dataclass(frozen=True)
 class Offer:
     """The instances and features a workspace offers."""
 
@@ -136,6 +176,10 @@ class Offer:
     search_sources: frozenset[str] = field(default_factory=frozenset)
     # The ontology files it offers, by ref (``module:file.ttl``, as its seed names them).
     ontologies: frozenset[str] = field(default_factory=frozenset)
+    # The files it gives outside it (``given_files``): a mode each, None when off.
+    org_files: OrgFiles | None = None
+    platform_files: Mode | None = None
+    system_files: Mode | None = None
 
     @classmethod
     def of(
@@ -149,6 +193,9 @@ class Offer:
         features: Iterable[str] = (),
         search_sources: Iterable[str] = (),
         ontologies: Iterable[str] = (),
+        org_files: OrgFiles | None = None,
+        platform_files: Mode | None = None,
+        system_files: Mode | None = None,
     ) -> Offer:
         """An offer; each of ``modules`` adds every agent, app, workflow and
         pipeline of that module (a shared module offered whole)."""
@@ -161,6 +208,9 @@ class Offer:
             features=frozenset(features),
             search_sources=frozenset(search_sources),
             ontologies=frozenset(ontologies),
+            org_files=org_files,
+            platform_files=platform_files,
+            system_files=system_files,
         )
 
     def items(self, kind: str) -> frozenset[Item]:
@@ -172,19 +222,30 @@ class Offer:
 
     def is_empty(self) -> bool:
         return not (
-            any(self.items(kind) for kind in SECTIONS) or any(self.ids(f) for f in ID_SECTIONS)
+            any(self.items(kind) for kind in SECTIONS)
+            or any(self.ids(f) for f in ID_SECTIONS)
+            or any(getattr(self, f) for f in GIVEN_FIELDS)
         )
 
     def merged(self, other: Offer) -> Offer:
+        """Both offers; a given section in the wider of its two modes."""
         return Offer(
             **{kind: self.items(kind) | other.items(kind) for kind in SECTIONS},
             **{f: self.ids(f) | other.ids(f) for f in ID_SECTIONS},
+            org_files=_wider_org(self.org_files, other.org_files),
+            platform_files=given_files.wider(self.platform_files, other.platform_files),
+            system_files=given_files.wider(self.system_files, other.system_files),
         )
 
     def without(self, other: Offer) -> Offer:
+        """This offer less ``other``'s; a given section goes when ``other`` gives it as
+        wide."""
         return Offer(
             **{kind: self.items(kind) - other.items(kind) for kind in SECTIONS},
             **{f: self.ids(f) - other.ids(f) for f in ID_SECTIONS},
+            org_files=_org_without(self.org_files, other.org_files),
+            platform_files=_mode_without(self.platform_files, other.platform_files),
+            system_files=_mode_without(self.system_files, other.system_files),
         )
 
     def offers(self, kind: str, module: str, name: str) -> bool:
@@ -237,6 +298,12 @@ def offer_statements(offer: Offer) -> list[dict[str, Any]]:
         statements += _parts(
             sid, [use], [scoped_resource(type_name, k) for k in sorted(offer.ids(field_name))]
         )
+    if offer.org_files is not None:
+        statements += given_files.statements(
+            given_files.ORG_FILES, offer.org_files.mode, offer.org_files.organization
+        )
+    statements += given_files.statements(given_files.PLATFORM_FILES, offer.platform_files)
+    statements += given_files.statements(given_files.SYSTEM_FILES, offer.system_files)
     return statements
 
 
@@ -282,10 +349,16 @@ def offer_of(document: Any) -> Offer:
     ids: dict[str, set[str]] = {f: set() for f in ID_SECTIONS}
     sid_kind = {sid: kind for kind, (sid, _a) in SECTIONS.items()}
     sid_field = {sid: (f, type_name) for f, (sid, _u, type_name) in ID_SECTIONS.items()}
+    # A given section's mode is read off its first statement, the Nexus half.
+    given: dict[str, tuple[list[str], list[str]]] = {}
     for statement in _statements_of(document):
-        sid, effect, _actions, resources = _statement_parts(statement)
+        sid, effect, actions, resources = _statement_parts(statement)
         section = offer_section(sid)
         if effect != "Allow" or section is None:
+            continue
+        if section in given_files.FIELD_OF_SID:
+            if sid == section:
+                given[given_files.FIELD_OF_SID[section]] = (actions, resources)
             continue
         if section in sid_field:
             f, type_name = sid_field[section]
@@ -293,9 +366,15 @@ def offer_of(document: Any) -> Offer:
             continue
         kind = sid_kind[section]
         found[kind].update(i for r in resources if (i := _item_of(kind, r)) is not None)
+    modes = {f: given_files.mode_of(f, actions) for f, (actions, _r) in given.items()}
+    org_mode = modes.get(given_files.ORG_FILES)
+    organization = given_files.organization_of(given.get(given_files.ORG_FILES, ((), ()))[1])
     return Offer(
         **{kind: frozenset(items) for kind, items in found.items()},
         **{f: frozenset(v) for f, v in ids.items()},
+        org_files=OrgFiles(organization, org_mode) if org_mode and organization else None,
+        platform_files=modes.get(given_files.PLATFORM_FILES),
+        system_files=modes.get(given_files.SYSTEM_FILES),
     )
 
 
@@ -391,8 +470,10 @@ def with_features(offer: Offer, features: Iterable[str]) -> Offer:
 
 __all__ = [
     "FEATURES_SID",
+    "GIVEN_FIELDS",
     "OFFER_SIDS",
     "Offer",
+    "OrgFiles",
     "SECTIONS",
     "WHOLE_MODULE",
     "changed",
@@ -514,6 +595,14 @@ def in_offer_form(document: Any) -> bool:
 
 
 def instances_only(offer: Offer) -> Offer:
-    """``offer`` without its features: what a re-seed adds (the features are the
-    Features setting's)."""
-    return replace(offer, features=frozenset(), search_sources=frozenset(), ontologies=frozenset())
+    """``offer`` without its features and what it gives outside the workspace: what a
+    re-seed adds (the rest is the settings')."""
+    return replace(
+        offer,
+        features=frozenset(),
+        search_sources=frozenset(),
+        ontologies=frozenset(),
+        org_files=None,
+        platform_files=None,
+        system_files=None,
+    )

@@ -31,8 +31,9 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `workspace_offer.py` | "<W> access" as an allow-list ("Ceilings as allow-lists"): `Offer`, `offer_document`, `offer_of`, `with_offer`, `in_offer_form`, `offer_from_seed`, `seeded_offer` |
 | `model_sets.py` | "Models · member", "Models · all", "Models · embeddings" (platform policies kept in step with `nexus_config.models.member_set` at start, `ensure_configured`); `level_model_policy_ids(iam, level)` for the level groups |
 | `capabilities.py` | Capability groups made on demand (`ensure_capability`): an organization's "Workflow runners", the platform's "Models · all" |
-| `platform_files.py` | Platform Files given with the workspace (#1590): "Platform Files · read" / "· write", a platform group per workspace kept in step with its people (`set_workspace_platform_files`, `follow`, `sync_platform_files`, `ensure_configured`), the legacy flags (`convert_legacy_drive_flags`, `DriveFlagChange`) |
-| `platform_files_routes.py` | `GET`/`PUT /api/workspaces/{id}/platform-files`: `{workspace_id, mode, can_change}`; read as the configuration, changed by the platform admin alone |
+| `given_files.py` | The files a workspace's offer gives outside it: `GivenOrgFiles`, `GivenPlatformFiles`, `GivenSystemFiles` by mode (`statements`, `mode_of`) |
+| `files_offer.py` | Startup, once: the Platform Files groups of #1590 into `GivenPlatformFiles`, groups and policies deleted (`iam_migrations` `files_offer_v1`); the legacy drive flags (`convert_legacy_drive_flags`, `DriveFlagChange`) |
+| `platform_files_routes.py` | `GET`/`PUT /api/workspaces/{id}/platform-files`: `{workspace_id, mode, can_change}`, the offer's `GivenPlatformFiles`; read as the configuration, written as the caller |
 | `container_defaults.py` | Each organization's and workspace's access policy and groups ("Access policies and default groups"): "<O> access", "<O> admins", "<O> people"; "<W> access" (W's bound), "<W> workspace", "<W> admins"; made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), forgotten with it (`dropped`); `grouped` / `grouped_record` (whether its people are groups, #1585); a container recorded before #1585 keeps its "<X> members" and admins in step with the roles (`sync_scope`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
 | `access_model.py` | Startup, once, after `container_defaults_v1`: per-person attachments become groups, with the report of every access change, compared after the start ("The access move"; `migrate_access`, `complete_report`, `iam_migrations` `access_model_v1`; `abi iam migrate-access --dry-run`, `migrate_from_cli`) |
 | `shadow_iam.py` | A copy of an IAM in memory (`shadow_of`), or kept as JSON (`snapshot`, `store_of`): the access move tries its plan there first, and reads its report from the copies' decisions |
@@ -459,8 +460,8 @@ lock; it waits for `container_defaults_v1`. Built from what IAM holds now with S
   declared actions, shared graphs, models) compared, each change a `Change` with a reason (`REASONS`, intended ones
   flagged: members lose workflows and pipelines, members gain datasets, model sets, owners lose delete, org Member
   roles go). Also: empty workspaces, workspaces with no admin, org-only people, retired and kept policies, the drive
-  flags (`platform_files.convert_legacy_drive_flags`, #1590: once the people are in their groups, after
-  `sync_platform_files`; it drops its holding table; a dry run asks it with `apply=False` on the copy).
+  flags (`files_offer.convert_legacy_drive_flags`: into each workspace's offer once its access policy is
+  recorded; it drops its holding table; a dry run asks it with `apply=False` on the copy).
 - **Safety.** A shape it does not know, or a plan the copy refuses (`AccessModelStop`), stops it: nothing written,
   nothing recorded. Before the real IAM changes, the move is kept (`access_model_v1_planned`: its plan's report, its
   inputs and IAM as it was, `shadow_iam.snapshot`); a start interrupted half way is finished by the next, which
@@ -477,31 +478,31 @@ lock; it waits for `container_defaults_v1`. Built from what IAM holds now with S
   the copy. Tests: `access_model_test.py` (decision matrices on `policy_tree_test`'s world and on
   `role_features_test`'s taken back to before #1585), `shadow_iam_test.py`.
 
-## Platform Files given with the workspace (#1590)
+## Files given by the workspace's offer (ADR `20261125_offer_gives_outside_resources`)
 
-- **Two platform policies, written once** (`platform_files.ensure_policies`, at start): "Platform Files · read"
-  (`ListPlatformFiles`, `GetPlatformFile` on `abi:nexus:platform_file/*`; `object_storage` list and get on
-  `naas_abi/platform-drive` and `/*`) and "Platform Files · write" (read, plus `PutPlatformFile`,
-  `DeletePlatformFile`, `object_storage:PutObject`, `PutObjectStream`, `DeleteObject`). An edit is replaced at the
-  next start.
-- **A platform group per workspace that has it**, "Platform Files · <W> (<workspace id>)", holds one of them,
-  unscoped; the setting (`off`, `read`, `write`) is which one, so IAM is its only store
-  (`workspace_platform_files`). Not "<W> workspace": what it holds at W is W's bound, and IAM refuses an unscoped
-  attachment to a group a workspace owns.
-- **Its members are W's people** (the members of W's membership groups, `list_container_members`), kept in step as
-  `api`: `MEMBERSHIPS` calls `follow(iam, principal)` after each membership change, where "Workspace admins" is kept;
-  `iam_admin` does after `add_member`/`remove_member` (`follow_member`); `set_workspace_platform_files` after a change;
-  `ensure_configured` at start (`bootstrap.apply_access_settings`), which also deletes the group of a deleted
-  workspace (and `MEMBERSHIPS.drop_scope` deletes it at once). A migration moving memberships without `MEMBERSHIPS`
-  calls `sync_platform_files(iam)` after.
-- **Who changes it:** `set_workspace_platform_files(iam, workspace_id, mode)` runs the group and attachment writes in
-  the ambient call context: only unscoped grants reach a platform group and attaching is held-checked, so the
-  platform admin (`may_set`: `iam:CreateGroup` at the platform). A workspace or org admin gets
-  `PermissionDeniedError`.
-- **The legacy flags:** `convert_legacy_drive_flags(iam, db) -> list[DriveFlagChange]` (`workspace_id`, `flag`
-  `"platform"|"system"`, `action` `"converted"|"reported"|"none"`, `detail`) reads `workspace_drive_flags_legacy`
-  (kept by `0073_drop_drive_flags.sql` on PostgreSQL), sets `write` for each `platform_drive_enabled`, reports
-  `system_drive_enabled`, then drops the table; idempotent (no table, `[]`); `apply=False` is a dry run.
+- **Given sections** of "<W> access" (`given_files.py`, read and written by `workspace_offer`): `GivenOrgFiles`
+  (off, read, write; the workspace's organization's `nexus:*OrgFile*` on `<O>/nexus:file/organization` and `/*`, and
+  `object_storage` on `<O>/object_storage:object/naas_abi/organization-drive/<o>` and `/*`), `GivenPlatformFiles`
+  (off, read, write; `nexus:*PlatformFile*` on `abi:nexus:platform_file/*`, `object_storage` on
+  `abi:object_storage:object/naas_abi/platform-drive` and `/*`), `GivenSystemFiles` (off, read;
+  `ListObjectStoreFiles`, `GetObjectStoreFile` on `abi:nexus:system_file/*`, `object_storage` read on
+  `abi:object_storage:object/*` and `abi:*/object_storage:object/*`). Each is its Nexus half and its object storage
+  half (`<sid>2`); read lists and reads, write also puts and deletes. Core IAM gives them to W's people while they
+  belong to W, each action within their level there (core "Given statements"): a Viewer reads, a Member writes.
+- **Who changes them:** a write of "<W> access" as the caller (`feature_access.FeatureAccessService.set_files`,
+  `PUT /api/workspaces/{id}/offer/files`, and `platform_files_routes.py`), held-checked by IAM: the platform admin
+  gives Platform and System Files, an organization's admins its Organization Files; a workspace admin narrows or
+  removes. `read_offer` says per row the mode, the `choices` the caller has (held, per `grantable` at the platform,
+  or narrower than now) and `editable`.
+- **My Files** is no section: `feature_flags.viewer_my_files` (default true); off, "Viewer access" denies
+  `ListMyFiles`, `GetMyFile`, `ListUserStorage`, `GetUserStorage` (`levels.no_my_files_statement`).
+- **The move** `files_offer_v1` (`files_offer.py`, `main._offer_moves`): each "Platform Files · <W> (<id>)" group of
+  #1590 becomes `GivenPlatformFiles` in its mode, then the groups and the two policies "Platform Files · read|write"
+  are deleted (a policy someone else holds is kept and named). **The legacy flags:**
+  `files_offer.convert_legacy_drive_flags(iam, db) -> list[DriveFlagChange]` (`workspace_id`, `flag`
+  `"platform"|"system"`, `action` `"converted"|"reported"|"none"`, `detail`) reads `workspace_drive_flags_legacy`,
+  gives `GivenPlatformFiles` write for each `platform_drive_enabled`, reports `system_drive_enabled`, then drops the
+  table; idempotent; `apply=False` is a dry run.
 
 ## The upgrade: sets and toggles become policies
 

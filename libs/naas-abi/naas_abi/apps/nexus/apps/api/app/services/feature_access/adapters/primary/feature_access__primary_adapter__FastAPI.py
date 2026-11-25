@@ -142,7 +142,8 @@ async def read_workspace_offer(
     service: FeatureAccessService = Service,
 ) -> dict[str, Any]:
     """The agents, apps, workflows and pipelines the workspace offers (its
-    allow-list, "<W> access"), by name or whole module."""
+    allow-list, "<W> access"), by name or whole module; the files it gives outside it
+    (``files``: a mode each, the modes the caller may choose) and what My Files is."""
     return await _call(service.read_offer(user, workspace_id))
 
 
@@ -165,6 +166,32 @@ async def save_workspace_search_sources(
     caller (403 for a source the caller does not hold, 422 for one beyond the
     organization's offer). Answers the offer after."""
     return await _call(service.save_search_sources(user, workspace_id, body.changes))
+
+
+class FilesBody(BaseModel):
+    """What the workspace gives its people outside it; a section left out is kept."""
+
+    org_files: Literal["off", "read", "write"] | None = None
+    platform_files: Literal["off", "read", "write"] | None = None
+    system_files: Literal["off", "read"] | None = None
+
+
+@router.put(
+    "/{workspace_id}/offer/files",
+    dependencies=[declares(action) for action in WRITES],
+)
+async def save_workspace_files(
+    workspace_id: str,
+    body: FilesBody,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+) -> dict[str, Any]:
+    """Give (or stop giving) Organization, Platform or System Files, in one write of
+    "<W> access" as the caller (403 for a section the caller does not hold and the
+    change widens; 422 for Organization Files in a workspace of no organization).
+    Answers the offer after."""
+    changes = {k: v for k, v in body.model_dump().items() if v is not None}
+    return await _call(service.set_files(user, workspace_id, changes))
 
 
 @router.put(

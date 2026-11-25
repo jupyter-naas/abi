@@ -185,6 +185,7 @@ FEATURE_ACCESS_ROUTES: dict[tuple[str, str], tuple[str, ...]] = {
     ("PUT", "/api/workspaces/{workspace_id}/feature-access"): ("iam:UpdatePolicy",),
     ("GET", "/api/workspaces/{workspace_id}/offer"): ("GetWorkspaceConfiguration",),
     ("PUT", "/api/workspaces/{workspace_id}/offer"): ("iam:UpdatePolicy",),
+    ("PUT", "/api/workspaces/{workspace_id}/offer/files"): ("iam:UpdatePolicy",),
 }
 
 
@@ -219,14 +220,12 @@ def test_the_capability_routes_declare_what_they_authorize(table) -> None:
     assert found == CAPABILITY_ROUTES
 
 
-# Workspace settings > General › Platform Files (``iam/platform_files``): read as the
-# workspace's configuration, changed by the IAM writes the caller makes at the platform.
+# Workspace settings > General › Platform Files (``iam/platform_files_routes``): read as
+# the workspace's configuration, saved as the write the caller makes of "<W> access" (its
+# ``GivenPlatformFiles``).
 PLATFORM_FILES_ROUTES: dict[tuple[str, str], tuple[str, ...]] = {
     ("GET", "/api/workspaces/{workspace_id}/platform-files"): ("GetWorkspaceConfiguration",),
-    ("PUT", "/api/workspaces/{workspace_id}/platform-files"): (
-        "iam:CreateGroup",
-        "iam:AttachPolicy",
-    ),
+    ("PUT", "/api/workspaces/{workspace_id}/platform-files"): ("iam:UpdatePolicy",),
 }
 
 

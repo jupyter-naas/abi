@@ -96,3 +96,29 @@ def test_the_offer_reads_as_configuration_and_saves_as_the_caller(client):
         == 422
     )
     assert client.put(path, json={"changes": []}, headers={"x-user": "olivia"}).status_code == 422
+
+
+def test_the_files_given_are_read_with_the_offer_and_saved_as_the_caller(client):
+    """Olivia, Acme's owner, gives Acme's Organization Files; Platform Files is the
+    platform admin's (403); a mode a section does not have or no change at all is 422."""
+    path = "/api/workspaces/alpha/offer/files"
+    state = client.get("/api/workspaces/alpha/offer", headers={"x-user": "olivia"}).json()
+    rows = {row["key"]: row for row in state["files"]}
+    assert set(rows) == {"org_files", "platform_files", "system_files"}
+    assert rows["org_files"]["mode"] == "off" and rows["org_files"]["editable"]
+    assert not rows["platform_files"]["editable"]
+    assert state["my_files"] == {"members": "write", "viewers": "read"}
+    saved = client.put(path, json={"org_files": "read"}, headers={"x-user": "olivia"})
+    assert saved.status_code == 200
+    assert {r["key"]: r["mode"] for r in saved.json()["files"]}["org_files"] == "read"
+    refused = client.put(path, json={"platform_files": "read"}, headers={"x-user": "olivia"})
+    assert refused.status_code == 403
+    assert (
+        client.put(path, json={"system_files": "write"}, headers={"x-user": "root"}).status_code
+        == 422
+    )
+    assert client.put(path, json={}, headers={"x-user": "olivia"}).status_code == 422
+    assert client.put(path, json={"org_files": "read"}, headers={"x-user": "dave"}).status_code in (
+        403,
+        404,
+    )

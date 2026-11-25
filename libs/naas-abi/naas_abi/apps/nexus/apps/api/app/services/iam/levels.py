@@ -200,11 +200,47 @@ def ontologies_statement() -> dict[str, Any]:
     }
 
 
+def viewer_my_files() -> bool:
+    """Whether a Viewer reads their My Files: the deployment's
+    ``feature_flags.viewer_my_files`` (on by default)."""
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+
+    flags = getattr(live_settings(), "feature_flags", None)
+    return bool(getattr(flags, "viewer_my_files", True))
+
+
+# What a Viewer reads of their own files through the platform companion of their role
+# (``catalog.files.PLATFORM_ACCESS``): My Files and their platform storage.
+MY_FILES_READ = (
+    "nexus:ListMyFiles",
+    "nexus:GetMyFile",
+    "nexus:ListUserStorage",
+    "nexus:GetUserStorage",
+)
+
+
+def no_my_files_statement() -> dict[str, Any]:
+    """A Deny of My Files, for "Viewer access" on a deployment that keeps it from
+    Viewers (``viewer_my_files`` off). A Deny may name what lies outside its scope."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource
+
+    return {
+        "sid": "NoMyFiles",
+        "effect": "Deny",
+        "actions": list(MY_FILES_READ),
+        "resources": [
+            nexus_resource(type_name, id=("-",)).rsplit("/", 1)[0] + "/*"
+            for type_name in ("my_file", "user_storage")
+        ],
+    }
+
+
 def level_document(name: str) -> PolicyDocument:
     """The document of a generic level policy (``VIEWER_ACCESS``, ``MEMBER_ACCESS``,
     ``WORKSPACE_ADMIN_ACCESS``): its features, the module scopes it uses and the
     search sources, every one of a type (the workspace's bound names which). The
-    actions of the level are the built-in role's, held beside it."""
+    actions of the level are the built-in role's, held beside it. "Viewer access"
+    denies My Files when the deployment keeps it from Viewers."""
     statements = [
         features_statement(level_features(name)),
         instances_statement(LEVEL_INSTANCES[name]),
@@ -213,6 +249,8 @@ def level_document(name: str) -> PolicyDocument:
         statements.append(search_sources_statement())
     if "ontology" in level_features(name):
         statements.append(ontologies_statement())
+    if name == VIEWER_ACCESS and not viewer_my_files():
+        statements.append(no_my_files_statement())
     return PolicyDocument.from_dict({"version": POLICY_VERSION, "statements": statements})
 
 

@@ -68,7 +68,10 @@ SERVICE = "nexus"
 #     level policies and bounded by each workspace's offer; ``SetSearchScope`` deprecated.
 # 19: ontology files (``ontology_file``, ``UseOntology``): no role's, granted by the
 #     level policies and bounded by each workspace's offer (``OfferOntologies``).
-VERSION = 19
+# 20: ``PutOrgFile`` and ``DeleteOrgFile`` are ``write``, not ``admin``: an organization's
+#     members write Organization Files, and a workspace's offer that gives them
+#     (``GivenOrgFiles``) lets its Members write them, its Viewers read them.
+VERSION = 20
 
 _MODULES = (
     organizations,

@@ -3,7 +3,8 @@
  * /api/workspaces/{id}/offer` cover its agents, apps, workflows and pipelines, by module (a
  * shared module offered whole is `<module>/*`); its features are General › Features'
  * (`/feature-access`, Everyone or Nobody). Everyone in "<W> workspace" reaches what it offers;
- * their level decides what they may do with it.
+ * their level decides what they may do with it. Its Files part gives what lies outside the workspace
+ * (Organization, Platform and System Files, `PUT /offer/files`), within each person's level.
  */
 import { authFetch } from '@/stores/auth';
 
@@ -33,9 +34,32 @@ export type OfferState = {
     /** The sources of the search it offers: a feature (`chat`...) or `web.<engine>`. */
     search_sources?: string[];
   };
+  /** The files it gives outside it; no Organization Files row for a workspace in no organization. */
+  files?: FileRow[];
+  my_files?: MyFiles;
 };
 
 export type OfferChange = { kind: OfferKind; module: string; name: string; offered: boolean };
+
+/** What a file section gives: nothing, reading, or reading and writing (a Viewer still only reads). */
+export type FileMode = 'off' | 'read' | 'write';
+export type FileKey = 'org_files' | 'platform_files' | 'system_files';
+
+/** A section of files the workspace gives outside it (`GivenOrgFiles`...). */
+export type FileRow = {
+  key: FileKey;
+  label: string;
+  mode: FileMode;
+  /** Every mode the section has (System Files: Off and Read). */
+  modes: FileMode[];
+  /** The modes the caller may choose: those they hold, and any narrower than the current one. */
+  choices: FileMode[];
+  editable: boolean;
+  reason: string | null;
+};
+
+/** My Files: a setting of the deployment, not of the workspace. */
+export type MyFiles = { members: 'write'; viewers: 'read' | 'none' };
 
 export class OfferError extends Error {
   readonly status: number;
@@ -88,6 +112,16 @@ export function createOfferApi(fetcher: Fetcher = authFetch) {
         body: JSON.stringify({ changes }),
       });
       if (!response.ok) throw await failure(response, `Could not save the search sources (HTTP ${response.status}).`);
+      return (await response.json()) as OfferState;
+    },
+    /** Give (or stop giving) files outside the workspace, in one write of "<W> access". */
+    saveFiles: async (workspaceId: string, changes: Partial<Record<FileKey, FileMode>>): Promise<OfferState> => {
+      const response = await fetcher(`${path(workspaceId)}/files`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(changes),
+      });
+      if (!response.ok) throw await failure(response, `Could not save the files (HTTP ${response.status}).`);
       return (await response.json()) as OfferState;
     },
   };

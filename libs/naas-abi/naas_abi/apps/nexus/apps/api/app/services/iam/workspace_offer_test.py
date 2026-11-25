@@ -5,6 +5,8 @@ nothing about who may do what is mocked."""
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 from naas_abi.apps.nexus.apps.api.app.services.iam import container_defaults
@@ -23,7 +25,9 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     Offer,
+    OrgFiles,
     in_offer_form,
+    instances_only,
     item_pattern,
     offer_document,
     offer_from_seed,
@@ -269,3 +273,62 @@ def test_ontologies_are_a_section_named_by_their_refs():
         "OfferOntologies2",
     ]
     assert offer_of(offer_document(many)) == many
+
+
+def test_the_files_given_outside_the_workspace_are_sections_of_the_offer():
+    """Organization, Platform and System Files are given sections: absolute names (no
+    ``${scope}``), each its Nexus half and its object storage half, read back as modes."""
+    offer = Offer.of(
+        features=["files"],
+        org_files=OrgFiles("acme", "write"),
+        platform_files="read",
+        system_files="read",
+    )
+    document = offer_document(offer)
+    assert [s["sid"] for s in document["statements"]] == [
+        "OfferFeatures",
+        "GivenOrgFiles",
+        "GivenOrgFiles2",
+        "GivenPlatformFiles",
+        "GivenPlatformFiles2",
+        "GivenSystemFiles",
+        "GivenSystemFiles2",
+    ]
+    given = [s for s in document["statements"] if s["sid"].startswith("Given")]
+    assert all("${" not in r for s in given for r in s["resources"])
+    org = given[0]
+    assert org["actions"] == [
+        "nexus:ListOrgFiles",
+        "nexus:GetOrgFile",
+        "nexus:PutOrgFile",
+        "nexus:DeleteOrgFile",
+    ]
+    assert org["resources"] == [
+        "abi:nexus:organization/acme/nexus:file/organization",
+        "abi:nexus:organization/acme/nexus:file/organization/*",
+    ]
+    assert given[3]["resources"] == [
+        "abi:object_storage:object/naas_abi/platform-drive",
+        "abi:object_storage:object/naas_abi/platform-drive/*",
+    ]
+    assert "object_storage:PutObject" not in given[3]["actions"]
+    assert offer_of(document) == offer
+    assert in_offer_form(document)
+    assert offer_section("GivenPlatformFiles2") == "GivenPlatformFiles"
+    parse_policy_document(document)
+    # The wider mode wins a merge; ``without`` takes a section given as wide.
+    assert (
+        Offer.of(platform_files="read").merged(Offer.of(platform_files="write")).platform_files
+        == "write"
+    )
+    assert Offer.of(platform_files="read").without(Offer.of(platform_files="write")) == Offer()
+    assert not Offer.of(system_files="read").is_empty()
+    # Rewriting the sections keeps the rest; a section turned off is gone.
+    narrowed = with_offer(document, replace(offer_of(document), platform_files=None))
+    assert offer_of(narrowed) == replace(offer, platform_files=None)
+    assert not any(s["sid"].startswith("GivenPlatformFiles") for s in narrowed["statements"])
+    # System Files is read only.
+    with pytest.raises(ValueError, match="System Files"):
+        offer_document(Offer.of(system_files="write"))
+    # A re-seed adds instances, never a given section.
+    assert instances_only(offer).is_empty()
