@@ -221,4 +221,3 @@ async def test_adapter_maps_row_to_record() -> None:
     assert skills[0].slug == "summarize"
     assert skills[0].scope == "organization"
     assert skills[0].organization_id == "org-1"
-    assert skills[0].enabled_here is True

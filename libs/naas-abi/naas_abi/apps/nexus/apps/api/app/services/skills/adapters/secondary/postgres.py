@@ -6,9 +6,7 @@ from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.models import (
     SkillModel,
-    SkillWorkspaceSwitchModel,
     WorkspaceModel,
-    _utcnow,
 )
 from naas_abi.apps.nexus.apps.api.app.services.skills.port import (
     SkillCreateInput,
@@ -39,7 +37,7 @@ class SkillSecondaryAdapterPostgres(SkillPersistencePort):
         return db
 
     @staticmethod
-    def _to_record(model: SkillModel, enabled_here: bool | None = None) -> SkillRecord:
+    def _to_record(model: SkillModel) -> SkillRecord:
         return SkillRecord(
             id=str(model.id),
             workspace_id=str(model.workspace_id),
@@ -56,7 +54,6 @@ class SkillSecondaryAdapterPostgres(SkillPersistencePort):
             ),
             created_at=datetime.fromisoformat(str(model.created_at)),
             updated_at=datetime.fromisoformat(str(model.updated_at)),
-            enabled_here=True if enabled_here is None else bool(enabled_here),
         )
 
     @staticmethod
@@ -87,21 +84,11 @@ class SkillSecondaryAdapterPostgres(SkillPersistencePort):
 
     async def list_visible(self, workspace_id: str, user_id: str) -> list[SkillRecord]:
         result = await self.db.execute(
-            select(SkillModel, SkillWorkspaceSwitchModel.enabled)
-            .outerjoin(
-                SkillWorkspaceSwitchModel,
-                # A switch is for an organization skill: one left from before a
-                # skill was narrowed decides nothing.
-                and_(
-                    SkillWorkspaceSwitchModel.skill_id == SkillModel.id,
-                    SkillWorkspaceSwitchModel.workspace_id == workspace_id,
-                    SkillModel.scope == "organization",
-                ),
-            )
+            select(SkillModel)
             .where(self._visibility_filter(workspace_id, user_id))
             .order_by(SkillModel.last_used_at.desc().nulls_last(), SkillModel.updated_at.desc())
         )
-        return [self._to_record(row, here) for row, here in result.all()]
+        return [self._to_record(row) for row in result.scalars().all()]
 
     async def organization_of(self, workspace_id: str) -> str | None:
         found = await self.db.execute(
@@ -109,24 +96,6 @@ class SkillSecondaryAdapterPostgres(SkillPersistencePort):
         )
         org_id = found.scalar_one_or_none()
         return str(org_id) if org_id else None
-
-    async def set_enabled_in(
-        self, skill_id: str, workspace_id: str, enabled: bool, user_id: str
-    ) -> None:
-        found = await self.db.execute(
-            select(SkillWorkspaceSwitchModel).where(
-                SkillWorkspaceSwitchModel.skill_id == skill_id,
-                SkillWorkspaceSwitchModel.workspace_id == workspace_id,
-            )
-        )
-        row = found.scalar_one_or_none()
-        if row is None:
-            row = SkillWorkspaceSwitchModel(skill_id=skill_id, workspace_id=workspace_id)
-            self.db.add(row)
-        row.enabled = enabled
-        row.updated_by = user_id
-        row.updated_at = _utcnow()
-        await self.db.commit()
 
     async def get_by_id(self, skill_id: str) -> SkillRecord | None:
         result = await self.db.execute(select(SkillModel).where(SkillModel.id == skill_id))

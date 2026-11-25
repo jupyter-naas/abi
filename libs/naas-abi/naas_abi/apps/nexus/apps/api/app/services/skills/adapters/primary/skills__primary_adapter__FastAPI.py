@@ -74,10 +74,6 @@ class SkillUpdateBody(BaseModel):
     enabled: bool | None = None
 
 
-class SkillSwitchBody(BaseModel):
-    enabled: bool
-
-
 @router.get("/", dependencies=[guard("ListSkills", literal="-")])
 async def list_skills(
     workspace_id: str,
@@ -168,35 +164,6 @@ async def update_skill(
     except SkillValidationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not skill:
-        raise HTTPException(status_code=404, detail="Skill not found")
-    return skill
-
-
-@router.put(
-    "/{skill_id}/workspaces/{workspace_id}",
-    dependencies=[
-        guard(
-            "UpdateWorkspace",
-            denied="Only the workspace's admins turn an organization skill on or off there",
-        )
-    ],
-)
-async def switch_skill_in_workspace(
-    skill_id: str,
-    workspace_id: str,
-    body: SkillSwitchBody,
-    current_user: User = Depends(get_current_user_required),
-    skill_service: SkillService = Depends(get_skill_service),
-) -> SkillRecord:
-    """An organization skill, on or off in one workspace of its organization: the
-    admins of each workspace decide whether its chats carry it."""
-    skill = await skill_service.set_enabled_in(
-        context=request_context(current_user),
-        skill_id=skill_id,
-        workspace_id=workspace_id,
-        enabled=body.enabled,
-    )
-    if skill is None:
         raise HTTPException(status_code=404, detail="Skill not found")
     return skill
 

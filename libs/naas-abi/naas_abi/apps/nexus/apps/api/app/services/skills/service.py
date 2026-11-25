@@ -210,18 +210,3 @@ class SkillService:
             )
             await self._require_organization(context.actor_user_id, org_id)
         return await self.adapter.delete(skill_id)
-
-    async def set_enabled_in(
-        self, context: RequestContext, skill_id: str, workspace_id: str, enabled: bool
-    ) -> SkillRecord | None:
-        """Turn an organization skill on or off in ``workspace_id``, one of its
-        organization's workspaces. The route checked that the caller administers
-        that workspace."""
-        existing = await self.adapter.get_by_id(skill_id)
-        if not existing or existing.scope != ORGANIZATION or not existing.organization_id:
-            return None
-        if await self.adapter.organization_of(workspace_id) != existing.organization_id:
-            return None
-        await self.adapter.set_enabled_in(skill_id, workspace_id, enabled, context.actor_user_id)
-        found = await self.adapter.list_visible(workspace_id, context.actor_user_id)
-        return next((s for s in found if s.id == skill_id), None)

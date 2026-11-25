@@ -657,9 +657,9 @@ class ChatService:
         try:
             # The turn was authorized (SendMessage); the catalog is the caller's own
             # view, narrowed to what they may use here (the skills feature and
-            # ``UseSkill``), and to what the workspace has not turned off.
+            # ``UseSkill``).
             skills = await self.skills_service.adapter.list_visible(workspace_id, user_id)
-            enabled = [s for s in skills if s.enabled and getattr(s, "enabled_here", True)]
+            enabled = [s for s in skills if s.enabled]
             if enabled:
                 enabled = await self.skill_access(user_id, workspace_id, enabled)
         except Exception:
