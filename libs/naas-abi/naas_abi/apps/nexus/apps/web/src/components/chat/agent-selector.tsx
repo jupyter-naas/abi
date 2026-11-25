@@ -7,7 +7,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { useAgentsStore, type Agent } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
-import { useAgentList } from '@/components/ui/dialogs';
+import { useAgentList } from '@/components/chat/use-agent-list';
 import { getLogoUrl } from '@/lib/logo-url';
 import { pickWorkspaceDefaultAgent } from '@/lib/pick-workspace-default-agent';
 

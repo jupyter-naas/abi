@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   CalendarDays,
   CircleDot,
@@ -14,6 +14,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Popover } from '@/components/database-view/primitives';
+import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
 import type { TaskFields, TaskIteration, TasksMember, TasksSettings } from '@/lib/tasks';
 import { Avatars } from './task-card';
 import { MarkdownEditor } from './markdown-editor';
@@ -22,6 +24,7 @@ import { ChipEditor } from './task-drawer';
 
 /** Iteration choice standing for the open tab's own iteration, created on save if needed. */
 const SCOPE_ITERATION = '__scope__';
+const FORM_ID = 'tasks-new-task-form';
 
 function PropLabel({ icon: Icon, htmlFor, children }: { icon: LucideIcon; htmlFor?: string; children: string }) {
   const Element = htmlFor ? 'label' : 'span';
@@ -76,14 +79,6 @@ export function TaskCreateDialog({
   const [githubIssue, setGithubIssue] = useState('');
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
-
   const toggleAssignee = (userId: string) =>
     setAssignees((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]));
 
@@ -110,168 +105,165 @@ export function TaskCreateDialog({
     }
   };
 
-  // Covers the Tasks page only (not the shell's navigation bars) and centers in it.
   return (
-    <div className="tasks-create-overlay">
-      <div className="tasks-create-backdrop" onClick={onClose} />
+    <Dialog
+      size="lg"
+      aria-label="New task"
+      className="tasks-dialog"
+      title={
+        <input
+          data-autofocus
+          form={FORM_ID}
+          className="tasks-drawer-title w-full"
+          value={title}
+          maxLength={300}
+          aria-label="Title"
+          placeholder="Task title"
+          onChange={(e) => setTitle(e.target.value)}
+        />
+      }
+      onClose={onClose}
+      onSubmit={() => void submit()}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form={FORM_ID} disabled={saving || !title.trim() || !isGithubIssueUrl(githubIssue)}>
+            Create task
+          </Button>
+        </>
+      }
+    >
       <form
-        className="tasks-create-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="New task"
+        id={FORM_ID}
+        className="tasks-dialog-form"
         onSubmit={(e) => {
           e.preventDefault();
           void submit();
         }}
       >
-        <header className="tasks-drawer-header">
-          <input
-            autoFocus
-            className="tasks-drawer-title"
-            value={title}
-            maxLength={300}
-            aria-label="Title"
-            placeholder="Task title"
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <button type="button" className="tasks-icon-button" title="Close" onClick={onClose}>
-            <X size={14} />
-          </button>
-        </header>
+        {/* Every property a person sets; workspace and audit fields are set by the server. */}
+        <div className="tasks-drawer-fields tasks-create-props">
+          <PropLabel icon={CircleDot} htmlFor="tasks-new-stage">Stage</PropLabel>
+          <select
+            id="tasks-new-stage"
+            className="tasks-drawer-select"
+            value={stage}
+            onChange={(e) => setStage(e.target.value)}
+          >
+            {settings.stages.map((s) => (
+              <option key={s.key} value={s.key}>{s.label}</option>
+            ))}
+          </select>
 
-        <div className="tasks-drawer-body">
-          {/* Every property a person sets; workspace and audit fields are set by the server. */}
-          <div className="tasks-drawer-fields tasks-create-props">
-            <PropLabel icon={CircleDot} htmlFor="tasks-new-stage">Stage</PropLabel>
-            <select
-              id="tasks-new-stage"
-              className="tasks-drawer-select"
-              value={stage}
-              onChange={(e) => setStage(e.target.value)}
+          <PropLabel icon={Users}>Assignees</PropLabel>
+          <div className="tasks-drawer-chips">
+            {assignees.map((id) => (
+              <span key={id} className="tasks-drawer-chip">
+                <Avatars names={[memberName(id)]} />
+                {memberName(id)}
+                <button
+                  type="button"
+                  className="tasks-drawer-chip-remove"
+                  title={`Unassign ${memberName(id)}`}
+                  onClick={() => toggleAssignee(id)}
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+            <Popover
+              width="w-72"
+              trigger={({ toggle }) => (
+                <button type="button" className="tasks-column-add tasks-column-add-inline" onClick={toggle}>
+                  <Plus size={12} /> Assign
+                </button>
+              )}
             >
-              {settings.stages.map((s) => (
-                <option key={s.key} value={s.key}>{s.label}</option>
-              ))}
-            </select>
-
-            <PropLabel icon={Users}>Assignees</PropLabel>
-            <div className="tasks-drawer-chips">
-              {assignees.map((id) => (
-                <span key={id} className="tasks-drawer-chip">
-                  <Avatars names={[memberName(id)]} />
-                  {memberName(id)}
-                  <button
-                    type="button"
-                    className="tasks-drawer-chip-remove"
-                    title={`Unassign ${memberName(id)}`}
-                    onClick={() => toggleAssignee(id)}
-                  >
-                    <X size={11} />
-                  </button>
-                </span>
-              ))}
-              <Popover
-                width="w-72"
-                trigger={({ toggle }) => (
-                  <button type="button" className="tasks-column-add tasks-column-add-inline" onClick={toggle}>
-                    <Plus size={12} /> Assign
-                  </button>
+              <div className="space-y-0.5">
+                {members.length === 0 && (
+                  <p className="px-2 py-1 text-xs text-muted-foreground">No workspace members found.</p>
                 )}
-              >
-                <div className="space-y-0.5">
-                  {members.length === 0 && (
-                    <p className="px-2 py-1 text-xs text-muted-foreground">No workspace members found.</p>
-                  )}
-                  {members.map((member) => (
-                    <button
-                      key={member.user_id}
-                      type="button"
-                      className="tasks-drawer-member-option"
-                      onClick={() => toggleAssignee(member.user_id)}
-                    >
-                      <input type="checkbox" readOnly checked={assignees.includes(member.user_id)} tabIndex={-1} />
-                      <span className="truncate">{member.name || member.email}</span>
-                      {member.name && member.email && (
-                        <span className="tasks-drawer-member-email truncate">{member.email}</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </Popover>
-            </div>
-
-            <PropLabel icon={Flag} htmlFor="tasks-new-priority">Priority</PropLabel>
-            <select
-              id="tasks-new-priority"
-              className="tasks-drawer-select"
-              value={priority}
-              onChange={(e) => setPriority(e.target.value)}
-            >
-              <option value="">No priority</option>
-              {settings.priorities.map((p) => (
-                <option key={p.key} value={p.key}>{p.label}</option>
-              ))}
-            </select>
-
-            <PropLabel icon={Tag}>Labels</PropLabel>
-            <ChipEditor
-              values={taskLabels}
-              suggestions={Array.from(new Set([...settings.suggested_labels, ...labels]))}
-              placeholder="Add a label"
-              onChange={setTaskLabels}
-            />
-
-            <PropLabel icon={CalendarDays} htmlFor="tasks-new-due">Due date</PropLabel>
-            <input
-              id="tasks-new-due"
-              type="date"
-              className="tasks-drawer-input"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-            />
-
-            <PropLabel icon={Github} htmlFor="tasks-new-github">GitHub issue</PropLabel>
-            <GithubIssueInput id="tasks-new-github" value={githubIssue} onChange={setGithubIssue} />
-
-            <PropLabel icon={Repeat} htmlFor="tasks-new-iteration">Iteration</PropLabel>
-            <select
-              id="tasks-new-iteration"
-              className="tasks-drawer-select"
-              value={iteration}
-              onChange={(e) => setIteration(e.target.value)}
-            >
-              <option value="">Backlog</option>
-              {scopeIterationLabel && <option value={SCOPE_ITERATION}>{scopeIterationLabel}</option>}
-              {[...iterations].reverse().map((it) => (
-                <option key={it.id} value={it.id}>
-                  {iterationLabel(it.id)}
-                </option>
-              ))}
-            </select>
+                {members.map((member) => (
+                  <button
+                    key={member.user_id}
+                    type="button"
+                    className="tasks-drawer-member-option"
+                    onClick={() => toggleAssignee(member.user_id)}
+                  >
+                    <input type="checkbox" readOnly checked={assignees.includes(member.user_id)} tabIndex={-1} />
+                    <span className="truncate">{member.name || member.email}</span>
+                    {member.name && member.email && (
+                      <span className="tasks-drawer-member-email truncate">{member.email}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </Popover>
           </div>
 
-          <div>
-            <p className="tasks-drawer-section-title">Content</p>
-            <MarkdownEditor
-              value={content}
-              maxLength={20000}
-              ariaLabel="Content"
-              placeholder="Context, acceptance criteria, links… Markdown supported."
-              onChange={setContent}
-            />
-          </div>
+          <PropLabel icon={Flag} htmlFor="tasks-new-priority">Priority</PropLabel>
+          <select
+            id="tasks-new-priority"
+            className="tasks-drawer-select"
+            value={priority}
+            onChange={(e) => setPriority(e.target.value)}
+          >
+            <option value="">No priority</option>
+            {settings.priorities.map((p) => (
+              <option key={p.key} value={p.key}>{p.label}</option>
+            ))}
+          </select>
+
+          <PropLabel icon={Tag}>Labels</PropLabel>
+          <ChipEditor
+            values={taskLabels}
+            suggestions={Array.from(new Set([...settings.suggested_labels, ...labels]))}
+            placeholder="Add a label"
+            onChange={setTaskLabels}
+          />
+
+          <PropLabel icon={CalendarDays} htmlFor="tasks-new-due">Due date</PropLabel>
+          <input
+            id="tasks-new-due"
+            type="date"
+            className="tasks-drawer-input"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+          />
+
+          <PropLabel icon={Github} htmlFor="tasks-new-github">GitHub issue</PropLabel>
+          <GithubIssueInput id="tasks-new-github" value={githubIssue} onChange={setGithubIssue} />
+
+          <PropLabel icon={Repeat} htmlFor="tasks-new-iteration">Iteration</PropLabel>
+          <select
+            id="tasks-new-iteration"
+            className="tasks-drawer-select"
+            value={iteration}
+            onChange={(e) => setIteration(e.target.value)}
+          >
+            <option value="">Backlog</option>
+            {scopeIterationLabel && <option value={SCOPE_ITERATION}>{scopeIterationLabel}</option>}
+            {[...iterations].reverse().map((it) => (
+              <option key={it.id} value={it.id}>
+                {iterationLabel(it.id)}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <footer className="tasks-drawer-footer">
-          <span className="tasks-drawer-footer-spacer" />
-          <button type="button" className="tasks-button" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="tasks-button tasks-button-accent" disabled={saving || !title.trim() || !isGithubIssueUrl(githubIssue)}>
-            Create task
-          </button>
-        </footer>
+        <div>
+          <p className="tasks-drawer-section-title">Content</p>
+          <MarkdownEditor
+            value={content}
+            maxLength={20000}
+            ariaLabel="Content"
+            placeholder="Context, acceptance criteria, links… Markdown supported."
+            onChange={setContent}
+          />
+        </div>
       </form>
-    </div>
+    </Dialog>
   );
 }

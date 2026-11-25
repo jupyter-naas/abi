@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Undo2, Redo2, Copy, Trash2 } from 'lucide-react';
+import { useConfirm, usePrompt } from '@/components/ui/dialogs';
 import { authFetch } from '@/stores/auth';
 import { address, cellInput, columnLabel, copyRange, parseAddress, parseClipboard, patchCells, readWorkbook, renameSheet, uniqueSheetName, writeWorkbook, type Cell, type Position, type Workbook } from './workbook-model';
 import { sheetAxis } from './workbook-layout';
@@ -12,6 +13,8 @@ export function WorkbookGrid({ html, workspaceId, selectedIndex, onSelect, onCha
   onChange: (html: string) => void; disabled?: boolean;
 }) {
   const model = useMemo(() => readWorkbook(html), [html]);
+  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { prompt, dialog: promptDialog } = usePrompt();
   const index = Math.min(selectedIndex, (model?.sheets.length ?? 1) - 1);
   const [active, setActive] = useState<Position>({ row: 0, col: 0 });
   const [end, setEnd] = useState<Position>({ row: 0, col: 0 });
@@ -185,10 +188,10 @@ export function WorkbookGrid({ html, workspaceId, selectedIndex, onSelect, onCha
     onSelect(Math.min(index, (readWorkbook(next)?.sheets.length ?? 1) - 1));
   };
   const inRange = (r: number, c: number) => r >= Math.min(active.row, end.row) && r <= Math.max(active.row, end.row) && c >= Math.min(active.col, end.col) && c <= Math.max(active.col, end.col);
-  const changeTab = (action: 'add' | 'duplicate' | 'delete') => {
+  const changeTab = async (action: 'add' | 'duplicate' | 'delete') => {
     const next = structuredClone(model);
     if (action === 'delete') {
-      if (next.sheets.length === 1 || !window.confirm(`Delete sheet “${next.sheets[index].name}”?`)) return;
+      if (next.sheets.length === 1 || !(await confirm({ title: `Delete sheet “${next.sheets[index].name}”?` }))) return;
       next.sheets.splice(index, 1); onSelect(Math.max(0, index - 1));
     } else {
       next.sheets.push({ ...(action === 'duplicate' ? structuredClone(next.sheets[index]) : { rows: [] }), name: uniqueSheetName(next) });
@@ -210,13 +213,13 @@ export function WorkbookGrid({ html, workspaceId, selectedIndex, onSelect, onCha
       <button aria-label="Undo" title="Undo (Ctrl/⌘ Z)" disabled={disabled || !history.past.length} onClick={() => undo()}><Undo2 size={16} /></button>
       <button aria-label="Redo" title="Redo (Ctrl/⌘ Shift Z)" disabled={disabled || !history.future.length} onClick={() => undo(true)}><Redo2 size={16} /></button>
       <span className="sheets-grid-divider" />
-      <button disabled={disabled} onClick={() => {
-        const name = window.prompt('Sheet name', model.sheets[index].name);
+      <button disabled={disabled} onClick={async () => {
+        const name = await prompt({ title: 'Sheet name', defaultValue: model.sheets[index].name, confirmLabel: 'Rename' });
         if (name === null) return;
         try { publish(renameSheet(model, index, name)); } catch (error) { setMessage((error as Error).message); }
       }}>Rename sheet</button>
-      <button onClick={() => changeTab('duplicate')} disabled={disabled}><Copy size={14} /> Duplicate sheet</button>
-      <button onClick={() => changeTab('delete')} disabled={disabled || model.sheets.length <= 1}><Trash2 size={14} /> Delete sheet</button>
+      <button onClick={() => void changeTab('duplicate')} disabled={disabled}><Copy size={14} /> Duplicate sheet</button>
+      <button onClick={() => void changeTab('delete')} disabled={disabled || model.sheets.length <= 1}><Trash2 size={14} /> Delete sheet</button>
       <label><input type="checkbox" checked={showFormulas} onChange={e => setShowFormulas(e.target.checked)} /> Show formulas</label>
     </div>
     <div className="sheets-grid-formula-bar">
@@ -267,12 +270,14 @@ export function WorkbookGrid({ html, workspaceId, selectedIndex, onSelect, onCha
       </div>
     </div>
     <div className="sheets-grid-bottom">
-      <button className="sheets-grid-add" aria-label="Add sheet" title="Add sheet" onClick={() => changeTab('add')} disabled={disabled}><Plus size={18} /></button>
+      <button className="sheets-grid-add" aria-label="Add sheet" title="Add sheet" onClick={() => void changeTab('add')} disabled={disabled}><Plus size={18} /></button>
       <div className="sheets-grid-tabs" role="tablist" aria-label="Workbook sheets">
         {model.sheets.map((sheet, i) => <button type="button" role="tab" aria-selected={i === index} key={sheet.name} className={i === index ? 'is-active' : ''} onClick={() => { if (editing) commit(); onSelect(i); }}>{sheet.name}</button>)}
       </div>
       <output className="sheets-grid-summary">{stats.length ? `Sum: ${stats.reduce((a, b) => a + b, 0).toLocaleString()} · Count: ${stats.length}` : address(active)}</output>
     </div>
     {message && <div className="sheets-grid-message" role="status">{message}</div>}
+    {confirmDialog}
+    {promptDialog}
   </div>;
 }

@@ -50,6 +50,7 @@ import {
 } from '@/components/office/office-create-state';
 import { copyDocumentToMyDrive } from '@/lib/documents-my-drive';
 import { createOfficeSaveQueue, type OfficeSaveQueue } from '@/lib/office-save-queue';
+import { useConfirm } from '@/components/ui/dialogs';
 import { authFetch } from '@/stores/auth';
 import {
   DOCUMENTS_UPDATED_EVENT,
@@ -185,6 +186,7 @@ async function ensureDocumentsRuntime(
 }
 
 export default function SectionsEditorPage() {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const params = useParams();
   const router = useRouter();
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
@@ -409,13 +411,15 @@ export default function SectionsEditorPage() {
 
   const refresh = useCallback(async () => {
     if (dirtyRef.current) {
-      const ok = window.confirm(
-        'You have unsaved local edits. Refresh from the live workspace (Coder when ready; Forgejo snapshot otherwise) and discard them?',
-      );
+      const ok = await confirm({
+        title: 'Discard your unsaved edits?',
+        description: 'Refresh loads the live workspace (Coder when ready; Forgejo snapshot otherwise) in place of your unsaved local edits.',
+        confirmLabel: 'Refresh',
+      });
       if (!ok) return;
     }
     await loadDocument({ quiet: true, ensureRuntime: true });
-  }, [loadDocument]);
+  }, [loadDocument, confirm]);
 
   useEffect(() => {
     void loadDocument({ quiet: false, ensureRuntime: true });
@@ -626,9 +630,11 @@ export default function SectionsEditorPage() {
     async (run: () => Promise<SectionMutationResult>, label: string) => {
       if (!workspaceId || !slug) return;
       if (dirtyRef.current) {
-        const ok = window.confirm(
-          'Unsaved code edits will be replaced by this page change. Continue?',
-        );
+        const ok = await confirm({
+          title: 'Replace your unsaved code edits?',
+          description: 'Unsaved code edits will be replaced by this page change.',
+          confirmLabel: 'Continue',
+        });
         if (!ok) return;
       }
       setMutating(true);
@@ -651,7 +657,7 @@ export default function SectionsEditorPage() {
         setMutating(false);
       }
     },
-    [workspaceId, slug, setSelectedIndex],
+    [workspaceId, slug, setSelectedIndex, confirm],
   );
 
   useEffect(() => {
@@ -793,10 +799,10 @@ export default function SectionsEditorPage() {
     );
   };
 
-  const deleteSelectedSection = () => {
+  const deleteSelectedSection = async () => {
     const sectionCount = parseDocumentsSectionOutline(htmlRef.current).length;
     if (sectionCount <= 1) return;
-    if (!window.confirm('Delete the selected page?')) return;
+    if (!(await confirm({ title: 'Delete the selected page?' }))) return;
     const sectionIndex = clampSectionIndex(currentIndex, sectionCount);
     void applyMutation(
       () => deleteSection(workspaceId, slug, sectionIndex),
@@ -864,6 +870,7 @@ export default function SectionsEditorPage() {
     return (
       <div className="flex h-full flex-col">
         <Header title="New document" nav={menuBar} />
+        {confirmDialog}
         <OfficeCreateLoader kind="document" phase="creating" />
         <DocumentsStatusBar />
       </div>
@@ -878,6 +885,7 @@ export default function SectionsEditorPage() {
           subtitle={slug ? `documents/${slug}/document.html` : undefined}
           nav={menuBar}
         />
+        {confirmDialog}
         <OfficeCreateLoader kind="document" phase="opening" />
         <DocumentsStatusBar />
       </div>
@@ -891,6 +899,7 @@ export default function SectionsEditorPage() {
         subtitle="A4 · 210 × 297 mm"
         nav={menuBar}
       />
+      {confirmDialog}
 
       {error && (
         <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">

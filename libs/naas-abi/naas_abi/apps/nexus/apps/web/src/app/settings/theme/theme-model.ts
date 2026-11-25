@@ -35,7 +35,7 @@ export const KIT_CATALOG: readonly KitEntry[] = [
   { module: 'menu', id: 'menus', label: 'Menus', use: 'Menu bars (File / Edit / View), overflow (⋯) and row menus, one style, on Radix.' },
   { module: 'tree-row', id: 'tree', label: 'List and tree rows', use: 'Sidebar lists and trees: twisty, icon, label, hover actions.' },
   { module: 'split-pane', id: 'split', label: 'Split pane', use: 'The drag handle between two columns (sidebar, settings nav, AI pane).' },
-  { module: 'dialog', id: 'dialogs', label: 'Dialog', use: 'Every modal, five widths: sm, md, lg, xl, full. Focus trapped, Escape closes, ⌘↵ submits.' },
+  { module: 'dialog', id: 'dialogs', label: 'Dialog', use: 'Every modal, five widths: sm, md, lg, xl, full. Focus trapped, Escape closes, ⌘↵ submits; dismissible={false} keeps it open while an action runs.' },
   { module: 'dialogs', id: 'dialogs', label: 'Confirm and prompt', use: 'useConfirm (with type-to-confirm) and usePrompt instead of window.confirm / prompt.' },
   { module: 'toast', id: 'toasts', label: 'Toast', use: 'toast.success / toast.error from anywhere; one stack for the whole app.' },
 ];
