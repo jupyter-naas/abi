@@ -17,6 +17,7 @@ The document is written in sections, one statement each, by ``sid``:
 | ``OfferWorkflows`` | ``module:RunWorkflow``, ``module:ReadWorkflowRuns`` | ``${scope}/module:workflow/...`` |
 | ``OfferPipelines`` | ``module:RunPipeline``, ``module:ReadPipelineRuns`` | ``${scope}/module:pipeline/...`` |
 | ``OfferFeatures`` | ``nexus:UseFeature`` | ``${scope}/nexus:feature/<key>`` |
+| ``OfferSearchSources`` | ``nexus:UseSearchSource`` | ``${scope}/nexus:search_source/<id>`` |
 
 A section naming more than ``policy.MAX_PATTERNS`` items (IAM's limit for one
 statement) is written in parts: ``OfferAgents``, ``OfferAgents2``, ``OfferAgents3``...
@@ -77,7 +78,17 @@ TYPE_OF_KIND = {
 }
 KIND_OF_TYPE = {type_name: kind for kind, type_name in TYPE_OF_KIND.items()}
 FEATURES_SID = "OfferFeatures"
-OFFER_SIDS = frozenset({*(sid for sid, _ in SECTIONS.values()), FEATURES_SID})
+USE_SEARCH_SOURCE = "nexus:UseSearchSource"
+SEARCH_SOURCES_SID = "OfferSearchSources"
+# The sections naming Nexus ids in the workspace (``${scope}/nexus:<type>/<id>``), by
+# the ``Offer`` field they fill: its sid, its action, the resource type.
+ID_SECTIONS: dict[str, tuple[str, str, str]] = {
+    "features": (FEATURES_SID, USE_FEATURE, "feature"),
+    "search_sources": (SEARCH_SOURCES_SID, USE_SEARCH_SOURCE, "search_source"),
+}
+OFFER_SIDS = frozenset(
+    {*(sid for sid, _ in SECTIONS.values()), *(sid for sid, _a, _t in ID_SECTIONS.values())}
+)
 
 Item = tuple[str, str]  # (module, name); name ``*`` is the whole module
 
@@ -117,6 +128,8 @@ class Offer:
     workflows: frozenset[Item] = field(default_factory=frozenset)
     pipelines: frozenset[Item] = field(default_factory=frozenset)
     features: frozenset[str] = field(default_factory=frozenset)
+    # The sources a search reads: a feature (``chat``...) or ``web.<engine>``.
+    search_sources: frozenset[str] = field(default_factory=frozenset)
 
     @classmethod
     def of(
@@ -128,6 +141,7 @@ class Offer:
         pipelines: Iterable[Item] = (),
         modules: Iterable[str] = (),
         features: Iterable[str] = (),
+        search_sources: Iterable[str] = (),
     ) -> Offer:
         """An offer; each of ``modules`` adds every agent, app, workflow and
         pipeline of that module (a shared module offered whole)."""
@@ -138,24 +152,31 @@ class Offer:
             workflows=frozenset([*workflows, *whole]),
             pipelines=frozenset([*pipelines, *whole]),
             features=frozenset(features),
+            search_sources=frozenset(search_sources),
         )
 
     def items(self, kind: str) -> frozenset[Item]:
         return getattr(self, kind)
 
+    def ids(self, field_name: str) -> frozenset[str]:
+        """The ids of an id section (``ID_SECTIONS``: ``features``, ``search_sources``)."""
+        return getattr(self, field_name)
+
     def is_empty(self) -> bool:
-        return not (any(self.items(kind) for kind in SECTIONS) or self.features)
+        return not (
+            any(self.items(kind) for kind in SECTIONS) or any(self.ids(f) for f in ID_SECTIONS)
+        )
 
     def merged(self, other: Offer) -> Offer:
         return Offer(
             **{kind: self.items(kind) | other.items(kind) for kind in SECTIONS},
-            features=self.features | other.features,
+            **{f: self.ids(f) | other.ids(f) for f in ID_SECTIONS},
         )
 
     def without(self, other: Offer) -> Offer:
         return Offer(
             **{kind: self.items(kind) - other.items(kind) for kind in SECTIONS},
-            features=self.features - other.features,
+            **{f: self.ids(f) - other.ids(f) for f in ID_SECTIONS},
         )
 
     def offers(self, kind: str, module: str, name: str) -> bool:
@@ -185,11 +206,15 @@ def _item_of(kind: str, pattern: str) -> Item | None:
     return unquote(module), (WHOLE_MODULE if name == "*" else unquote(name))
 
 
-def _feature_of(pattern: str) -> str | None:
-    prefix = scoped_resource("feature", "-").rsplit("/", 1)[0] + "/"
+def _id_of(type_name: str, pattern: str) -> str | None:
+    prefix = scoped_resource(type_name, "-").rsplit("/", 1)[0] + "/"
     if not pattern.startswith(prefix) or "*" in pattern:
         return None
     return unquote(pattern[len(prefix) :])
+
+
+def _feature_of(pattern: str) -> str | None:
+    return _id_of("feature", pattern)
 
 
 def offer_statements(offer: Offer) -> list[dict[str, Any]]:
@@ -200,11 +225,10 @@ def offer_statements(offer: Offer) -> list[dict[str, Any]]:
             [f"{module_scopes.SERVICE}:{a}" for a in actions],
             [item_pattern(kind, m, n) for m, n in sorted(offer.items(kind))],
         )
-    statements += _parts(
-        FEATURES_SID,
-        [USE_FEATURE],
-        [scoped_resource("feature", k) for k in sorted(offer.features)],
-    )
+    for field_name, (sid, use, type_name) in ID_SECTIONS.items():
+        statements += _parts(
+            sid, [use], [scoped_resource(type_name, k) for k in sorted(offer.ids(field_name))]
+        )
     return statements
 
 
@@ -247,21 +271,23 @@ def offer_of(document: Any) -> Offer:
     """The offer a document's sections hold (a dict or a ``PolicyDocument``);
     statements in no section are not read."""
     found: dict[str, set[Any]] = {kind: set() for kind in SECTIONS}
-    features: set[str] = set()
+    ids: dict[str, set[str]] = {f: set() for f in ID_SECTIONS}
     sid_kind = {sid: kind for kind, (sid, _a) in SECTIONS.items()}
+    sid_field = {sid: (f, type_name) for f, (sid, _u, type_name) in ID_SECTIONS.items()}
     for statement in _statements_of(document):
         sid, effect, _actions, resources = _statement_parts(statement)
         section = offer_section(sid)
         if effect != "Allow" or section is None:
             continue
-        if section == FEATURES_SID:
-            features.update(f for r in resources if (f := _feature_of(r)) is not None)
+        if section in sid_field:
+            f, type_name = sid_field[section]
+            ids[f].update(i for r in resources if (i := _id_of(type_name, r)) is not None)
             continue
         kind = sid_kind[section]
         found[kind].update(i for r in resources if (i := _item_of(kind, r)) is not None)
     return Offer(
         **{kind: frozenset(items) for kind, items in found.items()},
-        features=frozenset(features),
+        **{f: frozenset(v) for f, v in ids.items()},
     )
 
 
@@ -441,13 +467,21 @@ def seeded_offer(
         default = engine_default_agent()
     if default and default not in agents:
         agents.append(default)
-    return offer_from_seed(
+    offer, unresolved = offer_from_seed(
         agents=agents,
         apps=sorted(effective_seed_apps(slug, catalog_seed)),
         modules=sorted(effective_seed_modules(slug, catalog_seed)),
         features=features,
         resolve_agent=resolve_agent or engine_agent_resolver(),
     )
+    return replace(offer, search_sources=default_search_sources()), unresolved
+
+
+def default_search_sources() -> frozenset[str]:
+    """Every source of the search (``search.sources``): what a new workspace offers."""
+    from naas_abi.apps.nexus.apps.api.app.services.search.sources import default_sources
+
+    return default_sources()
 
 
 def in_offer_form(document: Any) -> bool:
@@ -466,4 +500,4 @@ def in_offer_form(document: Any) -> bool:
 def instances_only(offer: Offer) -> Offer:
     """``offer`` without its features: what a re-seed adds (the features are the
     Features setting's)."""
-    return replace(offer, features=frozenset())
+    return replace(offer, features=frozenset(), search_sources=frozenset())

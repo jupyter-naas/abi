@@ -244,3 +244,33 @@ describe('WorkspaceOfferEditor', () => {
     expect(document.querySelector('[aria-label="Workspace offer"]')).toBeNull();
   });
 });
+
+describe('WorkspaceOfferEditor: search sources', () => {
+  const withSources = (sources: string[]): OfferState => ({
+    ...OFFER,
+    offered: { ...OFFER.offered, search_sources: sources },
+  });
+
+  it('shows each source of the search as a toggle and saves it in the offer', async () => {
+    const parts = setup(withSources(['chat', 'web.wikipedia']));
+    const saveSearchSources = vi.fn().mockResolvedValue(withSources(['chat']));
+    Object.assign(parts.offerApi, { saveSearchSources });
+    await render(parts);
+    const section = document.querySelector('[data-offer-section="search-sources"]');
+    expect(section?.textContent).toContain('Search sources');
+    expect(switchOf('[data-offer-source="chat"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(switchOf('[data-offer-source="files"]')?.getAttribute('aria-checked')).toBe('false');
+    expect(switchOf('[data-offer-source="web.wikipedia"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(document.querySelector('[data-offer-source="web.wikipedia"]')?.textContent).toContain('Wikipedia');
+    await mounted!.click(switchOf('[data-offer-source="web.wikipedia"]'));
+    await mounted!.flush();
+    expect(saveSearchSources).toHaveBeenCalledWith('ws-1', { 'web.wikipedia': false });
+    expect(switchOf('[data-offer-source="web.wikipedia"]')?.getAttribute('aria-checked')).toBe('false');
+    expect(document.body.textContent).toContain('Wikipedia removed from the offer');
+  });
+
+  it('keeps the sources read-only where IAM does not let the caller change the offer', async () => {
+    await render(setup({ ...withSources(['chat']), editable: false }));
+    expect(switchOf('[data-offer-source="chat"]')?.disabled).toBe(true);
+  });
+});

@@ -11,6 +11,7 @@ import {
   type OfferState,
 } from '@/lib/access-model/workspace-offer';
 import { workspaceGroupName } from '@/lib/access-model/levels';
+import { FEATURE_SCOPES, WEB_ENGINES, webEngineScopeId } from '@/lib/search-scopes';
 import type { IamAdminApi } from '@/lib/iam-admin/api';
 import type { PublishersView } from '@/lib/iam-admin/types';
 import {
@@ -30,6 +31,12 @@ import {
 import './offer.css';
 
 const DEFAULT_OFFER_API = createOfferApi();
+
+/** The sources of the search, in the search page's order: its features, then the web engines. */
+const SEARCH_SOURCE_ROWS: { id: string; label: string }[] = [
+  ...FEATURE_SCOPES.map((s) => ({ id: s.id, label: s.label })),
+  ...WEB_ENGINES.map((e) => ({ id: webEngineScopeId(e.id), label: `Web · ${e.label}` })),
+];
 const DEFAULT_FEATURE_API = createFeatureAccessApi();
 const ITEM_LIMIT = 200;
 
@@ -246,6 +253,13 @@ export function WorkspaceOfferEditor({
       return true;
     }, `${label} ${on ? 'added to' : 'removed from'} the offer.`);
 
+  const toggleSource = (id: string, label: string, on: boolean) =>
+    void saveNow(async () => {
+      if ((offer.offered.search_sources ?? []).includes(id) === on) return false;
+      setOffer(await offerApi.saveSearchSources(workspaceId, { [id]: on }));
+      return true;
+    }, `${label} ${on ? 'added to' : 'removed from'} the offer.`);
+
   const toggleFeature = (key: string, label: string, on: boolean) =>
     void saveNow(async () => {
       const changes = featureChanges(featureRows, { [key]: on });
@@ -324,6 +338,29 @@ export function WorkspaceOfferEditor({
             })}
           </ul>
         )}
+      </div>
+
+      <div className="access-offer-section" data-offer-section="search-sources">
+        <h4 className="access-offer-heading">Search sources</h4>
+        <p className="access-policy-muted">
+          What the search reads here. A web engine sends the query outside the platform.
+        </p>
+        <ul className="access-offer-list">
+          {SEARCH_SOURCE_ROWS.map(({ id, label }) => {
+            const on = (offer.offered.search_sources ?? []).includes(id);
+            return (
+              <li key={id} className="access-offer-row" data-offer-source={id}>
+                <OfferSwitch
+                  label={`Offer ${label} to the search`}
+                  on={on}
+                  disabled={!editable || saving}
+                  onChange={(next) => toggleSource(id, label, next)}
+                />
+                <span className="access-offer-name">{label}</span>
+              </li>
+            );
+          })}
+        </ul>
       </div>
 
       {OFFER_KINDS.map(({ kind, label }) => {

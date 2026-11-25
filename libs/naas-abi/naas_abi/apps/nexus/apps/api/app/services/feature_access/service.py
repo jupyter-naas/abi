@@ -23,7 +23,7 @@ wins.
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -189,10 +189,24 @@ def check_offer_changes(changes: Sequence[OfferChange]) -> None:
             raise ValueError("Name the module and the item (* for the whole module)")
 
 
-def _offer_json(offer: Offer) -> dict[str, list[dict[str, str]]]:
+def _offer_json(offer: Offer) -> dict[str, Any]:
     return {
-        kind: [{"module": m, "name": n} for m, n in sorted(offer.items(kind))] for kind in SECTIONS
+        **{
+            kind: [{"module": m, "name": n} for m, n in sorted(offer.items(kind))]
+            for kind in SECTIONS
+        },
+        "search_sources": sorted(offer.search_sources),
     }
+
+
+def check_source_changes(changes: Mapping[str, bool]) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.search.sources import ALL_SOURCES
+
+    if not changes:
+        raise ValueError("Name a source to change")
+    unknown = sorted(set(changes) - set(ALL_SOURCES))
+    if unknown:
+        raise ValueError(f"Not a search source: {', '.join(unknown)}")
 
 
 class FeatureAccessService:
@@ -526,6 +540,32 @@ class FeatureAccessService:
         state = await self.read_offer(user, workspace_id)
         _log.info(f"Offer of {workspace_id} changed: {detail}")
         return state
+
+    async def save_search_sources(
+        self, user: Any, workspace_id: str, changes: Mapping[str, bool]
+    ) -> dict[str, Any]:
+        """Offer (or stop offering) search sources (``search.sources``), in one write
+        of "<W> access" as the caller: as ``save_offer``, IAM refuses a source the
+        caller does not hold (403) or one beyond the organization's offer (422)."""
+        check_source_changes(changes)
+        _container, record = await self._where(workspace_id)
+
+        def apply(offer: Offer) -> Offer:
+            on = {s for s, offered in changes.items() if offered}
+            off = {s for s, offered in changes.items() if not offered}
+            return replace(offer, search_sources=(offer.search_sources | on) - off)
+
+        await self._set_offer(
+            user,
+            workspace_id,
+            getattr(record, "access_policy_id", None),
+            "workspace-offer.search-sources",
+            workspace_id,
+            apply,
+        )
+        detail = ",".join(f"{'+' if v else '-'}{k}" for k, v in sorted(changes.items()))
+        _log.info(f"Search sources of {workspace_id} changed: {detail}")
+        return await self.read_offer(user, workspace_id)
 
     async def _change(
         self,

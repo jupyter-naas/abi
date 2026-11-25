@@ -64,7 +64,9 @@ SERVICE = "nexus"
 #     an organization ``DeletePlatformOrganization`` (on the platform-level
 #     ``organization_record``: no role's, the platform admin's); ``DeleteOrganization``
 #     deprecated (kept for ``delete_container``, which Nexus calls as ``api``).
-VERSION = 17
+# 18: search sources (``search_source``, ``UseSearchSource``): no role's, granted by the
+#     level policies and bounded by each workspace's offer; ``SetSearchScope`` deprecated.
+VERSION = 18
 
 _MODULES = (
     organizations,

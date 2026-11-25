@@ -620,3 +620,85 @@ async def test_a_member_chats_with_the_member_set_and_a_viewer_does_not(world):
     assert not _can(world, "viewer", "model_registry:Chat", chosen)
     assert _can(world, "viewer", "model_registry:Embed", other)
     assert _can(world, "wadmin", "model_registry:Chat", other)
+
+
+# -- search sources (fix-permissions-offer) ----------------------------------------------
+
+
+def _source(world, source: str, container: str | None = None) -> str:
+    return f"{container or world.W}/nexus:search_source/{source}"
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_offers_its_search_sources_and_its_levels_use_them_there(world):
+    """A search source (a feature searched, a web engine) is used where the workspace's
+    offer names it, within the organization's, by the levels that search. A source the
+    offer leaves out is refused to everyone in W, its admins included; in another
+    workspace the first's offer gives nothing."""
+    await _team(world)
+    w_access = world.record.access_policy_id
+    with as_service_account("api"):
+        o_access = world.iam.get_policy(w_access).parent_id
+        widen_offer(
+            world.iam,
+            o_access,
+            Offer.of(
+                features=["search"], search_sources=["chat", "web.wikipedia", "web.duckduckgo"]
+            ),
+        )
+        widen_offer(
+            world.iam,
+            w_access,
+            Offer.of(features=["search"], search_sources=["chat", "web.wikipedia"]),
+        )
+    use = "nexus:UseSearchSource"
+    assert _can(world, "member", use, _source(world, "web.wikipedia"))
+    assert _can(world, "member", use, _source(world, "chat"))
+    assert _can(world, "wadmin", use, _source(world, "web.wikipedia"))
+    for user in ("member", "wadmin"):
+        assert not _can(world, user, use, _source(world, "web.duckduckgo"))
+    # A Viewer does not search (no search feature at their level, so no source).
+    assert not _can(world, "viewer", use, _source(world, "web.wikipedia"))
+    # W's offer gives nothing in ws-2, which offers no source.
+    ws2 = workspace_container("org-1", "ws-2")
+    assert not _can(world, "member", use, _source(world, "web.wikipedia", ws2))
+    # A level grants a type, never a source: the bound names which.
+    member = level_document(MEMBER_ACCESS).to_dict()
+    sources = [r for s in member["statements"] for r in s["resources"] if "search_source" in r]
+    assert sources == ["${scope}/nexus:search_source/*"]
+    viewer = level_document(VIEWER_ACCESS).to_dict()
+    assert not [r for s in viewer["statements"] for r in s["resources"] if "search_source" in r]
+
+
+@pytest.mark.asyncio
+async def test_the_move_writes_the_sources_each_workspace_kept_on(world):
+    """``search_sources_offer``: an organization offers every source; a workspace
+    every source but those its Settings › Search switched off. Its other sections are
+    kept; a second pass changes nothing (a section naming nothing stays so)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import search_sources_offer
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import offer_of
+
+    await _team(world)
+    w_access = world.record.access_policy_id
+    with as_service_account("api"):
+        o_access = world.iam.get_policy(w_access).parent_id
+        before = offer_of(world.iam.get_policy(w_access).document)
+        # Search itself is offered (the sources are what it reads).
+        widen_offer(world.iam, o_access, Offer.of(features=["search"]))
+        widen_offer(world.iam, w_access, Offer.of(features=["search"]))
+    policies = {ORG: o_access, world.W: w_access}
+    switched_off = {"ws-1": ["web.duckduckgo", "maps"]}
+    report = search_sources_offer.apply(world.iam, policies, switched_off)
+    assert sorted(report.written) == sorted(policies) and not report.failed
+    world.authz.forget_offers()
+    use = "nexus:UseSearchSource"
+    assert _can(world, "member", use, _source(world, "web.wikipedia"))
+    assert not _can(world, "member", use, _source(world, "web.duckduckgo"))
+    assert not _can(world, "member", use, _source(world, "maps"))
+    with as_service_account("api"):
+        after = offer_of(world.iam.get_policy(w_access).document)
+    assert after.agents == before.agents and after.apps == before.apps
+    assert "web.duckduckgo" not in after.search_sources and "chat" in after.search_sources
+    # Once written, a pass leaves it: an admin's later choice is theirs.
+    again = search_sources_offer.apply(world.iam, policies, {})
+    assert not again.written and sorted(again.kept) == sorted(policies)

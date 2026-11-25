@@ -29,7 +29,10 @@ export type OfferState = {
   /** IAM lets the caller update "<W> access". */
   editable: boolean;
   whole_module: string;
-  offered: Record<OfferKind, OfferItem[]>;
+  offered: Record<OfferKind, OfferItem[]> & {
+    /** The sources of the search it offers: a feature (`chat`...) or `web.<engine>`. */
+    search_sources?: string[];
+  };
 };
 
 export type OfferChange = { kind: OfferKind; module: string; name: string; offered: boolean };
@@ -75,6 +78,16 @@ export function createOfferApi(fetcher: Fetcher = authFetch) {
         body: JSON.stringify({ changes }),
       });
       if (!response.ok) throw await failure(response, `Could not save the offer (HTTP ${response.status}).`);
+      return (await response.json()) as OfferState;
+    },
+    /** Offer or stop offering sources of the search, in one write of "<W> access". */
+    saveSearchSources: async (workspaceId: string, changes: Record<string, boolean>): Promise<OfferState> => {
+      const response = await fetcher(`${path(workspaceId)}/search-sources`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ changes }),
+      });
+      if (!response.ok) throw await failure(response, `Could not save the search sources (HTTP ${response.status}).`);
       return (await response.json()) as OfferState;
     },
   };

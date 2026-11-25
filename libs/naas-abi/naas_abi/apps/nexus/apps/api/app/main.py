@@ -598,6 +598,22 @@ async def _migrate_pending_invitations() -> None:
     await migrate_when_ready(AsyncSessionLocal, async_engine)
 
 
+async def _offer_search_sources() -> None:
+    """Search sources move into each access policy, once (``search_sources_offer``).
+    Not while IAM's moves wait: the next start does it."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.services.iam import authz, search_sources_offer
+    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime as iam_runtime
+
+    if authz.upgrading():
+        return
+    try:
+        async with AsyncSessionLocal() as db:
+            await search_sources_offer.migrate(db, iam_runtime.iam())
+    except Exception:  # noqa: BLE001 - retried at the next start
+        logging.getLogger(__name__).exception("Search sources could not move into the offers")
+
+
 async def _place_workspace_resources() -> None:
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
     from naas_abi.apps.nexus.apps.api.app.services.iam import placements
@@ -635,6 +651,7 @@ async def _startup(app: FastAPI) -> None:
     # Nexus's authorization lives in IAM: its action catalog and feature policies,
     # and (once) the memberships and superadmin flags it kept itself before.
     await _prepare_iam()
+    await _offer_search_sources()
     _watch_upgrade()
     await _hint_unlinked_users()
 

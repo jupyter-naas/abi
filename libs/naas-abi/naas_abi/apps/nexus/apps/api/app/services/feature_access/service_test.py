@@ -40,6 +40,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     Offer,
     offer_document,
     offer_of,
+    with_offer,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.adapters.secondary.engine import (
     EngineIamGateway,
@@ -361,3 +362,43 @@ async def test_agents_and_apps_are_offered_in_the_workspaces_access_policy(
     )
     assert state["offered"]["agents"] == []
     assert not _uses_agent(nexus, "dave", "acme.sales", "SalesAgent")
+
+
+def _uses_source(nexus: NexusIam, user: str, source: str) -> bool:
+    with use_call_context(NexusIam.context(user)):
+        resource = nexus_resource("search_source", container=ALPHA, id=source)
+        return nexus.iam.authorize("nexus:UseSearchSource", resource).allowed
+
+
+@pytest.mark.asyncio
+async def test_search_sources_are_offered_in_the_workspaces_access_policy(
+    nexus, acme, service, audit
+):
+    """Settings › Search writes the sources into "<W> access", as the caller: within
+    the organization's offer, the other sections kept."""
+    with use_call_context(NexusIam.context("root")):
+        org = nexus.iam.get_policy(_access(nexus, acme).parent_id)
+        nexus.iam.update_policy(
+            org.id,
+            expected_revision=org.revision,
+            document=with_offer(
+                org.document,
+                offer_of(org.document).merged(Offer.of(search_sources=["chat", "web.wikipedia"])),
+            ),
+        )
+    assert not _uses_source(nexus, "dave", "web.wikipedia")
+    state = await service.save_search_sources(
+        "olivia", "alpha", {"web.wikipedia": True, "chat": True}
+    )
+    assert state["offered"]["search_sources"] == ["chat", "web.wikipedia"]
+    assert _uses_source(nexus, "dave", "web.wikipedia")
+    assert audit.phases("workspace-offer.search-sources") == ["requested", "succeeded"]
+    assert offer_of(_access(nexus, acme).document).features == {"chat", "files"}
+    # Beyond the organization's offer: refused, nothing changes.
+    with pytest.raises(ValueError, match="would grant nothing"):
+        await service.save_search_sources("olivia", "alpha", {"web.duckduckgo": True})
+    with pytest.raises(ValueError, match="Not a search source"):
+        await service.save_search_sources("olivia", "alpha", {"web.bing": True})
+    state = await service.save_search_sources("olivia", "alpha", {"web.wikipedia": False})
+    assert state["offered"]["search_sources"] == ["chat"]
+    assert not _uses_source(nexus, "dave", "web.wikipedia")

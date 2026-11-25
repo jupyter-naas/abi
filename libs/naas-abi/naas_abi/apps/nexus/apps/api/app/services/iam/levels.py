@@ -178,15 +178,28 @@ def instances_statement(types: Sequence[str]) -> dict[str, Any]:
     }
 
 
+def search_sources_statement() -> dict[str, Any]:
+    """Every search source, by type, for a level that searches: the workspace's
+    offer names which (``OfferSearchSources``)."""
+    return {
+        "sid": "SearchSources",
+        "effect": "Allow",
+        "actions": ["nexus:UseSearchSource"],
+        "resources": ["${scope}/nexus:search_source/*"],
+    }
+
+
 def level_document(name: str) -> PolicyDocument:
     """The document of a generic level policy (``VIEWER_ACCESS``, ``MEMBER_ACCESS``,
-    ``WORKSPACE_ADMIN_ACCESS``): its features and the module scopes it uses, every
-    one of a type (the workspace's bound names which). The actions of the level are
-    the built-in role's, held beside it."""
+    ``WORKSPACE_ADMIN_ACCESS``): its features, the module scopes it uses and the
+    search sources, every one of a type (the workspace's bound names which). The
+    actions of the level are the built-in role's, held beside it."""
     statements = [
         features_statement(level_features(name)),
         instances_statement(LEVEL_INSTANCES[name]),
     ]
+    if "search" in level_features(name):
+        statements.append(search_sources_statement())
     return PolicyDocument.from_dict({"version": POLICY_VERSION, "statements": statements})
 
 

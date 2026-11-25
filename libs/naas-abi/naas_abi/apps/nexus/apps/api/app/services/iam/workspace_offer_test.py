@@ -233,3 +233,25 @@ def test_a_reseed_adds_the_seeds_instances_never_its_features(world):
     assert offer_of(w_access.document).agents == again.agents
     assert offer_of(w_access.document).features == frozenset()
     assert offer_of(org_access.document).features == {"chat"}
+
+
+def test_search_sources_are_a_section_of_their_own():
+    offer = Offer.of(features=["search"], search_sources=["chat", "web.wikipedia"])
+    document = offer_document(offer)
+    assert [s["sid"] for s in document["statements"]] == ["OfferFeatures", "OfferSearchSources"]
+    sources = document["statements"][1]
+    assert sources["actions"] == ["nexus:UseSearchSource"]
+    assert sources["resources"] == [
+        "${scope}/nexus:search_source/chat",
+        "${scope}/nexus:search_source/web.wikipedia",
+    ]
+    assert offer_of(document) == offer
+    assert in_offer_form(document)
+    assert offer_section("OfferSearchSources2") == "OfferSearchSources"
+    assert Offer.of(search_sources=["chat"]).merged(
+        Offer.of(search_sources=["maps"])
+    ).search_sources == {"chat", "maps"}
+    assert Offer.of(search_sources=["chat", "maps"]).without(
+        Offer.of(search_sources=["maps"])
+    ).search_sources == {"chat"}
+    assert not Offer.of(search_sources=["chat"]).is_empty()

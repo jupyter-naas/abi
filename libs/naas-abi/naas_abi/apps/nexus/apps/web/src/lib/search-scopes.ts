@@ -87,6 +87,15 @@ export const WEB_ENGINES: readonly { id: string; label: string; icon: string; de
 export const WEB_ENGINE_IDS: readonly string[] = WEB_ENGINES.map(e => e.id);
 export const webEngineScopeId = (engineId: string) => `web.${engineId}`;
 
+/**
+ * Every source of the search the workspace's offer names or leaves out
+ * (`search_source/<id>`, the API's `search.sources.ALL_SOURCES`).
+ */
+export const SEARCH_SOURCE_IDS: readonly string[] = [
+  ...FEATURE_SCOPES.map(s => s.id),
+  ...WEB_ENGINES.map(e => webEngineScopeId(e.id)),
+];
+
 /** Engines the workspace has not switched off. */
 export function allowedWebEngines(disabled: readonly string[]): string[] {
   return WEB_ENGINE_IDS.filter(id => !disabled.includes(webEngineScopeId(id)));

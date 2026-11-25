@@ -146,6 +146,27 @@ async def read_workspace_offer(
     return await _call(service.read_offer(user, workspace_id))
 
 
+class SearchSourcesBody(BaseModel):
+    # ``{source id: offered}``: ``chat``, ``web.wikipedia``... (``search.sources``).
+    changes: dict[str, bool] = Field(min_length=1, max_length=50)
+
+
+@router.put(
+    "/{workspace_id}/offer/search-sources",
+    dependencies=[declares(action) for action in WRITES],
+)
+async def save_workspace_search_sources(
+    workspace_id: str,
+    body: SearchSourcesBody,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+) -> dict[str, Any]:
+    """Offer or stop offering search sources, in one write of "<W> access" as the
+    caller (403 for a source the caller does not hold, 422 for one beyond the
+    organization's offer). Answers the offer after."""
+    return await _call(service.save_search_sources(user, workspace_id, body.changes))
+
+
 @router.put(
     "/{workspace_id}/offer",
     dependencies=[declares(action) for action in WRITES],
