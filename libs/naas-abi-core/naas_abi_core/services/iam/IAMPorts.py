@@ -1043,6 +1043,9 @@ class EffectiveStatement:
     # Reached through an attachment at ``${my workspaces}``: the membership group
     # that made ``scope`` one of the principal's containers.
     membership_group: str | None = None
+    # A given statement of a container's bound (``scope``): a grant to its
+    # members, capped by their level there, held by none of them to give again.
+    given: bool = False
 
 
 @dataclass(frozen=True)
@@ -1087,6 +1090,8 @@ class DecidingStatement:
     # container it applied at) the principal's; ``via_group`` is the group that
     # holds the policy (the level group), None when the principal holds it.
     membership_group: str | None = None
+    # A given statement of the bound of ``scope``, held by ``via_group`` there.
+    given: bool = False
 
 
 @dataclass(frozen=True)

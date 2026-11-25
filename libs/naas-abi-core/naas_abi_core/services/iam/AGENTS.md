@@ -93,6 +93,7 @@ model_registry, discovery, source_control, coding_environment) use
 | `tests/grant_contract.py` | Grant only what you hold: the refusals and what keeps working, in process and over NATS |
 | `tests/view_as_contract.py` | Viewing as a principal: the scenario's cast (Root, Acme, Alpha, Bravo, Olivia, Bob, Carol, Dave), what is allowed and refused, groups, the budget and what the roles give, in process |
 | `tests/sub_policy_contract.py` | Sub-policies: what they grant, live narrowing, inherited Denies, `explain`, the refusals, deriving, deleting, in process and over NATS |
+| `IAMService_given_test.py` | Given statements: members of any membership group receive them while members, capped by their level, unbounded by the chain, `explain`; writing, attaching and narrowing them, no re-giving, the refusals |
 | `IAMService_membership_test.py` | Membership and level groups and `${my workspaces}`: equal to the role at W for every catalog action at viewer, member and admin level, freshness, the ceiling's Deny, no reach without a membership, `explain`, grant only what you hold and the level-group exception, markers, listing, `grantable` |
 
 ## Ports
@@ -315,7 +316,9 @@ is registered ("Containers"). A policy owned by a container:
 - is written for its scope: **every** resource pattern, a Deny's included, is `${scope}`
   or starts with `${scope}/` (refused at create and update with `PolicyValidationError`;
   `policy.check_owned_document`, which Nexus's validate route calls too), so attached to
-  anyone it neither grants nor refuses anything beyond its scope;
+  anyone it neither grants nor refuses anything beyond its scope. One exception: an Allow
+  whose resources are **all** absolute (no `${...}`) is a **given statement** ("Given
+  statements"); an Allow mixing `${scope}` and absolute names is refused;
 - is attached only at its owner or at a container below it, always at a scope
   (`names.within_owner`): an organisation's at the organisation, below it or at any of its
   workspaces, a workspace's at that workspace or at a container inside it. No unscoped
@@ -412,6 +415,43 @@ usual. `explain` names the bound in `bounded_by`. No stored field: the rule read
 is at it. Attaching below a container grants at every container under it,
 so "Grant only what you hold" checks it there: an admin of an organisation's own level holds
 nothing in its workspaces and attaches nothing below it.
+
+**Given statements** (ADR `20261125_offer_gives_outside_resources`). In a bound, an Allow
+whose resources are all absolute (`policy.is_given`: no `${...}`; `*` included) is a
+**grant** to the people of the container: every active member of any of its active
+membership groups ("<W> workspace" and "<W> admins" alike), whichever group holds the
+bound, while they are members (leaving ends it at the next decision). Its Denies and its
+`${scope}` Allows stay the bound, as above; a given statement bounds nothing (it is left
+out of the container's `Bound`). An Allow mixing `${scope}` and absolute names is refused
+when written; at evaluation a scoped attachment keeps only its `${scope}` patterns.
+
+- **The level caps it.** Each action counts only when its catalog level is one of the
+  levels (`roles.ROLE_LEVELS`) of the built-in roles the person holds at the container:
+  reached through `${my workspaces}`, attached at it, or attached below it or a container
+  above it (`<O>/*`); `builtin.platform_admin` unscoped holds every level. A wildcard is
+  written out to the registered actions it matches; an unregistered action grants nothing.
+  So "read and write" lets a Viewer list and read, a Member write too, an admin administer.
+- **What it is.** `IAMService._given` emits each as an `EffectiveStatement` with
+  `given=True`, `scope` the container, `via_group` the group holding the bound,
+  `membership_group` the person's membership group of it, and no `bounds`: the bound's
+  chain does not narrow it. `explain` names the bound policy and its statement
+  (`DecidingStatement.given`, in process; not carried over NATS).
+- **Nobody gives it again.** What was given is never part of what a writer holds
+  (`IAMService._held_side` leaves it out), for every held check.
+- **Writing it.** A container's policy may hold given statements (`check_owned_document`);
+  attached at a scope, only as a bound (`_check_attachable(bound=)`, `update_policy`).
+  `create_policy` (a container's), `update_policy` (a container's, or one attached as a
+  bound) and `attach_policy` as a bound hold-check each given statement the change adds,
+  **unscoped and with no chain** (`IAMService._require_given_held`; on update only the
+  resources the previous given statements do not cover, `_given_added`): only the platform
+  admin gives platform resources, an org admin what they hold in their organisation, and a
+  workspace admin narrows or removes one, and edits the rest around it, never adds one. A
+  first-party account acting for no user is not checked. `_require_within_chain` skips them
+  in a container's policy. Joining or leaving a membership group is not checked against
+  them. Lists at a scope count a policy whose other Allows are given statements as
+  confined (`PolicyDocument.confined_or_given`); `attachable_policies` offers it for a
+  membership group of that scope (or for anyone, unnamed). Moving a platform policy into a
+  container still refuses its absolute Allows.
 
 **Variables** are substituted into resource patterns before matching, against
 the principal whose policies are being evaluated (`X` in `principal_decision(X)`
@@ -669,7 +709,9 @@ principal_decision(X):
       one at ${my workspaces} once per container X is a member of (its ${scope} that
       container; a customer policy's Allows there bounded by the container's bounds),
       but only the Denies of a bound (a membership group's attachment at its own
-      container), and, for a sub-policy, the Deny statements of each policy of its chain
+      container), plus the given statements of the bounds of each container X is a
+      member of, within X's level there ("Given statements"), and, for a sub-policy,
+      the Deny statements of each policy of its chain
   if any Deny statement in S matches:   EXPLICIT_DENY
   if any Allow statement in S matches,
      and, for a sub-policy's, an Allow of each policy of its chain matches too:
@@ -1506,6 +1548,7 @@ through the SDK, the CLI and Nexus alike.
 | `attach_policy` (user, group, service account) | the policy | the attachment's (below a container: at it and at every container under it) |
 | `add_group_member` | every attachment of the group, but IAM's companions of its roles, which follow them: the unscoped `builtin.platform.*` its role sync wants for the group's roles (`IAMService._companions`). A platform policy attached to the group by hand is checked like any other. Joining a membership group, also the member's own attachments at `${my workspaces}` (theirs and their groups'), which now reach its container. A level group's attachments at `${my workspaces}` are not checked (the exception below) | each attachment's; one at `${my workspaces}` at each container the member is or becomes a member of (within the owners); the member's own at the joined container |
 | `attach_policy` at `${my workspaces}` | the policy | each container the principal (a group: each of its members) is a member of now, within the owners |
+| `create_policy`, `update_policy`, `attach_policy` as a bound, of given statements ("Given statements") | each given statement the change adds, never what was only given to the writer | unscoped, with no chain |
 | `mark_group` with a new `membership_of` | each member's attachments at `${my workspaces}` | the new container |
 | `create_pending_grant` | the policy | the invitation's |
 | `bind_idp_group` | the policy, before the group is made, unless the binding is there already | the binding's |

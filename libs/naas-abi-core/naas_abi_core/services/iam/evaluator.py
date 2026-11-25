@@ -455,6 +455,7 @@ def _deciding(
         bounded_by=bounded_by,
         through=effective.through,
         membership_group=effective.membership_group,
+        given=effective.given,
     )
 
 
