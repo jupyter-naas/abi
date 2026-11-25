@@ -61,7 +61,7 @@ export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGr
         <thead>
           <tr>
             <th>Role or policy</th>
-            <th>Level</th>
+            <th title="Where it applies">Scope</th>
             <th>Through</th>
             <th aria-label="Actions" />
           </tr>

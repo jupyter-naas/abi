@@ -423,7 +423,7 @@ export function GroupPage({
                 <thead>
                   <tr>
                     <th>Policy</th>
-                    <th>Level</th>
+                    <th title="Where it applies">Scope</th>
                     <th aria-label="Actions" />
                   </tr>
                 </thead>

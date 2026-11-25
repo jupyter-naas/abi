@@ -6,6 +6,7 @@ import { mount, type Mounted } from '@/lib/testing/mount';
 import type { FeatureAccessApi } from '@/app/workspace/[workspaceId]/settings/general/feature-access-api';
 import type { FeatureAccessState, FeatureRow } from '@/app/workspace/[workspaceId]/settings/general/feature-access-model';
 import { WS, fakeApi, publishedType, resourcePage } from '../access-fixtures';
+import { FeatureAccessError } from '@/app/workspace/[workspaceId]/settings/general/feature-access-api';
 import { WorkspaceOfferEditor } from './offer-editor';
 
 let mounted: Mounted | null = null;
@@ -120,6 +121,37 @@ describe('WorkspaceOfferEditor', () => {
     expect(switchOf('[data-offer-section="workflows"] [data-offer-module="acme.sales"]')?.getAttribute('aria-checked')).toBe('true');
     expect(document.querySelector('[data-offer-section="apps"]')?.textContent).toContain('No module has apps');
     expect(document.querySelector('textarea')).toBeNull();
+  });
+
+  it('shows the offer as soon as it is read, the features following', async () => {
+    const parts = setup();
+    let answer: (state: FeatureAccessState) => void = () => undefined;
+    parts.featureApi.read = vi.fn(() => new Promise<FeatureAccessState>((resolve) => (answer = resolve)));
+    await render(parts);
+    expect(document.body.textContent).toContain('Everyone in Sales workspace reaches what is on here');
+    expect(document.querySelector('[data-offer-section="features"]')?.textContent).toContain('Loading the features');
+    answer(FEATURES);
+    await mounted!.flush();
+    expect(switchOf('[data-offer-feature="chat"]')?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('tells a refusal from a failure: a failure is said as one, with Retry', async () => {
+    const parts = setup();
+    parts.featureApi.read = vi.fn().mockRejectedValueOnce(new FeatureAccessError('Service Unavailable', 503)).mockResolvedValue(FEATURES);
+    await render(parts);
+    const features = () => document.querySelector('[data-offer-section="features"]')?.textContent ?? '';
+    expect(features()).not.toContain('You may not read');
+    expect(features()).toContain('could not be read');
+    await mounted!.click(button('Retry'));
+    await mounted!.flush();
+    expect(switchOf('[data-offer-feature="chat"]')?.getAttribute('aria-checked')).toBe('true');
+
+    await mounted!.unmount();
+    const refused = setup();
+    refused.featureApi.read = vi.fn().mockRejectedValue(new FeatureAccessError('Forbidden', 403));
+    await render(refused);
+    expect(features()).toContain('You may not read the features of this workspace.');
+    expect(button('Retry')).toBeUndefined();
   });
 
   it('lists a module’s items on demand and saves each toggle at once', async () => {

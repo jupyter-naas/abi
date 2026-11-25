@@ -129,7 +129,7 @@ export function PolicyAttachments({
             <thead>
               <tr>
                 <th>Who</th>
-                <th>Level</th>
+                <th title="Where it applies">Scope</th>
                 <th aria-label="Actions" />
               </tr>
             </thead>
