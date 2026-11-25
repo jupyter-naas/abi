@@ -24,6 +24,14 @@
 
 <!-- version list -->
 
+## v6.4.0 (2026-11-25)
+
+### Features
+
+- **iam**: A group says what it is for (schema 9)
+  ([`62e662e`](https://github.com/jupyter-naas/abi/commit/62e662eb75e985885d7334b2ea3c5edf3fd5f3d6))
+
+
 ## v6.3.0 (2026-11-25)
 
 ### Features
