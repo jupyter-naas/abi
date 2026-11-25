@@ -78,6 +78,7 @@ export function GroupPage({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   // Which member's Remove asks for a confirmation now.
   const [confirming, setConfirming] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -114,6 +115,7 @@ export function GroupPage({
           if (cancelled) return;
           setGroup(g);
           setName(g.name ?? '');
+          setDescription(g.description ?? '');
         })
         .catch((e) => !cancelled && setError(message(e)));
       void loadHeld();
@@ -238,7 +240,14 @@ export function GroupPage({
     let made: string | null = madeId;
     try {
       if (!made) {
-        made = (await api.createGroup(scope.value ? { name: value, scope: scope.value } : { name: value })).id;
+        const what = description.trim();
+        made = (
+          await api.createGroup({
+            name: value,
+            ...(scope.value ? { scope: scope.value } : {}),
+            ...(what ? { description: what } : {}),
+          })
+        ).id;
         setMadeId(made);
       }
       // What it grants first, then who holds it: each member joins a group that already holds
@@ -258,12 +267,17 @@ export function GroupPage({
   // Its name is what a group's Info changes (IAM keeps its owner, its kind and its id).
   const renames = !isNew && owned && can('iam:UpdateGroup');
   const nameChanged = !isNew && name.trim() !== '' && name.trim() !== (group!.name ?? '');
+  const descriptionChanged = !isNew && description.trim() !== (group!.description ?? '');
   const save = async () => {
     setSaving(true);
     try {
-      const renamed = await api.renameGroup(group!.id, name.trim());
+      const changes: { name?: string; description?: string } = {};
+      if (nameChanged) changes.name = name.trim();
+      if (descriptionChanged) changes.description = description.trim();
+      const renamed = await api.updateGroup(group!.id, changes);
       setGroup(renamed);
       setName(renamed.name ?? '');
+      setDescription(renamed.description ?? '');
       setError(null);
       setNotice('Saved.');
       await onChanged();
@@ -281,24 +295,6 @@ export function GroupPage({
     </button>
   );
 
-  // Fields as Settings shows them (Account › Profile): what cannot change is read-only there.
-  const field = (id: string, label: string, value: string, help?: string) => (
-    <div className="account-profile-field">
-      <label className="account-profile-field-label" htmlFor={`group-${id}`}>
-        {label}
-      </label>
-      <input
-        id={`group-${id}`}
-        type="text"
-        className="account-profile-field-input account-profile-field-input-readonly"
-        aria-label={label}
-        value={value}
-        readOnly
-        aria-readonly="true"
-        title={help}
-      />
-    </div>
-  );
   const nameFixed = !isNew && !renames;
   const ownerName = isNew ? scope.label : levelLabel(group!.owner_scope ?? PLATFORM, names);
 
@@ -342,7 +338,7 @@ export function GroupPage({
               {creating ? 'Creating…' : 'Create group'}
             </button>
           ) : renames ? (
-            <button type="button" className="org-settings-primary-button" onClick={() => void save()} disabled={saving || !nameChanged} data-action="save">
+            <button type="button" className="org-settings-primary-button" onClick={() => void save()} disabled={saving || (!nameChanged && !descriptionChanged)} data-action="save">
               {saving ? 'Saving…' : 'Save'}
             </button>
           ) : undefined
@@ -373,7 +369,26 @@ export function GroupPage({
               }}
             />
           </div>
-          {field('owner', 'Owned by', ownerName, 'The level that owns it: set when it is made')}
+          <div className="account-profile-field access-group-description-field">
+            <label className="account-profile-field-label" htmlFor="group-description">
+              Description
+            </label>
+            <textarea
+              id="group-description"
+              className={`account-profile-field-input access-group-description${nameFixed ? ' account-profile-field-input-readonly' : ''}`}
+              aria-label="Group description"
+              placeholder={nameFixed ? '' : 'What the group is for, e.g. The analysts of the sales team'}
+              maxLength={1000}
+              rows={2}
+              value={description}
+              readOnly={nameFixed}
+              aria-readonly={nameFixed || undefined}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                setNotice(null);
+              }}
+            />
+          </div>
         </div>
       </SettingsSection>
 

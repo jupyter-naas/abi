@@ -212,6 +212,8 @@ class PrincipalRecord:
     # they hold less than its ``${my workspaces}`` policies give. Set by the
     # platform's grants only.
     level_group: bool = False
+    # Groups: what the group is for, in a sentence or two (schema 9). None: none.
+    description: str | None = None
 
     @property
     def active(self) -> bool:
@@ -1421,11 +1423,13 @@ class IIAMService(ABC):
         scope: str | None = None,
         membership_of: str | None = None,
         level: bool = False,
+        description: str | None = None,
     ) -> PrincipalRecord:
         """A group owned by ``scope``: a registered container, else the
         platform. ``membership_of``: a membership group of that registered
         container, at or below its owner; ``level``: a level group (the
-        platform's grants only), as ``mark_group``."""
+        platform's grants only), as ``mark_group``; ``description``: what it is
+        for."""
 
     @abstractmethod
     def mark_group(
@@ -1457,9 +1461,12 @@ class IIAMService(ABC):
         attachments."""
 
     @abstractmethod
-    def update_group(self, group_id: str, *, name: str) -> PrincipalRecord:
-        """Rename a group (``iam:UpdateGroup``): its id, owner, members and
-        attachments stay."""
+    def update_group(
+        self, group_id: str, *, name: str | None = None, description: str | None = None
+    ) -> PrincipalRecord:
+        """Rename a group or change its description (``iam:UpdateGroup``), what is
+        given (an empty description: none): its id, owner, members and attachments
+        stay."""
 
     @abstractmethod
     def delete_group(self, group_id: str) -> PrincipalRecord: ...

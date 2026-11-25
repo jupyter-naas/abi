@@ -219,17 +219,16 @@ describe('GroupsView at a workspace', () => {
     expect(document.querySelector('[data-action="add-policies"]')).not.toBeNull();
   });
 
-  it('shows its fields as Settings does, its name the only one that changes', async () => {
+  it('shows its fields as Settings does: its name and its description', async () => {
     await show(workspaceApi(), owned.id);
     const input = (label: string) => document.querySelector(`[aria-label="${label}"]`) as HTMLInputElement;
-    for (const label of ['Group name', 'Owned by']) {
+    for (const label of ['Group name', 'Group description']) {
       expect(input(label).classList.contains('account-profile-field-input')).toBe(true);
       expect(input(label).disabled).toBe(false);
     }
     expect(input('Group name').readOnly).toBe(false);
-    expect(input('Owned by').readOnly).toBe(true);
-    expect(input('Owned by').classList.contains('account-profile-field-input-readonly')).toBe(true);
-    // Its kind and its id are above, beside and under its name: no field of their own.
+    // Its owner, its kind and its id are above, beside and under its name: no field of their own.
+    expect(input('Owned by')).toBeNull();
     expect(input('Kind')).toBeNull();
     expect(input('ID')).toBeNull();
     // Above Info: its name, its id, what it is.
@@ -257,7 +256,7 @@ describe('GroupsView at a workspace', () => {
 
   it('renames a group it owns, and shows the new name', async () => {
     const renamed = { ...owned, name: 'Talent' };
-    const api = workspaceApi({ renameGroup: vi.fn(() => Promise.resolve(renamed)) });
+    const api = workspaceApi({ updateGroup: vi.fn(() => Promise.resolve(renamed)) });
     await show(api, owned.id);
     const input = document.querySelector('[aria-label="Group name"]') as HTMLInputElement;
     expect(input.value).toBe('Recruiters');
@@ -265,8 +264,42 @@ describe('GroupsView at a workspace', () => {
     await mounted!.type(input, '  Talent ');
     await mounted!.click(document.querySelector('[data-action="save"]'));
     await mounted!.flush();
-    expect(api.renameGroup).toHaveBeenCalledWith('grp_ws', 'Talent');
+    expect(api.updateGroup).toHaveBeenCalledWith('grp_ws', { name: 'Talent' });
     expect((document.querySelector('[aria-label="Group name"]') as HTMLInputElement).value).toBe('Talent');
+  });
+
+  it('says what it is for: its description, saved with its name', async () => {
+    const described = { ...owned, description: 'Who hires.' };
+    const saved = { ...owned, description: 'Who hires, and onboards.' };
+    const api = workspaceApi({
+      getGroup: vi.fn(() => Promise.resolve(described)),
+      updateGroup: vi.fn(() => Promise.resolve(saved)),
+    });
+    await show(api, owned.id);
+    const field = () => document.querySelector('[aria-label="Group description"]') as HTMLTextAreaElement;
+    expect(field().value).toBe('Who hires.');
+    expect(field().readOnly).toBe(false);
+    await mounted!.type(field(), 'Who hires, and onboards.');
+    await mounted!.click(document.querySelector('[data-action="save"]'));
+    await mounted!.flush();
+    expect(api.updateGroup).toHaveBeenCalledWith('grp_ws', { description: 'Who hires, and onboards.' });
+    expect(field().value).toBe('Who hires, and onboards.');
+  });
+
+  it('creates a group with what it is for', async () => {
+    const api = workspaceApi();
+    mounted = await mount(GroupsView, { api, can: admin, scope: wsScope, directory: fakeDirectory([member()]) });
+    await mounted.flush();
+    await mounted.click(document.querySelector('[data-action="create-group"]'));
+    await mounted.type(document.querySelector('[aria-label="Group name"]'), 'Recruiters');
+    await mounted.type(document.querySelector('[aria-label="Group description"]'), 'Who hires.');
+    await mounted.click(document.querySelector('[data-action="create"]'));
+    await mounted.flush();
+    expect(api.createGroup).toHaveBeenCalledWith({
+      name: 'Recruiters',
+      scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1',
+      description: 'Who hires.',
+    });
   });
 
   it('offers no rename without iam:UpdateGroup, and keeps the form open when it fails', async () => {
@@ -285,7 +318,7 @@ describe('GroupsView at a workspace', () => {
     await mounted.unmount();
     mounted = null;
 
-    const failing = workspaceApi({ renameGroup: vi.fn(() => Promise.reject(new IamAdminError('Not allowed to rename it', 403))) });
+    const failing = workspaceApi({ updateGroup: vi.fn(() => Promise.reject(new IamAdminError('Not allowed to rename it', 403))) });
     await show(failing, owned.id);
     await mounted!.type(document.querySelector('[aria-label="Group name"]'), 'Talent');
     await mounted!.click(document.querySelector('[data-action="save"]'));
@@ -322,7 +355,7 @@ describe('A group’s page', () => {
     await mounted.flush();
 
     expect(document.querySelector('[data-group-detail="grp_g"]')).not.toBeNull();
-    expect((document.querySelector('[aria-label="Owned by"]') as HTMLInputElement).value).toBe('Workspace ws-1 (acme)');
+    expect(document.querySelector('[data-group-detail] [data-instance-meta]')?.textContent).toContain('Owned by Workspace ws-1 (acme)');
     expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'grp_g' });
     const levels = [...document.querySelectorAll('[data-holding]')].map((r) => r.querySelector('td:nth-child(2)')?.textContent);
     expect(levels).toEqual(['Workspace ws-1 (acme)', 'Project p1 (ws-1, acme)']);

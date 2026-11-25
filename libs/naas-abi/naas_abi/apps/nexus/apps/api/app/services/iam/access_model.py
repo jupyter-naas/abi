@@ -1026,8 +1026,16 @@ def convert_record(
         if named is not None and named.membership_of not in (None, container):
             raise AccessModelStop(f"{named.id} is a membership group of another container")
         if named is None:
+            from naas_abi.apps.nexus.apps.api.app.services.iam.group_descriptions import (
+                described,
+            )
+
+            name = membership_name(container, label)
             named = iam.create_group(
-                membership_name(container, label), scope=container, membership_of=container
+                name,
+                scope=container,
+                membership_of=container,
+                description=described(name, owner=container, membership_of=container),
             )
         elif named.membership_of != container:
             iam.mark_group(named.id, membership_of=container, level=bool(named.level_group))

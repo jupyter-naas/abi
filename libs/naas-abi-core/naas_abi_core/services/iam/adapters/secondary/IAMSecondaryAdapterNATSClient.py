@@ -210,6 +210,7 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         scope: str | None = None,
         membership_of: str | None = None,
         level: bool = False,
+        description: str | None = None,
     ) -> PrincipalRecord:
         return codec.principal_from_pb(
             self._request(
@@ -218,6 +219,7 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
                 scope=scope,
                 membership_of=membership_of,
                 level=level,
+                description=description,
             ).group
         )
 
@@ -255,9 +257,13 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             response.next_after if response.HasField("next_after") else None,
         )
 
-    def update_group(self, group_id: str, *, name: str) -> PrincipalRecord:
+    def update_group(
+        self, group_id: str, *, name: str | None = None, description: str | None = None
+    ) -> PrincipalRecord:
         return codec.principal_from_pb(
-            self._request("update_group", group_id=group_id, name=name).group
+            self._request(
+                "update_group", group_id=group_id, name=name, description=description
+            ).group
         )
 
     def delete_group(self, group_id: str) -> PrincipalRecord:

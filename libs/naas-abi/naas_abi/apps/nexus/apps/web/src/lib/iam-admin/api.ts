@@ -264,11 +264,14 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
       ),
     getGroup: (id: string) => read<GroupView>(fetcher, path('groups', id), 'Could not load the group.'),
     /** `scope`: the owner (an organization's or a workspace's container); none: the platform. */
-    createGroup: (input: { name: string; org?: string | null; scope?: string | null }) =>
+    createGroup: (input: { name: string; org?: string | null; scope?: string | null; description?: string }) =>
       send<PrincipalView>(fetcher, path('groups'), 'POST', input, 'Could not create the group.'),
     /** `iam:UpdateGroup`: its id, owner, members and policies stay. */
     renameGroup: (id: string, name: string) =>
       send<GroupView>(fetcher, path('groups', id), 'PATCH', { name }, 'Could not rename the group.'),
+    /** `iam:UpdateGroup`: its name, its description (empty: none), or both. */
+    updateGroup: (id: string, changes: { name?: string; description?: string }) =>
+      send<GroupView>(fetcher, path('groups', id), 'PATCH', changes, 'Could not save the group.'),
     deleteGroup: (id: string) =>
       send<void>(fetcher, path('groups', id), 'DELETE', undefined, 'Could not delete the group.'),
     addMember: (groupId: string, memberId: string) =>

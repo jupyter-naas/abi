@@ -56,6 +56,8 @@ message Principal {
   // Groups: a level group; its members change as the admins of any of a
   // person's containers decide, audited.
   bool level_group = 17;
+  // Groups: what the group is for, in a sentence or two. Empty: none.
+  optional string description = 18;
 }
 
 // A stored policy; the document is the JSON policy document.
@@ -492,6 +494,8 @@ message CreateGroupRequest {
   optional string membership_of = 5;
   // A level group: the platform's grants only.
   bool level = 6;
+  // What the group is for.
+  optional string description = 7;
 }
 message CreateGroupResponse {
   abi.common.v1.CallError error = 1;
@@ -525,7 +529,10 @@ message ListGroupsResponse {
 message UpdateGroupRequest {
   abi.common.v1.CallContext context = 1;
   string group_id = 2;
-  string name = 3;
+  // Its new name; unset: kept.
+  optional string name = 3;
+  // Its new description; unset: kept, empty: none.
+  optional string description = 4;
 }
 message UpdateGroupResponse {
   abi.common.v1.CallError error = 1;

@@ -20,8 +20,8 @@ export function PersonBack({ label = 'Users', onClick }: { label?: string; onCli
 /**
  * A person's page top and first section: who it is about, as Settings shows an account (their
  * picture when they have one, their name, IAM's id, their email), the page's actions (View as,
- * Reload…) at its right; then Info, with no title of its own: their name, email and id,
- * read-only (their account names them, changed in their own profile).
+ * Reload…) at its right; then Info, with no title of its own: their name and email,
+ * read-only (their account names them, changed in their own profile); their id is above.
  */
 export function PersonInfoSection({
   id,
@@ -67,7 +67,6 @@ export function PersonInfoSection({
         <div className="account-profile-form-grid" data-person-info={id}>
           {field('name', 'Name', name ?? 'Loading…')}
           {field('email', 'Email', email ?? '')}
-          {field('id', 'ID', id)}
         </div>
       </SettingsSection>
     </>

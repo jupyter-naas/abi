@@ -19,8 +19,9 @@ describe('A person’s page, shown alone', () => {
       actions: createElement('button', { type: 'button', 'data-action': 'view-as' }, 'View as'),
     });
     const input = (label: string) => document.querySelector(`[aria-label="${label}"]`) as HTMLInputElement;
-    expect([input('Name').value, input('Email').value, input('ID').value]).toEqual(['Ann Analyst', 'ann@example.com', 'usr_ann']);
-    for (const label of ['Name', 'Email', 'ID']) {
+    expect([input('Name').value, input('Email').value]).toEqual(['Ann Analyst', 'ann@example.com']);
+    expect(input('ID')).toBeNull(); // its id is above, under the name
+    for (const label of ['Name', 'Email']) {
       expect(input(label).readOnly).toBe(true);
       expect(input(label).classList.contains('account-profile-field-input-readonly')).toBe(true);
     }

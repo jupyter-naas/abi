@@ -357,7 +357,10 @@ def set_workspace_platform_files(iam: Any, workspace_id: str, mode: str) -> Mode
         return OFF
     made = False
     if group is None:
-        group = str(iam.create_group(group_name(workspace_id, _label(iam, container))).id)
+        from naas_abi.apps.nexus.apps.api.app.services.iam.group_descriptions import described
+
+        name = group_name(workspace_id, _label(iam, container))
+        group = str(iam.create_group(name, description=described(name, owner=PLATFORM)).id)
         made = True
     wanted = policies.write if mode == WRITE else policies.read
     other = policies.read if mode == WRITE else policies.write

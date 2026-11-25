@@ -162,6 +162,20 @@ def test_a_version_6_store_upgrades(tmp_path):
     check_upgrade_from_6(lambda: IAMStoreSQLite(path), execute)
 
 
+def test_a_version_8_store_upgrades(tmp_path):
+    import sqlite3
+
+    from naas_abi_core.services.iam.tests.iam_store_upgrade import check_upgrade_from_8
+
+    path = str(tmp_path / "iam.sqlite")
+
+    def execute(statement: str) -> None:
+        with sqlite3.connect(path) as conn:
+            conn.execute(statement.format(schema=""))
+
+    check_upgrade_from_8(lambda: IAMStoreSQLite(path), execute)
+
+
 def test_a_catalog_stored_before_the_format_reads_as_format_one(tmp_path):
     """The previous version stored catalogs without ``format``: read back, their
     flags are unknown (``ActionCatalog.flags_known``); what this version stores
