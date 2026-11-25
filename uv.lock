@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11, <4"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -3679,7 +3679,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "7.1.0"
+version = "4.1.2"
 source = { editable = "libs/naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -3767,7 +3767,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "5.1.0"
+version = "3.3.3"
 source = { editable = "libs/naas-abi-cli" }
 dependencies = [
     { name = "naas-abi" },
@@ -3793,7 +3793,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "6.1.0"
+version = "3.6.2"
 source = { editable = "libs/naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -3942,7 +3942,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-idp"
-version = "0.3.0"
+version = "0.2.0"
 source = { editable = "libs/naas-abi-idp" }
 dependencies = [
     { name = "authlib" },
@@ -3971,7 +3971,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "5.0.0"
+version = "4.0.0"
 source = { editable = "libs/naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },
@@ -4075,7 +4075,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-sdk"
-version = "0.7.0"
+version = "0.5.0"
 source = { editable = "libs/naas-abi-sdk" }
 dependencies = [
     { name = "naas-abi-proto" },
