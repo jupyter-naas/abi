@@ -24,6 +24,7 @@ import { useSettingsReloadGeneration } from '@/components/settings/settings-relo
 import { Button } from '@/components/ui/button';
 import { workspaceOrganization } from '@/components/shell/settings-nav';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { authFetch, useAuthStore } from '@/stores/auth';
 
 const SUBTITLES: Record<ContainerAccessPage, string> = {
   policies: 'Where rights come from in this workspace: each policy, and who holds it here',
@@ -123,11 +124,32 @@ export function WorkspacePerson() {
   const personId = pageFocus(usePathname(), `/workspace/${workspaceId}/settings/users`);
   const nonce = useSettingsReloadGeneration();
   const [person, setPerson] = useState<PersonRef | null>(null);
+  const workspace = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId || w.slug === workspaceId));
+  const platformAdmin = useAuthStore((s) => !!s.user?.is_superadmin);
+  // Who may take someone out of the workspace, as its Users list says (its admins, the
+  // platform's); the API decides again.
+  const managesMembers =
+    workspace?.currentUserRole === 'owner' || workspace?.currentUserRole === 'admin' || platformAdmin;
+  const usersPath = `/workspace/${workspaceId}/settings/users`;
+  const leave =
+    managesMembers && person
+      ? async () => {
+          const response = await authFetch(
+            `/api/workspaces/${encodeURIComponent(workspaceId)}/members/${encodeURIComponent(person.userId)}`,
+            { method: 'DELETE' },
+          );
+          if (!response.ok) {
+            const detail = await response.json().then((b) => (typeof b?.detail === 'string' ? b.detail : ''), () => '');
+            throw new Error(detail || 'Could not remove them from the workspace.');
+          }
+          router.push(usersPath);
+        }
+      : undefined;
   if (!personId) return null;
   // The page alone: back to Users, then who it is about (Info) and what they hold.
   return (
     <div className="access-instance-page">
-      <PersonBack onClick={() => router.push(`/workspace/${workspaceId}/settings/users`)} />
+      <PersonBack onClick={() => router.push(usersPath)} />
       <PersonInfoSection
         id={personId}
         name={person?.name ?? null}
@@ -144,6 +166,7 @@ export function WorkspacePerson() {
         principalId={personId}
         nonce={nonce}
         onPerson={setPerson}
+        onLeave={leave}
       />
     </div>
   );
