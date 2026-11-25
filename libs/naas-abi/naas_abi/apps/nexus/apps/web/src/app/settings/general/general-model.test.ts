@@ -65,6 +65,50 @@ describe('siteIdentitySections', () => {
     expect(row('sign-in', '"Powered by" line')?.value).toEqual({ kind: 'flag', on: true });
   });
 
+  it('shows the logo height, 48px when left out', () => {
+    expect(row('logo', 'Logo height')).toEqual({
+      key: 'logo_height',
+      label: 'Logo height',
+      value: { kind: 'text', text: '48px' },
+    });
+    const tall = siteIdentitySections({ ...SITE, logo_height: 96 }, ADDRESSES);
+    const logo = tall.find((s) => s.id === 'logo');
+    expect(logo?.rows.find((r) => r.key === 'logo_height')?.value).toEqual({ kind: 'text', text: '96px' });
+  });
+
+  it('shows the heading and the footer link next to the footer text, unset when left out', () => {
+    expect(row('sign-in', 'Heading')?.value).toEqual({ kind: 'unset' });
+    expect(row('sign-in', 'Footer link label')?.value).toEqual({ kind: 'unset' });
+    expect(row('sign-in', 'Footer link')?.value).toEqual({ kind: 'unset' });
+
+    const acme = siteIdentitySections(
+      {
+        ...SITE,
+        login_heading: 'Acme Platform',
+        login_footer_text: 'Acme Research operates this platform.',
+        login_footer_link_label: 'Grant 123',
+        login_footer_link_url: 'https://example.org/grant/123',
+      },
+      ADDRESSES
+    ).find((s) => s.id === 'sign-in')!;
+    const keys = acme.rows.map((r) => r.key);
+    expect(keys.slice(keys.indexOf('login_heading'), keys.indexOf('login_footer_link_url') + 1)).toEqual([
+      'login_heading',
+      'login_footer_text',
+      'login_footer_link_label',
+      'login_footer_link_url',
+    ]);
+    expect(acme.rows.find((r) => r.key === 'login_heading')?.value).toEqual({ kind: 'text', text: 'Acme Platform' });
+    expect(acme.rows.find((r) => r.key === 'login_footer_link_label')?.value).toEqual({
+      kind: 'text',
+      text: 'Grant 123',
+    });
+    expect(acme.rows.find((r) => r.key === 'login_footer_link_url')?.value).toEqual({
+      kind: 'url',
+      url: 'https://example.org/grant/123',
+    });
+  });
+
   it('lists the addresses the deployment decides, with no configuration key', () => {
     const addresses = siteIdentitySections(SITE, ADDRESSES).find((s) => s.id === 'addresses');
     expect(addresses?.rows).toEqual([
