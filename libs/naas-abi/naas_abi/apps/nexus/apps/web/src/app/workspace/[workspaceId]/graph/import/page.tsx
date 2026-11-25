@@ -21,7 +21,7 @@ import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
 import { KpiCard } from '@/components/ui/kpi-card';
-import { ToastStack, type ToastItem } from '@/components/graph/toast-notification';
+import { toast } from '@/components/ui/toast';
 
 const ACCEPTED_EXTENSIONS = ['.ttl', '.owl', '.nt', '.rdf', '.n3'];
 
@@ -156,20 +156,6 @@ export default function ImportPage() {
 
   const [importing, setImporting] = useState(false);
   const [records, setRecords] = useState<ImportRecord[]>([]);
-
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
-
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
-  const pushToast = useCallback((toast: Omit<ToastItem, 'id'>) => {
-    const item: ToastItem = {
-      ...toast,
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    };
-    setToasts((prev) => [...prev, item]);
-  }, []);
 
   useEffect(() => {
     setRecords(loadRecords(workspaceId));
@@ -356,11 +342,7 @@ export default function ImportPage() {
         return next;
       });
 
-      pushToast({
-        type: 'success',
-        title: 'Import complete',
-        message: `${result.count} triple${result.count !== 1 ? 's' : ''} imported into "${graphLabel}"`,
-      });
+      toast.success('Import complete', `${result.count} triple${result.count !== 1 ? 's' : ''} imported into "${graphLabel}"`);
       clearFile();
       setNewLabel('');
     } catch (err) {
@@ -372,13 +354,13 @@ export default function ImportPage() {
         saveRecords(workspaceId, next);
         return next;
       });
-      pushToast({ type: 'error', title: 'Import failed', message: msg });
+      toast.error('Import failed', msg);
     } finally {
       setImporting(false);
     }
   }, [
     file, analysis, importing, destMode, newLabel, newRole, existingGraphUri,
-    allGraphs, workspaceId, selectGraph, setVisibleGraphs, pushToast, clearFile,
+    allGraphs, workspaceId, selectGraph, setVisibleGraphs, clearFile,
   ]);
 
   const canImport =
@@ -391,7 +373,6 @@ export default function ImportPage() {
   return (
     <div className="flex h-full flex-col">
       <Header title="Import Graph" />
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
 
