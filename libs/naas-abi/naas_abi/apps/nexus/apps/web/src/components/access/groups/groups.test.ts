@@ -159,13 +159,13 @@ describe('GroupsView at a workspace', () => {
       limit: 500,
       memberCounts: true,
     });
-    // Create group opens the page of a group to be, its sections already there: its members
-    // and its policies are picked before it is made, then given to it; its page opens.
+    // Create group opens the page of a group to be, its sections already there: what it grants
+    // (its policies), then who holds it (its members), picked before it is made, then given to
+    // it in that order; its page opens.
     await mounted.click(document.querySelector('[data-action="create-group"]'));
     const page = () => document.querySelector('[data-group-new]');
-    expect(page()?.textContent).toContain('Info');
-    expect(page()?.textContent).toContain('Members');
-    expect(page()?.textContent).toContain('Policies');
+    const sections = [...(page()?.querySelectorAll('h3') ?? [])].map((h) => h.textContent);
+    expect(sections).toEqual(['Info', 'Policies', 'Members']);
     expect(document.querySelector('[data-group]')).toBeNull(); // the list is left
     await mounted.type(document.querySelector('[aria-label="Group name"]'), 'Recruiters');
     await mounted.click(document.querySelector('[data-action="add-members"]'));
@@ -183,7 +183,9 @@ describe('GroupsView at a workspace', () => {
     expect(api.createGroup).toHaveBeenCalledWith({ name: 'Recruiters', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
     expect(api.addMember).toHaveBeenCalledWith('grp_ws', 'usr_bob');
     expect(api.attach).toHaveBeenCalledWith({ policy_id: 'pol_1', principal_id: 'grp_ws', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
+    expect(api.attach.mock.invocationCallOrder[0]).toBeLessThan(api.addMember.mock.invocationCallOrder[0]);
     expect(document.querySelector('[data-group-detail]')?.getAttribute('data-group-detail')).toBe('grp_ws');
+    expect([...document.querySelectorAll('[data-group-detail] h3')].map((h) => h.textContent)).toEqual(['Info', 'Policies', 'Members']);
   });
 
   it('adds a member of the scope, lists the group’s policies at every level, attaches here, and maps no IdP claim', async () => {
@@ -211,9 +213,24 @@ describe('GroupsView at a workspace', () => {
   it('changes neither the members nor the existence of a group owned above', async () => {
     await show(workspaceApi(), fromOrg.id);
     expect(buttonNamed('Delete Org analysts')).toBeNull();
-    expect((document.querySelector('[aria-label="Group name"]') as HTMLInputElement).disabled).toBe(true);
+    expect((document.querySelector('[aria-label="Group name"]') as HTMLInputElement).readOnly).toBe(true);
     expect(document.querySelector('[data-action="add-members"]')).toBeNull();
     expect(document.querySelector('[data-action="add-policies"]')).not.toBeNull();
+  });
+
+  it('shows its fields as Settings does, its name the only one that changes', async () => {
+    await show(workspaceApi(), owned.id);
+    const input = (label: string) => document.querySelector(`[aria-label="${label}"]`) as HTMLInputElement;
+    for (const label of ['Group name', 'Owned by', 'Kind', 'ID']) {
+      expect(input(label).classList.contains('account-profile-field-input')).toBe(true);
+      expect(input(label).disabled).toBe(false);
+    }
+    expect(input('Group name').readOnly).toBe(false);
+    for (const label of ['Owned by', 'Kind', 'ID']) {
+      expect(input(label).readOnly).toBe(true);
+      expect(input(label).classList.contains('account-profile-field-input-readonly')).toBe(true);
+    }
+    expect(input('ID').value).toBe(owned.id);
   });
 
   it('renames a group it owns, and shows the new name', async () => {
@@ -242,7 +259,7 @@ describe('GroupsView at a workspace', () => {
     await mounted.click(document.querySelector(`[data-group="${owned.id}"] button[data-action="open"]`));
     await mounted.flush();
     expect(document.querySelector('[data-action="save"]')).toBeNull();
-    expect((document.querySelector('[aria-label="Group name"]') as HTMLInputElement).disabled).toBe(true);
+    expect((document.querySelector('[aria-label="Group name"]') as HTMLInputElement).readOnly).toBe(true);
     await mounted.unmount();
     mounted = null;
 

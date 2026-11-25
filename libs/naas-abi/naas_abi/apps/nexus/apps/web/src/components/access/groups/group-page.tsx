@@ -17,6 +17,7 @@ import { ConfirmDetach } from '../holdings/confirm-detach';
 import { AttachDialog, type AttachCandidate } from '../policies/attach-dialog';
 import { useActionsAt, useContainerNames } from '../policies/policy-owners';
 import '../holdings/holdings.css';
+import '@/app/account/profile/profile.css';
 
 const message = (e: unknown) => (e instanceof IamAdminError || e instanceof Error ? e.message : String(e));
 
@@ -234,12 +235,14 @@ export function GroupPage({
         made = (await api.createGroup(scope.value ? { name: value, scope: scope.value } : { name: value })).id;
         setMadeId(made);
       }
-      for (const m of draftMembers) await api.addMember(made, m.id);
+      // What it grants first, then who holds it: each member joins a group that already holds
+      // its policies, so joining is checked against them.
       for (const p of draftPolicies) await api.attach({ policy_id: p.id, principal_id: made, scope: scope.value });
+      for (const m of draftMembers) await api.addMember(made, m.id);
       await onChanged();
       onCreated?.(made);
     } catch (e) {
-      // Made, but a member or a policy was refused: said here, its page a click away.
+      // Made, but a policy or a member was refused: said here, its page a click away.
       setError(made ? `The group was created, but: ${message(e)}` : message(e));
     } finally {
       setCreating(false);
@@ -272,12 +275,25 @@ export function GroupPage({
     </button>
   );
 
-  const field = (label: string, value: string, help?: string) => (
-    <label className="access-policy-field access-policy-field-grow">
-      <span>{label}</span>
-      <input className="access-input w-full" aria-label={label} value={value} disabled readOnly title={help} />
-    </label>
+  // Fields as Settings shows them (Account › Profile): what cannot change is read-only there.
+  const field = (id: string, label: string, value: string, help?: string) => (
+    <div className="account-profile-field">
+      <label className="account-profile-field-label" htmlFor={`group-${id}`}>
+        {label}
+      </label>
+      <input
+        id={`group-${id}`}
+        type="text"
+        className="account-profile-field-input account-profile-field-input-readonly"
+        aria-label={label}
+        value={value}
+        readOnly
+        aria-readonly="true"
+        title={help}
+      />
+    </div>
   );
+  const nameFixed = !isNew && !renames;
 
   return (
     <div className="space-y-4" data-group-detail={group?.id ?? undefined} data-group-new={isNew ? '' : undefined}>
@@ -301,7 +317,7 @@ export function GroupPage({
         title="Info"
         description={
           isNew
-            ? 'Name the group, then add its members and its policies below.'
+            ? 'Name the group, then attach its policies and add its members below.'
             : 'A group keeps its owner, its kind and its id: its name changes here.'
         }
         actions={
@@ -316,27 +332,85 @@ export function GroupPage({
           ) : undefined
         }
       >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="access-policy-field access-policy-field-grow">
-            <span>Name</span>
+        <div className="account-profile-form-grid">
+          <div className="account-profile-field">
+            <label className="account-profile-field-label" htmlFor="group-name">
+              Name
+            </label>
             <input
-              className="access-input w-full"
+              id="group-name"
+              type="text"
+              className={`account-profile-field-input${nameFixed ? ' account-profile-field-input-readonly' : ''}`}
               aria-label="Group name"
               placeholder="Its name, e.g. Analysts"
               maxLength={128}
               value={name}
               autoFocus={isNew}
-              disabled={!isNew && !renames}
+              readOnly={nameFixed}
+              aria-readonly={nameFixed || undefined}
               onChange={(e) => {
                 setName(e.target.value);
                 setNotice(null);
               }}
             />
-          </label>
-          {field('Owned by', isNew ? scope.label : levelLabel(group!.owner_scope ?? PLATFORM, names), 'The level that owns it: set when it is made')}
-          {field('Kind', kind, 'What the access model makes of it')}
-          {field('ID', isNew ? 'Given when it is made' : group!.id, 'IAM’s id of the group')}
+          </div>
+          {field('owner', 'Owned by', isNew ? scope.label : levelLabel(group!.owner_scope ?? PLATFORM, names), 'The level that owns it: set when it is made')}
+          {field('kind', 'Kind', kind, 'What the access model makes of it')}
+          {field('id', 'ID', isNew ? 'Given when it is made' : group!.id, 'IAM’s id of the group')}
         </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Policies"
+        description={isNew ? `The policies it will hold, at ${scope.label}.` : 'The policies it holds, at every level you may list.'}
+        actions={can('iam:AttachPolicy') ? addButton('Attach policies', 'add-policies', () => setDialog('policies'), creating || morePolicies.length === 0) : undefined}
+      >
+        {isNew ? (
+          draftPolicies.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No policy yet.</p>
+          ) : (
+            <div className="access-table-wrap">
+              <table className="access-table" aria-label="Policies">
+                <thead>
+                  <tr>
+                    <th>Policy</th>
+                    <th>Level</th>
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {draftPolicies.map((p) => (
+                    <tr key={p.id} data-policy={p.id}>
+                      <td>{p.name}</td>
+                      <td>{scope.label}</td>
+                      <td className="text-right">
+                        <button
+                          type="button"
+                          className="access-button"
+                          aria-label={`Remove ${p.name}`}
+                          onClick={() => setDraftPolicies((current) => current.filter((q) => q.id !== p.id))}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : held === null ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : (
+          <HoldingsTable
+            rows={rows}
+            names={names}
+            actionsAt={actionsAt}
+            here={here}
+            onDetach={(a) => void detach(a)}
+            empty="Nothing you may list is attached to this group."
+          />
+        )}
       </SettingsSection>
 
       <SettingsSection
@@ -443,59 +517,6 @@ export function GroupPage({
               </form>
             )}
           </div>
-        )}
-      </SettingsSection>
-
-      <SettingsSection
-        title="Policies"
-        description={isNew ? `The policies it will hold, at ${scope.label}.` : 'The policies it holds, at every level you may list.'}
-        actions={can('iam:AttachPolicy') ? addButton('Attach policies', 'add-policies', () => setDialog('policies'), creating || morePolicies.length === 0) : undefined}
-      >
-        {isNew ? (
-          draftPolicies.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No policy yet.</p>
-          ) : (
-            <div className="access-table-wrap">
-              <table className="access-table" aria-label="Policies">
-                <thead>
-                  <tr>
-                    <th>Policy</th>
-                    <th>Level</th>
-                    <th aria-label="Actions" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {draftPolicies.map((p) => (
-                    <tr key={p.id} data-policy={p.id}>
-                      <td>{p.name}</td>
-                      <td>{scope.label}</td>
-                      <td className="text-right">
-                        <button
-                          type="button"
-                          className="access-button"
-                          aria-label={`Remove ${p.name}`}
-                          onClick={() => setDraftPolicies((current) => current.filter((q) => q.id !== p.id))}
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        ) : held === null ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : (
-          <HoldingsTable
-            rows={rows}
-            names={names}
-            actionsAt={actionsAt}
-            here={here}
-            onDetach={(a) => void detach(a)}
-            empty="Nothing you may list is attached to this group."
-          />
         )}
       </SettingsSection>
 
