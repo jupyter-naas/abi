@@ -57,9 +57,10 @@ const analysts = attachment({ id: 'a_g', policy_id: 'pol_w', policy_name: 'W ana
 /** What IAM answers a viewer: the rows they may list, and their rights by level. */
 function apiFor(rows: AttachmentView[], groups: (typeof g)[], rights: Record<string, string[]>) {
   return fakeApi({
-    listAttachments: vi.fn(({ principal_id }: { principal_id: string }) =>
-      principal_id === g.id
-        ? Promise.resolve({ items: groups.length ? [analysts] : [] })
+    // A person's rows, or (several principals at once) each named group's.
+    listAttachments: vi.fn(({ principal_id }: { principal_id: string | string[] }) =>
+      Array.isArray(principal_id)
+        ? Promise.resolve({ items: principal_id.includes(g.id) && groups.length ? [analysts] : [] })
         : Promise.resolve({ items: rows }),
     ),
     principalGroups: vi.fn().mockResolvedValue({ items: groups }),
@@ -111,7 +112,9 @@ describe('A person’s page', () => {
     const { open, changeRole } = await show(api, () => true);
 
     expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'usr_bob' });
-    expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'grp_g' });
+    // The groups' attachments: one request for all of them, never one per group.
+    expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: ['grp_g'] });
+    expect(api.listAttachments).toHaveBeenCalledTimes(2);
     expect(document.querySelector('.access-person-name')?.textContent).toBe('Bob');
     // Its level, named as the Owner column names containers.
     expect(row('builtin.member', ORG)?.textContent).toContain('Organization Acme');
@@ -215,6 +218,21 @@ describe('A person’s page', () => {
     expect(document.querySelectorAll('select, [aria-label^="Detach"]')).toHaveLength(0);
     // Named as the page that opened it named them.
     expect(document.querySelector('.access-person-name')?.textContent).toBe('bob');
+    // No group: nothing is asked for one.
+    expect(api.listAttachments).toHaveBeenCalledTimes(1);
+  });
+
+  it('says which groups’ attachments could not be read, and shows the rest', async () => {
+    const api = apiFor([memberAtW], [g], { [WS]: ADMIN });
+    vi.mocked(api.listAttachments).mockImplementation(((filter: { principal_id?: string | readonly string[] }) =>
+      Array.isArray(filter.principal_id)
+        ? Promise.reject(new IamAdminError('IAM is not available on this server.', 503))
+        : Promise.resolve({ items: [memberAtW] })) as typeof api.listAttachments);
+    await show(api, () => true, wsScope);
+    const notices = [...document.querySelectorAll('[data-person-notice]')].map((n) => n.textContent);
+    expect(notices).toEqual(['What G gives could not be read (IAM is not available on this server.).']);
+    expect(row('builtin.member', WS)).not.toBeNull();
+    expect(document.querySelector('[data-group-of="grp_g"]')).not.toBeNull();
   });
 
   it('changes the role of an account linked from the old login as its members name it, whatever opened the page', async () => {
@@ -293,7 +311,7 @@ describe('View as, on a person’s page', () => {
 
     // The platform's and the organization's levels, and their names, are outside the view.
     expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'usr_bob', scope: WS });
-    expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'grp_g', scope: WS });
+    expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: ['grp_g'], scope: WS });
     expect(api.listAttachments).not.toHaveBeenCalledWith({ principal_id: 'usr_bob' });
     for (const call of vi.mocked(api.access).mock.calls) expect(call[0]).toBe(WS);
     for (const call of vi.mocked(api.resources).mock.calls) expect(String(call[0]?.scope)).toContain(WS);

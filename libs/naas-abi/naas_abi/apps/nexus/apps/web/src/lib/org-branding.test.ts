@@ -77,7 +77,8 @@ describe('loadOrgBranding', () => {
     expect(await second).toBe(await first);
     expect(await loadOrgBranding('org-a')).toBe(await first);
     expect(authFetch).toHaveBeenCalledTimes(1);
-    expect(authFetch).toHaveBeenCalledWith('/api/organizations/org-a');
+    // The organization resource's read, with its declared cache policy.
+    expect(authFetch).toHaveBeenCalledWith('/api/organizations/org-a', {}, { settingsCache: false });
   });
 
   it('does not cache failures', async () => {

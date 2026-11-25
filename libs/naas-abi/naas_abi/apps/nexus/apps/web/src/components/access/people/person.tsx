@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { attachmentsByPrincipal } from '@/lib/iam-admin/batched';
 import type { AttachmentView, PrincipalView } from '@/lib/iam-admin/types';
 import { viewFlagActive } from '@/lib/view-flag';
 import { useAuthStore } from '@/stores/auth';
@@ -73,9 +74,9 @@ async function memberAt(
 
 /**
  * A person's page: every role, policy and group they hold, at every level IAM lets the viewer
- * list (`GET /attachments?principal_id=`, `GET /principals/{id}/groups` and each group's
- * attachments), whatever the level of the page it is opened from. Each row names its level as
- * the Owner column does, says whether it is direct or through which group, links to the policy
+ * list (`GET /attachments?principal_id=`, `GET /principals/{id}/groups`, then every group's
+ * attachments in one `GET /attachments?principal_id=…&principal_id=…`), whatever the level of
+ * the page it is opened from. Each row names its level as the Owner column does, says whether it is direct or through which group, links to the policy
  * at its owner, and offers the detach (or, for a role, the change of role, as on Members) where
  * IAM says the viewer may. A policy is attached to them here too (the person fixed), at the
  * page's level by default or at another one they belong to: the platform, or an organization
@@ -125,17 +126,19 @@ export function PersonView({
         },
       ),
     ]);
-    const heldByGroups = await Promise.all(
-      groups.map((group) =>
-        held(group.id).then(
-          (page) => ({ group, attachments: page.items }),
-          (e: unknown) => {
-            notices.push(`What ${principalLabel(group, group.id)} gives could not be read (${message(e)}).`);
-            return { group, attachments: [] as AttachmentView[] };
-          },
-        ),
-      ),
+    // Every group's attachments in one request (#1608), each kept by IAM as one read of it would.
+    const byGroup = await attachmentsByPrincipal(
+      api,
+      groups.map((group) => group.id),
+      inView ? ownerOf(scope) : null,
     );
+    const heldByGroups = groups.map((group) => {
+      const found = byGroup.get(group.id);
+      if (found?.error) {
+        notices.push(`What ${principalLabel(group, group.id)} gives could not be read (${message(found.error)}).`);
+      }
+      return { group, attachments: found?.items ?? [] };
+    });
     let profile = direct.find((a) => a.principal)?.principal ?? null;
     // A person read by id is outside a view (``view_as/AGENTS.md``): their rows name them, else the label does.
     if (!profile && !viewFlagActive()) profile = await api.getPrincipal(personId).catch(() => null);

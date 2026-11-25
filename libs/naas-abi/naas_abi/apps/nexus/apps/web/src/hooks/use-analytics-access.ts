@@ -2,7 +2,8 @@
 
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import { authFetch, useAuthStore } from '@/stores/auth';
+import { authFetch } from '@/stores/auth';
+import { usePermissionRevision, usePermissionSessionKey } from '@/lib/permission-cache';
 import { fetchAnalyticsAccess, type Fetcher } from '@/components/analytics/api';
 import { analyticsScopeKey, type AnalyticsScope } from '@/components/analytics/scope';
 import type { AnalyticsAccess } from '@/components/analytics/types';
@@ -42,11 +43,11 @@ export function createAnalyticsAccessStore(fetcher: Fetcher = authFetch) {
       const read = async () => {
         try {
           const access = await fetchAnalyticsAccess(scope, fetcher);
-          if (get().userId === userId) {
+          if (get().userId === userId && get().pending[key] === promise) {
             set((s) => ({ entries: { ...s.entries, [key]: { status: 'ready', access } } }));
           }
         } catch {
-          if (get().userId === userId) {
+          if (get().userId === userId && get().pending[key] === promise) {
             const kept = get().entries[key]?.access ?? null;
             set((s) => ({ entries: { ...s.entries, [key]: { status: kept ? 'ready' : 'error', access: kept } } }));
           }
@@ -81,7 +82,8 @@ export function useAnalyticsAccess(
   scope: AnalyticsScope | null,
   { refresh = false }: { refresh?: boolean } = {}
 ): AnalyticsAccessEntry {
-  const userId = useAuthStore((s) => s.user?.id ?? 'session');
+  const userId = usePermissionSessionKey();
+  const revision = usePermissionRevision();
   const key = scope ? analyticsScopeKey(scope) : null;
   const knownUser = useAnalyticsAccessStore((s) => s.userId);
   const entry = useAnalyticsAccessStore((s) => (key ? s.entries[key] : undefined));
@@ -89,12 +91,10 @@ export function useAnalyticsAccess(
 
   useEffect(() => {
     if (!scope || !key) return;
-    const state = useAnalyticsAccessStore.getState();
-    const current = state.userId === userId ? state.entries[key] : undefined;
-    if (refresh || !current || current.status === 'error') void load(userId, scope);
+    void load(userId, scope);
     // The scope is read through its key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, key, load, refresh]);
+  }, [userId, key, load, refresh, revision]);
 
   if (!key || knownUser !== userId || !entry) return CHECKING;
   return entry;

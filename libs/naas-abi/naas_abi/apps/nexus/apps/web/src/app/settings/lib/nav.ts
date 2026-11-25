@@ -5,6 +5,7 @@ import {
   Blocks,
   Bot,
   Boxes,
+  BrainCircuit,
   Braces,
   Building2,
   Cable,
@@ -209,6 +210,18 @@ export const ACCESS_ITEMS: PlatformSettingsNavItem[] = ACCESS_SECTIONS.map((sect
   needs: { anyOf: section.needs },
 }));
 
+/** Platform settings › Models: the model sets (who chats with which model directly), read from
+ *  their platform policies: for whoever may list the policies. */
+export const PLATFORM_MODELS_PATH = '/settings/models';
+
+export const MODELS_ITEM: PlatformSettingsNavItem = {
+  id: 'models',
+  label: 'Models',
+  href: PLATFORM_MODELS_PATH,
+  icon: BrainCircuit,
+  needs: { action: 'iam:ListPolicies' },
+};
+
 /** The ABI code as layered planes, then as a diagram: the same snapshot, two views. */
 export const LAYERS_ITEM: PlatformSettingsNavItem = {
   id: 'system-layers',
@@ -237,6 +250,7 @@ const PADDED_ITEM_IDS: ReadonlySet<string> = new Set([
   ORGANIZATIONS_ITEM.id,
   USERS_ITEM.id,
   DRIVES_ITEM.id,
+  MODELS_ITEM.id,
   ...ACCESS_ITEMS.map((item) => item.id),
 ]);
 
@@ -250,7 +264,7 @@ export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
     label: 'Administration',
     items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM],
   },
-  { label: 'Access', items: ACCESS_ITEMS },
+  { label: 'Access', items: [...ACCESS_ITEMS, MODELS_ITEM] },
   {
     label: 'System',
     items: [

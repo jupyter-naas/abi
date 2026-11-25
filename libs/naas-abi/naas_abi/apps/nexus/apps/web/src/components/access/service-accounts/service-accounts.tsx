@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { KeyRound, Pause, Play, Plus, Trash2 } from 'lucide-react';
 import { IamAdminError } from '@/lib/iam-admin/api';
-import type { KeyView, ServiceAccountView } from '@/lib/iam-admin/types';
+import type { KeyView, PolicyView, ServiceAccountView } from '@/lib/iam-admin/types';
 import type { AccessViewProps, PlatformViewProps } from '../access-props';
 import {
   AccessHeaderAction,
@@ -16,6 +16,7 @@ import {
   useListControls,
   type ListColumn,
 } from '../access-list';
+import { isServiceAccountPolicy } from '../builtins';
 import { OneTimeSecretPanel, useOneTimeSecret } from './one-time-secret';
 import './service-accounts.css';
 
@@ -288,7 +289,83 @@ export function ServiceAccountsView({ api, can, nonce }: PlatformViewProps) {
           </div>
         </div>
       )}
+      <ServiceAccountPolicies api={api} can={can} nonce={nonce} />
     </div>
+  );
+}
+
+/** How many pages of policies are read to find the service accounts'. */
+const MAX_POLICY_PAGES = 10;
+
+/**
+ * The policies of the service accounts, read-only: IAM's own (Nexus API, Engine, Engine job,
+ * Built-in IdP, Module bootstrap) and each module's approved manifest ("Module <m>"). They are
+ * listed here only, never on Policies nor as a policy to attach to a person or a group.
+ */
+export function ServiceAccountPolicies({ api, can, nonce }: PlatformViewProps) {
+  const [policies, setPolicies] = useState<PolicyView[] | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const lists = can('iam:ListPolicies');
+
+  useEffect(() => {
+    if (!lists) return;
+    let cancelled = false;
+    (async () => {
+      const found: PolicyView[] = [];
+      let after: string | undefined;
+      for (let page = 0; page < MAX_POLICY_PAGES; page += 1) {
+        const read = await api.listPolicies(after);
+        found.push(...read.items.filter((p) => isServiceAccountPolicy(p.id)));
+        if (!read.next_after) break;
+        after = read.next_after;
+      }
+      return found.sort((a, b) => a.name.localeCompare(b.name));
+    })().then(
+      (found) => !cancelled && setPolicies(found),
+      () => !cancelled && setPolicies([]),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [api, lists, nonce]);
+
+  if (!lists || !policies || policies.length === 0) return null;
+  return (
+    <section className="access-sa-policies" aria-label="Service-account policies" data-service-account-policies="">
+      <h3 className="access-sa-policies-title">Service-account policies</h3>
+      <p className="access-empty">
+        What IAM&apos;s own accounts and each module act with. Managed by IAM and the module approvals: read-only,
+        and shown nowhere else.
+      </p>
+      <table className="org-settings-users-table" aria-label="Service-account policies">
+        <thead>
+          <tr>
+            <th>Policy</th>
+            <th>Statements</th>
+          </tr>
+        </thead>
+        <tbody>
+          {policies.map((policy) => (
+            <Fragment key={policy.id}>
+              <tr data-sa-policy={policy.id} {...rowOpener(() => setOpen(open === policy.id ? null : policy.id))}>
+                <td>
+                  <NameCell name={policy.name} detail={policy.id} />
+                </td>
+                <td>{policy.document.statements.length}</td>
+              </tr>
+              {open === policy.id && (
+                <tr data-sa-policy-document={policy.id}>
+                  <td colSpan={2}>
+                    {policy.description && <p className="access-empty">{policy.description}</p>}
+                    <pre className="access-sa-policy-document">{JSON.stringify(policy.document, null, 2)}</pre>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }
 

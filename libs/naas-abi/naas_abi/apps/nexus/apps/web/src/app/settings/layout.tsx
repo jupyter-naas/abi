@@ -11,7 +11,6 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { SettingsLevelsNav } from '@/components/settings/settings-levels-nav';
 import { SettingsLayoutRoot, useWorkspaceReturnPath } from '@/components/settings/settings-shell';
 import { SettingsShellHeader } from '@/components/settings/settings-shell-header';
-import { SettingsLoading } from '@/components/settings/settings-ui';
 import {
   holds,
   laysOutOwnPanes,
@@ -68,11 +67,11 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
   const isMobile = useIsMobile();
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
   const groups = useMemo(() => visiblePlatformSettingsGroups(actions), [actions]);
-  const { tabs, level } = useSettingsTabs({ mobile: isMobile });
+  const { tabs, level, pagesReady } = useSettingsTabs({ mobile: isMobile });
 
   // Runs that failed since the admin last looked: the Jobs item's badge, and the Jobs page.
   const jobsApi = useMemo(() => createJobsApi(), []);
-  const jobFailures = useJobFailures(jobsApi, holds(READ_SYSTEM, actions));
+  const jobFailures = useJobFailures(jobsApi, pagesReady && holds(READ_SYSTEM, actions));
   const failures = jobFailures.failures;
   const jobsBadge =
     failures && failures.count > 0 ? (failures.more ? `${failures.count}+` : String(failures.count)) : null;
@@ -119,9 +118,10 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
   useRememberSettingsPath(item && allowed ? pathname : null);
 
   let content: React.ReactNode;
-  if (status === 'checking') content = <SettingsLoading />;
-  else if (status === 'error') content = <PlatformSettingsForbidden onRetry={retry} />;
-  else if (!allowed) content = <PlatformSettingsForbidden />;
+  // The page starts with the platform's access read. A refusal replaces it once that read answers.
+  // The organization list is only for the other tabs.
+  if (status === 'error') content = <PlatformSettingsForbidden onRetry={retry} />;
+  else if (status !== 'checking' && !allowed) content = <PlatformSettingsForbidden />;
   else content = children;
 
   return (

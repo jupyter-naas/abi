@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { viewFor } from '../system/data/services/registry';
+import { loadServiceView, loadedServiceView, SERVICE_VIEW_NAMES } from '../system/data/services/registry';
 import { SERVICE_ICONS } from './nav';
 import { SERVICE_PAGES, serviceForPage, servicePagePath, servicePagesIn } from './service-pages';
 
@@ -29,9 +29,15 @@ describe('service pages', () => {
     expect(new Set(SERVICE_PAGES.map((page) => servicePagePath(page.service))).size).toBe(SERVICE_PAGES.length);
   });
 
-  it('name and draw each page as its service view does', () => {
-    for (const page of SERVICE_PAGES) {
-      const view = viewFor(page.service);
+  // Imports all sixteen views: slower than the rest when the whole suite runs.
+  it('name and draw each page as its service view does', { timeout: 30_000 }, async () => {
+    expect([...SERVICE_VIEW_NAMES].sort()).toEqual(API_SERVICES);
+    // Not loaded until asked for (#1609); then its own view, under its own name.
+    const views = await Promise.all(SERVICE_PAGES.map((page) => loadServiceView(page.service)));
+    for (const [index, page] of SERVICE_PAGES.entries()) {
+      const view = views[index];
+      expect(view.name).toBe(page.service);
+      expect(loadedServiceView(page.service)).toBe(view);
       expect([page.service, page.label]).toEqual([page.service, view.label]);
       expect(SERVICE_ICONS[page.service]).toBe(view.icon);
     }

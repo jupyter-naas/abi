@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { getApiUrl, getOllamaUrl } from '@/lib/config';
-import { authFetch } from './auth';
+import { getOllamaUrl } from '@/lib/config';
 
 export type ProviderType = 'anthropic' | 'ollama' | 'openai' | 'cloudflare' | 'abi' | 'custom';
 
@@ -67,8 +66,8 @@ export const useIntegrationsStore = create<IntegrationsState>()(
       // Fetch available providers from API and populate store to avoid drift
       refreshProviders: async () => {
         try {
-          const API_BASE = getApiUrl();
-          const res = await authFetch(`${API_BASE}/api/providers/available`);
+          const { readAvailableProviders } = await import('./models');
+          const res = await readAvailableProviders();
           if (!res.ok) return;
           const data: Array<{ id: string; name: string; type: ProviderType; has_api_key: boolean; models: Array<{ id: string; name: string }> }> = await res.json();
           const mapped: ProviderConfig[] = data.map((p) => {

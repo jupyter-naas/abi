@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v5.2.0 (2026-11-23)
+
+### Features
+
+- **nexus**: Move per-person attachments to the groups model at start
+  ([#1587](https://github.com/jupyter-naas/abi/pull/1587),
+  [`d04e52f`](https://github.com/jupyter-naas/abi/commit/d04e52f634b2d0c9404d27bd413491fc7fab56de))
+
+- **nexus**: The access move applies at start and reports after
+  ([`109d384`](https://github.com/jupyter-naas/abi/commit/109d38497dbfdf072e2ebdd543c69f17b0e97d35))
+
+- **nexus-api**: People flows give a level and groups at the platform, org and workspace
+  ([#1589](https://github.com/jupyter-naas/abi/pull/1589),
+  [`48da1d2`](https://github.com/jupyter-naas/abi/commit/48da1d27c18f90a76098a0dc2fb0c67abed515ac))
+
+
 ## v5.1.0 (2026-11-20)
 
 ### Bug Fixes

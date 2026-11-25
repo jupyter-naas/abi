@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useState, useEffect, useMemo } from 'react';
-import { Plus, Shield, User, Crown, Trash2, AlertCircle, Mail } from 'lucide-react';
+import { Plus, Shield, Trash2, AlertCircle, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -9,10 +9,9 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
 import { Select } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
-import { workspaceAccessScope } from '@/components/access/access-scope';
-import { workspaceOrganization } from '@/components/shell/settings-nav';
 import { AddPeople } from '@/components/people/add-people';
 import { InvitedBadge, ResendButton } from '@/components/people/member-status';
 import {
@@ -20,10 +19,20 @@ import {
   candidateLabel,
   createPeopleApi,
   createUserHref,
-  memberStatus,
-  type MemberStatus,
+  LEVELS,
+  LEVEL_EVERYWHERE_NOTE,
+  LEVEL_LABELS,
+  type Level,
 } from '@/lib/people';
-import { ROLE_LABELS, assignableRoles, changeMemberRole, roleChangeable } from '@/components/access/roles/role-change';
+import {
+  MEMBER_FILTERS,
+  accessEditable,
+  filterMembers,
+  levelLabel,
+  readWorkspaceMember,
+  type MemberFilter,
+  type WorkspaceMemberRow,
+} from './members-model';
 import {
   SettingsEmpty,
   SettingsLoading,
@@ -36,26 +45,7 @@ import {
   settingsTable,
 } from '@/components/settings/settings-ui';
 
-interface Member {
-  id: string;
-  user_id: string;
-  name: string;
-  email: string;
-  role: 'owner' | 'admin' | 'member' | 'viewer';
-  avatar?: string;
-  joinedAt: Date | null;
-  /** 'organization': no membership row; access comes from the org owner/admin role. */
-  source: 'workspace' | 'organization';
-  /** Invited: created, has not signed in yet. */
-  status: MemberStatus;
-}
-
-const roleConfig = {
-  owner: { label: 'Owner', icon: Crown, color: 'text-primary' },
-  admin: { label: 'Admin', icon: Shield, color: 'text-primary' },
-  member: { label: 'Member', icon: User, color: 'text-foreground' },
-  viewer: { label: 'Viewer', icon: User, color: 'text-muted-foreground' },
-};
+type Member = WorkspaceMemberRow;
 
 async function readApiError(response: Response, fallback: string): Promise<string> {
   try {
@@ -100,20 +90,12 @@ function Members() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
+  const [levelFilter, setLevelFilter] = useState<MemberFilter>('all');
   const { confirm: confirmRemove, dialog: confirmDialog } = useConfirm();
 
-  const organizationId = workspaceOrganization(workspace);
-  const inviteScope = useMemo(
-    () => (workspace?.id ? workspaceAccessScope(organizationId, workspace.id).value : null),
-    [organizationId, workspace?.id]
-  );
-
-  const membershipRole =
-    workspace?.currentUserRole ||
-    members.find((m) => m.user_id === authUser?.id)?.role;
+  const self = members.find((m) => m.user_id === authUser?.id);
   const canManage =
-    membershipRole === 'owner' || membershipRole === 'admin';
+    workspace?.currentUserRole === 'owner' || workspace?.currentUserRole === 'admin' || !!self?.admin;
 
   const refreshMembers = async () => {
     const { authFetch } = await import('@/stores/auth');
@@ -122,16 +104,7 @@ function Members() {
       throw new Error(await readApiError(response, 'Failed to load members'));
     }
     const data = await response.json();
-    setMembers(
-      data.map((m: Record<string, unknown>) => ({
-        ...m,
-        name: (m.name as string) || 'Unknown',
-        email: (m.email as string) || '',
-        joinedAt: m.created_at ? new Date(m.created_at as string) : null,
-        source: m.source === 'organization' ? 'organization' : 'workspace',
-        status: memberStatus(m.status),
-      }))
-    );
+    setMembers(data.map((m: Record<string, unknown>) => readWorkspaceMember(m)));
   };
 
   useEffect(() => {
@@ -180,35 +153,32 @@ function Members() {
     }
   };
 
-  // The same role change as Roles & permissions › People & roles: the membership route, IAM decides.
-  const handleChangeRole = async (
-    userId: string,
-    newRole: 'admin' | 'member' | 'viewer'
-  ) => {
+  // A level is the person's, in all their workspaces; the admin toggle is this workspace's
+  // ("<W> admins"). IAM decides: a workspace's admins may change the level of its people.
+  const handleChange = async (member: Member, change: { level?: Level; admin?: boolean }) => {
     if (!canManage) return;
     setActionError('');
     try {
-      await changeMemberRole({ level: 'workspace', workspaceId }, userId, newRole);
-
-      setMembers(
-        members.map((m) =>
-          m.user_id === userId ? { ...m, role: newRole } : m
+      const done = await peopleApi.updateWorkspaceMember(workspaceId, member.user_id, change);
+      setMembers((current) =>
+        current.map((m) =>
+          m.user_id === member.user_id
+            ? { ...m, level: done.level ?? change.level ?? m.level, admin: change.admin ?? done.admin }
+            : m
         )
       );
+      if (change.level) {
+        setInviteNotice(
+          `${member.name} is now a ${LEVEL_LABELS[change.level]} in all of their workspaces.`
+        );
+      }
     } catch (error: unknown) {
-      console.error('Failed to change role:', error);
-      setActionError(
-        error instanceof Error ? error.message : 'Failed to change role'
-      );
+      setActionError(error instanceof Error ? error.message : 'Failed to change this member');
     }
   };
 
-  const query = searchQuery.trim().toLowerCase();
-  const filteredMembers = members.filter((member) => {
-    if (roleFilter !== 'all' && member.role !== roleFilter) return false;
-    return !query || member.name.toLowerCase().includes(query) || member.email.toLowerCase().includes(query);
-  });
-  const adminCount = members.filter((m) => m.role === 'owner' || m.role === 'admin').length;
+  const filteredMembers = filterMembers(members, levelFilter, searchQuery);
+  const adminCount = members.filter((m) => m.admin).length;
   const invitedCount = members.filter((m) => m.status === 'invited').length;
 
   return (
@@ -248,12 +218,10 @@ function Members() {
       {canManage && (
         <SettingsSection
           title="Add people"
-          description="Search this workspace's organization by name or email. Picking someone adds them at once with the role you choose; with no match, create them."
+          description="Search this workspace's organization by name or email. Picking someone adds them at once, at the level you choose, admin or not; with no match, create them."
         >
           <AddPeople
             workspaceId={workspaceId}
-            callerRole={membershipRole}
-            policyScope={inviteScope}
             memberIds={memberIds}
             navigate={(href) => router.push(href)}
             onAdded={async (candidate, emailSent) => {
@@ -283,26 +251,23 @@ function Members() {
           searchPlaceholder="Search members by name or email..."
           filters={
             <SettingsFilterSelect
-              label="Role"
-              value={roleFilter}
-              onChange={setRoleFilter}
-              options={[
-                { value: 'all', label: 'All roles' },
-                ...(Object.keys(roleConfig) as (keyof typeof roleConfig)[]).map((role) => ({
-                  value: role,
-                  label: roleConfig[role].label,
-                })),
-              ]}
+              label="Level"
+              value={levelFilter}
+              onChange={(value) => setLevelFilter(value as MemberFilter)}
+              options={MEMBER_FILTERS}
             />
           }
-          meta={`${countLabel(filteredMembers.length, members.length, 'member')} · ${adminCount} owner${adminCount === 1 ? '' : 's'} or admin${adminCount === 1 ? '' : 's'}`}
+          meta={`${countLabel(filteredMembers.length, members.length, 'member')} · ${adminCount} admin${adminCount === 1 ? '' : 's'}`}
         />
         <div className={settingsTable.wrapper}>
           <table className={settingsTable.table}>
             <thead>
               <tr className={settingsTable.headRow}>
                 <th className={settingsTable.th}>Member</th>
-                <th className={settingsTable.th}>Role</th>
+                <th className={settingsTable.th} title={LEVEL_EVERYWHERE_NOTE}>
+                  Level
+                </th>
+                <th className={settingsTable.th}>Workspace admin</th>
                 <th className={settingsTable.th}>Joined</th>
                 <th className={cn(settingsTable.th, 'text-right')}>Actions</th>
               </tr>
@@ -310,19 +275,15 @@ function Members() {
             <tbody>
               {filteredMembers.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                  <td colSpan={5} className="p-8 text-center text-muted-foreground">
                     No members match the current search and filters
                   </td>
                 </tr>
               )}
               {filteredMembers.map((member) => {
-                const role = roleConfig[member.role] || roleConfig.member;
-                const RoleIcon = role.icon;
                 const initial = (member.name || member.email || '?').charAt(0).toUpperCase();
                 const inherited = member.source === 'organization';
-                const roleLocked =
-                  !canManage ||
-                  !roleChangeable({ role: member.role, inherited, userId: member.user_id, selfId: authUser?.id });
+                const editable = accessEditable(member, { canManage, selfId: authUser?.id });
                 return (
                   <tr key={member.id} className={settingsTable.row}>
                     <td className={settingsTable.td}>
@@ -337,7 +298,7 @@ function Members() {
                             {inherited && (
                               <span
                                 className="border border-border px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wide text-muted-foreground"
-                                title="Organization owners and admins reach every workspace of the organization. Manage them in Organization > Users."
+                                title="Organization admins reach every workspace of the organization. Manage them in Organization > Users."
                               >
                                 via organization
                               </span>
@@ -361,32 +322,49 @@ function Members() {
                       </div>
                     </td>
                     <td className={settingsTable.td}>
-                      {roleLocked ? (
-                        <div className={cn('flex items-center gap-2', role.color)}>
-                          <RoleIcon size={14} />
-                          {role.label}
-                        </div>
-                      ) : (
+                      {editable ? (
                         <Select
-                          value={member.role}
-                          onChange={(e) =>
-                            void handleChangeRole(member.user_id, e.target.value as 'admin' | 'member' | 'viewer')
-                          }
+                          value={member.level ?? ''}
+                          onChange={(e) => void handleChange(member, { level: e.target.value as Level })}
                           className="h-8 w-32"
+                          aria-label={`Level of ${member.name}`}
+                          title={LEVEL_EVERYWHERE_NOTE}
+                          data-field="level"
                         >
-                          {assignableRoles('workspace').map((r) => (
-                            <option key={r} value={r}>
-                              {ROLE_LABELS[r]}
+                          {member.level === null && <option value="">—</option>}
+                          {LEVELS.map((level) => (
+                            <option key={level} value={level}>
+                              {LEVEL_LABELS[level]}
                             </option>
                           ))}
                         </Select>
+                      ) : (
+                        <span>{levelLabel(member.level)}</span>
+                      )}
+                    </td>
+                    <td className={settingsTable.td}>
+                      {editable ? (
+                        <span data-field="admin">
+                          <Checkbox
+                            aria-label={`${member.name} administers this workspace`}
+                            checked={member.admin}
+                            onCheckedChange={(on) => void handleChange(member, { admin: on })}
+                          />
+                        </span>
+                      ) : member.admin ? (
+                        <span className="flex items-center gap-2 text-primary">
+                          <Shield size={14} />
+                          Admin
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </td>
                     <td className={cn(settingsTable.td, 'text-muted-foreground')}>
                       {member.joinedAt ? member.joinedAt.toLocaleDateString() : '—'}
                     </td>
                     <td className={cn(settingsTable.td, 'text-right')}>
-                      {canManage && !inherited && member.role !== 'owner' && member.user_id !== authUser?.id && (
+                      {canManage && !inherited && member.user_id !== authUser?.id && (
                         <Button
                           variant="destructive-ghost"
                           size="icon"
@@ -411,27 +389,29 @@ function Members() {
 
       <IdpGroupBindings scope="workspaces" id={workspaceId} canManage={canManage} />
 
-      <SettingsSection title="Role Permissions">
+      <SettingsSection title="Levels">
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
             <p className="text-sm font-medium">Member</p>
-            <p className="text-xs text-muted-foreground">Can use agents, create content, and view data</p>
+            <p className="text-xs text-muted-foreground">
+              Uses the workspace&apos;s agents and apps, chat, files, datasets, graph, maps, ontology and search
+            </p>
           </div>
           <div>
             <p className="text-sm font-medium">Viewer</p>
-            <p className="text-xs text-muted-foreground">Read-only access to workspace content</p>
+            <p className="text-xs text-muted-foreground">Opens the workspace&apos;s apps and datasets, read-only</p>
           </div>
           <div>
-            <p className="text-sm font-medium">Admin</p>
-            <p className="text-xs text-muted-foreground">Full access except billing and workspace deletion</p>
+            <p className="text-sm font-medium">Workspace admin</p>
+            <p className="text-xs text-muted-foreground">
+              A Member who also manages this workspace: its settings, people, workflows and maps
+            </p>
           </div>
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          Organization owners and admins have owner or admin access to every workspace of the
-          organization without being added here. People added here are listed in the
-          organization&apos;s users as having workspace access only: they get no organization role.
-          Features (chat, files, graph, …) come from policies granting them, not from the role:
-          pick them when adding someone, or attach them in Roles &amp; permissions.
+          {LEVEL_EVERYWHERE_NOTE} Organization admins reach every workspace of the organization without being
+          added here. Capability groups (Workflow runners, Models · all, a seat) add one thing to a level: pick them
+          when adding someone.
         </p>
       </SettingsSection>
       {confirmDialog}

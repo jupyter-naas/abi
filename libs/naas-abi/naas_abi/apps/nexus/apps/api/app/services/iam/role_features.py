@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -163,6 +164,16 @@ def key_for(role: str, org: str, workspace: str, keys: Mapping[str, tuple[str, .
     return next((c for c in candidates if c in keys), None)
 
 
+# A scope of the older IAM, ``abi:<org>:<workspace>`` (either field ``-`` or ``*``): the
+# only kind a role brought features at. A container path (``abi:nexus:organization/...``)
+# and ``${my workspaces}`` are the new model's.
+_OLD_SCOPE = re.compile(r"abi:[^:/]+:[^:/]+")
+
+
+def _old_scope(scope: str | None) -> bool:
+    return scope is not None and _OLD_SCOPE.fullmatch(scope) is not None
+
+
 def _fields(scope: str) -> tuple[str, str]:
     _abi, org, workspace = scope.split(":", 2)
     return org, workspace
@@ -269,8 +280,10 @@ def _features(role: str, scope: str, keys: Mapping[str, tuple[str, ...]]) -> tup
 
 def _companion_scope(scope: str | None) -> str | None:
     """Where a role at ``scope`` brought features: a workspace or org-wide scope
-    (neither field ``-``); an org-level role brought none."""
-    if scope is None:
+    of the older IAM (``abi:<org>:<workspace>``, neither field ``-``); an
+    org-level role brought none, nor one at a scope of the new model (a new
+    install's default groups hold theirs at ``${my workspaces}``)."""
+    if scope is None or not _old_scope(scope):
         return None
     return None if "-" in _fields(scope) else scope
 
@@ -327,7 +340,7 @@ def move(
                 report.attached += 1
     # Invitations still pending: their role's features come with them.
     for grant in iam.list_pending_grants():
-        if grant.policy_id not in roles.ROLES or grant.scope is None:
+        if grant.policy_id not in roles.ROLES or not _old_scope(grant.scope):
             continue
         role = grant.policy_id.removeprefix("builtin.")
         org, workspace = _fields(grant.scope)

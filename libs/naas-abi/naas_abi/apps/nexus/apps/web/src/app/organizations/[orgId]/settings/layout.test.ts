@@ -7,6 +7,8 @@ const state = vi.hoisted(() => ({
   access: null as null | { actions: Record<string, boolean> },
   replaced: [] as string[],
   readsAnalytics: false,
+  primary: '#112233',
+  organizationReads: 0,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -32,6 +34,7 @@ vi.mock('@/hooks/use-settings-levels', async () => {
   return {
     useSettingsTabs: ({ organization }: { organization?: { id: string; items: never[] } }) => ({
       tabs: [],
+      pagesReady: true,
       level: currentSettingsLevel(
         settingsLevels({
           account: [],
@@ -50,6 +53,10 @@ vi.mock('@/lib/iam-admin/use-access', () => ({
 }));
 vi.mock('@/hooks/use-analytics-access', () => ({
   useReadsAnalytics: () => state.readsAnalytics,
+  useAnalyticsAccess: () => ({
+    status: 'ready' as const,
+    access: { can_read: state.readsAnalytics, timezone: 'UTC' },
+  }),
 }));
 vi.mock('@/stores/workspace', () => {
   const store = { currentWorkspaceId: 'ws-1' };
@@ -57,13 +64,20 @@ vi.mock('@/stores/workspace', () => {
 });
 vi.mock('@/stores/auth', () => ({
   useAuthStore: (select: (s: unknown) => unknown) => select({ logout: () => undefined }),
-  authFetch: async (url: string) =>
-    url === '/api/organizations/acme'
-      ? new Response(JSON.stringify({ name: 'Acme', current_user_role: state.role }), { status: 200 })
-      : new Response(JSON.stringify([{ id: 'acme' }, { id: 'beta' }]), { status: 200 }),
+  authFetch: async (url: string) => {
+    if (url !== '/api/organizations/acme') {
+      return new Response(JSON.stringify([{ id: 'acme' }, { id: 'beta' }]), { status: 200 });
+    }
+    state.organizationReads += 1;
+    return new Response(
+      JSON.stringify({ name: 'Acme', current_user_role: state.role, primary_color: state.primary }),
+      { status: 200 }
+    );
+  },
 }));
 
-import { createElement } from 'react';
+import { createElement, useEffect, useState } from 'react';
+import { act } from 'react';
 import { settingsLevelReturnPath, settingsReturnPath } from '@/lib/settings-scope-path';
 import OrganizationSettingsLayout from './layout';
 
@@ -137,5 +151,37 @@ describe('organization settings by URL (UJ-O1)', () => {
     expect(await render()).toContain('GENERAL PAGE');
     expect(settingsReturnPath('nothing')).toBe('/organizations/acme/settings/general');
     expect(settingsLevelReturnPath('organization')).toBe('/organizations/acme/settings/general');
+  });
+
+  it('restyle on a branding update without remounting the page (#1607)', async () => {
+    state.role = 'admin';
+    state.access = { actions: { 'iam:ListPolicies': true } };
+    let pageMounts = 0;
+    function Page() {
+      const [typed, setTyped] = useState('');
+      useEffect(() => {
+        pageMounts += 1;
+      }, []);
+      return createElement('input', {
+        'data-page': '',
+        value: typed,
+        onChange: (event: { target: { value: string } }) => setTyped(event.target.value),
+      });
+    }
+    mounted = await mount(OrganizationSettingsLayout, { children: createElement(Page) });
+    for (let i = 0; i < 4; i += 1) await mounted.flush();
+    await mounted.type(mounted.host.querySelector('[data-page]'), 'unsaved');
+    const reads = state.organizationReads;
+    const styleBefore = mounted.host.querySelector('[data-org-settings-root]')!.getAttribute('style');
+
+    state.primary = '#445566';
+    await act(async () => window.dispatchEvent(new CustomEvent('org-branding-updated')));
+    for (let i = 0; i < 4; i += 1) await mounted.flush();
+
+    expect(state.organizationReads).toBe(reads + 1);
+    expect(pageMounts).toBe(1);
+    expect(mounted.host.querySelector<HTMLInputElement>('[data-page]')!.value).toBe('unsaved');
+    const root = mounted.host.querySelector<HTMLElement>('[data-org-settings-root]')!;
+    expect(root.getAttribute('style')).not.toBe(styleBefore);
   });
 });

@@ -21,7 +21,11 @@ from contextlib import contextmanager
 from typing import Any, Protocol
 
 from fastapi import HTTPException
-from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MembershipDenied
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
+    MEMBERSHIPS,
+    MembershipDenied,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import PLATFORM
 from naas_abi.apps.nexus.apps.api.app.services.people import runtime as people_runtime
 from naas_abi.apps.nexus.apps.api.app.services.people.port import (
     MAX_SEARCH,
@@ -34,8 +38,9 @@ from naas_abi.apps.nexus.apps.api.app.services.people.port import (
     Grant,
     GrantNotHeldError,
     InvalidPolicyError,
+    LastOrgAdminError,
+    Level,
     NoProviderError,
-    OwnerGrantRefusedError,
     PlatformUser,
     ProviderInfo,
     ProvisioningFailedError,
@@ -43,6 +48,7 @@ from naas_abi.apps.nexus.apps.api.app.services.people.port import (
     RetiredIdentityError,
     UnknownUserError,
     UserStatus,
+    WorkspaceAccess,
     people_status,
     status_of_row,
 )
@@ -60,11 +66,17 @@ __all__ = [
     "AddedUser",
     "CreateOrLinkResult",
     "Grant",
+    "LAST_ORG_ADMIN",
+    "Level",
     "PeopleServicePort",
     "PlatformUser",
     "UserStatus",
+    "WorkspaceAccess",
     "added_result",
     "build_people_service",
+    "capability_group_items",
+    "level_and_admin",
+    "workspace_grant",
     "get_people_service",
     "people_errors",
     "people_http_error",
@@ -85,16 +97,34 @@ class PeopleServicePort(Protocol):
         email: str,
         name: str | None,
         provider: str | None,
-        grants: Sequence[Grant],
+        grant: Grant | None,
         by: Any,
-        may_grant_owner: bool = False,
         profile: Mapping[str, str] | None = None,
         organization_id: str | None = None,
     ) -> CreateOrLinkResult: ...
 
-    async def add_existing(
-        self, *, user_id: str, grants: Sequence[Grant], by: Any, may_grant_owner: bool = False
-    ) -> AddedUser: ...
+    async def add_existing(self, *, user_id: str, grant: Grant, by: Any) -> AddedUser: ...
+
+    async def set_level(
+        self, *, user_id: str, level: str, by: Any, where: Sequence[str] = ()
+    ) -> Level | None: ...
+
+    async def set_workspace_admin(
+        self, *, user_id: str, workspace_id: str, admin: bool, by: Any
+    ) -> None: ...
+
+    async def change_access(
+        self,
+        *,
+        user_id: str,
+        organization_id: str,
+        by: Any,
+        level: str | None = None,
+        org_admin: bool | None = None,
+        workspaces: Sequence[WorkspaceAccess] | None = None,
+        among: Sequence[str] = (),
+        capabilities: Sequence[str] | None = None,
+    ) -> None: ...
 
     async def get(self, user_id: str) -> PlatformUser | None: ...
 
@@ -121,6 +151,7 @@ def build_people_service(db: AsyncSession) -> PeopleServicePort:
 # more specific matched.
 _HTTP_STATUS_OF: tuple[tuple[type[BaseException], int], ...] = (
     (AlreadyMemberError, 409),  # AlreadyActiveError too: a resend to someone signed in
+    (LastOrgAdminError, 409),
     (RetiredIdentityError, 409),
     (EmailTakenError, 409),
     (UnknownUserError, 404),
@@ -132,14 +163,13 @@ _HTTP_STATUS_OF: tuple[tuple[type[BaseException], int], ...] = (
     (ProviderUnavailableError, 502),
     (ProvisioningError, 502),
     (GrantNotHeldError, 403),
-    (OwnerGrantRefusedError, 403),
     # What the request asked is not one (a malformed email or grant, an unknown
     # workspace): the invite routes always answered these 400.
     (ValueError, 400),
 )
 _DEFAULT_DETAIL = {
     400: "Invalid request",
-    403: "You cannot grant that role",
+    403: "You cannot give this access",
     404: "User not found",
     409: "Already a member",
     422: "No identity provider can take this person",
@@ -147,7 +177,7 @@ _DEFAULT_DETAIL = {
 }
 _EMAIL_TAKEN = "This email belongs to another account"
 _SIGNED_IN = "This member has already signed in"
-_OWNER_REFUSED = "Only owners can grant, change or remove an owner"
+LAST_ORG_ADMIN = "An organization keeps at least one admin"
 
 
 def people_http_error(exc: BaseException) -> HTTPException | None:
@@ -157,8 +187,8 @@ def people_http_error(exc: BaseException) -> HTTPException | None:
         if not isinstance(exc, cls):
             continue
         detail = str(exc) or _DEFAULT_DETAIL[status]
-        if isinstance(exc, OwnerGrantRefusedError):
-            detail = _OWNER_REFUSED
+        if isinstance(exc, LastOrgAdminError):
+            detail = LAST_ORG_ADMIN
         elif isinstance(exc, AlreadyActiveError):
             detail = _SIGNED_IN
         elif isinstance(exc, AlreadyMemberError):
@@ -189,6 +219,63 @@ def people_errors(denied: Callable[[str], HTTPException]) -> Iterator[None]:
         if answer is None:
             raise
         raise answer from exc
+
+
+def level_and_admin(
+    level: str | None, admin: bool | None, role: str | None
+) -> tuple[Level | None, bool]:
+    """``(level, admin)`` a request asks for at a workspace: ``level`` and ``admin``,
+    else the role of before (#1589): ``admin`` an admin, ``member`` or ``viewer`` that
+    level. Owner is not assigned any more; a Viewer administers nothing
+    (``ValueError``: 400)."""
+    if level is None and admin is None and role is not None:
+        if role == "owner":
+            raise ValueError("Owner is no longer assigned: make them an admin")
+        if role == "admin":
+            return None, True
+        level = role
+    if level is not None and level not in ("viewer", "member"):
+        raise ValueError(f"Unknown level {level!r}")
+    if level == "viewer" and admin:
+        raise ValueError("A workspace admin is a Member: a Viewer administers nothing")
+    return level, bool(admin)  # type: ignore[return-value]
+
+
+def workspace_grant(
+    organization_id: str | None,
+    workspace_id: str,
+    *,
+    level: str | None = None,
+    admin: bool | None = None,
+    role: str | None = None,
+    capabilities: Sequence[str] = (),
+) -> Grant:
+    """The grant of a workspace's add or invite: the person joins it (``level`` and
+    ``admin``, or the role of before, ``level_and_admin``) and the capability groups."""
+    chosen, is_admin = level_and_admin(level, admin, role)
+    return Grant(
+        organization_id,
+        level=chosen,
+        workspaces=(WorkspaceAccess(workspace_id, is_admin),),
+        capabilities=tuple(capabilities),
+    )
+
+
+async def capability_group_items(organization_id: str | None) -> list[dict[str, object]]:
+    """The capability groups a person may be put in, in ``organization_id`` (None: a
+    workspace in no organization): the organization's own, then the platform's. The
+    model's own groups (levels, memberships, admins) are not listed."""
+    groups = await MEMBERSHIPS.capability_groups(organization_id)
+    return [
+        {
+            "id": str(g.id),
+            "name": str(g.name),
+            "description": getattr(g, "description", None) or None,
+            "owner_scope": str(g.owner_scope),
+            "scope": "platform" if g.owner_scope == PLATFORM else "organization",
+        }
+        for g in groups
+    ]
 
 
 def provider_view(provider: ProviderInfo | None) -> dict[str, object] | None:

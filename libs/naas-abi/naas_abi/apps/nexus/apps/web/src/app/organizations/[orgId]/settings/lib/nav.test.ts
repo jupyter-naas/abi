@@ -15,7 +15,7 @@ describe('org settings nav', () => {
     expect(orgSettingsNavForRole('member')).toEqual([]);
     expect(orgSettingsNavForRole(null)).toEqual([]);
     expect(slugs('member', POLICIES)).toEqual(['policies']);
-    expect(slugs('member', BOTH)).toEqual(['policies', 'groups']);
+    expect(slugs('member', BOTH)).toEqual(['groups', 'policies']);
     // Whoever may list who holds what sees the policies held here.
     expect(slugs('member', iam('iam:ListAttachments'))).toEqual(['policies']);
     expect(slugs('member', iam('iam:Explain', 'nexus:ReadSystem'))).toEqual([]);
@@ -35,16 +35,30 @@ describe('org settings nav', () => {
     expect(slugs('owner', BOTH)).not.toContain('roles');
     expect(slugs('owner', BOTH)).not.toContain('access');
     const access = orgSettingsNavForRole('owner', { access: BOTH }).filter((item) => item.group === 'Access');
-    expect(access.map((item) => item.label)).toEqual(['Policies', 'Groups']);
+    expect(access.map((item) => item.label)).toEqual(['Groups', 'Policies']);
   });
 
   it('shows branding to admins and hides domains, servers, services, and billing', () => {
-    expect(slugs('owner', BOTH)).toEqual(['general', 'branding', 'workspaces', 'users', 'policies', 'groups']);
+    expect(slugs('owner', BOTH)).toEqual(['general', 'branding', 'workspaces', 'users', 'groups', 'policies']);
     expect(slugs('admin')).not.toContain('secrets');
   });
 });
 
 describe('org settings nav › Analytics', () => {
+  it('keeps Analytics and Access listed for an owner while their reads have not answered', () => {
+    const pending = orgSettingsNavForRole('owner', { accessKnown: false, analyticsKnown: false }).map((item) => item.slug);
+    expect(pending).toEqual(expect.arrayContaining(['analytics', 'groups', 'policies']));
+    const denied = orgSettingsNavForRole('admin', {
+      access: iam(),
+      readsAnalytics: false,
+      accessKnown: true,
+      analyticsKnown: true,
+    }).map((item) => item.slug);
+    expect(denied).not.toContain('analytics');
+    expect(denied).not.toContain('groups');
+    expect(denied).not.toContain('policies');
+  });
+
   it('shows Analytics to an owner or admin once the API says they may read it', () => {
     for (const role of ['owner', 'admin']) {
       expect(orgSettingsNavForRole(role).map((item) => item.slug)).not.toContain('analytics');
@@ -56,8 +70,8 @@ describe('org settings nav › Analytics', () => {
     for (const role of ['member', null]) {
       expect(orgSettingsNavForRole(role, { readsAnalytics: true }).map((item) => item.slug)).not.toContain('analytics');
       expect(orgSettingsNavForRole(role, { access: BOTH, readsAnalytics: true }).map((item) => item.slug)).toEqual([
-        'policies',
         'groups',
+        'policies',
       ]);
     }
   });
@@ -65,7 +79,7 @@ describe('org settings nav › Analytics', () => {
   it('lists Analytics after Members, before the Access pages', () => {
     expect(
       orgSettingsNavForRole('owner', { access: BOTH, readsAnalytics: true }).map((item) => item.slug)
-    ).toEqual(['general', 'branding', 'workspaces', 'users', 'analytics', 'policies', 'groups']);
+    ).toEqual(['general', 'branding', 'workspaces', 'users', 'analytics', 'groups', 'policies']);
   });
 });
 
@@ -95,7 +109,7 @@ describe('orgSectionRedirect', () => {
   });
   it('sends an iam: holder to the first Access page they hold, and lets anyone else stay (the layout refuses)', () => {
     expect(at('general', 'member', POLICIES)).toBe('policies');
-    expect(at('users', 'member', BOTH)).toBe('policies');
+    expect(at('users', 'member', BOTH)).toBe('groups');
     expect(at('general', 'member', iam('iam:ListGroups'))).toBe('groups');
     expect(at('policies', 'member', POLICIES)).toBeNull();
     expect(at('groups', 'member', BOTH)).toBeNull();
@@ -113,7 +127,7 @@ describe('orgSectionRedirect', () => {
     expect(at('policies', null, POLICIES)).toBeNull();
     // No role there, IAM rights (a platform admin who is no member): sent to Access.
     expect(at('users', null, POLICIES)).toBe('policies');
-    expect(at('branding', null, BOTH)).toBe('policies');
+    expect(at('branding', null, BOTH)).toBe('groups');
     // Nothing is decided before the role is read.
     expect(at('users', null, POLICIES, { roleKnown: false })).toBeNull();
   });

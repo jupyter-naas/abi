@@ -12,6 +12,12 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.models import (
+    OrganizationModel,
+    UserModel,
+    WorkspaceModel,
+)
 from naas_abi.apps.nexus.apps.api.app.services.accounts.port import (
     AccessRefused,
     Account,
@@ -35,6 +41,11 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     User,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
+    MEMBERSHIPS,
+    AccessSummary,
+    is_user_principal_id,
+)
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     InvalidPolicyError,
     NoProviderError,
@@ -50,6 +61,8 @@ from naas_abi.apps.nexus.apps.api.app.services.people.port import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
 from pydantic import BaseModel, Field
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 
@@ -88,6 +101,40 @@ class AdminUserInvite(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     name: str | None = Field(default=None, max_length=200)
     provider: str | None = None
+    # Make them a platform admin ("Platform admins"; #1589).
+    platform_admin: bool = False
+
+
+class AccessOrganization(BaseModel):
+    id: str
+    name: str
+    org_admin: bool
+
+
+class AccessWorkspace(BaseModel):
+    id: str
+    name: str
+    organization_id: str | None
+    admin: bool
+
+
+class AccessCapability(BaseModel):
+    id: str
+    name: str
+    owner_scope: str
+
+
+class AdminUserAccess(BaseModel):
+    """Where a person works and what they do (Platform › Users › person: "Platform
+    access (automatic)"; #1589), read from their groups."""
+
+    user_id: str
+    principal_id: str
+    level: str | None
+    platform_admin: bool
+    organizations: list[AccessOrganization]
+    workspaces: list[AccessWorkspace]
+    capabilities: list[AccessCapability]
 
 
 class AdminUserInvited(BaseModel):
@@ -250,8 +297,9 @@ async def invite_user(
     service: AccountService = Depends(get_account_service),
 ) -> AdminUserInvited:
     """Invite someone to the platform: their account exists from now on, ``invited``
-    until they sign in (``services/people``); their provider makes theirs, and they get
-    no role (attach their access in Roles & permissions)."""
+    until they sign in (``services/people``); their provider makes theirs. They get no
+    access, unless ``platform_admin`` (checked as the caller once the account exists:
+    a refusal leaves the account invited, without it)."""
     email = body.email.strip().lower()
     if "@" not in email or email.startswith("@") or email.endswith("@"):
         raise HTTPException(status_code=400, detail="Enter a valid email address")
@@ -270,13 +318,98 @@ async def invite_user(
         raise provider_failure(exc) from exc
     except ValueError as exc:  # an address the provider will not take
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    account = invited.account
+    if body.platform_admin:
+        account = await _answer(
+            service.update(account.id, is_superadmin=True, actor=current_user.id)
+        )
     return AdminUserInvited(
-        user=admin_user(invited.account),
+        user=admin_user(account),
         user_created=invited.user_created,
         sign_in_email_sent=invited.sign_in_email_sent,
         provisioning_skipped=invited.provisioning_skipped,
         renewed=invited.renewed,
         warning=invited.warning,
+    )
+
+
+async def _account_id(db: AsyncSession, person_id: str) -> str | None:
+    """The account (an undeleted ``users`` row) of ``person_id``: its id, or its IAM id
+    as the row records it once its person signed in through a provider."""
+    found = await db.scalar(
+        select(UserModel.id)
+        .where(
+            or_(UserModel.id == person_id, UserModel.principal_id == person_id),
+            UserModel.deleted_at.is_(None),
+        )
+        .order_by(UserModel.id != person_id)
+        .limit(1)
+    )
+    return str(found) if found is not None else None
+
+
+async def _access_of_account(db: AsyncSession, person_id: str) -> AccessSummary | None:
+    """What an account's groups give it, found by its id or its IAM id. IAM names the
+    account of an IAM id the row does not record (linked from the old login); the
+    account must still be one of the directory's. The session's reads run in turn."""
+    account = await _account_id(db, person_id)
+    if account is not None:
+        return await MEMBERSHIPS.access_of(account)
+    if not is_user_principal_id(person_id):
+        return None  # an unknown account id: nothing is asked of IAM, nothing made there
+    # IAM looks an IAM id up, and never creates it.
+    summary = await MEMBERSHIPS.access_of(person_id)
+    if summary is None or await _account_id(db, summary.user_id) != summary.user_id:
+        return None
+    return summary
+
+
+@router.get(
+    "/{account_id}/access",
+    response_model=AdminUserAccess,
+    dependencies=[guard("ListUsers", workspace=None, literal=LIST)],
+)
+async def user_access(account_id: str, db: AsyncSession = Depends(get_db)) -> AdminUserAccess:
+    """Their level, the organizations they administer or belong to, their workspaces
+    (and which they administer), their capability groups, and whether they are a
+    platform admin: what their groups give them, nothing to edit here.
+
+    ``account_id`` is their account's id or their IAM id (the person's page is opened by
+    it, #1608): an account of the directory, never a deleted one, else 404."""
+    summary = await _access_of_account(db, account_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    org_ids = [o for o, _ in summary.organizations]
+    ws_ids = [w for _, w, _ in summary.workspaces]
+    orgs = {
+        row.id: row.name
+        for row in (
+            await db.execute(select(OrganizationModel).where(OrganizationModel.id.in_(org_ids)))
+        ).scalars()
+    }
+    workspaces = {
+        row.id: row.name
+        for row in (
+            await db.execute(select(WorkspaceModel).where(WorkspaceModel.id.in_(ws_ids)))
+        ).scalars()
+    }
+    return AdminUserAccess(
+        user_id=summary.user_id,
+        principal_id=summary.principal_id,
+        level=summary.level,
+        platform_admin=summary.platform_admin,
+        organizations=[
+            AccessOrganization(id=o, name=orgs.get(o, o), org_admin=admin)
+            for o, admin in summary.organizations
+        ],
+        workspaces=[
+            AccessWorkspace(id=w, name=workspaces.get(w, w), organization_id=o, admin=admin)
+            for o, w, admin in summary.workspaces
+        ],
+        capabilities=[
+            AccessCapability(id=g, name=name, owner_scope=owner)
+            for g, name, owner in summary.capabilities
+        ],
     )
 
 

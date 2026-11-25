@@ -1,3 +1,5 @@
+import { levelConflict, readLevel, type Level, type WorkspaceAccess } from '@/lib/people';
+
 /** One member, as `GET /api/organizations/{org}/members/{user}` returns it. */
 export interface MemberAccount {
   user_id: string;
@@ -30,8 +32,17 @@ export interface MemberWorkspace {
   name: string;
   slug: string;
   role: string;
-  /** "workspace": explicit membership or ownership; "organization": inherited from the org role. */
+  /** "workspace": they joined it; "organization": they reach it as an org admin. */
   source: 'workspace' | 'organization';
+  /** They administer it ("<W> admins"). */
+  admin?: boolean;
+}
+
+/** A capability group they are in. */
+export interface MemberCapability {
+  id: string;
+  name: string;
+  owner_scope: string;
 }
 
 export interface MemberDetails {
@@ -41,8 +52,12 @@ export interface MemberDetails {
     user_id: string;
     /** Their IAM principal: an account linked from the old login has another id in IAM. */
     principal_id?: string | null;
-    /** Null: no org role, only access to some of the organization's workspaces. */
-    role: 'owner' | 'admin' | 'member' | null;
+    /** "admin" for an org admin, else their level at the organization; null: through a workspace only. */
+    role: 'admin' | 'member' | 'viewer' | null;
+    /** An admin of the organization. */
+    org_admin?: boolean;
+    /** Their level, in all their workspaces. */
+    level?: Level | null;
     /** Where they are linked to the organization from (an older answer has none: an org role). */
     source?: 'organization' | 'workspace';
     /** Invited: created, has not signed in yet. */
@@ -54,6 +69,7 @@ export interface MemberDetails {
   account: MemberAccount;
   organization_profile: MemberOrganizationProfile;
   workspaces: MemberWorkspace[];
+  capabilities?: MemberCapability[];
 }
 
 export const PROFILE_FIELDS: MemberProfileField[] = [
@@ -82,17 +98,18 @@ export function changedProfileFields(
 }
 
 /**
- * Save a member's changes as two steps said apart: the profile, then the role. A refused role
- * never hides a saved profile; after a role change the members list is refreshed (``refreshed``).
- * Returns null when everything was saved, else what was not, with the reason.
+ * Save a member's changes as two steps said apart: the profile, then their access. A refused
+ * access change never hides a saved profile; after an access change the members list is
+ * refreshed (``refreshed``). Returns null when everything was saved, else what was not, with
+ * the reason (the API's, e.g. the last org admin's 409).
  */
 export async function saveMemberChanges({
   profile,
-  role,
+  access,
   refreshed,
 }: {
   profile: (() => Promise<unknown>) | null;
-  role: (() => Promise<unknown>) | null;
+  access: (() => Promise<unknown>) | null;
   refreshed: () => Promise<unknown>;
 }): Promise<string | null> {
   const reason = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
@@ -103,34 +120,63 @@ export async function saveMemberChanges({
       return `The profile was not saved: ${reason(err, 'Failed to save')}`;
     }
   }
-  if (role) {
+  if (access) {
     try {
-      await role();
+      await access();
     } catch (err) {
-      const what = profile ? 'The profile was saved, but the role was not changed' : 'The role was not changed';
-      return `${what}: ${reason(err, 'Failed to change the role')}`;
+      const what = profile ? 'The profile was saved, but their access was not changed' : 'Their access was not changed';
+      return `${what}: ${reason(err, 'Failed to change it')}`;
     }
     await refreshed();
   }
   return null;
 }
 
-/** The org role picked on the page: admin, member, or '' for none (workspace access only). */
-export type OrgRoleChoice = 'admin' | 'member' | '';
+/** A member's access as the page edits it (#1589). */
+export type AccessDraft = {
+  orgAdmin: boolean;
+  level: Level | null;
+  /** The workspaces they joined (not those an org admin reaches anyway), each with "admin". */
+  workspaces: WorkspaceAccess[];
+  capabilities: string[];
+};
 
-/** What the role field starts at: the member's org role, or none for workspace access only. */
-export function initialOrgRole(role: MemberDetails['member']['role']): OrgRoleChoice {
-  return role === 'admin' || role === 'member' ? role : '';
+export function initialAccess(details: MemberDetails): AccessDraft {
+  const { member } = details;
+  return {
+    orgAdmin: member.org_admin ?? member.role === 'admin',
+    level: readLevel(member.level),
+    workspaces: details.workspaces
+      .filter((w) => w.source === 'workspace')
+      .map((w) => ({ id: w.id, admin: w.admin ?? (w.role === 'admin' || w.role === 'owner') })),
+    capabilities: (details.capabilities ?? []).map((c) => c.id),
+  };
 }
 
-/**
- * Whether saving changes the org role. "None" is never sent: it is where someone with workspace
- * access only starts, and an org role is taken back by removing them from the organization.
- */
-export function orgRoleChanged(
-  choice: OrgRoleChoice,
-  role: MemberDetails['member']['role'],
-  editable: boolean
-): choice is 'admin' | 'member' {
-  return editable && choice !== '' && choice !== role;
+const sameSet = (a: string[], b: string[]) => a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n');
+const workspaceKeys = (ws: WorkspaceAccess[]) => ws.map((w) => `${w.id}:${w.admin ? 1 : 0}`);
+
+/** What saving sends: the member change (`PATCH …/members/{id}`) and the workspaces
+ *  (`PUT …/members/{id}/workspaces`), each null when unchanged. */
+export function accessChanges(
+  saved: AccessDraft,
+  draft: AccessDraft
+): {
+  member: { orgAdmin?: boolean; level?: Level; capabilities?: string[] } | null;
+  workspaces: WorkspaceAccess[] | null;
+} {
+  const member: { orgAdmin?: boolean; level?: Level; capabilities?: string[] } = {};
+  if (draft.orgAdmin !== saved.orgAdmin) member.orgAdmin = draft.orgAdmin;
+  if (draft.level && draft.level !== saved.level) member.level = draft.level;
+  if (!sameSet(draft.capabilities, saved.capabilities)) member.capabilities = [...draft.capabilities];
+  const workspacesChanged = !sameSet(workspaceKeys(draft.workspaces), workspaceKeys(saved.workspaces));
+  return {
+    member: Object.keys(member).length ? member : null,
+    workspaces: workspacesChanged ? draft.workspaces : null,
+  };
+}
+
+/** Why the access cannot be saved, or null: a workspace admin is a Member. */
+export function accessError(draft: AccessDraft): string | null {
+  return levelConflict(draft.level, draft.workspaces.some((w) => w.admin));
 }

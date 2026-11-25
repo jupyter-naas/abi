@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createOpenableOrganizationsStore,
   needsOpenableOrganizations,
@@ -47,6 +47,31 @@ describe('the openable organizations store', () => {
       { id: 'acme', name: 'Acme', role: 'admin' },
       { id: 'beta', name: 'Beta', role: 'member' },
     ]);
+  });
+
+  it('shows the organizations a role opens before the others are read', async () => {
+    let releaseAccess: () => void = () => undefined;
+    const accessReady = new Promise<void>((resolve) => {
+      releaseAccess = resolve;
+    });
+    const calls: string[] = [];
+    const store = createOpenableOrganizationsStore(async (url) => {
+      calls.push(url);
+      if (url.startsWith(ACCESS)) await accessReady;
+      const key = url.startsWith(ACCESS) ? decodeURIComponent(url.slice(ACCESS.length)) : url;
+      const answers: Record<string, unknown> = {
+        '/api/organizations': LIST,
+        'abi:nexus:organization/beta': { actions: { 'iam:ListPolicies': true } },
+      };
+      return new Response(JSON.stringify(answers[key]), { status: 200 });
+    });
+    const done = store.getState().load('u1');
+    await vi.waitFor(() => expect(store.getState().orgs?.map((org) => org.id)).toEqual(['acme']));
+    expect(store.getState().status).toBe('ready');
+    releaseAccess();
+    await done;
+    expect(store.getState().orgs?.map((org) => org.id)).toEqual(['acme', 'beta']);
+    expect(calls.filter((url) => url.startsWith(ACCESS))).toHaveLength(1);
   });
 
   it('reads the access only of the organizations the role does not open', async () => {

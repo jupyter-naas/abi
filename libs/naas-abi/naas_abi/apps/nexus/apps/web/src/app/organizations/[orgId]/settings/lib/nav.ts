@@ -38,8 +38,8 @@ export const orgSettingsNav: OrgSettingsNavItem[] = [
   // IAM decides (the access of the organization's scope), not the membership role.
   // The API decides (`ReadOrganizationAnalytics`, its owners and admins by default).
   { slug: 'analytics', label: 'Analytics', icon: BarChart3, needs: 'analytics' },
-  { slug: 'policies', label: 'Policies', icon: KeyRound, needs: 'policies', group: 'Access' },
   { slug: 'groups', label: 'Groups', icon: UsersRound, needs: 'groups', group: 'Access' },
+  { slug: 'policies', label: 'Policies', icon: KeyRound, needs: 'policies', group: 'Access' },
   { slug: 'domains', label: 'Domains', icon: Globe, adminOnly: true, hidden: true },
   { slug: 'servers', label: 'Servers', icon: Server, adminOnly: true, hidden: true },
   { slug: 'services', label: 'Services', icon: Boxes, adminOnly: true, hidden: true },
@@ -79,14 +79,27 @@ export function orgSettingsAccess({
  *  the Access pages for whoever IAM lets open each, the rest for its owners and admins. */
 export function orgSettingsNavForRole(
   role: string | null | undefined,
-  { access = null, readsAnalytics = false }: { access?: AccessView | null; readsAnalytics?: boolean } = {}
+  {
+    access = null,
+    readsAnalytics = false,
+    accessKnown = true,
+    analyticsKnown = true,
+  }: {
+    access?: AccessView | null;
+    readsAnalytics?: boolean;
+    /** False while `GET /access` has not answered: an owner or admin keeps Access listed. */
+    accessKnown?: boolean;
+    /** False while the analytics read has not answered: an owner or admin keeps Analytics listed. */
+    analyticsKnown?: boolean;
+  } = {}
 ): OrgSettingsNavItem[] {
   const admin = isOrgAdminRole(role);
   return orgSettingsNav.filter((item) => {
     if (item.hidden) return false;
-    // Shown to an owner or admin only once the API said yes: a role IAM stripped of it sees no entry.
-    if (item.needs === 'analytics') return admin && readsAnalytics;
-    return item.needs ? opensSection(access, item.needs) : admin;
+    // An owner or admin sees the entry at once. A read that then says no takes it off.
+    if (item.needs === 'analytics') return (admin && readsAnalytics) || (admin && !analyticsKnown);
+    if (item.needs) return opensSection(access, item.needs) || (admin && !accessKnown);
+    return admin;
   });
 }
 

@@ -1,11 +1,12 @@
 """What Workspace settings > General › Features needs: IAM as the caller (the IAM
-admin pages' ``IamGateway``) and where it records which policy it wrote for each
-feature of a workspace.
+admin pages' ``IamGateway``) and the record of the "Feature · <name>" policies an
+older version wrote.
 
-Who may use a feature is a policy's, always: each feature of a workspace gets one
-policy "Feature · <name>" owned by the workspace, a sub-policy of "<W> access", and
-the choice (Everyone, Only…, Nobody) is where it is attached. The record says which
-policy that is; it is never found by its name.
+What a workspace offers is its access policy's, "<W> access" (``iam/workspace_offer``):
+Everyone is the feature offered there, Nobody not offered. An older version wrote
+one policy "Feature · <name>" per feature, attached where the choice was; the record
+(``FeaturePolicyStore``) still says which, so Access › Policies marks them until the
+access migration (S4) retires them. Nothing writes it any more.
 """
 
 from __future__ import annotations

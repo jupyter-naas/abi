@@ -236,7 +236,7 @@ describe('identity resolved from graph/nexus-identity', () => {
 
   it('shows the access role the actor realized', () => {
     const payload = buildEventGraphPayload(identityEvent());
-    expect(summarizeBucket(payload, 'Realizable')).toBe('Workspace owner · Platform superadmin');
+    expect(summarizeBucket(payload, 'Realizable')).toBe('Workspace owner · Platform admin');
   });
 
   it('shows a role change as the membership record it rewrote', () => {

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ExternalLink, Eye, Save } from 'lucide-react';
 import { selectSession, useAuthStore } from '@/stores/auth';
+import { readOrganization } from '@/lib/organization-resource';
 import { useOrganizationStore } from '@/stores/organization';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import {
@@ -53,8 +54,7 @@ export default function OrganizationBrandingPage() {
 
     const load = async () => {
       try {
-        const { authFetch } = await import('@/stores/auth');
-        const orgRes = await authFetch(`/api/organizations/${orgId}`);
+        const orgRes = await readOrganization(orgId);
         if (cancelled) return;
 
         if (!orgRes.ok) {

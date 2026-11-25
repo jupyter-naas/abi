@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
 import { authFetch } from '@/stores/auth';
+import { readOrganization } from '@/lib/organization-resource';
 import { DEFAULT_THEME, PRESET_COLORS } from '@/stores/workspace';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
@@ -19,6 +20,7 @@ import {
   type CatalogSeedDraft,
 } from '../workspace-instances-section';
 import { useAuthStore } from '@/stores/auth';
+import { adminRefusal, workspaceCreateBody } from '@/lib/access-model/workspace-create';
 import { slugify, WORKSPACE_SLUG } from './slug';
 import '@/app/account/profile/profile.css';
 import '@/app/workspace/[workspaceId]/settings/general/general.css';
@@ -46,8 +48,11 @@ async function readApiError(response: Response, fallback: string): Promise<strin
  * organization's groups, or typed as a new one. The logo is uploaded right
  * after the workspace exists, into Workspace Files
  * (``.settings/logos/logo.<ext>``); the desk wallpaper is set in General
- * once the workspace exists. No feature is picked here: what people may use
- * in it is what their policies grant (`nexus:UseFeature`), like agents.
+ * once the workspace exists. The workspace admin is picked from the
+ * organization's people, the creator by default (`admin_id`): they join
+ * "<W> admins" and "<W> workspace". No Owner is picked: nothing assigns it.
+ * No feature is picked here: what the workspace offers is its access policy,
+ * "<W> access", edited once it exists.
  */
 export default function OrgCreateWorkspacePage() {
   const params = useParams();
@@ -66,9 +71,11 @@ export default function OrgCreateWorkspacePage() {
   const [accentColor, setAccentColor] = useState(DEFAULT_THEME.accentColor ?? '');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState('');
-  const [ownerId, setOwnerId] = useState('');
+  const [adminId, setAdminId] = useState('');
   const [catalogSeedDraft, setCatalogSeedDraft] = useState<CatalogSeedDraft>({});
   const [error, setError] = useState('');
+  // A refusal about the workspace admin picked (400), shown at the picker.
+  const [adminError, setAdminError] = useState('');
   const [creating, setCreating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -97,7 +104,7 @@ export default function OrgCreateWorkspacePage() {
   useEffect(() => {
     if (!orgId) return;
     let cancelled = false;
-    void authFetch(`/api/organizations/${orgId}`)
+    void readOrganization(orgId)
       .then(async (res) => {
         if (!res.ok || cancelled) return;
         const data = await res.json();
@@ -123,8 +130,8 @@ export default function OrgCreateWorkspacePage() {
   }, [orgId]);
 
   useEffect(() => {
-    if (currentUserId && !ownerId) setOwnerId(currentUserId);
-  }, [currentUserId, ownerId]);
+    if (currentUserId && !adminId) setAdminId(currentUserId);
+  }, [currentUserId, adminId]);
 
   useEffect(() => {
     if (!logoFile) {
@@ -160,26 +167,37 @@ export default function OrgCreateWorkspacePage() {
   const handleCreate = async () => {
     if (!canCreate) return;
     setError('');
+    setAdminError('');
     setCreating(true);
     const catalog_seed = catalogSeedPayload(catalogSeedDraft);
     try {
       const res = await authFetch('/api/workspaces', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: trimmedName,
-          slug: effectiveSlug,
-          organization_id: orgId,
-          owner_id: ownerId || currentUserId || undefined,
-          workspace_group: group.trim() || null,
-          description: description.trim() || null,
-          primary_color: primaryColor,
-          accent_color: accentColor || null,
-          catalog_seed,
-        }),
+        body: JSON.stringify(
+          workspaceCreateBody({
+            name: trimmedName,
+            slug: effectiveSlug,
+            organizationId: orgId,
+            adminId,
+            creatorId: currentUserId,
+            group,
+            description,
+            primaryColor,
+            accentColor,
+            catalogSeed: catalog_seed,
+          })
+        ),
       });
       if (!res.ok) {
-        throw new Error(await readApiError(res, `Failed to create the workspace (HTTP ${res.status}).`));
+        const detail = await readApiError(res, `Failed to create the workspace (HTTP ${res.status}).`);
+        const aboutAdmin = adminRefusal(res.status, detail);
+        if (aboutAdmin) {
+          setAdminError(aboutAdmin);
+          setCreating(false);
+          return;
+        }
+        throw new Error(detail);
       }
       const workspace: { id: string } = await res.json();
       if (logoFile) {
@@ -212,7 +230,7 @@ export default function OrgCreateWorkspacePage() {
     <div className="workspace-general org-create-workspace space-y-6">
       <AccountPageHeader
         title="Create workspace"
-        subtitle="Add a workspace to this organization. Pick an owner and optional instances; org owners and admins reach every workspace."
+        subtitle="Add a workspace to this organization. Pick its workspace admin (you, by default) and optional instances; org admins reach every workspace."
         actions={
           <div className="org-create-workspace-actions">
             <button
@@ -325,14 +343,23 @@ export default function OrgCreateWorkspacePage() {
               disabled={creating}
             />
           </div>
-          <div className="account-profile-field">
-            <label className="account-profile-field-label">Owner</label>
+          <div className="account-profile-field" data-field="workspace-admin">
+            <label className="account-profile-field-label">Workspace admin</label>
             <WorkspaceOwnerSelect
               orgId={orgId}
-              value={ownerId}
-              onChange={setOwnerId}
+              value={adminId}
+              onChange={(id) => {
+                setAdminId(id);
+                setAdminError('');
+              }}
               disabled={creating}
+              role="admin"
             />
+            {adminError && (
+              <span className="account-profile-field-label org-create-workspace-hint" role="alert" data-admin-error="">
+                {adminError}
+              </span>
+            )}
           </div>
           <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="create-workspace-slug">

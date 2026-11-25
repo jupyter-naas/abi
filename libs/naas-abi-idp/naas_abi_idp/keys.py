@@ -31,6 +31,33 @@ CODE_KEY = "idp/code-key"
 RETIRED_KEPT_SECONDS = 24 * 3600
 # How often a process rereads the key documents: another replica may have rotated.
 REFRESH_SECONDS = 30.0
+# RFC 7518: a P-256 coordinate is 32 bytes. A shorter encoding is not a key.
+P256_COORD_BYTES = 32
+
+
+def public_jwk(generated: Any, kid: str) -> dict[str, Any]:
+    """The public half of ``generated``, with P-256 coordinates at full width.
+
+    authlib drops a leading zero from a coordinate. A verifier that requires
+    the full width then rejects the only signing key, and every token with it.
+    """
+    public = {
+        **generated.as_dict(is_private=False),
+        "kid": kid,
+        "alg": "ES256",
+        "use": "sig",
+    }
+    if public.get("kty") == "EC" and public.get("crv") == "P-256":
+        public["x"] = _full_width(str(public["x"]), P256_COORD_BYTES)
+        public["y"] = _full_width(str(public["y"]), P256_COORD_BYTES)
+    return public
+
+
+def _full_width(value: str, size: int) -> str:
+    raw = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    if len(raw) > size:
+        return value
+    return base64.urlsafe_b64encode(raw.rjust(size, b"\x00")).decode().rstrip("=")
 
 
 @dataclass(frozen=True)
@@ -113,12 +140,7 @@ class KeyRing:
         now = self._clock()
         generated = JsonWebKey.generate_key("EC", "P-256", is_private=True)
         kid = f"{time.strftime('%Y%m%d', time.gmtime(now))}-{secrets.token_hex(4)}"
-        public = {
-            **generated.as_dict(is_private=False),
-            "kid": kid,
-            "alg": "ES256",
-            "use": "sig",
-        }
+        public = public_jwk(generated, kid)
         # The private half first: a published key whose secret is missing signs nothing.
         self._secrets.set(
             SIGNING_KEY_PREFIX + kid, generated.as_pem(is_private=True).decode()

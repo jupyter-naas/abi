@@ -42,6 +42,7 @@
 - `FeatureFlagsConfig`
   - Feature access policy exposed to the frontend:
     - `enabled_features`
+    - `level_features` (`viewer` / `member` → the features that level uses, within each workspace's offer)
     - `role_baseline` (role → allowed features)
     - `workspace_overrides` (workspace → per-feature enable/disable)
     - `organization_overrides` (org id → role overlays)

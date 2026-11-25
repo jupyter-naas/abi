@@ -5,13 +5,14 @@ import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Sea
 import { cn } from '@/lib/utils';
 import { getLogoUrl } from '@/lib/logo-url';
 import { useIntegrationsStore } from '@/stores/integrations';
-import { useAgentsStore, type Agent } from '@/stores/agents';
+import { SETTINGS_RECONCILE_MS, ensureAgentsSynced, useAgentsStore, type Agent } from '@/stores/agents';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
-import { useServersStore } from '@/stores/servers';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
 import { Input, Textarea } from '@/components/ui/input';
+import { useSettingsReloadGeneration } from '@/components/settings/settings-reload';
+import { usePageState } from '@/hooks/use-page-state';
 import {
   SettingsEmpty,
   SettingsField,
@@ -37,6 +38,14 @@ const iconMap = {
 
 const iconOptions: Agent['icon'][] = ['user', 'bot', 'cpu', 'brain', 'sparkles', 'zap', 'target', 'search'];
 
+const NEW_AGENT = {
+  name: '',
+  description: '',
+  icon: 'sparkles' as Agent['icon'],
+  systemPrompt: 'You are a helpful AI assistant.',
+  providerId: null as string | null,
+};
+
 function AgentAvatar({ agent, size = 18 }: { agent: Agent; size?: number }) {
   if (agent.logoUrl) {
     // eslint-disable-next-line @next/next/no-img-element
@@ -51,16 +60,14 @@ export default function AgentsPage() {
   const router = useRouter();
   const workspaceId = params.workspaceId as string;
   const [mounted, setMounted] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [modelFilter, setModelFilter] = useState('all');
-  const [newAgent, setNewAgent] = useState({
-    name: '',
-    description: '',
-    icon: 'sparkles' as Agent['icon'],
-    systemPrompt: 'You are a helpful AI assistant.',
-    providerId: null as string | null,
-  });
+  // Kept for a return to the page (lib/page-state.ts): the filters and an unsaved new agent.
+  const pageKey = workspaceId ? { scope: `workspace:${workspaceId}`, page: 'agents' } : null;
+  const [showAddForm, setShowAddForm] = usePageState(pageKey && { ...pageKey, detail: 'add-form' }, false);
+  const [searchQuery, setSearchQuery] = usePageState(pageKey && { ...pageKey, detail: 'search' }, '');
+  const [modelFilter, setModelFilter] = usePageState(pageKey && { ...pageKey, detail: 'model' }, 'all');
+  const [newAgent, setNewAgent] = usePageState(pageKey && { ...pageKey, detail: 'new-agent' }, NEW_AGENT);
+  // Reload reads the roster and the models again here, without remounting the page.
+  const reloadGeneration = useSettingsReloadGeneration();
 
   const { providers } = useIntegrationsStore();
   const {
@@ -69,24 +76,24 @@ export default function AgentsPage() {
     deleteAgent,
     fetchAgents,
   } = useAgentsStore();
-  const { fetchServers } = useServersStore();
   const { models, fetchModels } = useModelsStore();
   const { confirm: confirmDelete, dialog: confirmDialog } = useConfirm();
 
-  // Fetch agents from database
+  // The roster, reconciled with the code's agents when the last reconciliation is older
+  // than SETTINGS_RECONCILE_MS (or Reload was pressed), else as held.
   useEffect(() => {
     const loadAgents = async () => {
       try {
         if (!workspaceId) return;
-        await fetchAgents(workspaceId, true);
-        await fetchServers(workspaceId);
+        await ensureAgentsSynced(workspaceId, SETTINGS_RECONCILE_MS);
+        await fetchAgents(workspaceId);
       } catch (error) {
         console.error('Failed to fetch agents:', error);
       }
     };
 
-    loadAgents();
-  }, [fetchAgents, fetchServers, workspaceId]);
+    void loadAgents();
+  }, [fetchAgents, workspaceId, reloadGeneration]);
 
   useEffect(() => {
     setMounted(true);
@@ -94,7 +101,7 @@ export default function AgentsPage() {
 
   useEffect(() => {
     fetchModels();
-  }, [fetchModels]);
+  }, [fetchModels, reloadGeneration]);
 
   const enabledProviders = mounted ? providers.filter((p) => p.enabled) : [];
   const displayAgents = mounted ? agents : [];
@@ -115,13 +122,7 @@ export default function AgentsPage() {
       capabilities: { memory: true, reasoning: false, vision: false },
       intentMappings: [],
     });
-    setNewAgent({
-      name: '',
-      description: '',
-      icon: 'sparkles',
-      systemPrompt: 'You are a helpful AI assistant.',
-      providerId: null,
-    });
+    setNewAgent(NEW_AGENT);
     setShowAddForm(false);
   };
 
@@ -188,13 +189,7 @@ export default function AgentsPage() {
 
   const resetNewAgent = () => {
     setShowAddForm(false);
-    setNewAgent({
-      name: '',
-      description: '',
-      icon: 'sparkles',
-      systemPrompt: 'You are a helpful AI assistant.',
-      providerId: null,
-    });
+    setNewAgent(NEW_AGENT);
   };
 
   return (

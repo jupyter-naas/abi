@@ -12,6 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
     access_description,
     access_template,
     labels_in,
+    membership_name,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults_test import (  # noqa: F401
     ALPHA,
@@ -60,7 +61,7 @@ def _made(container: str, label: str) -> tuple[str, str, str, str]:
     return (
         f"{label} access",
         access_description(container, label),
-        f"{label} members",
+        membership_name(container, label),
         f"{label} admins",
     )
 
@@ -168,4 +169,15 @@ async def test_the_start_leaves_groups_it_cannot_tell_were_made(world, nexus_db)
         assert (
             container_defaults.align_all(world.iam, {}, {"alpha": ("acme", "Apex")}, records) == []
         )
-    assert _names(world, ws_record)[2:] == ("Alpha members", "Alpha admins")
+    assert _names(world, ws_record)[2:] == ("Alpha workspace", "Alpha admins")
+
+
+@pytest.mark.asyncio
+async def test_a_retired_members_group_of_before_is_renamed_too(world, nexus_db):
+    """A container recorded before #1585 keeps its "<X> members": renamed with it."""
+    _org, _ws, _org_record, ws_record = await _acme(nexus_db)
+    with as_service_account("api"):
+        world.iam.update_group(ws_record.members_group_id, name="Alpha members")
+        records = {ws_record.container: ws_record}
+        container_defaults.align_all(world.iam, {}, {"alpha": ("acme", "Apex")}, records)
+    assert _names(world, ws_record)[2:] == ("Apex members", "Apex admins")

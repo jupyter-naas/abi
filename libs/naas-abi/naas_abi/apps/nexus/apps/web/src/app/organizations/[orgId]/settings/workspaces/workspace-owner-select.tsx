@@ -47,6 +47,7 @@ export function WorkspaceOwnerSelect({
   value,
   onChange,
   disabled,
+  role = 'owner',
 }: {
   orgId: string;
   /** The workspace whose owner is picked: what a view reads the members of. */
@@ -54,7 +55,10 @@ export function WorkspaceOwnerSelect({
   value: string;
   onChange: (userId: string) => void;
   disabled?: boolean;
+  /** Who is picked: the workspace's owner (General), or its workspace admin (creation). */
+  role?: 'owner' | 'admin';
 }) {
+  const noun = role === 'admin' ? 'Workspace admin' : 'Workspace owner';
   const [members, setMembers] = useState<OrgMemberOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -112,7 +116,9 @@ export function WorkspaceOwnerSelect({
     ? 'Loading members…'
     : selected
       ? memberLabel(selected)
-      : 'Select owner…';
+      : role === 'admin'
+        ? 'Select the workspace admin…'
+        : 'Select owner…';
 
   const optionCount = options.length;
   const active = optionCount ? Math.min(activeIndex, optionCount - 1) : 0;
@@ -214,7 +220,7 @@ export function WorkspaceOwnerSelect({
           'search-picker-trigger account-profile-field-input min-h-9 justify-between text-sm text-foreground',
           value && 'is-filtered'
         )}
-        aria-label={`Workspace owner: ${triggerLabel}`}
+        aria-label={`${noun}: ${triggerLabel}`}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={open ? listId : undefined}
@@ -268,7 +274,7 @@ export function WorkspaceOwnerSelect({
               />
             </div>
             <div className="min-h-0 overflow-y-auto">
-              <div id={listId} role="listbox" aria-label="Workspace owner">
+              <div id={listId} role="listbox" aria-label={noun}>
                 {options.map((member, index) => {
                   const checked = member.userId === value;
                   return (

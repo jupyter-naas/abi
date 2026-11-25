@@ -1,10 +1,11 @@
-"""``/api/workspaces/{workspace_id}/feature-access``: Workspace settings > General ›
-Features.
+"""``/api/workspaces/{workspace_id}/feature-access`` (Workspace settings > General ›
+Features) and ``/api/workspaces/{workspace_id}/offer`` (the agents, apps, workflows
+and pipelines it offers): both edit the workspace's allow-list, "<W> access".
 
-Reading it is reading the workspace's configuration (``GetWorkspaceConfiguration``,
-as ``/configuration``). Saving is IAM's own writes made as the caller (create the
-feature's policy, attach it, detach it), each audited first and decided by IAM:
-the route declares them for the matrix; the checks are IAM's, inside the calls.
+Reading is reading the workspace's configuration (``GetWorkspaceConfiguration``, as
+``/configuration``). Saving is IAM's own write made as the caller (``UpdatePolicy``
+on "<W> access"), audited first and decided by IAM: the route declares it for the
+matrix; the check is IAM's, inside the call.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.services.feature_access.runtime import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.feature_access.service import (
     FeatureAccessService,
+    OfferChange,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.port import IamUnavailableError
@@ -39,8 +41,8 @@ from pydantic import BaseModel, Field
 router = APIRouter()
 T = TypeVar("T")
 
-# The IAM writes a save makes as the caller.
-WRITES = ("iam:CreatePolicy", "iam:AttachPolicy", "iam:DetachPolicy")
+# The IAM write a save makes as the caller.
+WRITES = ("iam:UpdatePolicy",)
 
 
 async def _call(call: Awaitable[T]) -> T:
@@ -66,8 +68,8 @@ Signed = Depends(get_current_user_required)
 
 class ChangeBody(BaseModel):
     feature: str = Field(min_length=1, max_length=64)
+    # Only… is refused (``errors``): a feature is offered to the workspace or not.
     choice: Literal["everyone", "only", "nobody"]
-    # Only…: the IAM ids of the members (usr_…) and groups (grp_…) who may use it.
     principals: list[str] = Field(default_factory=list, max_length=100)
 
 
@@ -111,3 +113,51 @@ async def save_feature_access(
         FeatureChange(c.feature, c.choice, tuple(dict.fromkeys(c.principals))) for c in body.changes
     ]
     return await _call(service.save(user, workspace_id, changes))
+
+
+class OfferChangeBody(BaseModel):
+    kind: Literal["agents", "apps", "workflows", "pipelines"]
+    module: str = Field(min_length=1, max_length=200)
+    # ``*``: every item of the module (a shared module offered whole).
+    name: str = Field(min_length=1, max_length=200)
+    offered: bool
+
+
+class OfferBody(BaseModel):
+    changes: list[OfferChangeBody] = Field(min_length=1, max_length=100)
+
+
+@router.get(
+    "/{workspace_id}/offer",
+    dependencies=[
+        guard(
+            "GetWorkspaceConfiguration",
+            denied="Only admins can view the workspace configuration",
+        )
+    ],
+)
+async def read_workspace_offer(
+    workspace_id: str,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+) -> dict[str, Any]:
+    """The agents, apps, workflows and pipelines the workspace offers (its
+    allow-list, "<W> access"), by name or whole module."""
+    return await _call(service.read_offer(user, workspace_id))
+
+
+@router.put(
+    "/{workspace_id}/offer",
+    dependencies=[declares(action) for action in WRITES],
+)
+async def save_workspace_offer(
+    workspace_id: str,
+    body: OfferBody,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+) -> dict[str, Any]:
+    """Offer or stop offering items, in one write of "<W> access" as the caller
+    (403 for an item the caller does not hold, 422 for one beyond the
+    organization's offer: nothing changes). Answers the offer after."""
+    changes = [OfferChange(c.kind, c.module, c.name, c.offered) for c in body.changes]
+    return await _call(service.save_offer(user, workspace_id, changes))

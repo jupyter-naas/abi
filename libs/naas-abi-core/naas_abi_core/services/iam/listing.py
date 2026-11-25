@@ -21,6 +21,7 @@ from naas_abi_core import logger
 from naas_abi_core.services.iam.names import (
     PLATFORM,
     container_of_scope,
+    is_membership_scope,
     parse_resource_name,
     validate_scope,
     within,
@@ -187,7 +188,10 @@ def page_of(items: Iterable[ListedResource], query: ListingQuery) -> ListedPage:
 
 
 def listing_scope(scope: str) -> str:
-    """The container a listing at ``scope`` reads: a below scope's container."""
+    """The container a listing at ``scope`` reads: a below scope's container.
+    ``${my workspaces}`` names no container: a listing is never at it."""
+    if is_membership_scope(scope):
+        raise ValueError(f"A listing is at a container, not {scope}")
     return container_of_scope(validate_scope(scope))
 
 

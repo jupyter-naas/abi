@@ -24,6 +24,37 @@
 
 <!-- version list -->
 
+## v6.2.1 (2026-11-23)
+
+### Bug Fixes
+
+- **iam**: Explain finds a user by the id Nexus names them
+  ([`9cd9839`](https://github.com/jupyter-naas/abi/commit/9cd983992874266c5bbfe77a30e49ea6b1c80d27))
+
+
+## v6.2.0 (2026-11-23)
+
+### Bug Fixes
+
+- **nexus-api**: Keep Settings cache authorization fresh (#1604)
+  ([#1612](https://github.com/jupyter-naas/abi/pull/1612),
+  [`d4dcbc3`](https://github.com/jupyter-naas/abi/commit/d4dcbc370900a6313d58ed65bc976dd4ef88f35d))
+
+### Features
+
+- **iam**: Membership bounds and the first tie
+  ([#1585](https://github.com/jupyter-naas/abi/pull/1585),
+  [`a178534`](https://github.com/jupyter-naas/abi/commit/a1785341e7ee59debb22711a5cb061894a8065a4))
+
+- **iam**: Membership groups and the ${my workspaces} scope
+  ([#1584](https://github.com/jupyter-naas/abi/pull/1584),
+  [`ae12cc4`](https://github.com/jupyter-naas/abi/commit/ae12cc444fd44d2c67a3ca506846deee1ab9c97c))
+
+- **iam**: No model through the platform policies, self grants, an agent's own model
+  ([#1586](https://github.com/jupyter-naas/abi/pull/1586),
+  [`d5fb788`](https://github.com/jupyter-naas/abi/commit/d5fb7884489e65bf80f7653808dac8850c56ca73))
+
+
 ## v6.1.0 (2026-11-20)
 
 ### Features

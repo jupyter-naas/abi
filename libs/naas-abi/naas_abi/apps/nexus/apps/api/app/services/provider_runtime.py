@@ -804,13 +804,14 @@ async def complete_with_abi(
         agent = await asyncio.to_thread(_turn_copy, template_agent, thread_id)
         if agent is None:
             raise PermissionError(f"You may not use the agent {config.model} here")
-        if llm_model:
-            _retarget_inprocess_chat_model(agent, llm_model)
+        with agents_own_models(agent):
+            if llm_model:
+                _retarget_inprocess_chat_model(agent, llm_model)
 
-        if hasattr(agent, "ainvoke"):
-            return await agent.ainvoke(latest_user_message, thread_id=thread_id)
-        if hasattr(agent, "invoke"):
-            return agent.invoke(latest_user_message)
+            if hasattr(agent, "ainvoke"):
+                return await agent.ainvoke(latest_user_message, thread_id=thread_id)
+            if hasattr(agent, "invoke"):
+                return agent.invoke(latest_user_message)
         raise ValueError(f"In-process ABI agent '{config.model}' cannot be invoked")
 
     if not endpoint:
@@ -1474,6 +1475,76 @@ def _inprocess_agent_class_name(agent: Any) -> str:
     return f"{cls.__module__}/{cls.__name__}"
 
 
+# How deep the sub-agents of a turn are read for their models.
+_MAX_AGENT_DEPTH = 8
+
+
+def _declared_model_ids(agent_cls: type) -> set[str]:
+    """The chat models an agent class declares (``get_chat_model_ids``,
+    ``get_chat_model_id``): those a turn may switch it to."""
+    found: set[str] = set()
+    for getter, many in (("get_chat_model_ids", True), ("get_chat_model_id", False)):
+        method = getattr(agent_cls, getter, None)
+        if not callable(method):
+            continue
+        try:
+            value = method()
+        except Exception:  # noqa: BLE001 - a class that cannot say declares nothing
+            logger.debug("%s.%s failed", agent_cls.__name__, getter, exc_info=True)
+            continue
+        values = (value or []) if many else ([value] if value else [])
+        found.update(str(v).strip() for v in values if str(v).strip())
+    return found
+
+
+def agent_model_owners(agent: Any, container: str | None) -> dict[str, list[str]]:
+    """``{canonical model id: [agent scope names]}`` of this turn's agent and its
+    sub-agents in ``container`` (the workspace the turn runs in): the models each
+    was built with (the registry's gates on its chat model) and those its class
+    declares. Agents a workspace built (no module scope) own none."""
+    if not container:
+        return {}
+    from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import class_scope
+    from naas_abi_core.services.model_registry.agent_models import gated_model_ids
+
+    try:
+        from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary import (
+            agents__primary_adapter__FastAPI as agents_api,
+        )
+
+        module_of = agents_api.agent_class_modules()
+    except Exception:  # noqa: BLE001 - no engine registry: the classes' own modules
+        module_of = {}
+    owners: dict[str, list[str]] = {}
+
+    def visit(node: Any, depth: int) -> None:
+        if depth > _MAX_AGENT_DEPTH:
+            return
+        scope = class_scope(_inprocess_agent_class_name(node), type(node), module_of)
+        if scope is not None:
+            resource = scope.resource(container)
+            models = gated_model_ids(getattr(node, "_chat_model", None))
+            models |= _declared_model_ids(type(node))
+            for canonical_id in models:
+                owners.setdefault(canonical_id, []).append(resource)
+        for sub in getattr(node, "_agents", None) or []:
+            visit(sub, depth + 1)
+
+    visit(agent, 0)
+    return owners
+
+
+def agents_own_models(agent: Any) -> Any:
+    """For the turn of ``agent``: its own models are allowed to whoever may use it
+    (``module:UseAgent`` on its scope where the turn runs), whatever their model
+    set (core ``model_registry/agent_models``). Any other model stays theirs."""
+    from naas_abi_core.engine.call_context import current_call_context
+    from naas_abi_core.services.model_registry.agent_models import agent_models
+
+    owners = agent_model_owners(agent, current_call_context().container)
+    return agent_models("module:UseAgent", owners)
+
+
 def _turn_copy(template_agent: Any, thread_id: str | None) -> Any | None:
     """This turn's copy of ``template_agent``, with only the sub-agents the
     caller may use; None when the caller may not run it.
@@ -1682,7 +1753,6 @@ async def stream_with_abi_inprocess(
     knowing the next time one of them is tightened.
     """
     import asyncio
-    import json
 
     from naas_abi_core import logger
 
@@ -1725,6 +1795,27 @@ async def stream_with_abi_inprocess(
     if agent is None:
         yield f"\n\n**Error:** You may not use the agent {agent_name} here."
         return
+    # The agent's own models are its users', whatever their model set.
+    with agents_own_models(agent):
+        async for chunk in _stream_inprocess_turn(
+            agent, agent_name, latest_user_message, thread_id, llm_model
+        ):
+            yield chunk
+
+
+async def _stream_inprocess_turn(
+    agent: Any,
+    agent_name: str,
+    latest_user_message: str,
+    thread_id: str,
+    llm_model: str | None,
+) -> AsyncGenerator[str | dict[str, Any], None]:
+    """The turn of ``stream_with_abi_inprocess``, once its agent is this turn's copy."""
+    import asyncio
+    import json
+
+    from naas_abi_core import logger
+
     if llm_model:
         try:
             _retarget_inprocess_chat_model(agent, llm_model)

@@ -1,15 +1,17 @@
 // Create user: the pure part of the form Organization settings › Users › New and Workspace
-// settings › Members › New share. Which organization it creates in (fixed or picked), which
-// workspaces it attaches, the org roles it offers, and the one request it sends.
+// settings › Members › New share. Which organization it creates in (fixed or picked), the
+// person's level, whether they administer the organization, which workspaces they join (each
+// with "admin"), the capability groups they are put in, and the one request it sends (#1589).
 
 import {
   filledProfile,
+  levelConflict,
   looksLikeEmail,
+  type Level,
   type OrganizationCreate,
-  type OrganizationRole,
   type PeopleProfile,
+  type WorkspaceAccess,
   type WorkspaceCreate,
-  type WorkspaceRole,
 } from '@/lib/people';
 
 export type OrgChoice = { id: string; name: string };
@@ -17,17 +19,6 @@ export type WorkspaceChoice = { id: string; name: string };
 
 /** The organization: fixed (shown read-only), or picked among `choices`. */
 export type OrganizationProp = { fixed: OrgChoice } | { choices: OrgChoice[]; initialId?: string };
-
-/** "None (workspace access only)" in the org role field. */
-export const NO_ORG_ROLE = 'none';
-export type OrgRoleValue = OrganizationRole | typeof NO_ORG_ROLE;
-
-export const ORG_ROLE_LABELS: Record<OrgRoleValue, string> = {
-  owner: 'Owner',
-  admin: 'Admin',
-  member: 'Member',
-  none: 'None (workspace access only)',
-};
 
 export const PROFILE_FIELDS: { field: keyof PeopleProfile; label: string }[] = [
   { field: 'organization', label: 'Organization' },
@@ -40,13 +31,16 @@ export const PROFILE_FIELDS: { field: keyof PeopleProfile; label: string }[] = [
 export type CreateUserDraft = {
   email: string;
   name: string;
-  /** Ignored when the form offers no org role (the workspace page). */
-  orgRole: OrgRoleValue;
-  /** The workspaces picked, with the role there (the attached one is added by the form). */
-  workspaces: { id: string; role: WorkspaceRole }[];
-  /** The role at the attached workspace (the workspace page). */
-  attachedRole: WorkspaceRole;
-  policyIds: string[];
+  /** Their level, in all their workspaces. */
+  level: Level;
+  /** An admin of the organization (the organization page). */
+  orgAdmin: boolean;
+  /** The workspaces picked, each with "admin" (the attached one is added by the form). */
+  workspaces: WorkspaceAccess[];
+  /** Whether they administer the attached workspace (the workspace page). */
+  attachedAdmin: boolean;
+  /** The capability groups they are put in. */
+  capabilities: string[];
   provider?: string;
   profile: Partial<Record<keyof PeopleProfile, string>>;
 };
@@ -55,10 +49,10 @@ export type CreateUserConfig = {
   organization: OrganizationProp;
   /** The organization picked when it is selectable. */
   organizationId: string | null;
-  /** The workspace the person is attached to, not removable (the workspace page). */
+  /** The workspace the person joins, not removable (the workspace page). */
   attachedWorkspace?: WorkspaceChoice;
-  /** The org roles offered; none: the form asks for no org role and grants none. */
-  orgRoles: OrganizationRole[];
+  /** The organization page: the org admin toggle and the organization's workspaces to pick. */
+  organizationRoute: boolean;
 };
 
 /** The organization the form creates in: the fixed one, else the one picked. */
@@ -79,29 +73,13 @@ export function organizationReadOnly(organization: OrganizationProp): boolean {
   return 'fixed' in organization;
 }
 
-/** The workspaces the person gets: the attached one first, then those picked. */
+/** The workspaces the person joins: the attached one first, then those picked. */
 export function workspaceGrants(
-  draft: Pick<CreateUserDraft, 'workspaces' | 'attachedRole'>,
+  draft: Pick<CreateUserDraft, 'workspaces' | 'attachedAdmin'>,
   attached?: WorkspaceChoice
-): { id: string; role: WorkspaceRole }[] {
+): WorkspaceAccess[] {
   const picked = draft.workspaces.filter((w) => w.id !== attached?.id);
-  return attached ? [{ id: attached.id, role: draft.attachedRole }, ...picked] : picked;
-}
-
-/**
- * The org roles the field offers: those allowed, then "None (workspace access only)" once at
- * least one workspace is picked. Empty when the form asks for no org role.
- */
-export function orgRoleOptions(orgRoles: OrganizationRole[], workspaceCount: number): OrgRoleValue[] {
-  if (orgRoles.length === 0) return [];
-  return workspaceCount > 0 ? [...orgRoles, NO_ORG_ROLE] : [...orgRoles];
-}
-
-/** The org role the draft really has: "None" falls back to the first role once no workspace is left. */
-export function effectiveOrgRole(value: OrgRoleValue, orgRoles: OrganizationRole[], workspaceCount: number): OrgRoleValue {
-  const offered = orgRoleOptions(orgRoles, workspaceCount);
-  if (offered.includes(value)) return value;
-  return offered.includes('member') ? 'member' : (offered[0] ?? NO_ORG_ROLE);
+  return attached ? [{ id: attached.id, admin: draft.attachedAdmin }, ...picked] : picked;
 }
 
 export type CreateUserRequest =
@@ -109,9 +87,9 @@ export type CreateUserRequest =
   | { route: 'organization'; organizationId: string; body: OrganizationCreate };
 
 /**
- * The one request the form sends, or why it cannot be sent. With no org role offered and a
- * workspace attached, it creates into that workspace (no org role is granted); else into the
- * organization with an org role (or none) and every workspace picked.
+ * The one request the form sends, or why it cannot be sent. From a workspace it joins that
+ * workspace; from the organization it names the org admin toggle and every workspace picked
+ * (none and no org admin: they are one of the organization's people).
  */
 export function createUserRequest(
   draft: CreateUserDraft,
@@ -122,15 +100,18 @@ export function createUserRequest(
   const name = draft.name.trim() || undefined;
   const profile = filledProfile(draft.profile);
   const provider = draft.provider || undefined;
+  const capabilities = [...draft.capabilities];
 
-  if (config.orgRoles.length === 0) {
+  if (!config.organizationRoute) {
     if (!config.attachedWorkspace) return { ok: false, error: 'No workspace to add them to.' };
+    const conflict = levelConflict(draft.level, draft.attachedAdmin);
+    if (conflict) return { ok: false, error: conflict };
     return {
       ok: true,
       request: {
         route: 'workspace',
         workspaceId: config.attachedWorkspace.id,
-        body: { email, name, role: draft.attachedRole, policyIds: draft.policyIds, provider, profile },
+        body: { email, name, level: draft.level, admin: draft.attachedAdmin, capabilities, provider, profile },
       },
     };
   }
@@ -138,10 +119,11 @@ export function createUserRequest(
   const organization = selectedOrganization(config.organization, config.organizationId);
   if (!organization) return { ok: false, error: 'Pick an organization.' };
   const workspaces = workspaceGrants(draft, config.attachedWorkspace);
-  const role = effectiveOrgRole(draft.orgRole, config.orgRoles, workspaces.length);
-  if (role === NO_ORG_ROLE && workspaces.length === 0) {
-    return { ok: false, error: 'Pick an organization role, or at least one workspace.' };
-  }
+  const conflict = levelConflict(
+    draft.level,
+    workspaces.some((w) => w.admin)
+  );
+  if (conflict) return { ok: false, error: conflict };
   return {
     ok: true,
     request: {
@@ -150,9 +132,10 @@ export function createUserRequest(
       body: {
         email,
         name,
-        role: role === NO_ORG_ROLE ? null : role,
+        level: draft.level,
+        orgAdmin: draft.orgAdmin,
         workspaces,
-        policyIds: draft.policyIds,
+        capabilities,
         provider,
         profile,
       },

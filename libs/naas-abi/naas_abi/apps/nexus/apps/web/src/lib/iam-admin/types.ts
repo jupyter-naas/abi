@@ -207,6 +207,10 @@ export type PrincipalView = {
   /** Groups: who owns them, `abi:` (the platform) or a container (an organization's, a
    *  workspace's). */
   owner_scope?: string;
+  /** Groups: the container its members are members of ("<W> workspace"), else null. */
+  membership_of?: string | null;
+  /** Groups: a level group ("Viewers", "Members"). */
+  level_group?: boolean;
   created_at: string | null;
 };
 
@@ -215,6 +219,20 @@ export type IdpMapping = { provider: string; claim_value: string };
 export type GroupView = PrincipalView & {
   members: PrincipalView[];
   idp_mappings: IdpMapping[];
+};
+
+/** A group as the list shows it; with `memberCounts`, how many members it has: null where
+ *  the caller may not read it (its detail would be refused), so no detail is read per group. */
+export type GroupSummary = PrincipalView & { member_count?: number | null };
+
+/** A page of `GET /groups`, in IAM's order; `next_after` reads the next. */
+export type GroupsPage = { items: GroupSummary[]; next_after?: string | null };
+
+export type GroupsPageQuery = {
+  after?: string | null;
+  /** 1 to `GROUPS_PAGE_MAX`; IAM's 100 when absent. */
+  limit?: number;
+  memberCounts?: boolean;
 };
 
 export type KeyStatus = 'active' | 'revoked' | 'expired';
@@ -375,3 +393,19 @@ export type AuditEntry = {
  *  (principals and service accounts, keys, manifests, the simulator, IdP mappings, the audit)
  *  is false. */
 export type AccessView = { actions: Record<string, boolean> };
+
+// -- capability groups ----------------------------------------------------------------------
+
+/** A capability group of a level (`GET /api/iam/admin/capabilities?scope=`): an organization's
+ *  "Workflow runners", the platform's "Models · all"; null ids when it was never made. */
+export type CapabilityView = {
+  capability: 'workflow_runners' | 'models_all';
+  name: string;
+  owner_scope: string;
+  group_id: string | null;
+  policy_id: string | null;
+  /** The caller may make it now (it does not exist and IAM lets them). */
+  can_create: boolean;
+};
+
+export type CapabilitiesView = { scope: string; capabilities: CapabilityView[] };

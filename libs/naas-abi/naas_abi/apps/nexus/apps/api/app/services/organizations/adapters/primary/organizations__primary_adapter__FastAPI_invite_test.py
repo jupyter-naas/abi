@@ -66,6 +66,7 @@ def _client(people: FakePeopleService) -> TestClient:
         ),
         get_organization_by_id=AsyncMock(return_value=SimpleNamespace(id="org-1", name="Acme")),
         list_organization_member_profiles=AsyncMock(return_value={}),
+        get_organization_member_profile=AsyncMock(return_value=None),
         list_workspaces_for_org=AsyncMock(return_value=[SimpleNamespace(id="ws-1")]),
     )
     app = FastAPI()

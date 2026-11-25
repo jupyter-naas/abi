@@ -72,7 +72,7 @@ export function MapsAccessCell({
   if (!item.editable) {
     const why = item.owner
       ? `Shared from ${permissions.names.get(item.owner) ?? item.owner}`
-      : 'Deployment item: a platform superadmin sets where it is available';
+      : 'Deployment item: a platform admin sets where it is available';
     return (
       <span className="inline-flex min-w-0 items-center gap-1 text-muted-foreground" title={why}>
         <Lock size={12} className="shrink-0" aria-hidden />
@@ -197,7 +197,7 @@ function MapsAccessModal({
                 disabled={!data.superadmin}
                 onChange={() => setScope('all')}
               />
-              All workspaces{!data.superadmin ? ' (superadmin only)' : ''}
+              All workspaces{!data.superadmin ? ' (platform admins only)' : ''}
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input

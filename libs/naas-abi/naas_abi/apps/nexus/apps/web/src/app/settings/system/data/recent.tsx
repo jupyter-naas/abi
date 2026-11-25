@@ -2,13 +2,23 @@
 
 /** What super admins changed or revealed lately, across services. */
 import { useEffect, useState } from 'react';
-import { History } from 'lucide-react';
+import { History, type LucideIcon } from 'lucide-react';
 import type { DataApi, Failure } from './data-api';
 import type { AuditEntry } from './data-types';
 import { Avatar, EmptyState, Notice, RelativeTime, SkeletonRows, StatusPill } from './data-ui';
 import { Modal } from './modal';
 import { groupHistory } from './inspector';
-import { viewFor } from './services/registry';
+import { SERVICE_ICONS } from '../../lib/nav';
+import { SERVICE_PAGES } from '../../lib/service-pages';
+import { genericView } from './services/registry';
+
+/** A service's name and icon as the sidebar draws them, without loading its view. */
+function serviceIdentity(service: string): { label: string; icon: LucideIcon } {
+  const page = SERVICE_PAGES.find((p) => p.service === service);
+  if (page && Object.hasOwn(SERVICE_ICONS, service)) return { label: page.label, icon: SERVICE_ICONS[service] };
+  const generic = genericView(service);
+  return { label: generic.label, icon: generic.icon };
+}
 
 const VERBS: Record<string, string> = { create: 'created', replace: 'replaced', delete: 'deleted', reveal: 'revealed' };
 
@@ -47,7 +57,7 @@ export function RecentChanges({
       {grouped && grouped.length > 0 && (
         <ol className="data-history data-history-wide">
           {grouped.map((e, i) => {
-            const view = viewFor(e.service);
+            const view = serviceIdentity(e.service);
             const Icon = view.icon;
             return (
               <li key={`${e.at}-${i}`} className="data-history-item">

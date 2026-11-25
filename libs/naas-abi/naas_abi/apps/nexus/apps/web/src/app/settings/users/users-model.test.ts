@@ -60,8 +60,8 @@ describe('cells', () => {
     ).toEqual(['Acme', 'Zeta']);
   });
 
-  it('say superadmin, the IAM id or that there is none, and the day created', () => {
-    expect(cellValues(user({ is_superadmin: true }), 'superadmin')).toEqual(['Superadmin']);
+  it('say platform admin, the IAM id or that there is none, and the day created', () => {
+    expect(cellValues(user({ is_superadmin: true }), 'superadmin')).toEqual(['Platform admin']);
     expect(cellValues(user({ principal_id: null }), 'iam')).toEqual(['None yet']);
     expect(cellValues(user(), 'created')).toEqual([new Date('2026-10-01T09:30:00').toISOString().slice(0, 10)]);
   });

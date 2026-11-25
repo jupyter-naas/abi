@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createDeferredStorage } from '@/lib/deferred-storage';
+import {
+  defineResource,
+  hasFreshResource,
+  pathUnder,
+  primeResource,
+  readResource,
+  resourceEpoch,
+  useResourceCache,
+} from '@/lib/resource-cache';
 
 export interface AgentTool {
   id: string;
@@ -78,21 +87,98 @@ export interface Agent {
 // Re-fetch agents at most once every 5 minutes per workspace
 const AGENTS_CACHE_TTL_MS = 5 * 60 * 1000;
 
-// Workspaces reconciled with the backend code class registry this session.
-// GET /agents is read-only. POST /agents/sync is only sent when fetchAgents
-// is called with force=true (chat, agent settings). Module-level so it
-// resets on a full page reload; we still guard against parallel POSTs.
-const syncedWorkspaces = new Set<string>();
+/** Agent settings reconcile a roster older than this; the chat pane once per session. */
+export const SETTINGS_RECONCILE_MS = AGENTS_CACHE_TTL_MS;
 
-/** Reconcile the roster once per workspace per session (the right pane).
+/**
+ * A workspace's roster as the API answers it (`GET /api/agents/?workspace_id=`, or the
+ * reconciliation's answer, which is the same list): the store keeps the agents it shows,
+ * an agent's settings page reads the service fields from here, so both show one answer.
+ * Memory only; changed by any agent, provider or secret change.
+ */
+export const AGENT_ROSTER = defineResource<{ workspaceId: string }>({
+  name: 'agent-roster',
+  ttlMs: AGENTS_CACHE_TTL_MS,
+  key: ({ workspaceId }) => workspaceId,
+  backendCache: false,
+  invalidatedBy: (path) =>
+    (pathUnder(path, '/api/agents') && path !== '/api/agents/sync') ||
+    pathUnder(path, '/api/providers') ||
+    pathUnder(path, '/api/secrets'),
+});
+
+/**
+ * When a workspace was last reconciled (and roster read), with the resource cache's
+ * epoch then: a new session, an IAM change or Reload starts a new epoch, and what was
+ * done before it no longer counts. An undefined epoch was recorded before the session
+ * was known (or comes from the browser's storage) and counts within its age.
+ */
+type Mark = { at: number; epoch: number | undefined };
+const syncedWorkspaces = new Map<string, Mark>();
+const rosterMarks = new Map<string, Mark>();
+
+function mark(): Mark {
+  const epoch = resourceEpoch();
+  return { at: Date.now(), epoch: useResourceCache.getState().session === null ? undefined : epoch };
+}
+
+function markHolds(entry: Mark | undefined, withinMs: number): boolean {
+  if (!entry || Date.now() - entry.at >= withinMs) return false;
+  return entry.epoch === undefined || entry.epoch === resourceEpoch();
+}
+
+/** Forget every reconciliation (Reload): the next settings visit reconciles again. */
+export function forgetAgentsSync(): void {
+  syncedWorkspaces.clear();
+  rosterMarks.clear();
+}
+
+/** Reconcile the roster at most once per workspace within `withinMs` (the chat pane:
+ * once per session; agent settings: `SETTINGS_RECONCILE_MS`).
  *
  * The pane binds each section's office agent, so it needs agents added to the
  * config roster since the last sync. A plain GET would miss them. Syncing
  * once, not on every navigation, keeps /agents/sync off the Apps load path.
+ * A reconciliation still in flight is awaited, not sent again.
  */
-export async function ensureAgentsSynced(workspaceId: string): Promise<void> {
-  if (!workspaceId || syncedWorkspaces.has(workspaceId)) return;
+export async function ensureAgentsSynced(workspaceId: string, withinMs = Infinity): Promise<void> {
+  if (!workspaceId) return;
+  if (markHolds(syncedWorkspaces.get(workspaceId), withinMs)) {
+    await agentsInFlight.get(`${workspaceId}:sync`);
+    return;
+  }
   await useAgentsStore.getState().fetchAgents(workspaceId, true);
+}
+
+const rosterUrl = async (workspaceId: string) => {
+  const { getApiUrl } = await import('@/lib/config');
+  return `${getApiUrl()}/api/agents/?workspace_id=${workspaceId}`;
+};
+
+/** The roster read through the resource cache (one request for every caller). */
+function readRosterResponse(workspaceId: string): Promise<Response> {
+  return readResource(AGENT_ROSTER, { workspaceId }, async () => {
+    const { authFetch } = await import('./auth');
+    return authFetch(await rosterUrl(workspaceId), {}, { settingsCache: AGENT_ROSTER.backendCache });
+  });
+}
+
+/**
+ * The roster as the API answers it, for an agent's settings page: reconciled within
+ * `reconcileWithinMs`, the same answer the store shows (read once if it is not held).
+ */
+export async function readAgentRoster(
+  workspaceId: string,
+  reconcileWithinMs = SETTINGS_RECONCILE_MS,
+): Promise<unknown[]> {
+  await ensureAgentsSynced(workspaceId, reconcileWithinMs);
+  await useAgentsStore
+    .getState()
+    .fetchAgents(workspaceId, false, { reread: !hasFreshResource(AGENT_ROSTER, { workspaceId }) });
+  const response = await readRosterResponse(workspaceId);
+  if (!response.ok) throw new Error(`Failed to load agents (HTTP ${response.status})`);
+  const data: unknown = await response.json();
+  return Array.isArray(data) ? data : [];
 }
 
 /** The roster calls in flight, per workspace: `sync` (POST /agents/sync) and `get`. */
@@ -143,7 +229,11 @@ interface AgentsState {
   setAgentProvider: (agentId: string, providerId: string | null) => void;
   getAgent: (id: string) => Agent | undefined;
   resolveAgent: (id: string | undefined | null) => Agent | undefined;
-  fetchAgents: (workspaceId: string, force?: boolean) => Promise<void>;
+  /**
+   * `force`: reconcile (POST /agents/sync). Otherwise the roster is read when the one
+   * held is older than 5 minutes, from another epoch, or `reread` is asked.
+   */
+  fetchAgents: (workspaceId: string, force?: boolean, options?: { reread?: boolean }) => Promise<void>;
   addCustomType: (name: string) => string | null;
   setAgentTypeOverride: (agentId: string, type: string | null) => void;
 
@@ -173,18 +263,21 @@ export const useAgentsStore = create<AgentsState>()(
       customTypes: [],
       agentTypeOverrides: {},
 
-      fetchAgents: (workspaceId: string, force = false) => joinAgentsFetch(workspaceId, force, async () => {
+      fetchAgents: (workspaceId: string, force = false, { reread = false } = {}) => joinAgentsFetch(workspaceId, force, async () => {
         if (!workspaceId) return;
         // `agents` is one array. `lastFetchedAt` is per workspace, and both
-        // are saved in the browser. Skip the fetch only when this id matches.
+        // are saved in the browser. Skip the fetch only when this id matches,
+        // and the roster was read in this epoch (or before it was known).
         const sameWorkspace = get().agentsWorkspaceId === workspaceId;
-        if (!force && sameWorkspace) {
+        if (!force && !reread && sameWorkspace) {
           const lastFetched = get().lastFetchedAt[workspaceId];
           const hasCachedAgents = get().agents.length > 0;
+          const rosterMark = rosterMarks.get(workspaceId);
           if (
             hasCachedAgents &&
             lastFetched &&
-            Date.now() - lastFetched < AGENTS_CACHE_TTL_MS
+            Date.now() - lastFetched < AGENTS_CACHE_TTL_MS &&
+            (rosterMark === undefined || markHolds(rosterMark, AGENTS_CACHE_TTL_MS))
           ) {
             return;
           }
@@ -202,23 +295,29 @@ export const useAgentsStore = create<AgentsState>()(
           // /agents — the API auto-reconciles when the workspace has no rows yet.
           // We still avoid POST on every Apps navigation to keep load off the API.
           const shouldSync = force;
-          if (shouldSync) syncedWorkspaces.add(workspaceId);
+          const started = mark();
+          if (shouldSync) syncedWorkspaces.set(workspaceId, started);
           let response: Response;
           try {
             response = shouldSync
               ? await authFetch(`${API_BASE}/api/agents/sync?workspace_id=${workspaceId}`, {
                   method: 'POST',
                 })
-              : await authFetch(`${API_BASE}/api/agents/?workspace_id=${workspaceId}`);
+              : await readRosterResponse(workspaceId);
           } catch (err) {
-            if (shouldSync) syncedWorkspaces.delete(workspaceId);
+            if (shouldSync && syncedWorkspaces.get(workspaceId) === started) syncedWorkspaces.delete(workspaceId);
             throw err;
           }
-          if (!response.ok && shouldSync) {
+          if (!response.ok && shouldSync && syncedWorkspaces.get(workspaceId) === started) {
             syncedWorkspaces.delete(workspaceId);
           }
           if (response.ok) {
-            const data = await response.json();
+            const body = await response.text();
+            // The reconciliation answers the roster: the settings page reads it from here.
+            if (shouldSync && started.epoch !== undefined) {
+              primeResource(AGENT_ROSTER, { workspaceId }, body, started.epoch);
+            }
+            const data = JSON.parse(body);
             // Guard against legacy rows where a NULL model column was stringified
             // to the literal "None"/"null" — treat those as unset so they don't
             // mask the backend-resolved model.
@@ -271,6 +370,7 @@ export const useAgentsStore = create<AgentsState>()(
               updatedAt: new Date(a.updated_at),
             }));
             if (get().agentsWorkspaceId !== workspaceId) return;
+            rosterMarks.set(workspaceId, started);
             set({
               agents: formattedAgents,
               agentsWorkspaceId: workspaceId,

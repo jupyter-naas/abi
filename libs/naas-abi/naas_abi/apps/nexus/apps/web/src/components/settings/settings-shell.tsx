@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ChevronRight, type LucideIcon } from 'lucide-react';
 import { applyBrandColorVariables, brandColorVariables } from '@/lib/color';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { workspaceReturnPath } from '@/lib/workspace-return-path';
+import { useSettingsScrollMemory } from './settings-scroll-memory';
 import './settings-shell.css';
 
 export type SettingsBrand = { primary: string | null; accent: string | null };
@@ -20,6 +21,9 @@ export type SettingsBrand = { primary: string | null; accent: string | null };
  * They go on this root (first paint) and on <html> while it is mounted, so
  * dropdown menus, popovers and dialogs rendered in portals match; leaving the
  * settings restores the previous values.
+ *
+ * Scroll: each page's offset is kept by path (`useSettingsScrollMemory`), so a page
+ * opened again from the column, another level or back/forward is where it was left.
  */
 export function SettingsLayoutRoot({
   brand,
@@ -38,6 +42,8 @@ export function SettingsLayoutRoot({
   const brandAccent = brand?.accent ?? null;
   const brandVariables = brand ? brandColorVariables(brandPrimary, brandAccent) : {};
   const usesPlatformColors = Object.keys(brandVariables).length === 0;
+  const rootRef = useRef<HTMLDivElement>(null);
+  useSettingsScrollMemory(rootRef, usePathname());
 
   useEffect(
     () =>
@@ -53,6 +59,7 @@ export function SettingsLayoutRoot({
   } as React.CSSProperties;
   return (
     <div
+      ref={rootRef}
       className={[
         'org-settings-layout-root',
         usesPlatformColors && 'settings-layout-root-platform-colors',
@@ -88,10 +95,17 @@ export function SettingsNavItem({
   badge?: string | null;
   badgeTitle?: string;
 }) {
+  const router = useRouter();
+  // On intent only (#1609): a long column must not warm every page it lists.
+  const prefetch = () => router.prefetch(href);
   return (
     <li>
       <Link
         href={href}
+        prefetch={false}
+        onMouseEnter={prefetch}
+        onFocus={prefetch}
+        onTouchStart={prefetch}
         className={active ? 'org-settings-nav-item org-settings-nav-item-active' : 'org-settings-nav-item'}
         aria-current={active ? 'page' : undefined}
       >

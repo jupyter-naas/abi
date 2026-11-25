@@ -1,14 +1,74 @@
 name: Marketplace remote modules
 on:
   pull_request:
+    # A remote module's checks run only when that module changed. A proto or SDK
+    # change does not build every image.
     paths:
       - 'libs/naas-abi-marketplace-modules/**'
-      - 'libs/naas-abi-proto/**'
-      - 'libs/naas-abi-sdk/**'
       - '.github/workflows/marketplace_modules.yml'
   workflow_dispatch:
 jobs:
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.out.outputs.apps }}
+      run_tests: ${{ steps.out.outputs.run_tests }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          fetch-depth: 0
+      - id: out
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          python3 - << 'PY'
+          import json, os, subprocess, sys
+
+          event = os.environ["EVENT"]
+          root = "libs/naas-abi-marketplace-modules"
+          req_dir = os.path.join(root, "requirements")
+          all_apps = sorted(name[:-4] for name in os.listdir(req_dir) if name.endswith(".txt"))
+
+          def emit(apps, tests):
+              with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+                  out.write(f"apps={json.dumps(apps)}\n")
+                  out.write(f"run_tests={'true' if tests else 'false'}\n")
+
+          if event == "workflow_dispatch":
+              emit(all_apps, True)
+              sys.exit(0)
+
+          diff = subprocess.run(
+              ["git", "diff", "--name-only", os.environ["BASE"], "HEAD", "--", root],
+              check=True, text=True, capture_output=True,
+          ).stdout.splitlines()
+          docs = {
+              f"{root}/README.md",
+              f"{root}/AGENTS.md",
+              f"{root}/.gitignore",
+              f"{root}/.dockerignore",
+          }
+          apps, shared, code = set(), False, False
+          prefix = f"{root}/"
+          for path in diff:
+              if path in docs:
+                  continue
+              code = True
+              rel = path[len(prefix):]
+              parts = rel.split("/")
+              if parts[0] == "naas_abi_apps" and len(parts) > 1 and parts[1] in all_apps:
+                  apps.add(parts[1])
+              elif parts[0] == "requirements" and len(parts) == 2 and parts[1].endswith(".txt") and parts[1][:-4] in all_apps:
+                  apps.add(parts[1][:-4])
+              else:
+                  shared = True
+          emit(all_apps if shared else sorted(apps), code)
+          PY
+
   test:
+    needs: changed
+    if: needs.changed.outputs.run_tests == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -24,10 +84,12 @@ jobs:
         run: uv run --project libs/naas-abi-marketplace-modules --all-extras --python '${{ matrix.python }}' pytest libs/naas-abi-marketplace-modules -q
 
   images:
+    needs: changed
+    if: needs.changed.outputs.apps != '[]'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        app: [agicap, algolia, arxiv, exchangeratesapi, github, google_search, linkedin, naas, nebari, pennylane, postgres, powerpoint, pubmed, sanax, sec_gov, sendgrid, x, yahoofinance]
+        app: ${{ fromJson(needs.changed.outputs.apps) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       # The build fails if naas_abi_core (or naas_abi, naas_abi_marketplace) is

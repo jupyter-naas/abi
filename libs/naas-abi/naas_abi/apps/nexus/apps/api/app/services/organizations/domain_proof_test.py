@@ -32,6 +32,8 @@ def world(nexus_db, nexus_iam):
     asyncio.run(people())
     for uid in ("pat", "olivia"):
         nexus_iam.user(uid)
+        # No user creates an organization by default (catalog 16): these two may.
+        nexus_iam.may_create_organizations(uid)
     nexus_iam.platform_admin("root")
     published: dict[str, list[str]] = {}
 

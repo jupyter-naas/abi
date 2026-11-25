@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SettingsEmpty } from '@/components/settings/settings-ui';
@@ -19,16 +20,21 @@ import {
 } from './scope';
 import { ErrorBlock, LoadingBlock } from './states';
 import { analyticsTabs, shownTab, type AnalyticsTab, type AnalyticsTabProps } from './tabs';
-import { ChatsTab } from './tabs/chats-tab';
 import { EventsTab } from './tabs/events-tab';
 import { OverviewTab } from './tabs/overview-tab';
 import { PagesTab } from './tabs/pages-tab';
 import { SessionsTab } from './tabs/sessions-tab';
-import { UserDetailTab } from './tabs/user-detail';
 import { UsersTab } from './tabs/users-tab';
 import { WorkspacesTab } from './tabs/workspaces-tab';
 import { useAnalytics } from './use-analytics';
 import type { UsersResponse, WorkspacesResponse } from './types';
+
+// Chats (the conversations table, a conversation, its export) and one user's detail load on
+// first open (#1609). The other tabs are under 1 kB each once compressed: a chunk of their
+// own would cost a request on open and more than it saves.
+const loading = () => <LoadingBlock />;
+const ChatsTab = dynamic(() => import('./tabs/chats-tab').then((m) => m.ChatsTab), { loading });
+const UserDetailTab = dynamic(() => import('./tabs/user-detail').then((m) => m.UserDetailTab), { loading });
 
 /** The directories (members, workspaces) do not depend on the period: read once per scope. */
 const DIRECTORY_FILTERS: AnalyticsFilters = { period: DEFAULT_PERIOD, userId: ALL, workspaceId: ALL };
@@ -42,15 +48,17 @@ const DIRECTORY_FILTERS: AnalyticsFilters = { period: DEFAULT_PERIOD, userId: AL
 export function AnalyticsSection({ scope }: { scope: AnalyticsScope }) {
   const { status: accessStatus, access } = useAnalyticsAccess(scope, { refresh: true });
   const canRead = access?.can_read === true;
+  // The charts start with the access read. A refusal replaces them once that read answers.
+  const refused = accessStatus !== 'checking' && !canRead;
   const timeZone = access?.timezone || 'UTC';
 
   const [filters, setFilters] = useState<AnalyticsFilters>(initialAnalyticsFilters);
   const [tab, setTab] = useState<AnalyticsTab>('overview');
   const hasWorkspaces = scopeHasWorkspaces(scope);
 
-  const users = useAnalytics<UsersResponse>(scope, '/users', DIRECTORY_FILTERS, { skip: !canRead });
+  const users = useAnalytics<UsersResponse>(scope, '/users', DIRECTORY_FILTERS, { skip: refused });
   const workspaces = useAnalytics<WorkspacesResponse>(scope, '/workspaces', DIRECTORY_FILTERS, {
-    skip: !canRead || !hasWorkspaces,
+    skip: refused || !hasWorkspaces,
   });
   const directory = useMemo(() => users.data?.directory ?? [], [users.data]);
   // In an organization, a picked workspace narrows the user list to its members.
@@ -71,11 +79,8 @@ export function AnalyticsSection({ scope }: { scope: AnalyticsScope }) {
     setTab('overview');
   }, []);
 
-  if (!access) {
-    if (accessStatus === 'error') return <ErrorBlock message="The analytics access could not be read." />;
-    return <LoadingBlock />;
-  }
-  if (!canRead) {
+  if (accessStatus === 'error' && !access) return <ErrorBlock message="The analytics access could not be read." />;
+  if (refused) {
     return (
       <SettingsEmpty
         icon={<BarChart3 size={40} className="opacity-40" />}
@@ -147,7 +152,7 @@ export function AnalyticsSection({ scope }: { scope: AnalyticsScope }) {
       {activeTab === 'pages' && <PagesTab {...tabProps} />}
       {activeTab === 'workspaces' && <WorkspacesTab {...tabProps} />}
       {activeTab === 'chats' && (
-        <ChatsTab {...tabProps} canReadMessages={access.can_read_conversations} directory={directory} />
+        <ChatsTab {...tabProps} canReadMessages={access?.can_read_conversations === true} directory={directory} />
       )}
       {activeTab === 'events' && <EventsTab {...tabProps} />}
     </div>

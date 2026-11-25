@@ -86,6 +86,8 @@ def people(nexus_db, nexus_iam: NexusIam, monkeypatch: pytest.MonkeyPatch):
 
     for uid in ("pat", "ops"):
         nexus_iam.user(uid)
+    # Creating an organization is no user's by default (catalog 16): Pat is given it.
+    nexus_iam.may_create_organizations("pat")
     monkeypatch.setattr(nexus_config.settings, "organizations", [])
     # The seeds read where IAM's names are from this database: it has no
     # ``iam_migrations`` table, so nothing is to move (container paths).
@@ -138,7 +140,8 @@ async def test_seeding_keeps_a_persons_organization_of_a_configured_slug(
     # None of the configuration lands in it: no workspace, no configured owner.
     assert await _rows(nexus_db, WorkspaceModel, slug="acme-finance") == []
     members = await MEMBERSHIPS.members(org_container(mine))
-    assert [(m.user_id, m.role) for m in members] == [("pat", "owner")]
+    # Its creator is its admin (owner is no longer assigned, #1585).
+    assert [(m.user_id, m.role) for m in members] == [("pat", "admin")]
 
 
 @pytest.mark.asyncio

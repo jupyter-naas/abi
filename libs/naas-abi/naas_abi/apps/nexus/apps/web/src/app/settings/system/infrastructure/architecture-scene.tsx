@@ -282,7 +282,9 @@ export default function ArchitectureScene(props: Props) {
         mesh.geometry?.dispose();
         if (mesh.material) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(m => m.dispose());
       });
-      textures.forEach(texture => texture.dispose()); renderer.dispose(); renderer.domElement.remove();
+      // Release the WebGL context now rather than when it is collected: browsers keep
+      // only a few, and each visit to Layers would otherwise hold one more.
+      textures.forEach(texture => texture.dispose()); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove();
     };
   }, []);
 
