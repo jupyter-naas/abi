@@ -32,7 +32,7 @@ export const KIT_CATALOG: readonly KitEntry[] = [
   { module: 'kpi-card', id: 'cards', label: 'KPI card', use: 'One number with its label and trend.' },
   { module: 'toolbar', id: 'toolbar', label: 'Toolbar', use: 'The bar above a pane: search and filters left, actions right.' },
   { module: 'tabs', id: 'tabs', label: 'Tabs', use: 'Underline on a pane edge, segmented inside a toolbar. Arrow keys move.' },
-  { module: 'menu', id: 'menus', label: 'Menus', use: 'Menu bars (File / Edit / View), overflow (⋯) and row menus, one style, on Radix.' },
+  { module: 'menu', id: 'menus', label: 'Menus', use: 'Menu bars (File / Edit / View), overflow (⋯) and row menus, one style, on Radix. Every app bar (Apps, Chat, Datasets, Documents, Events, Files, Graph, Home, Maps, Ontology, Search, Sheets, Slides, Tasks) is a MenuBar of Menus from data; testId + itemTestIdPrefix name the trigger, panel and rows.' },
   { module: 'tree-row', id: 'tree', label: 'List and tree rows', use: 'Sidebar lists and trees: twisty, icon, label, hover actions.' },
   { module: 'split-pane', id: 'split', label: 'Split pane', use: 'The drag handle between two columns (sidebar, settings nav, AI pane).' },
   { module: 'dialog', id: 'dialogs', label: 'Dialog', use: 'Every modal, five widths: sm, md, lg, xl, full. Focus trapped, Escape closes, ⌘↵ submits; dismissible={false} keeps it open while an action runs.' },
