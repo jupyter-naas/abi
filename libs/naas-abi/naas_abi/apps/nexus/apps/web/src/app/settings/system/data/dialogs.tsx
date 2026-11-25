@@ -1,43 +1,39 @@
 'use client';
 
-/** Destructive confirmation and the value editor (create or replace). */
-import { useState } from 'react';
+/** Destructive confirmation and the value editor (create or replace), on the kit's dialog. */
+import { useState, type KeyboardEvent } from 'react';
 import { AlertTriangle, Eye, EyeOff, FileUp, Pencil, Plus, Trash2, UploadCloud } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
+import { Field } from '@/components/ui/field';
+import { Input, Select, Textarea } from '@/components/ui/input';
+import { Notice } from '@/components/ui/notice';
+import { Spinner } from '@/components/ui/spinner';
+import { Tabs } from '@/components/ui/tabs';
+import { cn } from '@/lib/utils';
 import type { Failure, Result, WriteOptions } from './data-api';
 import { TTL_UNITS, childId, confirmed, formatBytes, ttlSeconds, type TtlUnit } from './data-model';
 import type { ResourceEntry } from './data-types';
-import { CopyButton, Kbd, Notice } from './data-ui';
-import { Modal } from './modal';
+import { CopyButton, Kbd } from './data-ui';
 import type { ServiceView } from './services/types';
 import { CodeView } from './viewers/code-view';
 
 function ErrorLine({ failure }: { failure: Failure | null }) {
   if (!failure) return null;
   return (
-    <Notice tone="danger">
-      <AlertTriangle size={14} aria-hidden="true" /> {failure.reason}
+    <Notice tone="error" icon={<AlertTriangle size={14} aria-hidden="true" />}>
+      {failure.reason}
     </Notice>
   );
 }
 
-function ConfirmInput({
-  id,
-  verb,
-  value,
-  onChange,
-}: {
-  id: string;
-  verb: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
+const invalid = (bad: boolean) => (bad ? { 'aria-invalid': true, className: 'border-destructive' } : {});
+
+function ConfirmInput({ id, verb, value, onChange }: { id: string; verb: string; value: string; onChange: (value: string) => void }) {
   return (
-    <label className="data-confirm">
-      <span className="data-confirm-label">
-        Type <code className="data-mono">{id}</code> to {verb}
-      </span>
-      <input
-        className={`data-input${value && !confirmed(value, id) ? ' data-input-invalid' : ''}`}
+    <Field label={<>Type <code className="font-mono">{id}</code> to {verb}</>}>
+      <Input
+        {...invalid(Boolean(value) && !confirmed(value, id))}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete="off"
@@ -45,7 +41,7 @@ function ConfirmInput({
         aria-label="Type the id to confirm"
         data-autofocus
       />
-    </label>
+    </Field>
   );
 }
 
@@ -76,9 +72,9 @@ export function DeleteDialog({
     if (result) setFailure(result);
   };
   return (
-    <Modal
+    <Dialog
       title={`${verb} ${noun}`}
-      subtitle={entry.name}
+      description={entry.name}
       icon={<Trash2 size={18} />}
       tone="danger"
       onClose={onClose}
@@ -89,16 +85,17 @@ export function DeleteDialog({
             Recorded in the audit log · <Kbd>⌘</Kbd>
             <Kbd>↵</Kbd>
           </span>
-          <button type="button" className="data-button" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button type="button" className="data-button data-button-danger" disabled={!ready} onClick={submit}>
+          </Button>
+          <Button variant="destructive" disabled={!ready} onClick={submit}>
+            {busy ? <Spinner size={14} /> : null}
             {busy ? `${verb === 'Delete' ? 'Deleting' : `${verb}ing`}…` : `${verb} ${noun}`}
-          </button>
+          </Button>
         </>
       }
     >
-      <p className="data-modal-text">{warning ? `${warning} This cannot be undone.` : 'This cannot be undone.'}</p>
+      <p className="text-muted-foreground">{warning ? `${warning} This cannot be undone.` : 'This cannot be undone.'}</p>
       <div className="data-id-box">
         <code className="data-mono">{entry.id}</code>
         <CopyButton value={entry.id} label="Copy id" />
@@ -112,7 +109,7 @@ export function DeleteDialog({
         <ConfirmInput id={entry.id} verb={`${verb.toLowerCase()} it`} value={typed} onChange={setTyped} />
       </form>
       <ErrorLine failure={failure} />
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -193,12 +190,19 @@ export function EditorDialog({
     }
     setFailure(result);
   };
+  // ⌘/Ctrl+S saves too (the kit dialog submits on ⌘/Ctrl+Enter).
+  const saveKey = (event: KeyboardEvent) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === 's') {
+      event.preventDefault();
+      void save();
+    }
+  };
 
   const title = editing ? `Edit ${request.entry?.name ?? ''}` : `New ${view.noun.one}`;
   return (
-    <Modal
+    <Dialog
       title={title}
-      subtitle={
+      description={
         editing ? (
           <code className="data-mono">{request.entry?.id}</code>
         ) : request.parent ? (
@@ -217,133 +221,117 @@ export function EditorDialog({
             {writeFormat ? <>Format: {writeFormat}</> : <>Saved as text</>} · <Kbd>⌘</Kbd>
             <Kbd>S</Kbd> to save
           </span>
-          <button type="button" className="data-button" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button type="button" className="data-button data-button-primary" disabled={!ready} onClick={save}>
+          </Button>
+          <Button disabled={!ready} onClick={save}>
+            {busy ? <Spinner size={14} /> : null}
             {busy ? 'Saving…' : mustConfirm ? 'Replace' : editing ? 'Save' : 'Create'}
-          </button>
+          </Button>
         </>
       }
     >
-      {!editing && (
-        <label className="data-editor-name">
-          <span className="data-editor-name-prefix">
-            {request.parent ? `${request.parentLabel} /` : 'Name'}
-          </span>
-          <input
-            className={`data-input${nameError ? ' data-input-invalid' : ''}`}
-            value={name}
-            placeholder={spec.namePlaceholder ?? `${view.noun.one} name`}
-            onChange={(e) => setName(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            aria-label="Name"
-            data-autofocus
-          />
-        </label>
-      )}
-      {nameError && <p className="data-field-error">{nameError}</p>}
-      {spec.allowUpload && (
-        <div className="data-segmented" role="tablist" aria-label="Value source">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'write'}
-            className={tab === 'write' ? 'data-segment data-segment-active' : 'data-segment'}
-            onClick={() => setTab('write')}
-          >
-            <Pencil size={13} aria-hidden="true" /> Write
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'upload'}
-            className={tab === 'upload' ? 'data-segment data-segment-active' : 'data-segment'}
-            onClick={() => setTab('upload')}
-          >
-            <FileUp size={13} aria-hidden="true" /> Upload a file
-          </button>
-        </div>
-      )}
-      {tab === 'write' && compact ? (
-        <label className="data-editor-value">
-          <span className="data-confirm-label">Value</span>
-          <span className="data-editor-value-row">
-            <textarea
-              className={`data-input data-editor-textarea${shown ? '' : ' data-editor-textarea-hidden'}`}
-              value={text}
-              rows={3}
-              onChange={(e) => setText(e.target.value)}
+      <div className="space-y-3" onKeyDown={saveKey}>
+        {!editing && (
+          <label className="data-editor-name">
+            <span className="data-editor-name-prefix">{request.parent ? `${request.parentLabel} /` : 'Name'}</span>
+            <Input
+              {...invalid(Boolean(nameError))}
+              value={name}
+              placeholder={spec.namePlaceholder ?? `${view.noun.one} name`}
+              onChange={(e) => setName(e.target.value)}
               autoComplete="off"
               spellCheck={false}
-              aria-label="Value"
-              data-autofocus={editing ? true : undefined}
+              aria-label="Name"
+              data-autofocus
             />
-            {spec.secret && (
-              <button
-                type="button"
-                className="data-icon-button data-icon-button-bordered"
-                aria-label={shown ? 'Hide value' : 'Show value'}
-                title={shown ? 'Hide value' : 'Show value'}
-                onClick={() => setShown(!shown)}
-              >
-                {shown ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}
-              </button>
-            )}
-          </span>
-        </label>
-      ) : tab === 'write' ? (
-        <div className="data-editor-code">
-          <CodeView value={text} language={language} readOnly={false} onChange={setText} />
-        </div>
-      ) : (
-        <label className="data-dropzone">
-          <UploadCloud size={22} aria-hidden="true" />
-          <span>{file ? `${file.name} · ${formatBytes(file.size)}` : 'Choose a file to upload'}</span>
-          <input
-            type="file"
-            className="data-visually-hidden"
-            aria-label="File to upload"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-        </label>
-      )}
-      {valueError && <p className="data-field-error">{valueError}</p>}
-      {asksExpiry && (
-        <div className="data-editor-expiry">
-          <label className="data-confirm-label" htmlFor="data-editor-expiry">
-            Expires after
           </label>
-          <input
-            id="data-editor-expiry"
-            className={`data-input${ttl === null ? ' data-input-invalid' : ''}`}
-            value={ttlAmount}
-            placeholder="never"
-            inputMode="numeric"
-            onChange={(e) => setTtlAmount(e.target.value)}
-            aria-label="Expires after"
+        )}
+        {nameError && <p className="data-field-error">{nameError}</p>}
+        {spec.allowUpload && (
+          <Tabs
+            variant="segmented"
+            label="Value source"
+            className="w-fit"
+            value={tab}
+            onChange={setTab}
+            items={[
+              { id: 'write', label: 'Write', icon: <Pencil size={13} aria-hidden="true" /> },
+              { id: 'upload', label: 'Upload a file', icon: <FileUp size={13} aria-hidden="true" /> },
+            ]}
           />
-          <select
-            className="data-input"
-            value={ttlUnit}
-            onChange={(e) => setTtlUnit(e.target.value as TtlUnit)}
-            aria-label="Expiry unit"
-          >
-            {Object.keys(TTL_UNITS).map((unit) => (
-              <option key={unit} value={unit}>
-                {unit}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-      {ttl === null && <p className="data-field-error">The expiry must be a whole number above zero.</p>}
-      {mustConfirm && (
-        <ConfirmInput id={mustConfirm} verb="replace its value" value={typed} onChange={setTyped} />
-      )}
-      <ErrorLine failure={failure} />
-    </Modal>
+        )}
+        {tab === 'write' && compact ? (
+          <Field label="Value">
+            <span className="data-editor-value-row">
+              <Textarea
+                className={cn('data-editor-textarea', !shown && 'data-editor-textarea-hidden')}
+                value={text}
+                rows={3}
+                onChange={(e) => setText(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                aria-label="Value"
+                data-autofocus={editing ? true : undefined}
+              />
+              {spec.secret && (
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  aria-label={shown ? 'Hide value' : 'Show value'}
+                  title={shown ? 'Hide value' : 'Show value'}
+                  onClick={() => setShown(!shown)}
+                >
+                  {shown ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}
+                </Button>
+              )}
+            </span>
+          </Field>
+        ) : tab === 'write' ? (
+          <div className="data-editor-code">
+            <CodeView value={text} language={language} readOnly={false} onChange={setText} />
+          </div>
+        ) : (
+          <label className="data-dropzone">
+            <UploadCloud size={22} aria-hidden="true" />
+            <span>{file ? `${file.name} · ${formatBytes(file.size)}` : 'Choose a file to upload'}</span>
+            <input
+              type="file"
+              className="sr-only"
+              aria-label="File to upload"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+        )}
+        {valueError && <p className="data-field-error">{valueError}</p>}
+        {asksExpiry && (
+          <div className="data-editor-expiry">
+            <label className="text-xs text-muted-foreground" htmlFor="data-editor-expiry">
+              Expires after
+            </label>
+            <Input
+              id="data-editor-expiry"
+              {...invalid(ttl === null)}
+              value={ttlAmount}
+              placeholder="never"
+              inputMode="numeric"
+              onChange={(e) => setTtlAmount(e.target.value)}
+              aria-label="Expires after"
+            />
+            <Select value={ttlUnit} onChange={(e) => setTtlUnit(e.target.value as TtlUnit)} aria-label="Expiry unit">
+              {Object.keys(TTL_UNITS).map((unit) => (
+                <option key={unit} value={unit}>
+                  {unit}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
+        {ttl === null && <p className="data-field-error">The expiry must be a whole number above zero.</p>}
+        {mustConfirm && <ConfirmInput id={mustConfirm} verb="replace its value" value={typed} onChange={setTyped} />}
+        <ErrorLine failure={failure} />
+      </div>
+    </Dialog>
   );
 }
 
@@ -372,15 +360,15 @@ export function CreateDialog({
     return result.ok;
   };
   return (
-    <Modal
+    <Dialog
       title={view.createLabel ?? `New ${view.noun.one}`}
-      subtitle={parent ? <>in {parentLabel}</> : view.label}
+      description={parent ? <>in {parentLabel}</> : view.label}
       icon={<Plus size={18} />}
       size="lg"
       onClose={onClose}
     >
       {view.create?.({ parent, busy, submit, close: onClose })}
       <ErrorLine failure={failure} />
-    </Modal>
+    </Dialog>
   );
 }

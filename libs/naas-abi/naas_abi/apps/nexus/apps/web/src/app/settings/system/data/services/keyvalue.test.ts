@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement, Fragment, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mount, type Mounted } from '../../system-render';
+import { badgeVariant, mount, type Mounted } from '../../system-render';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
 import { KeyValuePreview, keyDeleteWarning, keyIcon, keyValueView } from './keyvalue';
 import { TtlBadge, keyFamily, keyPrefix, ttlState } from './keyvalue-parts';
@@ -57,8 +57,8 @@ describe('expiry', () => {
   it('reads as no expiry, minutes, the last minute, then expired', () => {
     expect(ttlState(undefined, now)).toEqual({ tone: 'neutral', label: 'no expiry', seconds: null });
     expect(ttlState(at(240), now)).toMatchObject({ tone: 'info', label: 'expires in 4 min' });
-    expect(ttlState(at(42), now)).toMatchObject({ tone: 'warn', label: 'expires in 42 s' });
-    expect(ttlState(at(-1), now)).toMatchObject({ tone: 'danger', label: 'expired' });
+    expect(ttlState(at(42), now)).toMatchObject({ tone: 'warning', label: 'expires in 42 s' });
+    expect(ttlState(at(-1), now)).toMatchObject({ tone: 'destructive', label: 'expired' });
   });
 
   it('counts down live', async () => {
@@ -71,7 +71,7 @@ describe('expiry', () => {
       vi.advanceTimersByTime(10_000);
     });
     expect(mounted.host.textContent).toBe('expires in 55 s');
-    expect(mounted.host.querySelector('.data-badge-warn')).not.toBeNull();
+    expect(badgeVariant(mounted.host.querySelector('.data-keyvalue-ttl > span'))).toBe('warning');
 
     await act(async () => {
       vi.advanceTimersByTime(60_000);

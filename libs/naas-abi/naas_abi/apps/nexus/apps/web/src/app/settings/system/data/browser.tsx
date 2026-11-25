@@ -18,7 +18,14 @@ import {
 import type { Failure } from './data-api';
 import { childId, plural, type Crumb } from './data-model';
 import type { ResourceEntry, ResourceServiceInfo } from './data-types';
-import { Badge, CopyButton, EmptyState, Hint, Kbd, Notice, SkeletonRows } from './data-ui';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Input } from '@/components/ui/input';
+import { Notice } from '@/components/ui/notice';
+import { SearchBox } from '@/components/ui/search-box';
+import { Loading } from '@/components/ui/spinner';
+import { CopyButton, Hint } from './data-ui';
 import type { Column, Level, ServiceView } from './services/types';
 
 function entryIcon(view: ServiceView, entry: ResourceEntry) {
@@ -54,7 +61,7 @@ export function ServiceHeader({
     <header className="data-service-header">
       <div className="data-service-heading">
         {view.readOnly && <Badge>Read-only</Badge>}
-        {caps.reveal && <Badge tone="warn">Masked values</Badge>}
+        {caps.reveal && <Badge variant="warning">Masked values</Badge>}
         {count !== null && (
           <span className="data-muted data-service-count">
             {plural(count, noun.one, noun.many)}
@@ -63,33 +70,33 @@ export function ServiceHeader({
         )}
       </div>
       <div className="data-service-actions">
-        <button type="button" className="data-button" onClick={onRecent}>
+        <Button variant="secondary" size="sm" onClick={onRecent}>
           <History size={14} aria-hidden="true" /> Recent changes
-        </button>
+        </Button>
         <Hint label="Keyboard shortcuts" shortcut="?">
-          <button type="button" className="data-icon-button data-icon-button-bordered" aria-label="Keyboard shortcuts" onClick={onShortcuts}>
+          <Button variant="secondary" size="icon" aria-label="Keyboard shortcuts" onClick={onShortcuts}>
             <Keyboard size={14} aria-hidden="true" />
-          </button>
+          </Button>
         </Hint>
         <Hint label="Refresh" shortcut="R">
-          <button type="button" className="data-icon-button data-icon-button-bordered" aria-label="Refresh" onClick={onRefresh}>
+          <Button variant="secondary" size="icon" aria-label="Refresh" onClick={onRefresh}>
             <RefreshCw size={14} aria-hidden="true" />
-          </button>
+          </Button>
         </Hint>
         {!onCreate && createBlocked && (
           <Hint label={createBlocked}>
             <span className="data-disabled-wrap">
-              <button type="button" className="data-button data-button-primary" disabled>
+              <Button size="sm" disabled>
                 <Plus size={14} aria-hidden="true" /> {view.createLabel ?? `New ${view.noun.one}`}
-              </button>
+              </Button>
             </span>
           </Hint>
         )}
         {onCreate && (
           <Hint label={view.createLabel ?? `New ${view.noun.one}`} shortcut="N">
-            <button type="button" className="data-button data-button-primary" onClick={onCreate}>
+            <Button size="sm" onClick={onCreate}>
               <Plus size={14} aria-hidden="true" /> {view.createLabel ?? `New ${view.noun.one}`}
-            </button>
+            </Button>
           </Hint>
         )}
       </div>
@@ -120,9 +127,9 @@ export function Toolbar({
     <div className="data-toolbar">
       {path.length > 1 && (
         <Hint label="Up one level" shortcut="⌫">
-          <button type="button" className="data-icon-button" aria-label="Up one level" onClick={onUp}>
+          <Button variant="ghost" size="icon" aria-label="Up one level" onClick={onUp}>
             <CornerLeftUp size={14} aria-hidden="true" />
-          </button>
+          </Button>
         </Hint>
       )}
       <nav className="data-crumbs" aria-label="Path">
@@ -144,24 +151,18 @@ export function Toolbar({
           );
         })}
       </nav>
-      <label className="data-search">
-        <Search size={14} aria-hidden="true" />
-        <input
-          ref={searchRef}
-          className="data-search-input"
-          placeholder={placeholder}
-          aria-label="Search"
-          value={search}
-          onChange={(e) => onSearch(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              onSearch('');
-              e.currentTarget.blur();
-            }
-          }}
-        />
-        {!search && <Kbd>/</Kbd>}
-      </label>
+      <SearchBox
+        ref={searchRef}
+        size="sm"
+        className="data-search"
+        placeholder={placeholder}
+        label="Search"
+        value={search}
+        onChange={onSearch}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') e.currentTarget.blur();
+        }}
+      />
     </div>
   );
 }
@@ -192,15 +193,16 @@ function RowActions({ entry, onDelete }: { entry: ResourceEntry; onDelete: (entr
     <span className="data-row-actions" onClick={(e) => e.stopPropagation()}>
       <CopyButton value={entry.id} label="Copy id" />
       {entry.kind === 'container' && entry.actions.includes('delete') && (
-        <button
-          type="button"
-          className="data-icon-button data-icon-button-danger"
+        <Button
+          variant="destructive-ghost"
+          size="icon"
+          className="h-7 w-7"
           aria-label={`Delete ${entry.name}`}
           title={`Delete ${entry.name}`}
           onClick={() => onDelete(entry)}
         >
           <Trash2 size={14} aria-hidden="true" />
-        </button>
+        </Button>
       )}
     </span>
   );
@@ -346,9 +348,9 @@ function LoadMore({ onVisible, loading }: { onVisible: () => void; loading: bool
   }, [onVisible]);
   return (
     <div ref={ref} className="data-load-more">
-      <button type="button" className="data-button" onClick={onVisible} disabled={loading}>
+      <Button variant="secondary" size="sm" onClick={onVisible} disabled={loading}>
         {loading ? 'Loading…' : 'Load more'}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -396,26 +398,27 @@ export function Browser({
   const dropTarget = onDrop && canCreate;
 
   let body: ReactNode;
-  if (entries === null) body = <SkeletonRows />;
+  if (entries === null) body = <Loading />;
   else if (entries.length === 0 && failure === null && listable) {
     body = search ? (
-      <EmptyState icon={Search} title="No matches">
-        Nothing loaded matches “{search}”.{hasMore ? ' Load more entries to search further.' : ''}
-      </EmptyState>
+      <EmptyState
+        icon={<Search size={22} strokeWidth={1.5} />}
+        title="No matches"
+        description={`Nothing loaded matches “${search}”.${hasMore ? ' Load more entries to search further.' : ''}`}
+      />
     ) : (
       <EmptyState
-        icon={view.icon}
+        icon={<view.icon size={22} strokeWidth={1.5} />}
         title={level.emptyTitle ?? `No ${(level.noun ?? view.noun).many} yet`}
+        description={level.emptyText}
         action={
           onCreate && (
-            <button type="button" className="data-button data-button-primary" onClick={onCreate}>
+            <Button size="sm" onClick={onCreate}>
               <Plus size={14} aria-hidden="true" /> {view.createLabel ?? `New ${view.noun.one}`}
-            </button>
+            </Button>
           )
         }
-      >
-        {level.emptyText}
-      </EmptyState>
+      />
     );
   } else if (entries.length === 0) body = null;
   else if (level.layout === 'cards') {
@@ -465,7 +468,7 @@ export function Browser({
       }}
     >
       {failure && (
-        <Notice tone="danger">
+        <Notice tone="error" className="data-level-notice">
           {failure.source === 'audit' ? 'Audit log: ' : ''}
           {failure.reason}
         </Notice>
@@ -483,8 +486,7 @@ export function Browser({
             This service cannot list these {(level.noun ?? view.noun).many}. Open one by its id.
           </p>
           <div className="data-lookup-row">
-            <input
-              className="data-input"
+            <Input
               aria-label="Id to open"
               placeholder="Id"
               value={lookup}
@@ -492,9 +494,9 @@ export function Browser({
               autoComplete="off"
               spellCheck={false}
             />
-            <button type="submit" className="data-button" disabled={!lookup.trim()}>
+            <Button type="submit" variant="secondary" disabled={!lookup.trim()}>
               Open
-            </button>
+            </Button>
           </div>
         </form>
       )}

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Settings2 } from 'lucide-react';
+import { Tabs } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import {
   GRAPH_PARAM_DEFS,
@@ -82,25 +83,13 @@ export function EventGraphParamsPanel({
 
       {open && (
         <div className="absolute bottom-full right-0 z-30 mb-1 max-h-[70vh] w-80 overflow-y-auto rounded-lg border bg-background p-3 shadow-lg">
-          <div role="tablist" className="flex gap-1 rounded-md border p-0.5">
-            {GRAPH_VIEWS.map((view) => (
-              <button
-                key={view}
-                type="button"
-                role="tab"
-                aria-selected={params.view === view}
-                onClick={() => onSwitchView(view)}
-                className={cn(
-                  'flex-1 rounded px-2 py-1 text-[11px]',
-                  params.view === view
-                    ? 'bg-workspace-accent-10 font-medium text-workspace-accent'
-                    : 'text-muted-foreground hover:bg-workspace-accent-10',
-                )}
-              >
-                {GRAPH_VIEW_LABELS[view]}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            variant="segmented"
+            label="Graph view"
+            value={params.view as GraphView}
+            onChange={onSwitchView}
+            items={GRAPH_VIEWS.map((view) => ({ id: view, label: GRAPH_VIEW_LABELS[view] }))}
+          />
 
           <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
             {params.view === '3d'

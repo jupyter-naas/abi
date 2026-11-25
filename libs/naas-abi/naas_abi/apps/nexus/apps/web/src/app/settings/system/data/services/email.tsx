@@ -6,7 +6,12 @@ import { useState } from 'react';
 import { Mail, Paperclip, Send } from 'lucide-react';
 import { formatBytes } from '../data-model';
 import type { ResourceDetail } from '../data-types';
-import { Badge, Kbd, RelativeTime } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input, Textarea } from '@/components/ui/input';
+import { Tabs } from '@/components/ui/tabs';
+import { Kbd, RelativeTime } from '../data-ui';
 import { EmailView } from '../viewers/email-view';
 import type { CreateProps, ServiceView } from './types';
 
@@ -82,6 +87,7 @@ export function Composer({ busy, submit, close }: CreateProps) {
   };
 
   const show = (error: string | null) => (tried && error ? <p className="data-field-error">{error}</p> : null);
+  const invalid = (error: string | null) => (tried && error ? { 'aria-invalid': true, className: 'border-destructive' } : {});
 
   return (
     <form
@@ -99,8 +105,8 @@ export function Composer({ busy, submit, close }: CreateProps) {
     >
       <label className="data-mail-field">
         <span className="data-mail-label">To</span>
-        <input
-          className={`data-input${tried && errors.to ? ' data-input-invalid' : ''}`}
+        <Input
+          {...invalid(errors.to)}
           value={to}
           onChange={(e) => setTo(e.target.value)}
           placeholder="ops@example.com, cto@example.com"
@@ -112,8 +118,8 @@ export function Composer({ busy, submit, close }: CreateProps) {
       {show(errors.to)}
       <label className="data-mail-field">
         <span className="data-mail-label">Cc</span>
-        <input
-          className={`data-input${tried && errors.cc ? ' data-input-invalid' : ''}`}
+        <Input
+          {...invalid(errors.cc)}
           value={cc}
           onChange={(e) => setCc(e.target.value)}
           placeholder="Optional"
@@ -124,8 +130,8 @@ export function Composer({ busy, submit, close }: CreateProps) {
       {show(errors.cc)}
       <label className="data-mail-field">
         <span className="data-mail-label">Subject</span>
-        <input
-          className={`data-input${tried && errors.subject ? ' data-input-invalid' : ''}`}
+        <Input
+          {...invalid(errors.subject)}
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
           aria-label="Subject"
@@ -133,45 +139,33 @@ export function Composer({ busy, submit, close }: CreateProps) {
         />
       </label>
       {show(errors.subject)}
-      <textarea
-        className="data-input data-mail-body"
+      <Textarea
+        className="data-mail-body"
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="Write your message…"
         aria-label="Message"
         rows={9}
       />
-      <label className="data-mail-toggle">
-        <input type="checkbox" checked={withHtml} onChange={(e) => setWithHtml(e.target.checked)} />
-        Also send an HTML version
-      </label>
+      <Checkbox className="w-fit" checked={withHtml} onCheckedChange={setWithHtml} label="Also send an HTML version" />
       {withHtml && (
         <div className="data-mail-html">
-          <div className="data-segmented" role="tablist" aria-label="HTML version">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!previewHtml}
-              className={!previewHtml ? 'data-segment data-segment-active' : 'data-segment'}
-              onClick={() => setPreviewHtml(false)}
-            >
-              HTML
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={previewHtml}
-              className={previewHtml ? 'data-segment data-segment-active' : 'data-segment'}
-              onClick={() => setPreviewHtml(true)}
-            >
-              Preview
-            </button>
-          </div>
+          <Tabs
+            variant="segmented"
+            label="HTML version"
+            className="w-fit"
+            value={previewHtml ? 'preview' : 'html'}
+            onChange={(id) => setPreviewHtml(id === 'preview')}
+            items={[
+              { id: 'html', label: 'HTML' },
+              { id: 'preview', label: 'Preview' },
+            ]}
+          />
           {previewHtml ? (
             <iframe className="data-mail-html-preview" title="HTML preview" sandbox="" srcDoc={html} />
           ) : (
-            <textarea
-              className="data-input data-mail-body data-mail-html-source"
+            <Textarea
+              className="data-mail-body data-mail-html-source"
               value={html}
               onChange={(e) => setHtml(e.target.value)}
               placeholder="<p>Hello</p>"
@@ -188,12 +182,12 @@ export function Composer({ busy, submit, close }: CreateProps) {
           Sent from the platform sender · recorded in the audit log · <Kbd>⌘</Kbd>
           <Kbd>↵</Kbd>
         </span>
-        <button type="button" className="data-button" onClick={close}>
+        <Button variant="secondary" onClick={close}>
           Cancel
-        </button>
-        <button type="submit" className="data-button data-button-primary" disabled={busy}>
+        </Button>
+        <Button type="submit" disabled={busy}>
           <Send size={14} aria-hidden="true" /> {busy ? 'Sending…' : 'Send'}
-        </button>
+        </Button>
       </footer>
     </form>
   );

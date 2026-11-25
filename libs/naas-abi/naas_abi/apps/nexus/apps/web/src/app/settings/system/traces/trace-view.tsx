@@ -5,7 +5,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ExternalLink, Maximize2, Waypoints } from 'lucide-react';
 import type { Failure } from '../data/data-api';
 import { absoluteTime } from '../data/data-model';
-import { Badge, CopyButton, EmptyState, RelativeTime, SkeletonRows } from '../data/data-ui';
+import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { CopyButton, RelativeTime } from '../data/data-ui';
 import type { TracesApi } from './traces-api';
 import { buildRows, formatSpanMs, serviceColor } from './traces-model';
 import type { Trace } from './traces-types';
@@ -89,7 +92,7 @@ export function TraceHeader({
             <span className="trace-service-dot" style={{ backgroundColor: serviceColor(s.name) }} aria-hidden="true" />
             {s.name}
             <span className="data-muted">{s.spans}</span>
-            {s.errors > 0 && <Badge tone="danger">{s.errors} err</Badge>}
+            {s.errors > 0 && <Badge variant="destructive">{s.errors} err</Badge>}
           </span>
         ))}
         <span className="data-spacer" />
@@ -141,14 +144,18 @@ export function TraceView({
 
   if (failure) {
     return (
-      <EmptyState icon={failure.status === 404 ? Waypoints : AlertTriangle} title={failure.status === 404 ? 'Trace not found' : 'Could not load the trace'}>
-        {failure.status === 404
-          ? 'It may not be exported yet (spans arrive within a second or two), or the tracing backend no longer keeps it.'
-          : failure.reason}
-      </EmptyState>
+      <EmptyState
+        icon={failure.status === 404 ? <Waypoints size={22} strokeWidth={1.5} /> : <AlertTriangle size={22} strokeWidth={1.5} />}
+        title={failure.status === 404 ? 'Trace not found' : 'Could not load the trace'}
+        description={
+          failure.status === 404
+            ? 'It may not be exported yet (spans arrive within a second or two), or the tracing backend no longer keeps it.'
+            : failure.reason
+        }
+      />
     );
   }
-  if (!trace) return <SkeletonRows rows={5} />;
+  if (!trace) return <Loading />;
 
   return (
     <div className={compact ? 'trace-view trace-view-compact' : 'trace-view'}>

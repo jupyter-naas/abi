@@ -3,6 +3,8 @@
 /** The launch form of a workflow: one input per field of its input schema (the logic is schema-form.ts). */
 import { useId } from 'react';
 import { Plus, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input, Select } from '@/components/ui/input';
 import {
   clearDrafts,
   edit,
@@ -46,7 +48,8 @@ function Control({
 }) {
   const id = useId();
   const { state, onState } = props;
-  const className = `data-input${invalid ? ' data-input-invalid' : ''}`;
+  const className = invalid ? 'border-destructive' : undefined;
+  const ariaInvalid = invalid || undefined;
   if (field.kind === 'boolean') {
     if (field.required || field.default !== undefined) {
       return (
@@ -61,9 +64,10 @@ function Control({
       );
     }
     return (
-      <select
+      <Select
         id={id}
         className={className}
+        aria-invalid={ariaInvalid}
         aria-label={label}
         value={value === undefined ? '' : String(value)}
         onChange={(e) => onState(edit(state, path, e.target.value === '' ? undefined : e.target.value === 'true'))}
@@ -71,14 +75,15 @@ function Control({
         <option value="">Not set</option>
         <option value="true">true</option>
         <option value="false">false</option>
-      </select>
+      </Select>
     );
   }
   if (field.kind === 'enum') {
     return (
-      <select
+      <Select
         id={id}
         className={className}
+        aria-invalid={ariaInvalid}
         aria-label={label}
         value={value === undefined ? '' : optionText(value as Scalar)}
         onChange={(e) => onState(edit(state, path, pickOption(field.options, e.target.value)))}
@@ -94,16 +99,17 @@ function Control({
             {optionText(o)}
           </option>
         ))}
-      </select>
+      </Select>
     );
   }
   if (field.kind === 'number' || field.kind === 'integer') {
     const key = pathPointer(path);
     const shown = state.drafts[key] ?? (typeof value === 'number' ? String(value) : '');
     return (
-      <input
+      <Input
         id={id}
         className={className}
+        aria-invalid={ariaInvalid}
         aria-label={label}
         inputMode={field.kind === 'integer' ? 'numeric' : 'decimal'}
         autoComplete="off"
@@ -113,9 +119,10 @@ function Control({
     );
   }
   return (
-    <input
+    <Input
       id={id}
       className={className}
+      aria-invalid={ariaInvalid}
       aria-label={label}
       autoComplete="off"
       value={typeof value === 'string' ? value : ''}
@@ -147,24 +154,25 @@ function ListInput({ field, path, props }: { field: FormField; path: Path; props
               />
               {problem && <p className="data-field-error">{problem.message}</p>}
             </div>
-            <button
-              type="button"
-              className="data-icon-button"
+            <Button
+              variant="ghost"
+              size="icon"
               aria-label={`Remove ${field.label} ${i + 1}`}
               onClick={() => onState(clearDrafts(edit(state, at, undefined), path))}
             >
               <X size={14} aria-hidden="true" />
-            </button>
+            </Button>
           </div>
         );
       })}
-      <button
-        type="button"
-        className="data-button sf-add"
+      <Button
+        variant="secondary"
+        size="sm"
+        className="sf-add"
         onClick={() => onState(clearDrafts(edit(state, path, [...items, item.kind === 'boolean' ? false : item.kind === 'enum' ? item.options[0] : item.kind === 'string' ? '' : null]), path))}
       >
         <Plus size={13} aria-hidden="true" /> Add {field.label.toLowerCase()}
-      </button>
+      </Button>
     </div>
   );
 }

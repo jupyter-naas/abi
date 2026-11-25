@@ -11,6 +11,10 @@ import type { Failure } from '../data/data-api';
 import type { JobsOverview, JobView, RunDetail, RunStep } from './jobs-types';
 import { JobsTab } from './jobs';
 
+// Toasts go to the app's one stack (ui/toast): the test checks what was announced.
+const toast = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }));
+vi.mock('@/components/ui/toast', () => ({ toast }));
+
 let search = '';
 const replace = vi.fn();
 const push = vi.fn();
@@ -182,7 +186,7 @@ describe('JobsTab', () => {
 
     expect(api.trigger).toHaveBeenCalledWith('ops.reports', 'digest', {});
     expect(q('[aria-label="Selected run"]')?.textContent).toContain('Queued');
-    expect(q('.data-toasts')?.textContent).toContain('Started digest');
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Started digest' }));
 
     details['ops.reports/digest:9'] = {
       ...run({ key: 'ops.reports/digest:9', run_id: 'digest:9', status: 'RUNNING', finished_at: null, duration_ms: null }),
@@ -208,7 +212,7 @@ describe('JobsTab', () => {
     await mounted!.flush();
 
     expect(api.cancel).toHaveBeenCalledWith('ops.billing', 'sync:4');
-    expect(q('.data-toasts')?.textContent).toContain('Cancellation sent');
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining('Cancellation sent') }));
   });
 
   it('filters the run feed by status', async () => {

@@ -1,6 +1,8 @@
 'use client';
 import { useMemo, type CSSProperties } from 'react';
-import { ArrowDownLeft, ArrowUpRight, Layers, Search } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Layers } from 'lucide-react';
+import { SearchBox } from '@/components/ui/search-box';
+import { Tabs } from '@/components/ui/tabs';
 import { architecture } from './architecture-model';
 import { useInfrastructure } from './infrastructure-store';
 import './infrastructure.css';
@@ -16,11 +18,11 @@ export function InfrastructureSection() {
   const outbound = architecture.edges.filter(e => e.source === componentId);
   const inbound = architecture.edges.filter(e => e.target === componentId);
   return <div className="infrastructure-sidebar">
-    <div className="infrastructure-sidebar-tabs"><button aria-pressed={tab === 'layers'} onClick={() => setTab('layers')}>Architecture</button><button aria-pressed={tab === 'inspector'} onClick={() => setTab('inspector')}>Inspector</button></div>
+    <Tabs label="Sidebar" className="mb-3" value={tab} onChange={setTab} items={[{ id: 'layers', label: 'Architecture' }, { id: 'inspector', label: 'Inspector' }]} />
     {tab === 'layers' ? <>
       <button className={`infrastructure-tree-row ${!layerId ? 'is-active' : ''}`} onClick={reset}><Layers size={14} /><span>Entire system</span><small>{architecture.components.length}</small></button>
       {architecture.layers.map((item) => <button key={item.id} className={`infrastructure-tree-row ${layerId === item.id ? 'is-active' : ''}`} aria-pressed={layerId === item.id} onClick={() => select(item.id)}><span className="infrastructure-layer-dot" style={{ '--layer-color': item.color } as CSSProperties} /><span>{item.label}</span><small>{architecture.components.filter(c => c.layer === item.id).length}</small></button>)}
-      <label className="infrastructure-search"><Search size={14} /><input aria-label="Search components" placeholder="Find a component…" value={search} onChange={e => setSearch(e.target.value)} /></label>
+      <SearchBox size="sm" className="mx-1 mb-1.5 mt-4" label="Search components" placeholder="Find a component…" value={search} onChange={setSearch} />
       <div className="infrastructure-component-list">{filtered.map(c => <button key={c.id} onClick={() => select(c.layer, c.id)}><span><strong>{c.label}</strong><small>{c.files} files</small></span><ArrowUpRight size={13} /></button>)}{!filtered.length && <p>No matching components.</p>}</div>
     </> : <div className="infrastructure-inspector">        <div className="infrastructure-inspector-title" aria-live="polite"><div className="infrastructure-eyebrow">{component ? 'COMPONENT' : layer ? 'LAYER OVERVIEW' : 'SYSTEM OVERVIEW'}</div><h2>{component?.label ?? layer?.label ?? 'ABI architecture'}</h2><p>{component ? component.id : layer?.description ?? 'Five logical layers, from applications to infrastructure adapters. Select a layer to bring its plane into focus.'}</p></div>
         <div className="infrastructure-metrics">{([['Source files', sum('files')], ['Lines of code', sum('lines')], ['Classes', sum('classes')], ['Functions', sum('functions')], ['Test files', sum('tests')], ['Components', selectedComponents.length]] as const).map(([label, value]) => <div key={label}><span>{label}</span><strong>{number(value)}</strong></div>)}</div>
@@ -31,7 +33,7 @@ export function InfrastructureSection() {
           <h3><ArrowDownLeft size={14} /> Used by <span>{inbound.length}</span></h3>{inbound.length ? inbound.map(edge => <button key={edge.source} onClick={() => select(componentMap.get(edge.source)!.layer, edge.source)}><span>{componentMap.get(edge.source)!.label}<small>{edge.count} extracted relationships</small></span><ArrowUpRight size={14} /></button>) : <p>No incoming dependencies resolved.</p>}</div>
           <details className="infrastructure-files"><summary>Source files ({component.sourcePaths.length})</summary>{component.sourcePaths.map(path => <code key={path}>{path}</code>)}</details>
         </> : <>
-          <label className="infrastructure-search"><Search size={15} /><input aria-label="Search components" placeholder="Find a component…" value={search} onChange={e => setSearch(e.target.value)} /></label>
+          <SearchBox size="sm" className="mx-1 mb-1.5 mt-4" label="Search components" placeholder="Find a component…" value={search} onChange={setSearch} />
           <div className="infrastructure-component-list">{filtered.map(c => <button key={c.id} onClick={() => select(c.layer, c.id)}><span><strong>{c.label}</strong><small>{c.files} files · {c.functions} functions</small></span><ArrowUpRight size={14} /></button>)}{!filtered.length && <p>No components match “{search}”.</p>}</div>
         </>}</div>}
     <details className="infrastructure-about"><summary>About this map</summary><p>{architecture.extractor} · {architecture.revision}</p><p>{architecture.scope}</p><p>{architecture.edges.length} resolved component dependencies. Dynamic wiring may be absent.</p></details>

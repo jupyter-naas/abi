@@ -5,8 +5,11 @@ import { useEffect, useState } from 'react';
 import { History, type LucideIcon } from 'lucide-react';
 import type { DataApi, Failure } from './data-api';
 import type { AuditEntry } from './data-types';
-import { Avatar, EmptyState, Notice, RelativeTime, SkeletonRows, StatusPill } from './data-ui';
-import { Modal } from './modal';
+import { Dialog } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Notice } from '@/components/ui/notice';
+import { Loading } from '@/components/ui/spinner';
+import { Avatar, RelativeTime, StatusPill } from './data-ui';
 import { groupHistory } from './inspector';
 import { SERVICE_ICONS } from '../../lib/nav';
 import { SERVICE_PAGES } from '../../lib/service-pages';
@@ -46,13 +49,15 @@ export function RecentChanges({
   }, [api]);
   const grouped = entries ? groupHistory(entries) : null;
   return (
-    <Modal title="Recent changes" subtitle="Changes and reveals made in any service, from Platform Settings" icon={<History size={18} />} size="lg" onClose={onClose}>
-      {failure && <Notice tone="danger">{failure.reason}</Notice>}
-      {!grouped && !failure && <SkeletonRows rows={5} />}
+    <Dialog title="Recent changes" description="Changes and reveals made in any service, from Platform Settings" icon={<History size={18} />} size="lg" onClose={onClose}>
+      {failure && <Notice tone="error">{failure.reason}</Notice>}
+      {!grouped && !failure && <Loading />}
       {grouped && grouped.length === 0 && (
-        <EmptyState icon={History} title="Nothing yet">
-          Every change and reveal made on a service&apos;s page shows up here.
-        </EmptyState>
+        <EmptyState
+          icon={<History size={22} strokeWidth={1.5} />}
+          title="Nothing yet"
+          description="Every change and reveal made on a service's page shows up here."
+        />
       )}
       {grouped && grouped.length > 0 && (
         <ol className="data-history data-history-wide">
@@ -72,7 +77,7 @@ export function RecentChanges({
                     >
                       {e.resource_id}
                     </button>
-                    {e.outcome === 'failed' && <StatusPill tone="danger" label="failed" />}
+                    {e.outcome === 'failed' && <StatusPill tone="destructive" label="failed" />}
                   </p>
                   <p className="data-history-meta">
                     <Icon size={12} aria-hidden="true" /> {view.label} · <RelativeTime iso={e.at} />
@@ -83,6 +88,6 @@ export function RecentChanges({
           })}
         </ol>
       )}
-    </Modal>
+    </Dialog>
   );
 }

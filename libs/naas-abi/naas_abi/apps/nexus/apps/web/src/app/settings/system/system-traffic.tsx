@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Select } from '@/components/ui/input';
+import { SearchBox } from '@/components/ui/search-box';
 import { formatBytes, formatMs } from './system-format';
 import type { Tone } from './system-model';
 import {
@@ -17,7 +22,7 @@ import {
 import { loadSystem } from './system-api';
 import { streamTraffic } from './system-traffic-stream';
 import type { TelemetryInfo } from './system-types';
-import { Section, SourceNote, Status } from './system-ui';
+import { SourceNote, Status } from './system-ui';
 import { systemTracePath } from './system-tabs';
 
 const KINDS = ['all', 'service', 'transfer', 'model', 'discovery', 'agent', 'job', 'event'];
@@ -82,8 +87,8 @@ export function TrafficView({
   return (
     <>
       <div className="system-traffic-filters">
-        <select
-          className="system-input"
+        <Select
+          className="w-auto"
           value={filters.kind}
           aria-label="Kind"
           onChange={(e) => onFilters({ ...filters, kind: e.target.value })}
@@ -91,24 +96,21 @@ export function TrafficView({
           {KINDS.map((kind) => (
             <option key={kind} value={kind}>{kind === 'all' ? 'All kinds' : kind}</option>
           ))}
-        </select>
-        <input
-          className="system-input system-input-grow"
+        </Select>
+        <SearchBox
+          className="flex-1"
           placeholder="Filter by subject, service, caller, error, trace…"
           value={filters.text}
-          onChange={(e) => onFilters({ ...filters, text: e.target.value })}
+          onChange={(text) => onFilters({ ...filters, text })}
         />
-        <label className="system-checkbox">
-          <input
-            type="checkbox"
-            checked={filters.errorsOnly}
-            onChange={(e) => onFilters({ ...filters, errorsOnly: e.target.checked })}
-          />
-          Errors only
-        </label>
+        <Checkbox
+          label="Errors only"
+          checked={filters.errorsOnly}
+          onCheckedChange={(errorsOnly) => onFilters({ ...filters, errorsOnly })}
+        />
       </div>
 
-      <Section title="By service" subtitle={`${shown.length} calls in view`}>
+      <Card title="By service" description={`${shown.length} calls in view`}>
         {summary.length === 0 ? (
           <p className="system-empty">Nothing yet.</p>
         ) : (
@@ -139,9 +141,9 @@ export function TrafficView({
             </table>
           </div>
         )}
-      </Section>
+      </Card>
 
-      <Section title="Recent calls" subtitle="Newest first.">
+      <Card title="Recent calls" description="Newest first.">
         {shown.length === 0 ? (
           <p className="system-empty">No calls match.</p>
         ) : (
@@ -182,7 +184,7 @@ export function TrafficView({
             </table>
           </div>
         )}
-      </Section>
+      </Card>
     </>
   );
 }
@@ -261,14 +263,14 @@ export function SystemTraffic() {
     <div className="system-tab-body">
       <div className="system-traffic-bar">
         {running ? (
-          <button type="button" className="system-button" onClick={stop}>Stop</button>
+          <Button variant="secondary" size="sm" onClick={stop}>Stop</Button>
         ) : (
-          <button type="button" className="system-button system-button-primary" onClick={start}>Start live traffic</button>
+          <Button size="sm" onClick={start}>Start live traffic</Button>
         )}
-        <button type="button" className="system-button" disabled={!running} onClick={() => setPaused((p) => !p)}>
+        <Button variant="secondary" size="sm" disabled={!running} onClick={() => setPaused((p) => !p)}>
           {paused ? 'Resume' : 'Pause'}
-        </button>
-        <button type="button" className="system-button" onClick={() => setEvents([])}>Clear</button>
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => setEvents([])}>Clear</Button>
         <span className="system-traffic-state">
           {stream.state === 'live' && <Status tone="ok" label={paused ? `${stream.label} (paused)` : stream.label} />}
           {stream.state === 'connecting' && <Status tone="warn" label="Connecting…" />}

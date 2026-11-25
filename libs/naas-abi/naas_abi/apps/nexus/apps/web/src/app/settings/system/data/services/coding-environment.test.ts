@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { createElement, type ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { mount, type Mounted } from '../../system-render';
+import { badgeVariant, mount, type Mounted } from '../../system-render';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
 import { codingEnvironmentView } from './coding-environment';
 
@@ -52,7 +52,7 @@ describe('coding environment view', () => {
 
     expect(host.textContent).toContain('ada@example.com');
     expect(host.textContent).toContain('Agent ready');
-    expect(host.querySelector('.data-pill-success')?.textContent).toContain('running');
+    expect([...host.querySelectorAll('.data-pill')].find((p) => badgeVariant(p) === 'success')?.textContent).toContain('running');
   });
 
   it('lists templates read-only with their active version', async () => {

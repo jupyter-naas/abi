@@ -2,7 +2,10 @@
 
 /** One span: timing, ids, attributes by namespace, events, resource and links. */
 import { AlertTriangle, ArrowUpRight, X } from 'lucide-react';
-import { Badge, CopyButton, Hint, Notice } from '../data/data-ui';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
+import { CopyButton, Hint } from '../data/data-ui';
 import { formatSpanMs, groupAttributes, selfTime, serviceColor } from './traces-model';
 import type { Scalar, Span, Trace } from './traces-types';
 
@@ -62,24 +65,23 @@ export function SpanDetail({
             {span.service}
             {span.kind && <Badge>{span.kind}</Badge>}
             {span.status === 'error' ? (
-              <Badge tone="danger">error</Badge>
+              <Badge variant="destructive">error</Badge>
             ) : span.status === 'ok' ? (
-              <Badge tone="success">ok</Badge>
+              <Badge variant="success">ok</Badge>
             ) : null}
           </p>
         </div>
         {onClose && (
           <Hint label="Close">
-            <button type="button" className="data-icon-button" aria-label="Close span" onClick={onClose}>
+            <Button variant="ghost" size="icon" aria-label="Close span" onClick={onClose}>
               <X size={15} aria-hidden="true" />
-            </button>
+            </Button>
           </Hint>
         )}
       </header>
 
       {span.status === 'error' && span.status_message && (
-        <Notice tone="danger">
-          <AlertTriangle size={14} aria-hidden="true" />
+        <Notice tone="error" icon={<AlertTriangle size={14} aria-hidden="true" />}>
           <span className="span-error">{span.status_message}</span>
         </Notice>
       )}

@@ -1,46 +1,27 @@
 'use client';
 
-/** Small building blocks shared by every service view of the data explorer. */
+/**
+ * What the data explorer adds to the kit (`components/ui`): a status pill, a keyboard key,
+ * a tooltip, a copy button, relative times, an avatar and a property row. Badges, notices,
+ * empty states, dialogs and toasts come from the kit.
+ */
 import { useEffect, useState, type ReactNode } from 'react';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { Check, Copy, type LucideIcon } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { absoluteTime, initials, relativeTime } from './data-model';
 
-export type Tone = 'neutral' | 'accent' | 'success' | 'warn' | 'danger' | 'info';
+/** The kit's badge variants (``ui/badge``), used for every status tone of the explorer. */
+export type Tone = 'neutral' | 'primary' | 'success' | 'warning' | 'destructive' | 'info';
 
-export function Badge({
-  children,
-  tone = 'neutral',
-  mono = false,
-  title,
-}: {
-  children: ReactNode;
-  tone?: Tone;
-  mono?: boolean;
-  title?: string;
-}) {
-  return (
-    <span className={`data-badge data-badge-${tone}${mono ? ' data-badge-mono' : ''}`} title={title}>
-      {children}
-    </span>
-  );
-}
-
+/** A kit badge led by a status dot (pulsing while something runs). */
 export function StatusPill({ tone, label, pulse = false }: { tone: Tone; label: string; pulse?: boolean }) {
   return (
-    <span className={`data-pill data-pill-${tone}`}>
-      <span className={pulse ? 'data-pill-dot data-pill-dot-pulse' : 'data-pill-dot'} aria-hidden="true" />
+    <Badge variant={tone} className="data-pill">
+      <span className={`data-pill-dot${pulse ? ' data-pill-dot-pulse' : ''}`} aria-hidden="true" />
       {label}
-    </span>
-  );
-}
-
-export function IconTile({ icon: Icon, size = 'md' }: { icon: LucideIcon; size?: 'sm' | 'md' | 'lg' }) {
-  const px = size === 'lg' ? 20 : size === 'sm' ? 14 : 16;
-  return (
-    <span className={`data-icon-tile data-icon-tile-${size}`} aria-hidden="true">
-      <Icon size={px} strokeWidth={1.75} />
-    </span>
+    </Badge>
   );
 }
 
@@ -80,9 +61,10 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
     return () => window.clearTimeout(timer);
   }, [done]);
   return (
-    <button
-      type="button"
-      className="data-icon-button"
+    <Button
+      variant="ghost"
+      size="icon"
+      className="data-copy-button h-7 w-7"
       aria-label={done ? 'Copied' : label}
       title={done ? 'Copied' : label}
       onClick={(event) => {
@@ -91,7 +73,7 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
       }}
     >
       {done ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-    </button>
+    </Button>
   );
 }
 
@@ -123,56 +105,12 @@ export function Avatar({ name }: { name: string }) {
   );
 }
 
-export function EmptyState({
-  icon: Icon,
-  title,
-  children,
-  action,
-}: {
-  icon: LucideIcon;
-  title: string;
-  children?: ReactNode;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="data-empty" role="status">
-      <span className="data-empty-icon" aria-hidden="true">
-        <Icon size={22} strokeWidth={1.5} />
-      </span>
-      <p className="data-empty-title">{title}</p>
-      {children && <p className="data-empty-text">{children}</p>}
-      {action && <div className="data-empty-action">{action}</div>}
-    </div>
-  );
-}
-
-export function SkeletonRows({ rows = 6 }: { rows?: number }) {
-  return (
-    <div className="data-skeleton" aria-busy="true" aria-label="Loading">
-      {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="data-skeleton-row">
-          <span className="data-skeleton-block data-skeleton-icon" />
-          <span className="data-skeleton-block" style={{ width: `${40 + ((i * 17) % 35)}%` }} />
-          <span className="data-skeleton-block data-skeleton-meta" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export function Field({ label, children }: { label: string; children: ReactNode }) {
+/** One label / value row of a property list (``<dl>``). Not a form field: see ``ui/field``. */
+export function Property({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="data-field">
       <dt className="data-field-label">{label}</dt>
       <dd className="data-field-value">{children}</dd>
-    </div>
-  );
-}
-
-export function Notice({ tone = 'neutral', children }: { tone?: Tone; children: ReactNode }) {
-  return (
-    <div className={`data-notice data-notice-${tone}`} role="status">
-      {children}
     </div>
   );
 }
