@@ -953,8 +953,10 @@ class Holdings:
         ``statements`` at ``scope`` (None: unscoped) the giver does not hold.
         For a sub-policy, ``parents`` is its chain, each policy's statements,
         nearest first: only what an Allow of each also names for the action is
-        granted. Its searches share one budget (``CALL_BUDGET``): past it, what
-        is left is not proven, and refused."""
+        granted, and nothing a Deny of one of them refuses (the giver needs
+        neither to hold it nor to be free of a Deny of it). Its searches share
+        one budget (``CALL_BUDGET``): past it, what is left is not proven, and
+        refused."""
         with budget():
             for index, raw in enumerate(statements):
                 if raw.effect != "Allow":
@@ -972,9 +974,12 @@ class Holdings:
                     if bounds is None:
                         continue  # the chain allows it nowhere: not granted
                     universes = self._typed_universes(action)
+                    taken = _chain_denies(parents, action, scope)
                     for grant in grants:
                         try:
-                            reason = self._refusal(action, grant, universes, bounds)
+                            reason = self._refusal(
+                                action, grant, universes, bounds, taken
+                            )
                         except Exhausted:
                             reason = TOO_COSTLY
                         if reason is not None:
@@ -989,13 +994,18 @@ class Holdings:
         grant: str,
         universes: list[tuple[Universe, bool]],
         bounds: Bounds = (),
+        taken: tuple[str, ...] = (),
     ) -> str | None:
+        """Why the giver may not grant ``action`` on ``grant`` within ``bounds``
+        (a sub-policy's chain), or None. ``taken``: what a Deny of the chain
+        refuses, which the grant never gives, so it needs no cover and no Deny
+        of the giver's refuses it."""
         for index, side in enumerate(self.sides):
             # Each type's names, against what is held for that type.
             if not all(
                 covered(
                     grant,
-                    self._allowed(index, action, on_containers=container),
+                    (*self._allowed(index, action, on_containers=container), *taken),
                     u,
                     bounds,
                 )
@@ -1004,7 +1014,7 @@ class Holdings:
                 return side.lacks
         for index in range(len(self.sides)):
             for pattern, policy_id in self._denied(index, action):
-                if any(overlaps(grant, (pattern,), u, bounds) for u, _c in universes):
+                if any(_given(grant, pattern, u, bounds, taken) for u, _c in universes):
                     return (
                         f"a Deny of policy {policy_id} refuses {shown(pattern)}"
                         if policy_id
@@ -1147,6 +1157,57 @@ def _chain_bounds(
             return None
         bounds.append(patterns)
     return tuple(bounds)
+
+
+def _chain_denies(
+    parents: Sequence[Sequence[Statement]], action: str, scope: str | None
+) -> tuple[str, ...]:
+    """The patterns, in held form at ``scope``, a Deny of a policy of a chain
+    refuses ``action`` on: the sub-policy never grants them. They are taken out
+    of the grant, so they may say less than the evaluator refuses, never more:
+    the exact forms (``over=False``), not the wider ones a Deny of the giver is
+    read in. ``action`` may be a pattern (``Holdings._actions``): then a Deny
+    counts only when its actions are shown to take every action the pattern
+    names."""
+    found: dict[str, None] = {}
+    for level in parents:
+        for statement in level:
+            if statement.effect != "Deny" or not any(
+                _actions_within(action, p) for p in statement.actions
+            ):
+                continue
+            for r in statement.resources:
+                found.update(
+                    dict.fromkeys(held_forms(r, scope, variables=True, over=False))
+                )
+    return tuple(found)
+
+
+def _actions_within(action: str, pattern: str) -> bool:
+    """Whether every action ``action`` names matches ``pattern``: ``action``
+    itself when it is concrete; when it is a pattern, false unless shown."""
+    if not ("*" in action or "?" in action):
+        return matches(pattern, action)
+    try:
+        return covered(action, (pattern,))
+    except Exhausted:
+        return False
+
+
+def _given(
+    grant: str,
+    denied: str,
+    within: Universe,
+    bounds: Bounds,
+    taken: tuple[str, ...],
+) -> bool:
+    """Whether a grant of ``grant`` within ``bounds`` may give a name ``denied``
+    matches, one no pattern of ``taken`` (a Deny of the chain) refuses. True
+    when that is not disproven. The pruned overlap search first: the costlier
+    one runs only for a Deny that meets the grant."""
+    if not overlaps(grant, (denied,), within, bounds):
+        return False
+    return not taken or not covered(grant, taken, within, (*bounds, (denied,)))
 
 
 def _within_parents(

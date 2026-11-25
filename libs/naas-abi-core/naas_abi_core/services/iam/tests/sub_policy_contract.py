@@ -406,6 +406,84 @@ def run_grant_only_what_you_hold_reads_the_chain(iam: IAMService, as_user: AsUse
             session.create_policy("c", allow(agents("c")), scope=WS1)
 
 
+def run_a_deny_of_the_chain_needs_no_cover(iam: IAMService, as_user: AsUser):
+    """A workspace's access P allows every agent but b; its people policy S,
+    every agent within P. Whoever holds S gives it on: P's Deny of b binds them,
+    and S never grants b either. A Deny of the giver's own still refuses."""
+    tree(iam)
+    with as_service_account("engine"):
+        access = iam.create_policy(
+            "ws-1 access",
+            document(
+                statement("Allow", [USE], [AGENTS]),
+                statement("Deny", [USE], agents("b"), sid="TurnedOffAgents"),
+            ),
+            scope=WS1,
+        )
+        people = iam.create_policy(
+            "ws-1 people", allow([AGENTS]), scope=WS1, parent=access.id
+        )
+        lead = iam.ensure_user("https://idp.example", "lead")
+        iam.attach_policy(roles.ADMIN, lead.id, WS1)
+        iam.attach_policy(people.id, lead.id, WS1)
+        carol = iam.ensure_user("https://idp.example", "carol")
+        dave = iam.ensure_user("https://idp.example", "dave")
+    with as_user(lead) as session:
+        assert _allowed(session, agent("a")) and not _allowed(session, agent("b"))
+        session.attach_policy(people.id, carol.id, WS1)
+    with as_user(carol) as session:
+        assert _allowed(session, agent("a")) and not _allowed(session, agent("b"))
+    with as_service_account("engine"):
+        no_c = iam.create_policy(
+            "no c", document(statement("Deny", [USE], agents("c"))), scope=WS1
+        )
+        iam.attach_policy(no_c.id, lead.id, WS1)
+    with as_user(lead) as session, pytest.raises(GrantNotHeldError, match=no_c.id):
+        session.attach_policy(people.id, dave.id, WS1)
+
+
+def run_a_deny_of_the_chain_takes_only_what_it_refuses(
+    iam: IAMService, as_user: AsUser
+):
+    """Below an organisation (``org-1/*``), a chain Deny on ``${scope}`` refuses
+    the organisation itself and ``${scope}/mod*`` the names directly in it, not
+    the workspaces' agents: those the giver must still hold. A lead who may use
+    no agent cannot give the org's people policy on."""
+    tree(iam)
+    with as_service_account("engine"):
+        lead = iam.ensure_user("https://idp.example", "lead")
+        iam.attach_policy(roles.ADMIN, lead.id, ORG_WIDE)
+        no_agents = iam.create_policy(
+            "lead may use no agent",
+            document(statement("Deny", [USE], ["${scope}/*"])),
+            scope=ORG_SCOPE,
+        )
+        iam.attach_policy(no_agents.id, lead.id, ORG_WIDE)
+    for denied in ("${scope}", "${scope}/mod*"):
+        with as_service_account("engine"):
+            access = iam.create_policy(
+                f"org access, no {denied}",
+                document(
+                    statement("Allow", [USE], [AGENTS]),
+                    statement("Deny", [USE], [denied]),
+                ),
+                scope=ORG_SCOPE,
+            )
+            people = iam.create_policy(
+                f"org people, no {denied}",
+                allow([AGENTS]),
+                scope=ORG_SCOPE,
+                parent=access.id,
+            )
+            carol = iam.ensure_user("https://idp.example", f"carol {denied}")
+        with as_user(lead) as session:
+            assert not _allowed(session, agent("a"))
+            with pytest.raises(GrantNotHeldError, match="module:agent"):
+                session.attach_policy(people.id, carol.id, ORG_WIDE)
+        with as_user(carol) as session:
+            assert not _allowed(session, agent("a"))
+
+
 def run_widening_a_parent_is_checked_below_it(iam: IAMService, as_user: AsUser):
     """An org's editor holds agents at the org's own level only: widening its
     policy would widen a workspace's sub-policy beyond what it holds there."""
@@ -690,6 +768,8 @@ SCENARIOS = (
     run_a_parent_with_sub_policies_is_not_deleted,
     run_derive_only_from_what_you_hold,
     run_grant_only_what_you_hold_reads_the_chain,
+    run_a_deny_of_the_chain_needs_no_cover,
+    run_a_deny_of_the_chain_takes_only_what_it_refuses,
     run_widening_a_parent_is_checked_below_it,
     run_re_parenting_under_a_deny_beyond_scope_is_attaching_it,
     run_a_refusal_names_only_what_the_caller_may_see,
