@@ -44,7 +44,7 @@ export default function PlatformPersonPage() {
   if (!personId) return null;
   // The page alone: back to Users, then who it is about (Info) and what they hold.
   return (
-    <div className="space-y-6">
+    <div className="access-instance-page">
       <PersonBack onClick={() => router.push(PLATFORM_USERS_PATH)} />
       <PersonInfoSection
         id={personId}

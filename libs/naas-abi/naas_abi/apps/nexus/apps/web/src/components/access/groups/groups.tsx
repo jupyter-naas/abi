@@ -138,7 +138,7 @@ export function GroupsView({
 
   if (selected === NEW_GROUP && can('iam:CreateGroup')) {
     return (
-      <div className="access-group org-settings-users-main">
+      <div className="access-group org-settings-users-main access-instance-page">
         <button type="button" className="access-person-back" onClick={() => setSelected(null)}>
           <ArrowLeft size={14} /> Groups
         </button>
@@ -168,7 +168,7 @@ export function GroupsView({
     // needs only the group and its attachments: it opens whether the list was read or not.
     const listed = groups?.find((g) => g.id === selected);
     return (
-      <div className="access-group org-settings-users-main">
+      <div className="access-group org-settings-users-main access-instance-page">
         <button type="button" className="access-person-back" onClick={() => setSelected(null)}>
           <ArrowLeft size={14} /> Groups
         </button>

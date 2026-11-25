@@ -775,8 +775,14 @@ describe('PoliciesView: a policy owned at another level', () => {
     mounted = await mount(PoliciesView, { api, can: () => true, scope: PLATFORM_ACCESS_SCOPE, directory: EMPTY_DIRECTORY, focus: 'pol_1' });
     await validated();
     for (let i = 0; i < 4; i++) await mounted.flush();
-    const header = document.querySelector('[aria-label="Policy Graph reader"] .access-policy-editor-header');
-    expect(header?.querySelector('[data-policy-actions] [data-action="attach"]')).not.toBeNull();
+    const header = document.querySelector('[aria-label="Policy Graph reader"] [data-instance-header]');
+    expect(header?.querySelector('[data-instance-name]')?.textContent).toBe('Graph reader');
+    expect(header?.querySelector('[data-instance-ids]')?.textContent).toBe('pol_1');
+    // Its sections, as a group's: Info (no title), Held by with its "+ Attach", Configuration.
+    const page = document.querySelector('[aria-label="Policy Graph reader"]');
+    expect([...(page?.querySelectorAll('h3') ?? [])].map((h) => h.textContent)).toEqual(['Held by', 'Configuration']);
+    expect(page?.querySelector('[data-held-actions] [data-action="attach"]')).not.toBeNull();
+    expect(header?.querySelector('[data-action="attach"]')).toBeNull();
     expect(document.querySelector('.access-list-actions [data-action="attach"]')).toBeNull();
   });
 });

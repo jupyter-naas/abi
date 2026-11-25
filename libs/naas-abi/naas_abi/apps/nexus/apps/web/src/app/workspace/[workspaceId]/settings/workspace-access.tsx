@@ -126,7 +126,7 @@ export function WorkspacePerson() {
   if (!personId) return null;
   // The page alone: back to Users, then who it is about (Info) and what they hold.
   return (
-    <div className="space-y-6">
+    <div className="access-instance-page">
       <PersonBack onClick={() => router.push(`/workspace/${workspaceId}/settings/users`)} />
       <PersonInfoSection
         id={personId}

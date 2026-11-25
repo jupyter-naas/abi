@@ -5,7 +5,8 @@ import { Plus } from 'lucide-react';
 import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { AttachablePolicy, AttachmentView, PrincipalKind } from '@/lib/iam-admin/types';
 import type { AccessDirectory } from '../access-directory';
-import { AccessHeaderAction } from '../access-list';
+import { AccessHeaderAction, AccessHeaderSlotContext } from '../access-list';
+import { SettingsSection } from '@/components/settings/settings-ui';
 import type { AccessNavigation } from '../access-props';
 import type { AccessScope } from '../access-scope';
 import { offeredTo, type PrincipalChoice } from '../attachments/attach-form';
@@ -63,6 +64,7 @@ export function PolicyAttachments({
   const [items, setItems] = useState<AttachmentView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -99,9 +101,15 @@ export function PolicyAttachments({
   };
 
   if (items === null) return null;
+  // Its "+ Attach" sits in the section's header, as a group's "+ Attach policies".
   return (
-    <section className="access-policy-attachments" aria-label="Who holds it">
-      <h4 className="access-policy-subheading">Held by</h4>
+    <AccessHeaderSlotContext.Provider value={actionsSlot}>
+    <SettingsSection
+      title="Held by"
+      description="Who holds it, at every level you may list."
+      actions={<span ref={setActionsSlot} className="access-instance-actions-slot" data-held-actions="" />}
+    >
+    <div className="access-policy-attachments" role="region" aria-label="Who holds it" data-held-by="">
       {boundOf && (
         <p className="access-policy-muted" data-held-bound="">
           Everyone in {boundOf} reaches what is offered here: this is the workspace&apos;s offer, changed in
@@ -178,7 +186,9 @@ export function PolicyAttachments({
           onAttached={() => void load()}
         />
       )}
-    </section>
+    </div>
+    </SettingsSection>
+    </AccessHeaderSlotContext.Provider>
   );
 }
 
@@ -209,7 +219,7 @@ async function principalsOf(
 }
 
 /** The policy, attached at the page's scope to someone picked in a search (`AttachDialog`),
- *  opened by "+ Attach" in the page header, beside its Reload. */
+ *  opened by "+ Attach" in the header of Held by. */
 function AttachToPrincipal({
   api,
   policyId,
@@ -271,8 +281,6 @@ function AttachToPrincipal({
         <button
           type="button"
           className="org-settings-primary-button"
-          // After "Discard changes", whichever was shown first.
-          style={{ order: 2 }}
           data-action="attach"
           onClick={() => {
             setNotice(null);

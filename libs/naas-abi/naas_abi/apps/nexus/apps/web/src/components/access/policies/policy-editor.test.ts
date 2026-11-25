@@ -314,7 +314,8 @@ describe('PolicyEditor sub-policies', () => {
     const { onSaved } = await open({ api: api({ updatePolicy }), policy: subPolicy });
 
     expect(field('Parent policy')?.textContent).toContain('Sub-policy of Org access');
-    expect(field('Parent policy')?.textContent).toContain('pol_parent');
+    expect(field('Parent policy')?.querySelector('[title="pol_parent"]')).not.toBeNull(); // its id under the pointer
+    expect(field('Parent policy')?.closest('[data-instance-meta]')).not.toBeNull(); // under the policy's name
     await mounted!.type(field('Policy name'), 'Analysts');
     await mounted!.click(button('Save changes') ?? null);
     await mounted!.flush();
@@ -352,7 +353,7 @@ describe('PolicyEditor read-only', () => {
     await open({ api: api({ validatePolicy }), policy: managedPolicy, readOnly: true });
 
     expect(mounted!.host.textContent).toContain('Managed: IAM writes this policy');
-    expect((field('Policy name') as HTMLInputElement).disabled).toBe(true);
+    expect((field('Policy name') as HTMLInputElement).readOnly).toBe(true);
     expect(button('Save changes')).toBeUndefined();
     expect(button('Add statement')).toBeUndefined();
     expect(field('Add to actions of statement 1')).toBeNull();

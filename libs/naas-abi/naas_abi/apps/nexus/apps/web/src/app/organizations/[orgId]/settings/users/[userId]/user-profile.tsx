@@ -139,7 +139,7 @@ export default function OrgUserProfilePage() {
   if (loading) return <p className="text-sm text-muted-foreground">Loading user...</p>;
   if (!details) {
     return (
-      <div className="space-y-6">
+      <div className="access-instance-page">
         <PersonBack onClick={() => router.push(orgSettingsSectionPath(orgId, 'users'))} />
         {refused && <p className="text-sm text-muted-foreground">Only the organization’s admins see its people.</p>}
         {!refused && (
@@ -237,13 +237,14 @@ export default function OrgUserProfilePage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="access-instance-page">
       {/* The page alone: back to Users, then who it is about (Info), their profile and what they hold. */}
       <PersonBack onClick={() => router.push(orgSettingsSectionPath(orgId, 'users'))} />
       <PersonInfoSection
         id={member.principal_id ?? member.user_id}
         name={displayName}
         email={account.email ?? null}
+        image={orgAvatarUrl}
         actions={
           <>
             {member.principal_id && !isSelf && (

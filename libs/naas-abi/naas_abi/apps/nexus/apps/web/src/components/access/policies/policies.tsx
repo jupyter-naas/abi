@@ -26,6 +26,7 @@ import { roleOfPolicy } from '../roles/role-change';
 import { levelPolicyOf, workspaceGroupName } from '@/lib/access-model/levels';
 import { PolicyAttachments } from './policy-attachments';
 import { PolicyEditor } from './policy-editor';
+import { InstanceHeader } from '../instance-header';
 import { ownerHref, usePolicyOwners } from './policy-owners';
 import { policyTree } from './policy-tree';
 import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
@@ -300,7 +301,7 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
 
   if (selection) {
     return (
-      <div className="access-policy-page" data-policy-page={selection.kind === 'new' ? NEW_POLICY : selection.kind === 'policy' ? selection.policy.id : selection.id}>
+      <div className="access-policy-page access-instance-page" data-policy-page={selection.kind === 'new' ? NEW_POLICY : selection.kind === 'policy' ? selection.policy.id : selection.id}>
         <button type="button" className="access-policy-back" onClick={() => select(null)}>
           <ArrowLeft size={14} /> Policies
         </button>
@@ -600,11 +601,7 @@ function HeldPolicySection({ name, id, children }: { name: string; id: string; c
   return (
     <AccessHeaderSlotContext.Provider value={actions}>
       <section className="access-policy-editor" aria-label={`Policy ${name}`}>
-        <header className="access-policy-editor-header">
-          <h3 className="access-policy-title">{name}</h3>
-          <code className="access-policy-id">{id}</code>
-          <span ref={setActions} className="access-policy-editor-actions" data-policy-actions="" />
-        </header>
+        <InstanceHeader name={name} id={id} actionsRef={setActions} />
         {children}
       </section>
     </AccessHeaderSlotContext.Provider>

@@ -165,7 +165,8 @@ describe('GroupsView at a workspace', () => {
     await mounted.click(document.querySelector('[data-action="create-group"]'));
     const page = () => document.querySelector('[data-group-new]');
     const sections = [...(page()?.querySelectorAll('h3') ?? [])].map((h) => h.textContent);
-    expect(sections).toEqual(['Info', 'Policies', 'Members']);
+    expect(sections).toEqual(['Policies', 'Members']); // Info has no title: the page's own is above it
+    expect(page()?.querySelector('[data-instance-name]')?.textContent).toBe('New group');
     expect(document.querySelector('[data-group]')).toBeNull(); // the list is left
     await mounted.type(document.querySelector('[aria-label="Group name"]'), 'Recruiters');
     await mounted.click(document.querySelector('[data-action="add-members"]'));
@@ -185,7 +186,7 @@ describe('GroupsView at a workspace', () => {
     expect(api.attach).toHaveBeenCalledWith({ policy_id: 'pol_1', principal_id: 'grp_ws', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
     expect(api.attach.mock.invocationCallOrder[0]).toBeLessThan(api.addMember.mock.invocationCallOrder[0]);
     expect(document.querySelector('[data-group-detail]')?.getAttribute('data-group-detail')).toBe('grp_ws');
-    expect([...document.querySelectorAll('[data-group-detail] h3')].map((h) => h.textContent)).toEqual(['Info', 'Policies', 'Members']);
+    expect([...document.querySelectorAll('[data-group-detail] h3')].map((h) => h.textContent)).toEqual(['Policies', 'Members']);
   });
 
   it('adds a member of the scope, lists the group’s policies at every level, attaches here, and maps no IdP claim', async () => {
@@ -221,16 +222,22 @@ describe('GroupsView at a workspace', () => {
   it('shows its fields as Settings does, its name the only one that changes', async () => {
     await show(workspaceApi(), owned.id);
     const input = (label: string) => document.querySelector(`[aria-label="${label}"]`) as HTMLInputElement;
-    for (const label of ['Group name', 'Owned by', 'Kind', 'ID']) {
+    for (const label of ['Group name', 'Owned by']) {
       expect(input(label).classList.contains('account-profile-field-input')).toBe(true);
       expect(input(label).disabled).toBe(false);
     }
     expect(input('Group name').readOnly).toBe(false);
-    for (const label of ['Owned by', 'Kind', 'ID']) {
-      expect(input(label).readOnly).toBe(true);
-      expect(input(label).classList.contains('account-profile-field-input-readonly')).toBe(true);
-    }
-    expect(input('ID').value).toBe(owned.id);
+    expect(input('Owned by').readOnly).toBe(true);
+    expect(input('Owned by').classList.contains('account-profile-field-input-readonly')).toBe(true);
+    // Its kind and its id are above, beside and under its name: no field of their own.
+    expect(input('Kind')).toBeNull();
+    expect(input('ID')).toBeNull();
+    // Above Info: its name, its id, what it is.
+    const header = document.querySelector('[data-group-detail] [data-instance-header]');
+    expect(header?.querySelector('[data-instance-name]')?.textContent).toBe(owned.name);
+    expect(header?.querySelector('[data-instance-ids]')?.textContent).toBe(owned.id);
+    expect(header?.querySelector('[data-instance-meta]')?.textContent).toContain('Owned by');
+    expect(header?.querySelector('[data-action="save"]')).not.toBeNull();
   });
 
   it('renames a group it owns, and shows the new name', async () => {

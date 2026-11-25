@@ -24,8 +24,18 @@ describe('A person’s page, shown alone', () => {
       expect(input(label).readOnly).toBe(true);
       expect(input(label).classList.contains('account-profile-field-input-readonly')).toBe(true);
     }
-    expect(document.querySelector('h3')?.textContent).toBe('Info');
-    expect(document.querySelector('[data-action="view-as"]')).not.toBeNull();
+    expect(document.querySelector('h3')).toBeNull(); // Info has no title: the page's own is above it
+    const header = document.querySelector('[data-instance-header]');
+    expect(header?.querySelector('[data-instance-name]')?.textContent).toBe('Ann Analyst');
+    expect(header?.querySelector('[data-instance-ids]')?.textContent).toBe('usr_ann');
+    expect(header?.querySelector('[data-instance-meta]')?.textContent).toContain('ann@example.com');
+    expect(header?.querySelector('[data-action="view-as"]')).not.toBeNull();
+    expect(header?.querySelector('img')).toBeNull(); // no picture: none shown
+  });
+
+  it('shows their picture at the left of their name when they have one', async () => {
+    mounted = await mount(PersonInfoSection, { id: 'usr_ann', name: 'Ann', email: null, image: '/avatar.png' });
+    expect(document.querySelector('[data-instance-header] img')?.getAttribute('src')).toBe('/avatar.png');
   });
 
   it('leads back to Users', async () => {

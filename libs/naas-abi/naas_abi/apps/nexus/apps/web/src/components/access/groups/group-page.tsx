@@ -14,6 +14,7 @@ import { offeredTo } from '../attachments/attach-form';
 import { holdingRows, levelLabel, scopesOf } from '../holdings/holdings-model';
 import { HoldingsTable } from '../holdings/holdings-table';
 import { ConfirmDetach } from '../holdings/confirm-detach';
+import { InstanceHeader } from '../instance-header';
 import { AttachDialog, type AttachCandidate } from '../policies/attach-dialog';
 import { useActionsAt, useContainerNames } from '../policies/policy-owners';
 import '../holdings/holdings.css';
@@ -294,6 +295,7 @@ export function GroupPage({
     </div>
   );
   const nameFixed = !isNew && !renames;
+  const ownerName = isNew ? scope.label : levelLabel(group!.owner_scope ?? PLATFORM, names);
 
   return (
     <div className="space-y-4" data-group-detail={group?.id ?? undefined} data-group-new={isNew ? '' : undefined}>
@@ -313,12 +315,21 @@ export function GroupPage({
         </p>
       )}
 
-      <SettingsSection
-        title="Info"
-        description={
-          isNew
-            ? 'Name the group, then attach its policies and add its members below.'
-            : 'A group keeps its owner, its kind and its id: its name changes here.'
+      {/* The page's own top: its name, its id, what it is; Create or Save at its right. Info,
+          below, has no title of its own. */}
+      <InstanceHeader
+        name={isNew ? name.trim() || 'New group' : group!.name}
+        id={isNew ? null : group!.id}
+        badge={
+          <span className="platform-users-badge access-policy-badge" data-group-kind="">
+            {kind}
+          </span>
+        }
+        meta={
+          <>
+            <span>Owned by {ownerName}</span>
+            {!isNew && !owned && <span>· read-only here: it changes at its level</span>}
+          </>
         }
         actions={
           isNew ? (
@@ -331,7 +342,10 @@ export function GroupPage({
             </button>
           ) : undefined
         }
-      >
+      />
+      {isNew && <p className="text-sm text-muted-foreground">Name the group, then attach its policies and add its members below.</p>}
+
+      <SettingsSection>
         <div className="account-profile-form-grid">
           <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="group-name">
@@ -354,9 +368,7 @@ export function GroupPage({
               }}
             />
           </div>
-          {field('owner', 'Owned by', isNew ? scope.label : levelLabel(group!.owner_scope ?? PLATFORM, names), 'The level that owns it: set when it is made')}
-          {field('kind', 'Kind', kind, 'What the access model makes of it')}
-          {field('id', 'ID', isNew ? 'Given when it is made' : group!.id, 'IAM’s id of the group')}
+          {field('owner', 'Owned by', ownerName, 'The level that owns it: set when it is made')}
         </div>
       </SettingsSection>
 
