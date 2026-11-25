@@ -118,7 +118,7 @@ def test_loopback_hosts() -> None:
         "nexus.example.com",
         "localhost.example.com",
         "10.0.0.1",
-        "0.0.0.0",
+        "0.0.0.0",  # nosec B104 - a host the loopback check refuses, not a bind
         "evil-localhost",
     ):
         assert not is_loopback_host(host), host
