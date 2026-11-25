@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -9,107 +8,6 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 import { Spinner } from '@/components/ui/spinner';
-import { useAgentsStore, type Agent } from '@/stores/agents';
-import { useWorkspaceStore } from '@/stores/workspace';
-
-// ============================================================
-// Generic Modal Backdrop
-// ============================================================
-
-export function ModalBackdrop({
-  open,
-  onClose,
-  children,
-  widthClassName = 'max-w-md',
-}: {
-  open: boolean;
-  onClose: () => void;
-  children: ReactNode;
-  /** Content width; prompts use the default, previews go wider. */
-  widthClassName?: string;
-}) {
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      // An Escape a field inside has used (a list it closed) leaves the modal open.
-      if (e.key === 'Escape' && !e.defaultPrevented) onClose();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
-        onClick={onClose}
-      />
-      {/* Content */}
-      <div className={cn('relative z-10 mx-4 w-full animate-in zoom-in-95 fade-in duration-200', widthClassName)}>
-        {children}
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-// ============================================================
-// useAgentList - same list as chat page (AgentSelector)
-// Use this in any dialog that needs to show or select agents.
-// ============================================================
-
-export function useAgentList(searchQuery = '') {
-  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
-  const { agents, fetchAgents, getAgent } = useAgentsStore();
-
-  // The API lists exactly the agents the caller may use in the workspace.
-  const usableAgents = agents;
-
-  const filteredAgents = useMemo(
-    () =>
-      searchQuery.trim()
-        ? usableAgents.filter(
-            (a: Agent) =>
-              a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              a.description.toLowerCase().includes(searchQuery.toLowerCase())
-          )
-        : usableAgents,
-    [usableAgents, searchQuery]
-  );
-
-  const defaultAgents = useMemo(
-    () =>
-      filteredAgents
-        .filter((a: Agent) => a.isDefault)
-        .sort((a: Agent, b: Agent) => a.name.localeCompare(b.name)),
-    [filteredAgents]
-  );
-
-  const customAgents = useMemo(
-    () =>
-      filteredAgents
-        .filter((a: Agent) => !a.isDefault)
-        .sort((a: Agent, b: Agent) => a.name.localeCompare(b.name)),
-    [filteredAgents]
-  );
-
-  useEffect(() => {
-    if (currentWorkspaceId) {
-      fetchAgents(currentWorkspaceId);
-    }
-  }, [currentWorkspaceId, fetchAgents]);
-
-  return {
-    usableAgents,
-    defaultAgents,
-    customAgents,
-    filteredAgents,
-    getAgent,
-  } as const;
-}
 
 // ============================================================
 // PromptDialog - replaces window.prompt

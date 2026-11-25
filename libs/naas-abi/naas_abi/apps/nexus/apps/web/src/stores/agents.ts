@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { toast } from '@/components/ui/toast';
 import { createDeferredStorage } from '@/lib/deferred-storage';
 import {
   defineResource,
@@ -587,7 +588,7 @@ export const useAgentsStore = create<AgentsState>()(
           if (!response.ok) {
             console.error('Failed to set default agent on server');
             set({ agents: previousState });
-            alert('Failed to set default agent');
+            toast.error('Failed to set default agent');
             return;
           }
 
@@ -598,7 +599,7 @@ export const useAgentsStore = create<AgentsState>()(
         } catch (error) {
           console.error('Failed to set default agent on server:', error);
           set({ agents: previousState });
-          alert('Failed to set default agent: ' + error);
+          toast.error('Failed to set default agent', String(error));
         }
       },
 

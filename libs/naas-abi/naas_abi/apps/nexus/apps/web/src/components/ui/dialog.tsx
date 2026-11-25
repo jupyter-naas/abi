@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type HTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -21,7 +21,9 @@ const FOCUSABLE =
 /**
  * The one dialog, in five widths. Focus moves in (to `[data-autofocus]`, else the first
  * field or button) and back out on close, Tab stays inside, Escape closes (unless a field
- * inside already used it), ⌘/Ctrl+Enter submits when `onSubmit` is given.
+ * inside already used it), ⌘/Ctrl+Enter submits when `onSubmit` is given. While an action runs,
+ * `dismissible={false}` keeps it open (no Escape, backdrop or close button). Other attributes
+ * (`data-*`, `id`) go on the dialog element.
  */
 export function Dialog({
   open = true,
@@ -35,7 +37,9 @@ export function Dialog({
   footer,
   children,
   className,
-}: {
+  dismissible = true,
+  ...rest
+}: Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'onSubmit'> & {
   open?: boolean;
   title: ReactNode;
   description?: ReactNode;
@@ -48,11 +52,14 @@ export function Dialog({
   footer?: ReactNode;
   children?: ReactNode;
   className?: string;
+  /** False while something runs that closing would interrupt. */
+  dismissible?: boolean;
 }) {
   const panel = useRef<HTMLDivElement>(null);
-  const close = useRef(onClose);
+  const titleId = useId();
+  const close = useRef(dismissible ? onClose : () => undefined);
   const submit = useRef(onSubmit);
-  close.current = onClose;
+  close.current = dismissible ? onClose : () => undefined;
   submit.current = onSubmit;
 
   useEffect(() => {
@@ -98,14 +105,16 @@ export function Dialog({
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div
         aria-hidden="true"
-        onClick={onClose}
+        onClick={() => close.current()}
         className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
       />
       <div
+        {...rest}
         ref={panel}
         role="dialog"
         aria-modal="true"
-        aria-label={typeof title === 'string' ? title : undefined}
+        aria-label={rest['aria-label'] ?? (typeof title === 'string' ? title : undefined)}
+        aria-labelledby={rest['aria-label'] || typeof title === 'string' ? undefined : titleId}
         tabIndex={-1}
         className={cn(
           'relative z-10 flex max-h-full w-full flex-col border border-border bg-background shadow-2xl outline-none animate-in zoom-in-95 fade-in duration-200',
@@ -120,14 +129,16 @@ export function Dialog({
             </span>
           ) : null}
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-foreground">{title}</h2>
+            <h2 id={titleId} className="text-base font-semibold text-foreground">{title}</h2>
             {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
           </div>
           <button
             type="button"
             aria-label="Close"
+            data-action="close"
+            disabled={!dismissible}
             onClick={onClose}
-            className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="-mr-1 -mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
           >
             <X size={16} />
           </button>

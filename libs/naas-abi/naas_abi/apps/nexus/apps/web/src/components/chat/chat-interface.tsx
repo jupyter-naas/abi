@@ -8,6 +8,11 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
+import { Field } from '@/components/ui/field';
+import { Select, Textarea } from '@/components/ui/input';
+import { Spinner } from '@/components/ui/spinner';
 import { useWorkspaceStore, getModelHistory, type AgentType, type Message, type MessageFeedback, type MessageFeedbackDetails, type SidebarSection, type ToolCall } from '@/stores/workspace';
 import { useSurfaceConversation } from '@/stores/chat-thread-selectors';
 import { nextChatUrl } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
@@ -2745,79 +2750,6 @@ export function ChatInterface({
       }
     } catch (error) {
       // console.error('Chat API error:', error);
-      
-      // Check if it's an Ollama connection error
-      // const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      // const isOllamaError = errorMessage.includes('Ollama') || errorMessage.includes('11434') || errorMessage.includes('Could not reach');
-      //
-      // if (isOllamaError) {
-      //   // If we added a placeholder message, update it with error instead of adding new one
-      //   if (conversationId && isStreaming) {
-      //     updateLastMessage(conversationId, `❌ Ollama is not running or not reachable.\n\nClick below to start it automatically.`);
-      //   }
-      //
-      //   // Show modal to user
-      //   if (confirm('❌ Ollama is not running.\n\nWould you like to start Ollama and pull the required model?\n\n(This may take a few minutes on first run)')) {
-      //     try {
-      //       // Update the message to show we're starting
-      //       if (conversationId) {
-      //         updateLastMessage(conversationId, '🔄 Starting Ollama and pulling model...\n\n⏳ This may take 1-2 minutes on first run.\n\nPlease wait...');
-      //       }
-      //
-      //       setIsLoading(true);
-      //
-      //       // Try to ensure Ollama is ready (will auto-start + pull model)
-      //       const ensureResponse = await fetch(`${getApiBase()}/api/ollama/ensure-ready`, {
-      //         method: 'POST',
-      //         headers: { 'Content-Type': 'application/json' },
-      //       });
-      //
-      //       const ensureData = await ensureResponse.json();
-      //
-      //       if (ensureData.ready) {
-      //         // Remove the loading message before retry
-      //         if (conversationId) {
-      //           useWorkspaceStore.setState(state => ({
-      //             conversations: state.conversations.map(c =>
-      //               c.id === conversationId
-      //                 ? { ...c, messages: c.messages.slice(0, -1) }
-      //                 : c
-      //             )
-      //           }));
-      //         }
-      //
-      //         // Retry the message automatically
-      //         alert('✅ Ollama is ready! Retrying your message...');
-      //         // Reconstruct and resubmit
-      //         await handleSubmit(new Event('submit') as any);
-      //         return;
-      //       } else {
-      //         // Update message with error
-      //         if (conversationId) {
-      //           updateLastMessage(conversationId, `⚠️ Could not start Ollama: ${ensureData.error || 'Unknown error'}\n\nPlease start Ollama manually and try again.`);
-      //         }
-      //       }
-      //     } catch (startError) {
-      //       console.error('Failed to start Ollama:', startError);
-      //       if (conversationId) {
-      //         updateLastMessage(conversationId, '⚠️ Failed to start Ollama automatically.\n\nPlease start it manually:\n• macOS: Open Ollama.app\n• Linux: Run `ollama serve`\n\nThen try your message again.');
-      //       }
-      //     } finally {
-      //       setIsLoading(false);
-      //     }
-      //   } else {
-      //     // User cancelled - remove the error message
-      //     if (conversationId) {
-      //       useWorkspaceStore.setState(state => ({
-      //         conversations: state.conversations.map(c =>
-      //           c.id === conversationId
-      //             ? { ...c, messages: c.messages.slice(0, -1) }
-      //             : c
-      //         )
-      //       }));
-      //     }
-      //   }
-      // } else {
       // For other errors, update the placeholder if it exists, otherwise add new message
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       // Stop leaves whatever already arrived in place; it is not a failure.
@@ -4813,17 +4745,6 @@ function FeedbackDislikeDialog({
     }
   }, [open, initialDetails]);
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !submitting) onCancel();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [open, submitting, onCancel]);
-
-  if (!open) return null;
-
   const handleSubmit = () => {
     onSubmit({
       type: type.trim() ? type : null,
@@ -4832,103 +4753,68 @@ function FeedbackDislikeDialog({
     });
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
-        onClick={() => !submitting && onCancel()}
-      />
-      <div className="relative z-10 mx-4 w-full max-w-md animate-in zoom-in-95 fade-in duration-200">
-        <div className="border border-border bg-background p-6 shadow-2xl">
-          <h3 className="text-base font-semibold text-foreground">Provide negative feedback</h3>
-
-          <div className="mt-4 space-y-1">
-            <label className="text-sm text-foreground">
-              What type of issue would you like to report? (optional)
-            </label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="w-full border border-border bg-muted/50 px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2 ring-offset-background"
+  return (
+    <Dialog
+      open={open}
+      title="Provide negative feedback"
+      dismissible={!submitting}
+      onClose={onCancel}
+      onSubmit={() => !submitting && handleSubmit()}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={submitting}>
+            {submitting && <Spinner size={12} />}
+            Submit
+          </Button>
+        </>
+      }
+    >
+      <Field label="What type of issue would you like to report? (optional)" htmlFor="feedback-dislike-type">
+        <Select id="feedback-dislike-type" value={type} onChange={(e) => setType(e.target.value)}>
+          <option value="">Select...</option>
+          {FEEDBACK_TYPE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Please provide details: (optional)" htmlFor="feedback-dislike-detail">
+        <Textarea
+          id="feedback-dislike-detail"
+          value={detail}
+          onChange={(e) => setDetail(e.target.value)}
+          rows={4}
+          className="resize-none"
+          placeholder="Describe the issue you encountered..."
+        />
+      </Field>
+      <Field
+        label="How unsatisfactory was this response? (optional)"
+        hint="1 = slightly unsatisfactory · 5 = completely unsatisfactory"
+      >
+        <div className="flex items-center gap-1">
+          {[1, 2, 3, 4, 5].map((value) => (
+            <Button
+              key={value}
+              variant={severity !== null && value <= severity ? 'destructive' : 'secondary'}
+              size="icon"
+              onClick={() => setSeverity(severity === value ? null : value)}
+              aria-label={`Severity ${value}`}
+              aria-pressed={severity !== null && value <= severity}
             >
-              <option value="">Select...</option>
-              {FEEDBACK_TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="mt-4 space-y-1">
-            <label className="text-sm text-foreground">
-              Please provide details: (optional)
-            </label>
-            <textarea
-              value={detail}
-              onChange={(e) => setDetail(e.target.value)}
-              rows={4}
-              className="w-full resize-none border border-border bg-muted/50 px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2 ring-offset-background"
-              placeholder="Describe the issue you encountered..."
-            />
-          </div>
-
-          <div className="mt-4 space-y-2">
-            <label className="text-sm text-foreground">
-              How unsatisfactory was this response? (optional)
-            </label>
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((value) => {
-                const active = severity !== null && value <= severity;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setSeverity(severity === value ? null : value)}
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center border text-sm transition-colors',
-                      active
-                        ? 'border-red-600/40 bg-red-50/40 text-red-600'
-                        : 'border-border text-muted-foreground hover:bg-muted/40',
-                    )}
-                    aria-label={`Severity ${value}`}
-                  >
-                    {value}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              1 = slightly unsatisfactory · 5 = completely unsatisfactory
-            </p>
-          </div>
-
-          <p className="mt-4 text-xs text-muted-foreground">
-            By submitting this report, you send the entire current conversation to our team to help
-            us improve our models.
-          </p>
-
-          <div className="mt-6 flex justify-end gap-2">
-            <button
-              onClick={onCancel}
-              disabled={submitting}
-              className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="inline-flex items-center gap-2 bg-workspace-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-workspace-accent/90 disabled:opacity-60"
-            >
-              {submitting && <Loader2 size={12} className="animate-spin" />}
-              Submit
-            </button>
-          </div>
+              {value}
+            </Button>
+          ))}
         </div>
-      </div>
-    </div>,
-    document.body,
+      </Field>
+      <p className="text-xs text-muted-foreground">
+        By submitting this report, you send the entire current conversation to our team to help us improve our models.
+      </p>
+    </Dialog>
   );
 }
 

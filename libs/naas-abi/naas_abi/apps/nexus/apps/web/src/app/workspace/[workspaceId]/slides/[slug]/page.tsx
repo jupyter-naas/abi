@@ -42,6 +42,7 @@ import {
 import { openSlidesAgentPane, slidesApiErrorMessage } from '@/lib/create-slides-project';
 import { copyDeckToMyDrive } from '@/lib/slides-my-drive';
 import { createOfficeSaveQueue, type OfficeSaveQueue } from '@/lib/office-save-queue';
+import { useConfirm } from '@/components/ui/dialogs';
 import { authFetch } from '@/stores/auth';
 import {
   SLIDES_DECK_UPDATED_EVENT,
@@ -179,6 +180,7 @@ async function ensureSlidesRuntime(
 }
 
 export default function SlidesEditorPage() {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const params = useParams();
   const router = useRouter();
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
@@ -408,13 +410,15 @@ export default function SlidesEditorPage() {
 
   const refresh = useCallback(async () => {
     if (dirtyRef.current) {
-      const ok = window.confirm(
-        'You have unsaved local edits. Refresh from the live workspace (Coder when ready; Forgejo snapshot otherwise) and discard them?',
-      );
+      const ok = await confirm({
+        title: 'Discard your unsaved edits?',
+        description: 'Refresh loads the live workspace (Coder when ready; Forgejo snapshot otherwise) in place of your unsaved local edits.',
+        confirmLabel: 'Refresh',
+      });
       if (!ok) return;
     }
     await loadDeck({ quiet: true, ensureRuntime: true });
-  }, [loadDeck]);
+  }, [loadDeck, confirm]);
 
   useEffect(() => {
     void loadDeck({ quiet: false, ensureRuntime: true });
@@ -615,9 +619,11 @@ export default function SlidesEditorPage() {
     async (run: () => Promise<SlideMutationResult>, label: string) => {
       if (!workspaceId || !slug) return;
       if (dirtyRef.current) {
-        const ok = window.confirm(
-          'Unsaved code edits will be replaced by this slide change. Continue?',
-        );
+        const ok = await confirm({
+          title: 'Replace your unsaved code edits?',
+          description: 'Unsaved code edits will be replaced by this slide change.',
+          confirmLabel: 'Continue',
+        });
         if (!ok) return;
       }
       setMutating(true);
@@ -640,7 +646,7 @@ export default function SlidesEditorPage() {
         setMutating(false);
       }
     },
-    [workspaceId, slug, setSelectedIndex],
+    [workspaceId, slug, setSelectedIndex, confirm],
   );
 
   useEffect(() => {
@@ -748,9 +754,9 @@ export default function SlidesEditorPage() {
     );
   };
 
-  const deleteSelectedSlide = () => {
+  const deleteSelectedSlide = async () => {
     if (slides.length <= 1) return;
-    if (!window.confirm('Delete the selected slide?')) return;
+    if (!(await confirm({ title: 'Delete the selected slide?' }))) return;
     void applyMutation(
       () => deleteSlide(workspaceId, slug, currentIndex),
       'Deleted slide',
@@ -810,6 +816,7 @@ export default function SlidesEditorPage() {
     return (
       <div className="flex h-full flex-col">
         <Header title="New presentation" nav={menuBar} />
+        {confirmDialog}
         <OfficeCreateLoader kind="deck" phase="creating" />
         <SlidesStatusBar />
       </div>
@@ -824,6 +831,7 @@ export default function SlidesEditorPage() {
           subtitle={slug ? `slides/${slug}/deck.html` : undefined}
           nav={menuBar}
         />
+        {confirmDialog}
         <OfficeCreateLoader kind="deck" phase="opening" />
         <SlidesStatusBar />
       </div>
@@ -837,6 +845,7 @@ export default function SlidesEditorPage() {
         subtitle={`HTML source · PPTX is a 1280x720 reconstruction (closest fit)`}
         nav={menuBar}
       />
+      {confirmDialog}
 
       {error && (
         <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">

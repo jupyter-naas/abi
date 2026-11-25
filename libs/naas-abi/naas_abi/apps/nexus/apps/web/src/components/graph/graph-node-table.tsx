@@ -13,6 +13,10 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
+import { Field } from '@/components/ui/field';
+import { Select } from '@/components/ui/input';
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -93,6 +97,74 @@ type SortDir = 'asc' | 'desc';
 // ─── CSV export helpers ───────────────────────────────────────────────────────
 
 export type CsvEncoding = 'utf-8' | 'utf-8-bom' | 'latin-1' | 'windows-1252' | 'iso-8859-15';
+export type CsvOptions = { encoding: CsvEncoding; separator: string; decimal: string };
+
+const CSV_ENCODINGS: { value: CsvEncoding; label: string }[] = [
+  { value: 'utf-8', label: 'UTF-8' },
+  { value: 'utf-8-bom', label: 'UTF-8 with BOM (Excel)' },
+  { value: 'windows-1252', label: 'Windows-1252 (Western Europe)' },
+  { value: 'latin-1', label: 'Latin-1 / ISO-8859-1' },
+  { value: 'iso-8859-15', label: 'ISO-8859-15 (Latin-9, € sign)' },
+];
+
+/** Export CSV options: encoding (among `encodings`), column and decimal separators, then Export. */
+export function CsvExportDialog({
+  open,
+  encodings = CSV_ENCODINGS.map((e) => e.value),
+  onClose,
+  onExport,
+}: {
+  open: boolean;
+  encodings?: CsvEncoding[];
+  onClose: () => void;
+  onExport: (options: CsvOptions) => void;
+}) {
+  const [options, setOptions] = useState<CsvOptions>({ encoding: 'utf-8', separator: ';', decimal: ',' });
+  const set = (patch: Partial<CsvOptions>) => setOptions((o) => ({ ...o, ...patch }));
+  return (
+    <Dialog
+      open={open}
+      size="sm"
+      title="Export CSV options"
+      onClose={onClose}
+      onSubmit={() => onExport(options)}
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={() => onExport(options)}>
+            Export
+          </Button>
+        </>
+      }
+    >
+      <Field label="Encoding" htmlFor="csv-export-encoding">
+        <Select id="csv-export-encoding" value={options.encoding} onChange={(e) => set({ encoding: e.target.value as CsvEncoding })}>
+          {CSV_ENCODINGS.filter((e) => encodings.includes(e.value)).map((e) => (
+            <option key={e.value} value={e.value}>
+              {e.label}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Column separator" htmlFor="csv-export-separator">
+        <Select id="csv-export-separator" value={options.separator} onChange={(e) => set({ separator: e.target.value })}>
+          <option value=";">Semicolon ( ; )</option>
+          <option value=",">Comma ( , )</option>
+          <option value={'\t'}>Tab</option>
+          <option value="|">Pipe ( | )</option>
+        </Select>
+      </Field>
+      <Field label="Decimal separator" htmlFor="csv-export-decimal">
+        <Select id="csv-export-decimal" value={options.decimal} onChange={(e) => set({ decimal: e.target.value })}>
+          <option value=",">Comma ( , )</option>
+          <option value=".">Period ( . )</option>
+        </Select>
+      </Field>
+    </Dialog>
+  );
+}
 
 // Windows-1252 extra mappings for the 0x80–0x9F control block
 const CP1252: Record<number, number> = {
@@ -137,7 +209,7 @@ function exportTableToCsv(
   rows: RowData[],
   columns: ColDef[],
   filename: string,
-  options: { encoding: CsvEncoding; separator: string; decimal: string },
+  options: CsvOptions,
 ) {
   const { encoding, separator, decimal } = options;
   const applyDecimal = (v: string) =>
@@ -323,9 +395,6 @@ function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColD
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(20);
   const [csvExportOpen, setCsvExportOpen] = useState(false);
-  const [csvEncoding, setCsvEncoding] = useState<CsvEncoding>('utf-8');
-  const [csvSeparator, setCsvSeparator] = useState(';');
-  const [csvDecimal, setCsvDecimal] = useState(',');
 
   // Column reorder state
   const [colOrder, setColOrder] = useState<string[]>(() => columns.map((c) => c.key));
@@ -572,84 +641,14 @@ function DataTable({ columns, rows, exportFilename, statsSlot }: { columns: ColD
         </table>
       </div>
 
-      {/* CSV export dialog */}
-      {csvExportOpen && typeof document !== 'undefined' && createPortal(
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-          onClick={() => setCsvExportOpen(false)}
-        >
-          <div
-            className="w-80 border bg-card p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="mb-4 text-sm font-semibold">Export CSV options</h3>
-            <div className="space-y-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground">Encoding</label>
-                <select
-                  value={csvEncoding}
-                  onChange={(e) => setCsvEncoding(e.target.value as CsvEncoding)}
-                  className="border bg-background px-2 py-1.5 text-xs"
-                >
-                  <option value="utf-8">UTF-8</option>
-                  <option value="utf-8-bom">UTF-8 with BOM (Excel)</option>
-                  <option value="windows-1252">Windows-1252 (Western Europe)</option>
-                  <option value="latin-1">Latin-1 / ISO-8859-1</option>
-                  <option value="iso-8859-15">ISO-8859-15 (Latin-9, € sign)</option>
-                </select>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground">Column separator</label>
-                <select
-                  value={csvSeparator}
-                  onChange={(e) => setCsvSeparator(e.target.value)}
-                  className="border bg-background px-2 py-1.5 text-xs"
-                >
-                  <option value=";">Semicolon ( ; )</option>
-                  <option value=",">Comma ( , )</option>
-                  <option value={'\t'}>Tab</option>
-                  <option value="|">Pipe ( | )</option>
-                </select>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground">Decimal separator</label>
-                <select
-                  value={csvDecimal}
-                  onChange={(e) => setCsvDecimal(e.target.value)}
-                  className="border bg-background px-2 py-1.5 text-xs"
-                >
-                  <option value=",">Comma ( , )</option>
-                  <option value=".">Period ( . )</option>
-                </select>
-              </div>
-            </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setCsvExportOpen(false)}
-                className="border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  exportTableToCsv(sorted, displayColumns, exportFilename ?? 'graph-table.csv', {
-                    encoding: csvEncoding,
-                    separator: csvSeparator,
-                    decimal: csvDecimal,
-                  });
-                  setCsvExportOpen(false);
-                }}
-                className="bg-workspace-accent px-3 py-1.5 text-xs text-white hover:opacity-90"
-              >
-                Export
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
+      <CsvExportDialog
+        open={csvExportOpen}
+        onClose={() => setCsvExportOpen(false)}
+        onExport={(options) => {
+          exportTableToCsv(sorted, displayColumns, exportFilename ?? 'graph-table.csv', options);
+          setCsvExportOpen(false);
+        }}
+      />
 
       {/* Pagination footer */}
       <div className="flex items-center justify-between gap-4 pt-1 text-xs text-muted-foreground shrink-0">

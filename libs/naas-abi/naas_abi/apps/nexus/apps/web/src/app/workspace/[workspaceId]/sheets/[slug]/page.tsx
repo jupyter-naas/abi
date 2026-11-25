@@ -29,6 +29,7 @@ import {
   startNewWorkbook,
 } from '@/lib/create-sheets-project';
 import { copyWorkbookToMyDrive } from '@/lib/sheets-my-drive';
+import { useConfirm } from '@/components/ui/dialogs';
 import { authFetch } from '@/stores/auth';
 import {
   SHEETS_DECK_UPDATED_EVENT,
@@ -160,6 +161,7 @@ async function ensureSheetsRuntime(
 }
 
 export default function SheetsEditorPage() {
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const params = useParams();
   const router = useRouter();
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
@@ -362,13 +364,15 @@ export default function SheetsEditorPage() {
 
   const refresh = useCallback(async () => {
     if (dirtyRef.current) {
-      const ok = window.confirm(
-        'You have unsaved local edits. Refresh from the live workspace (Coder when ready; Forgejo snapshot otherwise) and discard them?',
-      );
+      const ok = await confirm({
+        title: 'Discard your unsaved edits?',
+        description: 'Refresh loads the live workspace (Coder when ready; Forgejo snapshot otherwise) in place of your unsaved local edits.',
+        confirmLabel: 'Refresh',
+      });
       if (!ok) return;
     }
     await loadWorkbook({ quiet: true, ensureRuntime: true });
-  }, [loadWorkbook]);
+  }, [loadWorkbook, confirm]);
 
   useEffect(() => {
     void loadWorkbook({ quiet: false, ensureRuntime: true });
@@ -637,9 +641,9 @@ export default function SheetsEditorPage() {
     );
   };
 
-  const deleteSelectedTab = () => {
+  const deleteSelectedTab = async () => {
     if (tabs.length <= 1) return;
-    if (!window.confirm('Delete the selected sheet tab?')) return;
+    if (!(await confirm({ title: 'Delete the selected sheet tab?' }))) return;
     void applyMutation(
       () => deleteWorkbookTab(workspaceId, slug, currentIndex),
       'Deleted sheet tab',
@@ -699,6 +703,7 @@ export default function SheetsEditorPage() {
           subtitle={slug ? `sheets/${slug}/workbook.html` : undefined}
           nav={menuBar}
         />
+        {confirmDialog}
         <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
           <Loader2 size={16} className="animate-spin" />
           Loading workbook…
@@ -715,6 +720,7 @@ export default function SheetsEditorPage() {
         subtitle={`${tabs.length} sheet${tabs.length === 1 ? '' : 's'} · Changes save automatically`}
         nav={menuBar}
       />
+      {confirmDialog}
 
       {error && (
         <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">

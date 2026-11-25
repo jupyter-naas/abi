@@ -93,6 +93,7 @@ export default function ThemePage() {
   const [tab, setTab] = useState<'all' | 'mine' | 'shared'>('all');
   const [segment, setSegment] = useState<'grid' | 'list'>('grid');
   const [dialog, setDialog] = useState<DialogSize | null>(null);
+  const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const { confirm, dialog: confirmDialog } = useConfirm();
   const { prompt, dialog: promptDialog } = usePrompt();
@@ -351,13 +352,17 @@ export default function ThemePage() {
           size={dialog ?? 'md'}
           title={`Dialog · ${dialog}`}
           description="Header, scrolling body, footer."
+          dismissible={!saving}
           onClose={() => setDialog(null)}
           onSubmit={() => setDialog(null)}
           footer={
             <>
               <span className="text-xs text-muted-foreground">⌘↵ to save</span>
-              <Button variant="ghost" onClick={() => setDialog(null)}>Cancel</Button>
-              <Button onClick={() => setDialog(null)}>Save</Button>
+              <Button variant="ghost" onClick={() => setDialog(null)} disabled={saving}>Cancel</Button>
+              <Button variant="secondary" onClick={() => { setSaving(true); window.setTimeout(() => setSaving(false), 2000); }} disabled={saving}>
+                {saving ? 'Saving…' : 'Not dismissible for 2 s'}
+              </Button>
+              <Button onClick={() => setDialog(null)} disabled={saving}>Save</Button>
             </>
           }
         >

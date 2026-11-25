@@ -1,14 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Shield, UserCircle, Trash2, AlertCircle, Mail } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Plus, Shield, UserCircle, Trash2, Mail } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
 import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
 import { CapabilityGroupPicker } from '@/components/invitations/invite-policy-picker';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog } from '@/components/ui/dialog';
+import { useConfirm } from '@/components/ui/dialogs';
+import { Field } from '@/components/ui/field';
+import { Input, Select } from '@/components/ui/input';
+import { Notice } from '@/components/ui/notice';
+import { toast } from '@/components/ui/toast';
 import { useInviteProviders } from '@/components/invitations/use-invite-providers';
 import { inviteSuccessMessage, providerHint } from '@/lib/invitations';
 
@@ -39,6 +45,7 @@ export default function OrgUsersPage() {
   const [invitationsKey, setInvitationsKey] = useState(0);
   const providers = useInviteProviders(showInviteModal);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
     void fetchOrganizations();
@@ -84,15 +91,25 @@ export default function OrgUsersPage() {
 
   const handleRemove = async (userId: string) => {
     if (!org || !canManage) return;
-    if (!confirm('Remove them from the organization? They leave all its workspaces; their account is kept.')) return;
+    const ok = await confirm({
+      title: 'Remove them from the organization?',
+      description: 'They leave all its workspaces; their account is kept.',
+      confirmLabel: 'Remove',
+    });
+    if (!ok) return;
 
     try {
       await removeFromOrganization(org.id, userId);
     } catch (error: unknown) {
-      alert(
-        error instanceof Error ? error.message : 'Failed to remove member'
-      );
+      toast.error('Failed to remove member', error instanceof Error ? error.message : undefined);
     }
+  };
+
+  const closeInvite = () => {
+    setShowInviteModal(false);
+    setInviteEmail('');
+    setInviteError('');
+    setInviteCapabilities([]);
   };
 
   if (!org) {
@@ -209,98 +226,66 @@ export default function OrgUsersPage() {
 
       <IdpGroupBindings scope="organizations" id={org.id} canManage={canManage} />
 
-      {showInviteModal && canManage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-lg">
-            <h3 className="text-lg font-semibold mb-2">Add User</h3>
-            <p className="mb-4 text-xs text-muted-foreground">
-              {providers.known.enabled
-                ? 'The identity provider creates the account if needed; their access applies when they first sign in with this email. Same API as'
-                : 'Creates the account if needed and emails a sign-in code. Same API as'}{' '}
-              <code>POST /api/organizations/{'{id}'}/members/invite</code>.
-            </p>
-
-            {inviteError && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-                <AlertCircle size={16} />
-                <span>{inviteError}</span>
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Email</label>
-                <input
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="user@example.com"
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
-                />
-              </div>
-
-              {providers.choosable && (
-                <div>
-                  <label className="block text-sm font-medium mb-2">Identity provider</label>
-                  <select
-                    value={providers.picked ?? ''}
-                    onChange={(e) => providers.setPicked(e.target.value)}
-                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
-                  >
-                    {providers.known.providers.map((p) => (
-                      <option key={p.name} value={p.name}>
-                        {p.display_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {providers.known.enabled && providerHint(providers.chosen) && (
-                <p className="text-xs text-muted-foreground">{providerHint(providers.chosen)}</p>
-              )}
-
-              <Checkbox
-                label="Org admin"
-                checked={inviteOrgAdmin}
-                onCheckedChange={setInviteOrgAdmin}
-                disabled={inviteLoading}
-              />
-
-              <CapabilityGroupPicker
-                at={{ organizationId: org.id }}
-                value={inviteCapabilities}
-                onChange={setInviteCapabilities}
-                disabled={inviteLoading}
-              />
-            </div>
-
-            <div className="mt-6 flex gap-2">
-              <button
-                onClick={() => {
-                  setShowInviteModal(false);
-                  setInviteEmail('');
-                  setInviteError('');
-                  setInviteCapabilities([]);
-                }}
-                className="flex-1 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-accent transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => void handleInvite()}
-                disabled={!inviteEmail.trim() || inviteLoading}
-                className={cn(
-                  'flex-1 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors',
-                  'hover:bg-blue-600',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
-                )}
-              >
-                {inviteLoading ? 'Adding...' : 'Add User'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {confirmDialog}
+      <Dialog
+        open={showInviteModal && canManage}
+        title="Add User"
+        description={
+          <>
+            {providers.known.enabled
+              ? 'The identity provider creates the account if needed; their access applies when they first sign in with this email. Same API as'
+              : 'Creates the account if needed and emails a sign-in code. Same API as'}{' '}
+            <code>POST /api/organizations/{'{id}'}/members/invite</code>.
+          </>
+        }
+        onClose={closeInvite}
+        footer={
+          <>
+            <Button variant="ghost" onClick={closeInvite}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleInvite()} disabled={!inviteEmail.trim() || inviteLoading}>
+              {inviteLoading ? 'Adding...' : 'Add User'}
+            </Button>
+          </>
+        }
+      >
+        {inviteError && <Notice tone="error">{inviteError}</Notice>}
+        <Field label="Email" htmlFor="org-invite-email">
+          <Input
+            id="org-invite-email"
+            type="email"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+            placeholder="user@example.com"
+          />
+        </Field>
+        {providers.choosable && (
+          <Field label="Identity provider" htmlFor="org-invite-provider">
+            <Select
+              id="org-invite-provider"
+              value={providers.picked ?? ''}
+              onChange={(e) => providers.setPicked(e.target.value)}
+            >
+              {providers.known.providers.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.display_name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        {providers.known.enabled && providerHint(providers.chosen) && (
+          <p className="text-xs text-muted-foreground">{providerHint(providers.chosen)}</p>
+        )}
+        <Checkbox label="Org admin" checked={inviteOrgAdmin} onCheckedChange={setInviteOrgAdmin} disabled={inviteLoading} />
+        <CapabilityGroupPicker
+          at={{ organizationId: org.id }}
+          value={inviteCapabilities}
+          onChange={setInviteCapabilities}
+          disabled={inviteLoading}
+        />
+      </Dialog>
     </div>
   );
 }
