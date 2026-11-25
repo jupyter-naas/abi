@@ -121,6 +121,17 @@
 
 <!-- version list -->
 
+## v7.5.1 (2026-11-25)
+
+### Bug Fixes
+
+- **nexus**: A person's add buttons say what they add, Scope columns, an offer shown at once
+  ([`17ed6ce`](https://github.com/jupyter-naas/abi/commit/17ed6ceb13f6aaf1b2f8325656a8ec4accc000bc))
+
+- **nexus**: The access pages ask before what cannot be undone, and leave a group owned above alone
+  ([`c8acf87`](https://github.com/jupyter-naas/abi/commit/c8acf872270cab14d0072e24059bbc1f84e5bceb))
+
+
 ## v7.5.0 (2026-11-25)
 
 ### Bug Fixes
