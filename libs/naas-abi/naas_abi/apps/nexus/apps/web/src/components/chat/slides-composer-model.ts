@@ -1,8 +1,9 @@
+import { SLIDES_KIND } from '@/components/office/office-kinds';
 import {
-  slidesTreeFileNodes,
-  type SlidesProjectTree,
-  type SlidesTreeFileNode,
-} from '@/components/shell/sidebar/slides-tree';
+  officeTreeFileNodes,
+  type OfficeProjectTree as SlidesProjectTree,
+  type OfficeTreeFileNode as SlidesTreeFileNode,
+} from '@/components/shell/sidebar/office-tree';
 
 export type SlidesComposerFile = {
   name: string;
@@ -43,5 +44,5 @@ export function slidesComposerFiles(
   fallbackPath?: string | null,
 ): SlidesComposerFile[] {
   if (!tree) return slidesComposerFallbackFiles(fallbackPath);
-  return flattenSlidesComposerFiles(slidesTreeFileNodes(tree, { deckOpen: true }));
+  return flattenSlidesComposerFiles(officeTreeFileNodes(tree, { fileName: SLIDES_KIND.fileName, open: true }));
 }

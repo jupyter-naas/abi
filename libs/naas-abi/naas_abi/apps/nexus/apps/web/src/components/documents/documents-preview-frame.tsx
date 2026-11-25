@@ -11,7 +11,7 @@ import {
 } from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { resolveDocumentsPreviewAssets } from './documents-assets';
+import { resolveDocumentsPreviewAssets } from '@/components/office/office-assets';
 import {
   computeSectionsPreviewScale,
   isSectionsPreviewMessage,

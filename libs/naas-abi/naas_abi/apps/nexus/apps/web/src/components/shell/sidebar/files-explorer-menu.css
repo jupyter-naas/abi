@@ -1,0 +1,38 @@
+/* Hover overflow on explorer rows. Menu chrome is chat's. */
+
+.files-explorer-overflow-host {
+  position: relative;
+}
+
+.files-explorer-overflow-host .chat-list-row-menu-trigger {
+  opacity: 0;
+}
+
+.files-explorer-overflow-host:hover .chat-list-row-menu-trigger,
+.files-explorer-overflow-host.is-menu-open .chat-list-row-menu-trigger {
+  opacity: 1;
+}
+
+@media (max-width: 767px) {
+  .files-explorer-overflow-host .chat-list-row-menu-trigger {
+    opacity: 1;
+  }
+}
+
+/* Portaled panel: escape the pane's overflow and sit above the status footer. */
+.files-explorer-menu-backdrop {
+  z-index: 399;
+}
+
+.files-explorer-menu-panel {
+  position: fixed;
+  right: auto;
+  margin-top: 0;
+  z-index: 400;
+}
+
+.files-explorer-menu-panel.is-measuring {
+  visibility: hidden;
+  top: 0;
+  left: 0;
+}

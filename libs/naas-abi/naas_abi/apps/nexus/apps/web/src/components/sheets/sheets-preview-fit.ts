@@ -1,3 +1,4 @@
+import type { OfficeCoverFit } from '@/components/office/office-cover-thumb';
 /** Workbook preview stage (legacy 16:9 layout for multi-tab scroll). */
 export const SHEETS_STAGE_WIDTH = 1280;
 export const SHEETS_STAGE_HEIGHT = 720;
@@ -808,3 +809,12 @@ export function applySheetsTextEdits(html: string, edits: SheetsTextEdit[]): str
   }
   return next;
 }
+
+/** Gallery covers and filmstrip thumbs: the 16:9 stage contained in the thumb. */
+export const SHEETS_COVER_FIT: OfficeCoverFit = {
+  width: SHEETS_STAGE_WIDTH,
+  height: SHEETS_STAGE_HEIGHT,
+  scale: (boxWidth, boxHeight) => computeSheetsPreviewScale(boxWidth, boxHeight),
+  readCoverHtml: readWorkbookCoverHtml,
+  prepareCoverHtml: prepareSheetsCoverHtml,
+};

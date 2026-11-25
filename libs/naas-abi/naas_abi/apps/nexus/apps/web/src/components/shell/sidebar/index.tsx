@@ -22,8 +22,7 @@ import {
   moveNavItem,
   shiftForReorder,
 } from '@/lib/sidebar-nav';
-import { isDocumentsNestedPath } from './documents-tree';
-import { isSlidesNestedPath } from './slides-tree';
+import { isOfficeNestedPath } from './office-tree';
 import { getWorkspacePath } from './utils';
 import { panelFromPathChange } from '../home-route';
 import { clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
@@ -358,16 +357,9 @@ export function Sidebar() {
       return;
     }
     if (shown === section.id) {
-      if (section.id === 'slides') {
-        const gallery = getDefaultPath('slides');
-        if (gallery && isSlidesNestedPath(pathname, gallery)) {
-          router.push(gallery);
-          return;
-        }
-      }
-      if (section.id === 'documents') {
-        const gallery = getDefaultPath('documents');
-        if (gallery && isDocumentsNestedPath(pathname, gallery)) {
+      if (section.id === 'slides' || section.id === 'documents') {
+        const gallery = getDefaultPath(section.id);
+        if (gallery && isOfficeNestedPath(pathname, gallery)) {
           router.push(gallery);
           return;
         }

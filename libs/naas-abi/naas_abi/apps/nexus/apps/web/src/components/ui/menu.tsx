@@ -116,6 +116,7 @@ export function Menu({
   onOpenChange,
   testId,
   itemTestIdPrefix,
+  contentTestId,
 }: {
   label?: ReactNode;
   trigger?: ReactNode;
@@ -128,6 +129,8 @@ export function Menu({
   testId?: string;
   /** See `MenuItems`. */
   itemTestIdPrefix?: string;
+  /** Test id of the open panel; defaults to `${testId}-dropdown`. */
+  contentTestId?: string;
 }) {
   return (
     <DropdownMenu.Root open={open} onOpenChange={onOpenChange} modal={false}>
@@ -140,7 +143,7 @@ export function Menu({
         )}
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content align={align} sideOffset={5} className={menuClasses.surface} data-testid={testId ? `${testId}-dropdown` : undefined}>
+        <DropdownMenu.Content align={align} sideOffset={5} className={menuClasses.surface} data-testid={contentTestId ?? (testId ? `${testId}-dropdown` : undefined)}>
           <MenuItems items={items} itemTestIdPrefix={itemTestIdPrefix} />
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

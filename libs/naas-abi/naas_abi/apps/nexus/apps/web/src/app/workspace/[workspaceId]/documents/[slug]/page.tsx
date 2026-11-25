@@ -14,7 +14,7 @@ import {
   DocumentsPreviewFrame,
   type DocumentsPreviewFrameHandle,
 } from '@/components/documents/documents-preview-frame';
-import { downloadDocumentsHtml, resolveDocumentsPreviewAssets } from '@/components/documents/documents-assets';
+import { downloadOfficeHtml as downloadDocumentsHtml, resolveDocumentsPreviewAssets } from '@/components/office/office-assets';
 import {
   applyDocumentsTextEdits,
   prepareSectionsPreviewHtml,
@@ -37,7 +37,7 @@ import {
   type DocumentsInsertKind,
   type SectionMutationResult,
 } from '@/components/documents/documents-outline';
-import { DocumentsStatusBar } from '@/components/documents/documents-status-bar';
+import { DocumentsStatusBar } from '@/components/office/office-status-bar';
 import {
   openDocumentsAgentPane,
   documentsApiErrorMessage,

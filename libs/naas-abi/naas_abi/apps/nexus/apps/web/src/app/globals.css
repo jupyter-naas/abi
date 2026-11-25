@@ -704,24 +704,6 @@ aside.glass :focus-visible {
   line-height: 18px;
 }
 
-/* Slides sidebar tree only: same 12/18 density; Chat uses .chat-list-row in chat-components.css. */
-.slides-sidebar-list-row {
-  font-size: 12px;
-  line-height: 18px;
-}
-
-/* Documents sidebar tree: same 12/18; keep global shell listRow at 14/19. */
-.documents-sidebar-list-row {
-  font-size: 12px;
-  line-height: 18px;
-}
-
-/* Sheets sidebar tree: same 12/18; keep global shell listRow at 14/19. */
-.sheets-sidebar-list-row {
-  font-size: 12px;
-  line-height: 18px;
-}
-
 /* Feature section list rows that previously used text-sm / shell listRow.
    Workspaces stays on .shell-sidebar-list-row (14/19); it is a panel, not a dock section. */
 .apps-sidebar-list-row,

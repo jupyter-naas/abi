@@ -13,12 +13,8 @@ import { ChevronRight, Edit2, File, Folder, MoreVertical, Trash2 } from 'lucide-
 import { cn } from '@/lib/utils';
 import { isSystemPath } from '@/lib/system-files';
 import type { FileInfo } from '@/stores/files';
-import {
-  placeDocumentsProjectMenu,
-  type DocumentsProjectMenuPlacement,
-} from '@/components/documents/documents-project-menu';
 import '@/app/workspace/[workspaceId]/chat/components/chat-components.css';
-import '@/components/documents/documents-project-menu.css';
+import './files-explorer-menu.css';
 import {
   canDropOntoExplorerFolder,
   explorerDirKey,
@@ -28,6 +24,8 @@ import {
   matchesExplorerQuery,
   normalizeExplorerPath,
   NEXUS_FILE_DRAG_MIME,
+  placeExplorerMenu,
+  type ExplorerMenuPlacement,
 } from './files-explorer';
 
 const EXPLORER_ROW_TYPO = 'files-explorer-list-row';
@@ -77,7 +75,7 @@ function FilesExplorerRowMenu({
 }) {
   const triggerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<DocumentsProjectMenuPlacement | null>(null);
+  const [pos, setPos] = useState<ExplorerMenuPlacement | null>(null);
   const canPortal = typeof document !== 'undefined';
 
   useIsoLayoutEffect(() => {
@@ -91,7 +89,7 @@ function FilesExplorerRowMenu({
       const rect = trigger.getBoundingClientRect();
       const menuEl = menuRef.current;
       setPos(
-        placeDocumentsProjectMenu(
+        placeExplorerMenu(
           rect,
           { width: window.innerWidth, height: window.innerHeight },
           {
@@ -152,13 +150,13 @@ function FilesExplorerMenuPanel({
   onRename: () => void;
   onDelete: () => void;
   onOpenChange: (open: boolean) => void;
-  pos: DocumentsProjectMenuPlacement | null;
+  pos: ExplorerMenuPlacement | null;
   menuRef?: Ref<HTMLDivElement>;
 }) {
   return (
     <>
       <div
-        className="chat-context-menu-backdrop documents-project-menu-backdrop"
+        className="chat-context-menu-backdrop files-explorer-menu-backdrop"
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -167,7 +165,7 @@ function FilesExplorerMenuPanel({
       />
       <div
         ref={menuRef}
-        className={`chat-context-menu documents-project-menu-panel${pos ? '' : ' is-measuring'}`}
+        className={`chat-context-menu files-explorer-menu-panel${pos ? '' : ' is-measuring'}`}
         data-testid="files-explorer-menu-panel"
         data-placement={pos?.placement ?? 'below'}
         style={
@@ -259,7 +257,7 @@ function ExplorerFileRow({
   return (
     <li key={`${source}::file::${filePath}`} data-ontology-tree-row>
       <div
-        className={cn('sections-overflow-host flex items-center', showMenu && 'is-menu-open')}
+        className={cn('files-explorer-overflow-host flex items-center', showMenu && 'is-menu-open')}
         onContextMenu={(event) => {
           event.preventDefault();
           if (!readOnly) setShowMenu(true);
@@ -403,7 +401,7 @@ function ExplorerFolderRow({
     <li key={dirKey} data-ontology-tree-row>
       <div
         className={cn(
-          'sections-overflow-host flex items-center',
+          'files-explorer-overflow-host flex items-center',
           showMenu && 'is-menu-open',
           isDropTarget && 'rounded-md bg-workspace-accent-15 ring-1 ring-inset ring-workspace-accent',
         )}
