@@ -29,7 +29,11 @@ W's people within their level (``given_files``, ADR
 and ``GivenSystemFiles``, each a mode, written as its Nexus half and its object storage
 half (``<sid>2``). And the graphs W is given and what it closes of its own
 (``given_graphs``): ``GivenGraphs``, ``GivenGraphsWrite``, ``GivenGraphsAll`` (Allows on
-absolute names) and ``OfferGraphsDeny`` (W's only Denies, within ``${scope}``).
+absolute names) and ``OfferGraphsDeny`` (W's only Denies, within ``${scope}``). And
+the Maps items W uses without owning them (``given_maps``): ``GivenMaps`` and
+``GivenBasemaps`` (the deployment's feeds and basemaps, every one or by id, and those
+another workspace shares with W) and ``OfferMapsDeny``, ``OfferBasemapsDeny`` (the
+deployment items W does not use, within ``${scope}``).
 
 An offer of nothing is ``container_defaults.nothing_document`` (an Allow no name
 matches). ``offer_of`` reads the sections back: what the Features and Agents/Apps
@@ -51,7 +55,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import unquote
 
-from naas_abi.apps.nexus.apps.api.app.services.iam import given_files, given_graphs
+from naas_abi.apps.nexus.apps.api.app.services.iam import given_files, given_graphs, given_maps
 from naas_abi.apps.nexus.apps.api.app.services.iam.given_files import Mode
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import scoped_resource
 from naas_abi_core.services.iam import module_scopes
@@ -106,6 +110,7 @@ OFFER_SIDS = frozenset(
         *(sid for sid, _a, _t in ID_SECTIONS.values()),
         *given_files.SIDS.values(),
         *given_graphs.SIDS,
+        *given_maps.SIDS,
     }
 )
 # The given sections' ``Offer`` fields (``given_files``).
@@ -118,6 +123,10 @@ _GRAPH_SID_FIELD = {
     given_graphs.WRITE_SID: "graphs_write",
     given_graphs.ALL_SID: "graphs_all",
 }
+# The Maps part's ``Offer`` fields (``given_maps``): the given names, the closed ones.
+MAP_FIELDS = given_maps.FIELDS
+# Sections whose statements are Denies: W's own, within ``${scope}``.
+DENY_SECTIONS = frozenset({given_graphs.DENY_SID, *given_maps.DENY_SIDS})
 
 Item = tuple[str, str]  # (module, name); name ``*`` is the whole module
 
@@ -200,6 +209,10 @@ class Offer:
     # own graphs (by name, with ``given_graphs.NEW_GRAPH``'s) when it excludes them.
     graphs_no_create: bool = False
     graphs_closed: frozenset[str] = field(default_factory=frozenset)
+    # The Maps items it uses without owning them (``given_maps``), by absolute name, and
+    # the deployment items it closes, within ``${scope}``.
+    maps: frozenset[str] = field(default_factory=frozenset)
+    maps_closed: frozenset[str] = field(default_factory=frozenset)
 
     @classmethod
     def of(
@@ -221,6 +234,8 @@ class Offer:
         graphs_all: Iterable[str] = (),
         graphs_no_create: bool = False,
         graphs_closed: Iterable[str] = (),
+        maps: Iterable[str] = (),
+        maps_closed: Iterable[str] = (),
     ) -> Offer:
         """An offer; each of ``modules`` adds every agent, app, workflow and
         pipeline of that module (a shared module offered whole)."""
@@ -241,6 +256,8 @@ class Offer:
             graphs_all=frozenset(graphs_all),
             graphs_no_create=graphs_no_create,
             graphs_closed=frozenset(graphs_closed),
+            maps=frozenset(maps),
+            maps_closed=frozenset(maps_closed),
         )
 
     def items(self, kind: str) -> frozenset[Item]:
@@ -256,6 +273,7 @@ class Offer:
             or any(self.ids(f) for f in ID_SECTIONS)
             or any(getattr(self, f) for f in GIVEN_FIELDS)
             or any(getattr(self, f) for f in GRAPH_FIELDS)
+            or any(getattr(self, f) for f in MAP_FIELDS)
         )
 
     def merged(self, other: Offer) -> Offer:
@@ -269,6 +287,7 @@ class Offer:
             system_files=given_files.wider(self.system_files, other.system_files),
             **{f: getattr(self, f) | getattr(other, f) for f in GRAPH_NAME_FIELDS},
             graphs_no_create=self.graphs_no_create or other.graphs_no_create,
+            **{f: getattr(self, f) | getattr(other, f) for f in MAP_FIELDS},
         )
 
     def without(self, other: Offer) -> Offer:
@@ -282,6 +301,7 @@ class Offer:
             system_files=_mode_without(self.system_files, other.system_files),
             **{f: getattr(self, f) - getattr(other, f) for f in GRAPH_NAME_FIELDS},
             graphs_no_create=self.graphs_no_create and not other.graphs_no_create,
+            **{f: getattr(self, f) - getattr(other, f) for f in MAP_FIELDS},
         )
 
     def offers(self, kind: str, module: str, name: str) -> bool:
@@ -347,6 +367,7 @@ def offer_statements(offer: Offer) -> list[dict[str, Any]]:
         offer.graphs_no_create,
         offer.graphs_closed,
     )
+    statements += given_maps.statements(offer.maps, offer.maps_closed)
     return statements
 
 
@@ -396,9 +417,18 @@ def offer_of(document: Any) -> Offer:
     given: dict[str, tuple[list[str], list[str]]] = {}
     graphs: dict[str, set[str]] = {f: set() for f in GRAPH_NAME_FIELDS}
     no_create = False
+    maps: dict[str, set[str]] = {f: set() for f in MAP_FIELDS}
     for statement in _statements_of(document):
         sid, effect, actions, resources = _statement_parts(statement)
         section = offer_section(sid)
+        if section in given_maps.DENY_SIDS:
+            if effect == "Deny":
+                maps["maps_closed"].update(resources)
+            continue
+        if section in given_maps.GIVEN_SIDS:
+            if effect == "Allow":
+                maps["maps"].update(resources)
+            continue
         if section == given_graphs.DENY_SID and effect == "Deny":
             if sid == section:
                 no_create = True
@@ -431,6 +461,7 @@ def offer_of(document: Any) -> Offer:
         system_files=modes.get(given_files.SYSTEM_FILES),
         **{f: frozenset(v) for f, v in graphs.items()},
         graphs_no_create=no_create,
+        **{f: frozenset(v) for f, v in maps.items()},
     )
 
 
@@ -529,6 +560,8 @@ __all__ = [
     "GIVEN_FIELDS",
     "GRAPH_FIELDS",
     "GRAPH_NAME_FIELDS",
+    "DENY_SECTIONS",
+    "MAP_FIELDS",
     "OFFER_SIDS",
     "Offer",
     "OrgFiles",
@@ -541,9 +574,11 @@ __all__ = [
     "offer_of",
     "offer_section",
     "graphs_only",
+    "maps_only",
     "with_features",
     "with_offer",
     "without_graphs_fields",
+    "without_maps_fields",
 ]
 
 
@@ -650,7 +685,7 @@ def in_offer_form(document: Any) -> bool:
 
     def fits(sid: Any, effect: str) -> bool:
         section = offer_section(sid)
-        if section == given_graphs.DENY_SID:
+        if section in DENY_SECTIONS:
             return effect == "Deny"
         return (section is not None or sid == NOTHING_SID) and effect == "Allow"
 
@@ -672,6 +707,7 @@ def instances_only(offer: Offer) -> Offer:
         platform_files=None,
         system_files=None,
         **without_graphs_fields(),
+        **without_maps_fields(),
     )
 
 
@@ -683,3 +719,13 @@ def without_graphs_fields() -> dict[str, Any]:
 def graphs_only(offer: Offer) -> Offer:
     """The Graphs part of ``offer`` alone."""
     return Offer(**{f: getattr(offer, f) for f in GRAPH_FIELDS})
+
+
+def without_maps_fields() -> dict[str, Any]:
+    """The Maps part of an offer, empty: ``replace(offer, **without_maps_fields())``."""
+    return {f: frozenset() for f in MAP_FIELDS}
+
+
+def maps_only(offer: Offer) -> Offer:
+    """The Maps part of ``offer`` alone."""
+    return Offer(**{f: getattr(offer, f) for f in MAP_FIELDS})

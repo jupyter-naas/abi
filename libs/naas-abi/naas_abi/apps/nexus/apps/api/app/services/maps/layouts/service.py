@@ -58,6 +58,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.permissions__sch
 from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.service import (
     MapsAccess,
     MapsPolicy,
+    OfferedMaps,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.port import MapsSettingsStorePort
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.settings__schema import (
@@ -315,7 +316,7 @@ class MapsLayoutService:
                 user_id=None,
             )
 
-    async def _own(self, workspace_id: str, policy: MapsPolicy) -> list[MapsLayout]:
+    async def _own(self, workspace_id: str, policy: MapsPolicy | OfferedMaps) -> list[MapsLayout]:
         """The workspace's records, minus deployment items it may no longer use."""
         return [
             layout
@@ -323,7 +324,9 @@ class MapsLayoutService:
             if not layout.system or policy.allows(layout.id, DEPLOYMENT, workspace_id)
         ]
 
-    async def _visible(self, workspace_id: str, policy: MapsPolicy) -> list[MapsLayout]:
+    async def _visible(
+        self, workspace_id: str, policy: MapsPolicy | OfferedMaps
+    ) -> list[MapsLayout]:
         own = await self._own(workspace_id, policy)
         taken = {layout.id for layout in own}
         by_owner: dict[str, list[MapsLayout]] = {}
@@ -356,7 +359,7 @@ class MapsLayoutService:
         as graph layers) are decided with the records. ``seed=False`` writes none of
         that: the list is what is stored (a view of someone else changes nothing).
         """
-        policy = await self._access.policy(KIND_LAYOUT)
+        policy = await self._access.in_workspace(KIND_LAYOUT, workspace_id)
         allowed = [s for s in seeds if policy.allows(s.id, DEPLOYMENT, workspace_id)]
         if allowed and seed:
             await self.ensure_seeded(workspace_id, allowed, revisions)
@@ -385,11 +388,12 @@ class MapsLayoutService:
 
     async def visible(self, workspace_id: str) -> builtins.list[MapsLayout]:
         """Feeds the workspace may use: its own and those shared with it (no seeding)."""
-        return await self._visible(workspace_id, await self._access.policy(KIND_LAYOUT))
+        policy = await self._access.in_workspace(KIND_LAYOUT, workspace_id)
+        return await self._visible(workspace_id, policy)
 
     async def get(self, workspace_id: str, layout_id: str) -> MapsLayout:
         """A record the workspace may use: its own, or one shared with it."""
-        policy = await self._access.policy(KIND_LAYOUT)
+        policy = await self._access.in_workspace(KIND_LAYOUT, workspace_id)
         for layout in await self._visible(workspace_id, policy):
             if layout.id == layout_id:
                 return layout

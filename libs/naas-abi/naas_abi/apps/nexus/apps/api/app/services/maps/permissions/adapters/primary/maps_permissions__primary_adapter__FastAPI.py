@@ -5,6 +5,12 @@ basemap (seeds) and each custom one this workspace owns. Reading is for the
 workspace's administrators (``GetMapsAccess``); changing follows ``permissions/service.py``
 (deployment items and "every workspace" need a platform superadmin; custom
 items only touch workspaces the actor administers).
+
+Where an item is used is each workspace's offer (``iam/given_maps``): the answer reads it
+across every workspace, and a change is written into the offer of each workspace it
+changes, as the caller (IAM refuses what they do not hold: 403). A workspace whose access
+policy is no allow-list yet is read from ``maps_grants``; a change it would need is
+refused (409) until the access migration has converted it.
 """
 
 from __future__ import annotations
@@ -43,8 +49,15 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.port import Work
 from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.service import (
     MapsAccess,
     MapsActor,
+    MapsOfferPendingError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.seeds import maps_seed_registry
+from naas_abi_core.services.iam.IAMPorts import (
+    IAMConflictError,
+    IAMNotFoundError,
+    PermissionDeniedError,
+    RevisionConflictError,
+)
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -77,8 +90,12 @@ def _http_error(exc: Exception) -> HTTPException:
         return exc
     if isinstance(exc, MapsPermissionValidationError):
         return HTTPException(status_code=422, detail={"errors": exc.errors})
-    if isinstance(exc, MapsPermissionError):
+    if isinstance(exc, (MapsPermissionError, PermissionDeniedError)):
         return HTTPException(status_code=403, detail=str(exc))
+    if isinstance(exc, IAMNotFoundError):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, (MapsOfferPendingError, RevisionConflictError, IAMConflictError)):
+        return HTTPException(status_code=409, detail=str(exc))
     return HTTPException(status_code=500, detail=f"Permission change failed: {exc}")
 
 
@@ -154,18 +171,26 @@ async def list_permissions(
     response.headers["Cache-Control"] = "no-store"
     superadmin = await is_platform_admin(current_user.id)
     items = await _items(request, workspace_id, layouts, basemaps, superadmin)
-    policies = {
-        KIND_LAYOUT: await access.policy(KIND_LAYOUT),
-        KIND_BASEMAP: await access.policy(KIND_BASEMAP),
-    }
+    stored = {kind: await access.policy(kind) for kind in (KIND_LAYOUT, KIND_BASEMAP)}
     workspaces = await directory.administered(current_user.id, superadmin=superadmin)
+    every = [w.id for w in await directory.every()] if access.offers is not None else []
+    # Each workspace's offer, read once for every item.
+    assignments = await access.assignments(every)
+    found = []
+    for item in items:
+        grant = await access.view(
+            item["kind"],
+            item["item_id"],
+            item["owner"],
+            workspaces=every,
+            assignments=assignments,
+            stored=stored[item["kind"]],
+        )
+        found.append({**item, **_grant_out(grant)})
     return {
         "superadmin": superadmin,
         "workspaces": [{"id": w.id, "name": w.name} for w in workspaces],
-        "items": [
-            {**item, **_grant_out(policies[item["kind"]].grant(item["item_id"], item["owner"]))}
-            for item in items
-        ],
+        "items": found,
     }
 
 
@@ -207,14 +232,27 @@ async def update_permission(
             )
     actor = MapsActor(current_user.id, superadmin, frozenset(known))
     try:
-        grant = await access.update(
-            kind,
-            item_id,
-            item["owner"],
-            all_workspaces=body.all_workspaces,
-            workspace_ids=set(body.workspace_ids),
-            actor=actor,
-        )
+        if access.offers is not None:
+            # Each workspace's offer, written as the caller.
+            grant = await access.give(
+                kind,
+                item_id,
+                item["owner"],
+                all_workspaces=body.all_workspaces,
+                workspace_ids=set(body.workspace_ids),
+                actor=actor,
+                user=current_user,
+                workspaces=[w.id for w in await directory.every()],
+            )
+        else:
+            grant = await access.update(
+                kind,
+                item_id,
+                item["owner"],
+                all_workspaces=body.all_workspaces,
+                workspace_ids=set(body.workspace_ids),
+                actor=actor,
+            )
     except Exception as exc:
         raise _http_error(exc) from exc
     return {**item, **_grant_out(grant)}

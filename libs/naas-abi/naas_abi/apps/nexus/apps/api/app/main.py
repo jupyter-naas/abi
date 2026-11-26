@@ -600,13 +600,14 @@ async def _migrate_pending_invitations() -> None:
 
 async def _offer_moves() -> None:
     """What moves into each access policy, once each (``search_sources_offer``,
-    ``ontologies_offer``, ``files_offer``, ``graphs_offer``). Not while IAM's moves wait:
-    the next start does it."""
+    ``ontologies_offer``, ``files_offer``, ``graphs_offer``, ``maps_offer``). Not while
+    IAM's moves wait: the next start does it."""
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
     from naas_abi.apps.nexus.apps.api.app.services.iam import (
         authz,
         files_offer,
         graphs_offer,
+        maps_offer,
         ontologies_offer,
         search_sources_offer,
     )
@@ -614,7 +615,7 @@ async def _offer_moves() -> None:
 
     if authz.upgrading():
         return
-    for move in (search_sources_offer, ontologies_offer, files_offer, graphs_offer):
+    for move in (search_sources_offer, ontologies_offer, files_offer, graphs_offer, maps_offer):
         try:
             async with AsyncSessionLocal() as db:
                 await move.migrate(db, iam_runtime.iam())

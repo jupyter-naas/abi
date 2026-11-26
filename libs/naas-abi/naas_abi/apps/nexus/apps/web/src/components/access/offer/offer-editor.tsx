@@ -8,6 +8,8 @@ import {
   createOfferApi,
   graphsSettingsHref,
   graphsSummaryLines,
+  mapsSettingsHref,
+  mapsSummaryLines,
   type FileMode,
   type FileRow,
   type OfferApi,
@@ -405,6 +407,26 @@ export function WorkspaceOfferEditor({
           </ul>
           <a className="access-policy-link" href={graphsSettingsHref(workspaceId)}>
             Change them in Settings › Graphs
+          </a>
+        </div>
+      )}
+
+      {offer.maps && (
+        <div className="access-offer-section" data-offer-section="maps">
+          <h4 className="access-offer-heading">Maps</h4>
+          <p className="access-policy-muted">
+            The feeds and basemaps of the platform its people read on its map, and those other workspaces share with
+            it. Its admins still hide any of them in the workspace.
+          </p>
+          <ul className="access-offer-list" data-offer-maps="">
+            {mapsSummaryLines(offer.maps).map((line) => (
+              <li key={line} className="access-offer-row">
+                <span className="access-offer-name">{line}</span>
+              </li>
+            ))}
+          </ul>
+          <a className="access-policy-link" href={mapsSettingsHref(workspaceId)}>
+            Change them in Settings › Maps
           </a>
         </div>
       )}

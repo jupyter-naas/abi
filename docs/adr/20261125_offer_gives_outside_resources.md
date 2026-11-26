@@ -50,6 +50,25 @@ The reason they are not in the offer is the bound rule (#1585). What a membershi
 - **The level caps what is given** (decision 3), confirmed.
 - **My Files** is always on for Members and Workspace admins. A workspace may turn it off for its **Viewers** only (`GivenMyFiles` names who keeps it).
 
+## Maps (decided on implementation, 2026-11-26)
+
+- **What is given.** The Maps items a workspace uses without owning them: the deployment's feeds (`layout`) and
+  basemaps (seeds, copied into each workspace that uses them) and the ones another workspace shares with it. A
+  feed's layers follow their feed; built-in feeds and graph layers are not in it.
+- **Sections.** `GivenMaps` (feeds: `ListLayouts`, `GetLayout`) and `GivenBasemaps` (`ListBasemaps`, `GetBasemap`),
+  Allows on absolute names: `abi:nexus:<kind>/*` (every deployment item, the ones added later too),
+  `abi:nexus:<kind>/<id>`, or `<V>/nexus:<kind>/<id>` for V's item. And `OfferMapsDeny`, `OfferBasemapsDeny`, Denies
+  of W's bound on `${scope}/nexus:<kind>/<id>`: a deployment item W does not use though every one is given (a row
+  of `maps_grants` narrowing it away). List and read only: W administers its own copies through its roles.
+- **Who gives.** Settings › Maps › Access stays item by item, and writes the offer of each workspace a change
+  touches, as the caller: the platform admin gives a deployment item; V's item is given by whoever holds it in V
+  and may change W's offer; a workspace admin closes a deployment item in W and never reopens it.
+- **Hidden** (`maps_settings.hidden_*`) stays the workspace's display choice: not in the offer.
+- **New workspaces** are given every deployment feed and basemap (what no `maps_grants` row meant).
+- **Migration** `maps_offer_v1` (not part of `offer_gives_v1`): every deployment item, those narrowed away closed,
+  and the shared items by name. `maps_grants` stays for the workspaces whose access policy is no allow-list yet;
+  a change one of them would need is refused (409) until it is converted.
+
 ## Open question
 
 - **The core change** is one rule in the evaluation of a membership group's own bound (absolute names become grants to its members, capped by their level, decision 3), and one in the held check. It needs the core security tests: a given statement never reaches a non-member, never outlives the membership, never exceeds the person's level, and never beyond the writer's holdings.
