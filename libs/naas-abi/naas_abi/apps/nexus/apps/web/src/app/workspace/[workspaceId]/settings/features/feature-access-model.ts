@@ -144,57 +144,91 @@ export function otherPolicies(row: FeatureRow): { policy: OtherPolicy; text: str
     }));
 }
 
+/** What each Nexus feature is, as its row says it. */
+export const FEATURE_DESCRIPTIONS: Record<string, string> = {
+  agents: 'The agents people chat with and build here.',
+  apps: 'The apps opened in the workspace (embedded pages and tools).',
+  chat: 'Conversations with the agents.',
+  code: 'The code workspace.',
+  datasets: 'The datasets read and queried here.',
+  documents: 'Documents written and edited here.',
+  files: 'The workspace’s own files (Workspace Files), and My Files.',
+  graph: 'The knowledge graph: its views and graph explorer.',
+  maps: 'Maps, their feeds and layers.',
+  marketplace: 'The modules people browse and add.',
+  ontology: 'The ontologies and their entities.',
+  search: 'The search across the workspace and the web.',
+  settings: 'The workspace settings pages.',
+  sheets: 'Spreadsheets.',
+  skills: 'Saved prompts run as commands.',
+  slides: 'Slide decks.',
+  tasks: 'Tasks and their runs.',
+};
+
+export function featureDescription(key: string): string {
+  return FEATURE_DESCRIPTIONS[key] ?? '';
+}
+
+/** The settings page each feature is configured on, under the workspace (`/settings/...`). */
+export const FEATURE_PAGES: Record<string, string> = {
+  agents: '/settings/agents',
+  apps: '/settings/apps',
+  chat: '/settings/models',
+  files: '/settings/files',
+  graph: '/settings/graphs',
+  maps: '/settings/maps',
+  marketplace: '/settings/modules',
+  ontology: '/settings/ontologies',
+  search: '/settings/search',
+  skills: '/settings/skills',
+};
+
+export function featurePage(workspaceId: string, key: string): string | null {
+  const path = FEATURE_PAGES[key];
+  return path ? `/workspace/${workspaceId}${path}` : null;
+}
+
 /** The columns of the features table: each sorts and filters, as Settings › Users. */
-export type FeatureColumnId = 'feature' | 'offered' | 'access' | 'policies';
+export type FeatureColumnId = 'feature' | 'description' | 'access' | 'enabled';
 export const FEATURE_COLUMNS: { id: FeatureColumnId; label: string }[] = [
   { id: 'feature', label: 'Feature' },
-  { id: 'offered', label: 'Offered to' },
+  { id: 'description', label: 'Description' },
   // How far people go with it (`access-levels`): the page fills its values.
   { id: 'access', label: 'Access' },
-  { id: 'policies', label: 'Other policies' },
+  { id: 'enabled', label: 'Enabled' },
 ];
-
-const CHOICE_LABELS: Record<FeatureChoice, string> = { everyone: 'Everyone', nobody: 'Nobody' };
-const GRANT_LABELS: Record<FeatureChoice, string> = { everyone: 'Granted', nobody: 'Not granted' };
-
-/** The columns for the policy edited: another policy than the offer says Granted. */
-export function featureColumns(offer: boolean): { id: FeatureColumnId; label: string }[] {
-  return offer ? FEATURE_COLUMNS : FEATURE_COLUMNS.map((c) => (c.id === 'offered' ? { ...c, label: 'Granted' } : c));
-}
 
 /** What a column filter sees of a row (what it holds, not an unsaved draft: a row never leaves
  *  the table while it is being changed). */
-export function featureCellValues(row: FeatureRow, column: FeatureColumnId, offer = true): string[] {
+export function featureCellValues(row: FeatureRow, column: FeatureColumnId): string[] {
   if (column === 'feature') return [row.label];
-  if (column === 'offered') return [offer ? CHOICE_LABELS[row.choice] : GRANT_LABELS[row.choice]];
+  if (column === 'description') return [featureDescription(row.key)];
   if (column === 'access') return [];
-  return row.also.length === 0 ? ['None'] : otherPolicies(row).map(({ policy }) => policy.name);
+  return [row.choice === 'everyone' ? 'Enabled' : 'Disabled'];
 }
 
-/** What the search bar reads of a row: its name and key, who it is offered to, the other
- *  policies, and whether it is not offered here or was changed on its policy's page. */
+/** What the search bar reads of a row: its name, key and description, whether it is enabled,
+ *  not offered here, or changed by hand on its policy's page. */
 export function featureSearchTexts(row: FeatureRow): string[] {
   return [
     row.label,
     row.key,
-    CHOICE_LABELS[row.choice],
-    ...row.also.map((policy) => `${policy.name} ${policy.effect === 'Deny' ? 'denied' : 'granted'}`),
+    featureDescription(row.key),
+    row.choice === 'everyone' ? 'enabled' : 'disabled',
     row.offered ? '' : 'not offered',
     row.hand_edited ? 'changed by hand' : '',
   ];
 }
 
-export const FEATURE_EXPORT_HEADERS = ['Feature', 'Key', 'Offered to', 'Offered here', 'Other policies'];
+export const FEATURE_EXPORT_HEADERS = ['Feature', 'Key', 'Description', 'Enabled', 'Offered here'];
 
 /** A row of the CSV / Excel export, as the table shows it saved. */
 export function featureExportRow(row: FeatureRow): string[] {
   return [
     row.label,
     row.key,
-    CHOICE_LABELS[row.choice],
+    featureDescription(row.key),
+    row.choice === 'everyone' ? 'Yes' : 'No',
     row.offered ? 'Yes' : 'No',
-    otherPolicies(row)
-      .map(({ text }) => text)
-      .join('; '),
   ];
 }

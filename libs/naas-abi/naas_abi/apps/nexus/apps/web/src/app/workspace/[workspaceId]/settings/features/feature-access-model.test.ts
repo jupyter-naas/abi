@@ -5,7 +5,9 @@ import {
   choicesOf,
   draftOf,
   featureCellValues,
+  featureDescription,
   featureExportRow,
+  featurePage,
   featureSearchTexts,
   otherPolicies,
   rowNotes,
@@ -145,25 +147,27 @@ describe('the other policies naming a feature', () => {
 });
 
 describe('the features table (as Settings › Users)', () => {
-  const deny = { id: 'pol_no', name: 'No maps', owner_scope: SCOPE, effect: 'Deny' as const, attached: true };
   const chat = row({ key: 'chat', label: 'Chat', choice: 'everyone' });
-  const maps = row({ key: 'maps', label: 'Maps', also: [deny] });
+  const maps = row({ key: 'maps', label: 'Maps' });
   const graph = row({ key: 'graph', label: 'Graph', choice: 'everyone', offered: false });
 
-  it('filters a column on what a row holds, None for no other policy', () => {
-    expect(featureCellValues(chat, 'offered')).toEqual(['Everyone']);
-    expect(featureCellValues(chat, 'policies')).toEqual(['None']);
-    expect(featureCellValues(maps, 'policies')).toEqual(['No maps']);
+  it('filters a column on what a row holds: its description, Enabled or Disabled', () => {
+    expect(featureCellValues(chat, 'enabled')).toEqual(['Enabled']);
+    expect(featureCellValues(maps, 'enabled')).toEqual(['Disabled']);
+    expect(featureCellValues(maps, 'description')).toEqual([featureDescription('maps')]);
+    expect(featureDescription('maps')).not.toBe('');
   });
 
-  it('searches the name, who it is offered to, the policies and not offered', () => {
-    expect(featureSearchTexts(maps).join(' ')).toContain('No maps denied');
+  it('searches the name, the description, enabled and not offered', () => {
+    expect(featureSearchTexts(maps).join(' ')).toContain('feeds');
     expect(featureSearchTexts(graph)).toContain('not offered');
-    expect(featureSearchTexts(chat)).not.toContain('not offered');
+    expect(featureSearchTexts(chat)).toContain('enabled');
   });
 
-  it('exports a row as the table shows it', () => {
-    expect(featureExportRow(maps)).toEqual(['Maps', 'maps', 'Nobody', 'Yes', 'Also denied by No maps']);
-    expect(featureExportRow(graph)[3]).toBe('No');
+  it('exports a row as the table shows it, and opens each feature on its own page', () => {
+    expect(featureExportRow(maps)).toEqual(['Maps', 'maps', featureDescription('maps'), 'No', 'Yes']);
+    expect(featureExportRow(graph)[4]).toBe('No');
+    expect(featurePage('ws1', 'agents')).toBe('/workspace/ws1/settings/agents');
+    expect(featurePage('ws1', 'code')).toBeNull();
   });
 });

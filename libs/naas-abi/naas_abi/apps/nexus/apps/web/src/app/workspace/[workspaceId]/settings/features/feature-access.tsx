@@ -41,17 +41,17 @@ import {
   draftOf,
   editsOffer,
   featureCellValues,
-  featureColumns,
   featureExportRow,
   featureSearchTexts,
-  otherPolicies,
   rowNotes,
   sortedRows,
   type FeatureAccessState,
   type FeatureChoice,
-  type FeatureColumnId,
   type FeatureDraft,
   type FeatureRow,
+  featurePage,
+  featureDescription,
+  type FeatureColumnId,
 } from './feature-access-model';
 
 const DEFAULT_API = createFeatureAccessApi();
@@ -127,12 +127,12 @@ export function FeatureAccess({
     [state]
   );
   const offer = editsOffer(state);
-  const columns = useMemo(() => featureColumns(offer), [offer]);
+  const columns = FEATURE_COLUMNS;
   const table = useSettingsTable({
     rows,
     columns,
     cellValues: (row: FeatureRow, column: FeatureColumnId) => {
-      if (column !== 'access') return featureCellValues(row, column, offer);
+      if (column !== 'access') return featureCellValues(row, column);
       const level = levelRow(row.key)?.level;
       return level ? [LEVEL_LABELS[level]] : [];
     },
@@ -279,7 +279,7 @@ export function FeatureAccess({
           <SettingsTableToolbar
             search={table.search}
             onSearchChange={table.setSearch}
-            searchPlaceholder="Search feature, everyone, nobody, policy, not offered…"
+            searchPlaceholder="Search feature, description, enabled, not offered…"
             meta={
               <>
                 {`${countLabel(shown.length, rows.length, 'feature')} · ${unsaved}`}
@@ -287,14 +287,19 @@ export function FeatureAccess({
               </>
             }
           />
-          <p className="text-xs text-muted-foreground">
-            Other policies may grant or deny a feature too, and a Deny always wins.
+          <p className="text-xs text-muted-foreground" data-access-legend="">
+            <strong>Access</strong>: how far people go with an enabled feature. Read lets them see it, Write also
+            create and change, Admin also configure it.{' '}
+            {offer
+              ? 'Here it is a cap for everyone in the workspace, admins included; each person’s level still applies below it.'
+              : 'Here it is what this policy grants whoever holds it, within the workspace’s offer.'}{' '}
+            Unfold Actions to see what each level allows.
           </p>
           <div className="org-settings-users-table-wrap">
             <table className="org-settings-users-table">
-              <SettingsTableHead table={table} />
+              <SettingsTableHead table={table} trailing={<th aria-label="Configure" />} />
               <tbody>
-                {shown.length === 0 && <SettingsTableNoMatch colSpan={columns.length} noun="features" />}
+                {shown.length === 0 && <SettingsTableNoMatch colSpan={columns.length + 1} noun="features" />}
                 {table.paged.pageRows.map((row) => {
                   const draft = draftFor(row);
                   return (
@@ -303,44 +308,8 @@ export function FeatureAccess({
                         <p className="font-medium text-foreground">{row.label}</p>
                         <p className="text-xs text-muted-foreground">{row.key}</p>
                       </td>
-                      <td data-field="offered">
-                        <div
-                          className="workspace-features-choices"
-                          role="radiogroup"
-                          aria-label={`Who ${row.label} is offered to`}
-                        >
-                          {choicesOf(row, offer).map((choice) => (
-                            <button
-                              key={choice.value}
-                              type="button"
-                              role="radio"
-                              aria-checked={draft.choice === choice.value}
-                              data-choice={choice.value}
-                              title={choice.hint}
-                              disabled={!choice.enabled || saving}
-                              className="workspace-features-choice"
-                              onClick={() => choose(row, choice.value)}
-                            >
-                              {choice.label}
-                            </button>
-                          ))}
-                        </div>
-                        {rowNotes(row, state).map((note) => (
-                          <p key={note.text} className="workspace-features-note" data-tone={note.tone}>
-                            {note.text}
-                            {note.href && note.link ? (
-                              <>
-                                {' '}
-                                <Link href={note.href}>{note.link}</Link>
-                              </>
-                            ) : null}
-                          </p>
-                        ))}
-                        {rowErrors[row.key] && (
-                          <p className="workspace-features-error" role="alert">
-                            {rowErrors[row.key]}
-                          </p>
-                        )}
+                      <td data-field="description" className="text-muted-foreground">
+                        {featureDescription(row.key) || '—'}
                       </td>
                       <td data-field="access">
                         {(() => {
@@ -360,18 +329,52 @@ export function FeatureAccess({
                           );
                         })()}
                       </td>
-                      <td data-field="policies">
-                        {row.also.length === 0 ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          <ul className="workspace-features-also">
-                            {otherPolicies(row).map(({ policy, text, href }) => (
-                              <li key={policy.id} data-effect={policy.effect}>
-                                {href ? <Link href={href}>{text}</Link> : text}
-                              </li>
-                            ))}
-                          </ul>
+                      <td data-field="enabled">
+                        {(() => {
+                          const on = draft.choice === 'everyone';
+                          const choices = choicesOf(row, offer);
+                          const can = choices.find((c) => c.value === (on ? 'nobody' : 'everyone'))?.enabled ?? false;
+                          const hint = choices.find((c) => c.value === 'everyone')?.hint;
+                          return (
+                            <label className="inline-flex items-center gap-2" title={hint}>
+                              <input
+                                type="checkbox"
+                                checked={on}
+                                disabled={!can || saving}
+                                aria-label={`${offer ? 'Offer' : 'Grant'} ${row.label}`}
+                                data-enabled={row.key}
+                                onChange={(event) => choose(row, event.target.checked ? 'everyone' : 'nobody')}
+                              />
+                              <span className="text-xs text-muted-foreground">{on ? 'Enabled' : 'Disabled'}</span>
+                            </label>
+                          );
+                        })()}
+                        {rowNotes(row, state).map((note) => (
+                          <p key={note.text} className="workspace-features-note" data-tone={note.tone}>
+                            {note.text}
+                            {note.href && note.link ? (
+                              <>
+                                {' '}
+                                <Link href={note.href}>{note.link}</Link>
+                              </>
+                            ) : null}
+                          </p>
+                        ))}
+                        {rowErrors[row.key] && (
+                          <p className="workspace-features-error" role="alert">
+                            {rowErrors[row.key]}
+                          </p>
                         )}
+                      </td>
+                      <td className="whitespace-nowrap text-right">
+                        {(() => {
+                          const href = featurePage(workspaceId, row.key);
+                          return href ? (
+                            <Link href={href} className="text-xs text-primary hover:underline" data-action="configure">
+                              Configure {row.label} →
+                            </Link>
+                          ) : null;
+                        })()}
                       </td>
                     </tr>
                   );
