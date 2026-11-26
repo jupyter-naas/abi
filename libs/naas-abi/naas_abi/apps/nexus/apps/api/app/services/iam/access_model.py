@@ -975,8 +975,9 @@ def _no_level_needed(orgs: set[str]) -> str:
 
 
 def _is_graph_grant(policy_id: str, names: Mapping[str, str]) -> bool:
-    """A workspace's shared-graph policy (``graph_grants.policy_name``): per person,
-    kept in step by ``_sync_graph_grants``."""
+    """A workspace's shared-graph policy of before (``graphs_offer.policy_name``): per
+    person, kept in step by ``_sync_graph_grants`` until ``graphs_offer_v1`` moves it into
+    the offer."""
     name = names.get(policy_id, "")
     return name.startswith(GRAPH_GRANT_PREFIX) and GRAPH_GRANT_INFIX in name
 
@@ -1285,10 +1286,11 @@ def _default_admin(iam: Any, inputs: Inputs, outcome: Outcome, levels: Levels) -
 
 
 def _sync_graph_grants(iam: Any, inputs: Inputs, outcome: Outcome) -> list[str]:
-    """Each workspace's shared-graph policies (``graph_grants``) held by exactly its
-    people (read) and its admins (write), unscoped, as Nexus keeps them. Returns the
-    policies' ids."""
-    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
+    """Each workspace's shared-graph policies of before (``graphs_offer.policy_name``) held
+    by exactly its people (read) and its admins (write), unscoped, as Nexus kept them
+    until ``graphs_offer_v1`` (which runs after this move) put them in the offer. Returns
+    the policies' ids."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.graphs_offer import (
         READ,
         WRITE,
         policy_name,

@@ -6,6 +6,8 @@ import {
   OFFER_KINDS,
   WHOLE_MODULE,
   createOfferApi,
+  graphsSettingsHref,
+  graphsSummaryLines,
   type FileMode,
   type FileRow,
   type OfferApi,
@@ -386,6 +388,26 @@ export function WorkspaceOfferEditor({
           </p>
         )}
       </div>
+
+      {offer.graphs && (
+        <div className="access-offer-section" data-offer-section="graphs">
+          <h4 className="access-offer-heading">Graphs</h4>
+          <p className="access-policy-muted">
+            The graphs of other workspaces or of the platform its people read, or write (a Viewer still only reads), and
+            what it closes of its own.
+          </p>
+          <ul className="access-offer-list" data-offer-graphs="">
+            {graphsSummaryLines(offer.graphs).map((line) => (
+              <li key={line} className="access-offer-row">
+                <span className="access-offer-name">{line}</span>
+              </li>
+            ))}
+          </ul>
+          <a className="access-policy-link" href={graphsSettingsHref(workspaceId)}>
+            Change them in Settings › Graphs
+          </a>
+        </div>
+      )}
 
       <div className="access-offer-section" data-offer-section="search-sources">
         <h4 className="access-offer-heading">Search sources</h4>

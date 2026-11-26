@@ -27,7 +27,9 @@ The **given** sections name files outside W, absolute names only, which IAM give
 W's people within their level (``given_files``, ADR
 ``20261125_offer_gives_outside_resources``): ``GivenOrgFiles``, ``GivenPlatformFiles``
 and ``GivenSystemFiles``, each a mode, written as its Nexus half and its object storage
-half (``<sid>2``).
+half (``<sid>2``). And the graphs W is given and what it closes of its own
+(``given_graphs``): ``GivenGraphs``, ``GivenGraphsWrite``, ``GivenGraphsAll`` (Allows on
+absolute names) and ``OfferGraphsDeny`` (W's only Denies, within ``${scope}``).
 
 An offer of nothing is ``container_defaults.nothing_document`` (an Allow no name
 matches). ``offer_of`` reads the sections back: what the Features and Agents/Apps
@@ -49,7 +51,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import unquote
 
-from naas_abi.apps.nexus.apps.api.app.services.iam import given_files
+from naas_abi.apps.nexus.apps.api.app.services.iam import given_files, given_graphs
 from naas_abi.apps.nexus.apps.api.app.services.iam.given_files import Mode
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import scoped_resource
 from naas_abi_core.services.iam import module_scopes
@@ -103,10 +105,19 @@ OFFER_SIDS = frozenset(
         *(sid for sid, _ in SECTIONS.values()),
         *(sid for sid, _a, _t in ID_SECTIONS.values()),
         *given_files.SIDS.values(),
+        *given_graphs.SIDS,
     }
 )
 # The given sections' ``Offer`` fields (``given_files``).
 GIVEN_FIELDS = tuple(given_files.SIDS)
+# The Graphs part's ``Offer`` fields (``given_graphs``): sets of names, and a switch.
+GRAPH_NAME_FIELDS = ("graphs_read", "graphs_write", "graphs_all", "graphs_closed")
+GRAPH_FIELDS = (*GRAPH_NAME_FIELDS, "graphs_no_create")
+_GRAPH_SID_FIELD = {
+    given_graphs.READ_SID: "graphs_read",
+    given_graphs.WRITE_SID: "graphs_write",
+    given_graphs.ALL_SID: "graphs_all",
+}
 
 Item = tuple[str, str]  # (module, name); name ``*`` is the whole module
 
@@ -180,6 +191,15 @@ class Offer:
     org_files: OrgFiles | None = None
     platform_files: Mode | None = None
     system_files: Mode | None = None
+    # The graphs it is given (``given_graphs``), by absolute name: read (list and read),
+    # written, and every graph of its organization (``read_all``).
+    graphs_read: frozenset[str] = field(default_factory=frozenset)
+    graphs_write: frozenset[str] = field(default_factory=frozenset)
+    graphs_all: frozenset[str] = field(default_factory=frozenset)
+    # What it closes of its own, as Denies within ``${scope}``: creating graphs, and its
+    # own graphs (by name, with ``given_graphs.NEW_GRAPH``'s) when it excludes them.
+    graphs_no_create: bool = False
+    graphs_closed: frozenset[str] = field(default_factory=frozenset)
 
     @classmethod
     def of(
@@ -196,6 +216,11 @@ class Offer:
         org_files: OrgFiles | None = None,
         platform_files: Mode | None = None,
         system_files: Mode | None = None,
+        graphs_read: Iterable[str] = (),
+        graphs_write: Iterable[str] = (),
+        graphs_all: Iterable[str] = (),
+        graphs_no_create: bool = False,
+        graphs_closed: Iterable[str] = (),
     ) -> Offer:
         """An offer; each of ``modules`` adds every agent, app, workflow and
         pipeline of that module (a shared module offered whole)."""
@@ -211,6 +236,11 @@ class Offer:
             org_files=org_files,
             platform_files=platform_files,
             system_files=system_files,
+            graphs_read=frozenset(graphs_read),
+            graphs_write=frozenset(graphs_write),
+            graphs_all=frozenset(graphs_all),
+            graphs_no_create=graphs_no_create,
+            graphs_closed=frozenset(graphs_closed),
         )
 
     def items(self, kind: str) -> frozenset[Item]:
@@ -225,16 +255,20 @@ class Offer:
             any(self.items(kind) for kind in SECTIONS)
             or any(self.ids(f) for f in ID_SECTIONS)
             or any(getattr(self, f) for f in GIVEN_FIELDS)
+            or any(getattr(self, f) for f in GRAPH_FIELDS)
         )
 
     def merged(self, other: Offer) -> Offer:
-        """Both offers; a given section in the wider of its two modes."""
+        """Both offers; a given section in the wider of its two modes; the graphs both
+        name, and what either closes (merging never opens what one closes)."""
         return Offer(
             **{kind: self.items(kind) | other.items(kind) for kind in SECTIONS},
             **{f: self.ids(f) | other.ids(f) for f in ID_SECTIONS},
             org_files=_wider_org(self.org_files, other.org_files),
             platform_files=given_files.wider(self.platform_files, other.platform_files),
             system_files=given_files.wider(self.system_files, other.system_files),
+            **{f: getattr(self, f) | getattr(other, f) for f in GRAPH_NAME_FIELDS},
+            graphs_no_create=self.graphs_no_create or other.graphs_no_create,
         )
 
     def without(self, other: Offer) -> Offer:
@@ -246,6 +280,8 @@ class Offer:
             org_files=_org_without(self.org_files, other.org_files),
             platform_files=_mode_without(self.platform_files, other.platform_files),
             system_files=_mode_without(self.system_files, other.system_files),
+            **{f: getattr(self, f) - getattr(other, f) for f in GRAPH_NAME_FIELDS},
+            graphs_no_create=self.graphs_no_create and not other.graphs_no_create,
         )
 
     def offers(self, kind: str, module: str, name: str) -> bool:
@@ -304,6 +340,13 @@ def offer_statements(offer: Offer) -> list[dict[str, Any]]:
         )
     statements += given_files.statements(given_files.PLATFORM_FILES, offer.platform_files)
     statements += given_files.statements(given_files.SYSTEM_FILES, offer.system_files)
+    statements += given_graphs.statements(
+        offer.graphs_read,
+        offer.graphs_write,
+        offer.graphs_all,
+        offer.graphs_no_create,
+        offer.graphs_closed,
+    )
     return statements
 
 
@@ -351,10 +394,21 @@ def offer_of(document: Any) -> Offer:
     sid_field = {sid: (f, type_name) for f, (sid, _u, type_name) in ID_SECTIONS.items()}
     # A given section's mode is read off its first statement, the Nexus half.
     given: dict[str, tuple[list[str], list[str]]] = {}
+    graphs: dict[str, set[str]] = {f: set() for f in GRAPH_NAME_FIELDS}
+    no_create = False
     for statement in _statements_of(document):
         sid, effect, actions, resources = _statement_parts(statement)
         section = offer_section(sid)
-        if effect != "Allow" or section is None:
+        if section == given_graphs.DENY_SID and effect == "Deny":
+            if sid == section:
+                no_create = True
+            else:
+                graphs["graphs_closed"].update(resources)
+            continue
+        if effect != "Allow" or section is None or section == given_graphs.DENY_SID:
+            continue
+        if section in _GRAPH_SID_FIELD:
+            graphs[_GRAPH_SID_FIELD[section]].update(resources)
             continue
         if section in given_files.FIELD_OF_SID:
             if sid == section:
@@ -375,6 +429,8 @@ def offer_of(document: Any) -> Offer:
         org_files=OrgFiles(organization, org_mode) if org_mode and organization else None,
         platform_files=modes.get(given_files.PLATFORM_FILES),
         system_files=modes.get(given_files.SYSTEM_FILES),
+        **{f: frozenset(v) for f, v in graphs.items()},
+        graphs_no_create=no_create,
     )
 
 
@@ -471,6 +527,8 @@ def with_features(offer: Offer, features: Iterable[str]) -> Offer:
 __all__ = [
     "FEATURES_SID",
     "GIVEN_FIELDS",
+    "GRAPH_FIELDS",
+    "GRAPH_NAME_FIELDS",
     "OFFER_SIDS",
     "Offer",
     "OrgFiles",
@@ -482,8 +540,10 @@ __all__ = [
     "offer_from_seed",
     "offer_of",
     "offer_section",
+    "graphs_only",
     "with_features",
     "with_offer",
+    "without_graphs_fields",
 ]
 
 
@@ -583,20 +643,26 @@ def default_search_sources() -> frozenset[str]:
 
 def in_offer_form(document: Any) -> bool:
     """Whether ``document`` is an allow-list this module wrote: only offer sections
-    (or the ``Nothing`` placeholder). A ceiling of an older version (a wildcard and
-    its Denies, the sets' move's) is not: the access migration (S4) converts it."""
+    (or the ``Nothing`` placeholder), Allows but for the Denies of W's own graphs
+    (``OfferGraphsDeny``). A ceiling of an older version (a wildcard and its Denies, the
+    sets' move's) is not: the access migration (S4) converts it."""
     from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import NOTHING_SID
+
+    def fits(sid: Any, effect: str) -> bool:
+        section = offer_section(sid)
+        if section == given_graphs.DENY_SID:
+            return effect == "Deny"
+        return (section is not None or sid == NOTHING_SID) and effect == "Allow"
 
     statements = _statements_of(document)
     return bool(statements) and all(
-        (offer_section(sid) is not None or sid == NOTHING_SID) and effect == "Allow"
-        for sid, effect, _actions, _resources in map(_statement_parts, statements)
+        fits(sid, effect) for sid, effect, _actions, _resources in map(_statement_parts, statements)
     )
 
 
 def instances_only(offer: Offer) -> Offer:
-    """``offer`` without its features and what it gives outside the workspace: what a
-    re-seed adds (the rest is the settings')."""
+    """``offer`` without its features, what it gives outside the workspace and what it
+    closes: what a re-seed adds (the rest is the settings')."""
     return replace(
         offer,
         features=frozenset(),
@@ -605,4 +671,15 @@ def instances_only(offer: Offer) -> Offer:
         org_files=None,
         platform_files=None,
         system_files=None,
+        **without_graphs_fields(),
     )
+
+
+def without_graphs_fields() -> dict[str, Any]:
+    """The Graphs part of an offer, empty: ``replace(offer, **without_graphs_fields())``."""
+    return {**{f: frozenset() for f in GRAPH_NAME_FIELDS}, "graphs_no_create": False}
+
+
+def graphs_only(offer: Offer) -> Offer:
+    """The Graphs part of ``offer`` alone."""
+    return Offer(**{f: getattr(offer, f) for f in GRAPH_FIELDS})

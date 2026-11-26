@@ -499,21 +499,6 @@ async def test_a_member_joined_when_they_entered_the_workspace_s_groups(world):
 
 
 @pytest.mark.asyncio
-async def test_an_organization_s_admins_read_and_write_its_workspaces_shared_graphs(world):
-    """An organization's admins are admins of each of its workspaces, with no "<W>
-    admins": its shared graphs' grants follow them too."""
-    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
-        GraphGrants,
-    )
-
-    await _team(world)
-    readers, writers = await GraphGrants._holders(world.W)
-    oadmin, member = world.principal("oadmin"), world.principal("member")
-    assert oadmin in readers and oadmin in writers
-    assert member in readers and member not in writers
-
-
-@pytest.mark.asyncio
 async def test_a_role_at_the_organization_and_at_the_platform(world):
     """Organization › Users and Platform › Users › Role: the organization's people first
     and its admins for an org admin (no level); at the platform, Platform admins for a

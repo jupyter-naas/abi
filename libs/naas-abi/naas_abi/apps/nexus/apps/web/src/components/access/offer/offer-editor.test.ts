@@ -357,3 +357,32 @@ describe('WorkspaceOfferEditor: files', () => {
     expect(document.querySelector('[data-offer-my-files]')?.textContent).toContain('Viewers have none');
   });
 });
+
+describe('WorkspaceOfferEditor: graphs', () => {
+  it('shows the Graphs part as a summary, changed in Settings › Graphs', async () => {
+    const graphs = { read: 3, write: 1, read_all: true, include_owned: false, allow_create: false };
+    await render(setup({ ...OFFER, graphs }));
+    const section = document.querySelector('[data-offer-section="graphs"]');
+    expect([...(section?.querySelectorAll('[data-offer-graphs] li') ?? [])].map((li) => li.textContent)).toEqual([
+      '3 graphs given to read, 1 of them to write.',
+      'Every graph of its organization is read, the ones made later too.',
+      'Its own graphs are excluded.',
+      'Creating graphs is closed.',
+    ]);
+    // Read only here: no toggle, a link to where it is changed.
+    expect(section?.querySelector('[role="switch"], select')).toBeNull();
+    expect(section?.querySelector('a')?.getAttribute('href')).toBe('/workspace/ws-1/settings/graphs');
+  });
+
+  it('says when nothing is given, and shows no section for an offer that does not say', async () => {
+    const graphs = { read: 0, write: 0, read_all: false, include_owned: true, allow_create: true };
+    await render(setup({ ...OFFER, graphs }));
+    expect(document.querySelector('[data-offer-graphs]')?.textContent).toBe(
+      'No graph of another workspace or of the platform is given.',
+    );
+    await mounted?.unmount();
+    mounted = null;
+    await render(setup());
+    expect(document.querySelector('[data-offer-section="graphs"]')).toBeNull();
+  });
+});

@@ -1312,7 +1312,7 @@ async def _none_of(actions: tuple[str, ...]) -> dict[str, bool]:
 
 
 # Names and descriptions Nexus gives the policies it makes itself: a workspace's graph
-# assignments (``graph_grants``) and what the sets' move made (``policy_tree.MADE``).
+# assignments of before (``graphs_offer``) and what the sets' move made (``policy_tree.MADE``).
 RESERVED_POLICY_PREFIX = "workspace."
 
 

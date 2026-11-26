@@ -239,6 +239,35 @@ def test_a_reseed_adds_the_seeds_instances_never_its_features(world):
     assert offer_of(org_access.document).features == {"chat"}
 
 
+def test_a_seeded_workspace_is_made_with_its_graphs_its_organization_never_given_them(world):
+    """A configured workspace's graphs (``graphs_offer.configured_graphs``) are in its own
+    access policy when it is made; its organization's offer, which takes the seed, takes
+    none of them, and a re-seed never adds them."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import given_graphs
+    from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
+
+    graphs = Offer(
+        **given_graphs.fields_of(
+            WorkspaceGraphPolicyConfig(read_all=True, read=["urn:a"], allow_create=False),
+            container=W,
+        )
+    )
+    seeded = Offer.of(features=["chat"]).merged(graphs)
+    records, report = _make(world, {"w": seeded})
+    assert not report.failed
+    with as_service_account("api"):
+        w_access = world.iam.get_policy(records[W].access_policy_id)
+        org_access = world.iam.get_policy(records[org_container("acme")].access_policy_id)
+    assert offer_of(w_access.document) == seeded
+    assert offer_of(org_access.document) == Offer.of(features=["chat"])
+    with as_service_account("api"):
+        plan_and_apply(
+            world.iam, {"acme": "Acme"}, {"w": ("acme", "W")}, dict(records), {"w": seeded}
+        )
+        org_access = world.iam.get_policy(records[org_container("acme")].access_policy_id)
+    assert offer_of(org_access.document) == Offer.of(features=["chat"])
+
+
 def test_search_sources_are_a_section_of_their_own():
     offer = Offer.of(features=["search"], search_sources=["chat", "web.wikipedia"])
     document = offer_document(offer)
@@ -332,3 +361,133 @@ def test_the_files_given_outside_the_workspace_are_sections_of_the_offer():
         offer_document(Offer.of(system_files="write"))
     # A re-seed adds instances, never a given section.
     assert instances_only(offer).is_empty()
+
+
+def test_the_graphs_given_and_closed_are_sections_of_the_offer():
+    """The Graphs part: given Allows on absolute names (read, write, every graph of the
+    organization), in parts past the pattern limit, and the Denies W writes within
+    ``${scope}``, read back as they were."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import given_graphs
+
+    many = [f"urn:graph:g{i:03}" for i in range(120)]
+    read = frozenset(n for iri in many for n in given_graphs.anywhere_names(iri))
+    write = frozenset({given_graphs.name_in(W2, "urn:graph:g000")})
+    closed = frozenset(
+        {given_graphs.closed_name(given_graphs.NEW_GRAPH), given_graphs.closed_name("urn:x")}
+    )
+    offer = Offer.of(
+        features=["files"],
+        graphs_read=read,
+        graphs_write=write,
+        graphs_all=frozenset(given_graphs.read_all_names(W)),
+        graphs_no_create=True,
+        graphs_closed=closed,
+    )
+    document = offer_document(offer)
+    sids = [s["sid"] for s in document["statements"]]
+    assert sids == [
+        "OfferFeatures",
+        "GivenGraphs",
+        "GivenGraphs2",
+        "GivenGraphs3",
+        "GivenGraphsWrite",
+        "GivenGraphsAll",
+        "OfferGraphsDeny",
+        "OfferGraphsDeny2",
+    ]
+    by_sid = {s["sid"]: s for s in document["statements"]}
+    assert by_sid["GivenGraphs"]["actions"] == given_graphs.READ_ACTIONS
+    assert "triple_store:DropGraph" not in given_graphs.READ_ACTIONS + given_graphs.WRITE_ACTIONS
+    assert "triple_store:ClearGraph" not in given_graphs.WRITE_ACTIONS
+    assert by_sid["GivenGraphsWrite"]["actions"] == ["triple_store:Insert", "triple_store:Remove"]
+    assert set(by_sid["GivenGraphsAll"]["resources"]) == {
+        "abi:nexus:organization/acme/*/triple_store:graph/*",
+        "abi:nexus:organization/acme/triple_store:graph/*",
+        "abi:triple_store:graph/http%3A%2F%2Fontology.naas.ai%2Fgraph%2Fschema",
+        "abi:*/triple_store:graph/http%3A%2F%2Fontology.naas.ai%2Fgraph%2Fschema",
+    }
+    assert by_sid["OfferGraphsDeny"] == {
+        "sid": "OfferGraphsDeny",
+        "effect": "Deny",
+        "actions": ["triple_store:CreateGraph"],
+        "resources": ["${scope}/triple_store:graph/*"],
+    }
+    assert by_sid["OfferGraphsDeny2"]["effect"] == "Deny"
+    allows = [s for s in document["statements"] if s["sid"].startswith("GivenGraphs")]
+    assert all("${" not in r for s in allows for r in s["resources"])
+    denies = [s for s in document["statements"] if s["effect"] == "Deny"]
+    assert all(r.startswith("${scope}/") for s in denies for r in s["resources"])
+    parse_policy_document(document)
+    assert offer_of(document) == offer
+    assert in_offer_form(document)
+    assert offer_section("GivenGraphsWrite") == "GivenGraphsWrite"
+    assert offer_section("OfferGraphsDeny2") == "OfferGraphsDeny"
+    # Only W's Denies may be Denies: a Deny in another section is not the offer's form.
+    stray = {**document, "statements": [*document["statements"]]}
+    stray["statements"][1] = {**stray["statements"][1], "effect": "Deny"}
+    assert not in_offer_form(stray)
+    # Merged keeps what either says, ``without`` takes the other's names away.
+    assert Offer.of(graphs_read=read).merged(Offer.of(graphs_write=write)) == Offer.of(
+        graphs_read=read, graphs_write=write
+    )
+    assert offer.merged(Offer.of(features=["chat"])).graphs_closed == closed
+    assert offer.without(offer).is_empty()
+    assert not Offer.of(graphs_no_create=True).is_empty()
+    # Rewriting the sections keeps the rest; a re-seed never adds them.
+    narrowed = with_offer(document, replace(offer, graphs_read=frozenset()))
+    assert offer_of(narrowed) == replace(offer, graphs_read=frozenset())
+    assert instances_only(offer).is_empty()
+
+
+def test_a_graph_configuration_becomes_the_graphs_sections_and_back():
+    from naas_abi.apps.nexus.apps.api.app.services.iam import given_graphs
+    from naas_abi.apps.nexus.graph_policy_config import (
+        NEXUS_IDENTITY_GRAPH,
+        SCHEMA_GRAPH,
+        WorkspaceGraphPolicyConfig,
+    )
+
+    config = WorkspaceGraphPolicyConfig(
+        read=["urn:a", SCHEMA_GRAPH, NEXUS_IDENTITY_GRAPH],
+        write=["urn:b"],
+        include_owned=False,
+    )
+    fields = given_graphs.fields_of(config, container=W, owned={"urn:mine", "urn:a"})
+    assert given_graphs.iris_of(fields["graphs_read"]) == {"urn:a", "urn:b", SCHEMA_GRAPH}
+    assert fields["graphs_read"] >= set(given_graphs.anywhere_names("urn:a"))
+    assert given_graphs.iris_of(fields["graphs_write"]) == {"urn:b"}
+    assert fields["graphs_no_create"] is True
+    # Its own graphs are closed but the one it shares with itself, and a new one.
+    assert given_graphs.iris_of(fields["graphs_closed"]) == {"urn:mine", given_graphs.NEW_GRAPH}
+    back = given_graphs.config_of(fields)
+    assert back == WorkspaceGraphPolicyConfig(
+        read=sorted(["urn:a", "urn:b", SCHEMA_GRAPH]),
+        write=["urn:b"],
+        include_owned=False,
+        allow_create=False,
+    )
+    # A change keeps the names of the graphs that stay; a new one is named by ``name_of``.
+    changed = given_graphs.fields_of(
+        WorkspaceGraphPolicyConfig(read=["urn:a", "urn:c"]),
+        container=W,
+        name_of=lambda iri: [given_graphs.name_in(W2, iri)],
+        current=fields,
+    )
+    assert changed["graphs_read"] == {
+        *given_graphs.anywhere_names("urn:a"),
+        given_graphs.name_in(W2, "urn:c"),
+    }
+    assert changed["graphs_closed"] == frozenset() and changed["graphs_no_create"] is False
+    # Reading every graph: the organization's, kept as it is named.
+    every = given_graphs.fields_of(WorkspaceGraphPolicyConfig(read_all=True), container=W)
+    assert every["graphs_all"] == set(given_graphs.read_all_names(W))
+    assert given_graphs.config_of(every).read_all
+    solo = given_graphs.read_all_names(workspace_container(None, "solo"))
+    assert solo[0] == "abi:nexus:workspace/solo/triple_store:graph/*"
+    assert given_graphs.summary(fields) == {
+        "read": 3,
+        "write": 1,
+        "read_all": False,
+        "include_owned": False,
+        "allow_create": False,
+    }

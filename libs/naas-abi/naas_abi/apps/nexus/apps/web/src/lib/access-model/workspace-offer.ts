@@ -4,7 +4,9 @@
  * shared module offered whole is `<module>/*`); its features are General › Features'
  * (`/feature-access`, Everyone or Nobody). Everyone in "<W> workspace" reaches what it offers;
  * their level decides what they may do with it. Its Files part gives what lies outside the workspace
- * (Organization, Platform and System Files, `PUT /offer/files`), within each person's level.
+ * (Organization, Platform and System Files, `PUT /offer/files`), within each person's level. Its
+ * Graphs part (the graphs it is given to read or write, every graph of its organization, what it
+ * closes of its own) is Settings › Graphs' (`/resource-access/graphs`): the offer shows its summary.
  */
 import { authFetch } from '@/stores/auth';
 
@@ -37,7 +39,42 @@ export type OfferState = {
   /** The files it gives outside it; no Organization Files row for a workspace in no organization. */
   files?: FileRow[];
   my_files?: MyFiles;
+  /** The Graphs part, as Settings › Graphs edits it: shown here, not changed. */
+  graphs?: GraphsSummary;
 };
+
+/** What the offer gives of the graphs outside the workspace, and closes of its own. */
+export type GraphsSummary = {
+  /** Graphs given to read (those given to write included). */
+  read: number;
+  /** Graphs given to write (a Viewer still only reads). */
+  write: number;
+  /** Every graph of its organization, the ones made later included. */
+  read_all: boolean;
+  /** Its own graphs are offered (false: excluded). */
+  include_owned: boolean;
+  /** Its members may create graphs. */
+  allow_create: boolean;
+};
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** The Graphs part in words, one line each. */
+export function graphsSummaryLines(graphs: GraphsSummary): string[] {
+  const lines = [
+    graphs.read === 0
+      ? 'No graph of another workspace or of the platform is given.'
+      : `${plural(graphs.read, 'graph', 'graphs')} given to read, ${graphs.write} of them to write.`,
+  ];
+  if (graphs.read_all) lines.push('Every graph of its organization is read, the ones made later too.');
+  if (!graphs.include_owned) lines.push('Its own graphs are excluded.');
+  if (!graphs.allow_create) lines.push('Creating graphs is closed.');
+  return lines;
+}
+
+/** Where the Graphs part is changed. */
+export const graphsSettingsHref = (workspaceId: string) =>
+  `/workspace/${encodeURIComponent(workspaceId)}/settings/graphs`;
 
 export type OfferChange = { kind: OfferKind; module: string; name: string; offered: boolean };
 

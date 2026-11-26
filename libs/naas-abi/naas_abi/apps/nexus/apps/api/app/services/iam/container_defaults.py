@@ -45,7 +45,7 @@ import json
 import re
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Protocol
 
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
@@ -65,6 +65,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     offer_document,
     offer_of,
     with_offer,
+    without_graphs_fields,
 )
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
@@ -1149,7 +1150,10 @@ def apply_seeded_offers(
             logger.exception(f"The seed of {workspace_id} is not in its access policy")
             report.failed.append(f"{workspace_id}: {exc}")
         if org_id:
-            by_org[org_id] = by_org.get(org_id, Offer()).merged(offer)
+            # What a workspace is given of the graphs is its own: never its organization's.
+            by_org[org_id] = by_org.get(org_id, Offer()).merged(
+                replace(offer, **without_graphs_fields())
+            )
     for org_id, offer in sorted(by_org.items()):
         record = records.get(org_container(org_id))
         try:
@@ -1346,6 +1350,18 @@ async def migrate(db: AsyncSession, defaults: ContainerDefaults = CONTAINER_DEFA
     orgs, workspaces = await read_nexus(db)
     known = {record.container: record for record in await store.all()}
     offers = await configured_offers(db)
+    # A configured workspace made now is given the graphs its configuration names
+    # (``graphs_offer.configured_graphs``); one made before has them in its offer.
+    missing = {
+        w: workspaces[w][0]
+        for w in offers
+        if w in workspaces and workspace_container(workspaces[w][0], w) not in known
+    }
+    if missing:
+        from naas_abi.apps.nexus.apps.api.app.services.iam.graphs_offer import configured_graphs
+
+        graphs = await configured_graphs(db, missing)
+        offers = {w: o.merged(graphs[w]) if w in graphs else o for w, o in offers.items()}
     made, report = await run_in_threadpool(
         lambda: _as_api(lambda iam: plan_and_apply(iam, orgs, workspaces, known, offers))
     )

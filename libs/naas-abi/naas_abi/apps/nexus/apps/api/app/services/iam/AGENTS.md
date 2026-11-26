@@ -33,6 +33,8 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `capabilities.py` | Capability groups made on demand (`ensure_capability`): an organization's "Workflow runners", the platform's "Models · all" |
 | `given_files.py` | The files a workspace's offer gives outside it: `GivenOrgFiles`, `GivenPlatformFiles`, `GivenSystemFiles` by mode (`statements`, `mode_of`) |
 | `files_offer.py` | Startup, once: the Platform Files groups of #1590 into `GivenPlatformFiles`, groups and policies deleted (`iam_migrations` `files_offer_v1`); the legacy drive flags (`convert_legacy_drive_flags`, `DriveFlagChange`) |
+| `given_graphs.py` | The graphs a workspace's offer gives outside it and what it closes of its own: `GivenGraphs`, `GivenGraphsWrite`, `GivenGraphsAll`, `OfferGraphsDeny` (`statements`, `fields_of` from a `WorkspaceGraphPolicyConfig`, `config_of` back, `summary`) |
+| `graphs_offer.py` | Startup, once: each workspace's graph assignment into its offer, the `workspace.<ws>.graphs.read|write` policies and their per-person attachments deleted (`iam_migrations` `graphs_offer_v1`); `configured_graphs` for a seeded workspace made later |
 | `platform_files_routes.py` | `GET`/`PUT /api/workspaces/{id}/platform-files`: `{workspace_id, mode, can_change}`, the offer's `GivenPlatformFiles`; read as the configuration, written as the caller |
 | `container_defaults.py` | Each organization's and workspace's access policy and groups ("Access policies and default groups"): "<O> access", "<O> admins", "<O> people"; "<W> access" (W's bound), "<W> workspace", "<W> admins"; made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), forgotten with it (`dropped`); `grouped` / `grouped_record` (whether its people are groups, #1585); a container recorded before #1585 keeps its "<X> members" and admins in step with the roles (`sync_scope`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
 | `access_model.py` | Startup, once, after `container_defaults_v1`: per-person attachments become groups, with the report of every access change, compared after the start ("The access move"; `migrate_access`, `complete_report`, `iam_migrations` `access_model_v1`; `abi iam migrate-access --dry-run`, `migrate_from_cli`) |
@@ -365,9 +367,8 @@ there is a level. Nothing is attached to a person.
   makes the level groups (`LEVELS.peek`).
 - **Workspace creation** takes `admin_id` (default the creator; in an organization, someone of its directory, else
   400), who joins "<W> admins" and "<W> workspace"; the defaults are made before the grant.
-- **Shared graph grants** (`graph_grants.py`) follow the groups: `.read` to whoever belongs to W, `.write` to its
-  admins (and, in a container of before, its members). A group W owns receives attachments at W only, always at a
-  scope, and a scoped one keeps only `${scope}` names, so they stay unscoped attachments to each holder, kept in step.
+- **Shared graphs** are the Graphs part of W's offer (`given_graphs.py`): IAM gives them to W's people while they
+  belong there; nothing is kept in step with the groups.
 
 ### The upgrade (`container_defaults_v1`)
 
@@ -503,6 +504,34 @@ lock; it waits for `container_defaults_v1`. Built from what IAM holds now with S
   `"platform"|"system"`, `action` `"converted"|"reported"|"none"`, `detail`) reads `workspace_drive_flags_legacy`,
   gives `GivenPlatformFiles` write for each `platform_drive_enabled`, reports `system_drive_enabled`, then drops the
   table; idempotent; `apply=False` is a dry run.
+
+## Graphs given by the workspace's offer (ADR `20261125_offer_gives_outside_resources`)
+
+- **Sections** of "<W> access" (`given_graphs.py`, read and written by `workspace_offer`, fields `graphs_read`,
+  `graphs_write`, `graphs_all`, `graphs_no_create`, `graphs_closed`): `GivenGraphs` (parts `GivenGraphs2`...: the
+  `triple_store` actions at the list and read levels on each graph W reads or writes), `GivenGraphsWrite` (parts too:
+  `Insert`, `Remove` on each graph it writes), `GivenGraphsAll` (read, `read_all`: `<O>/triple_store:graph/*`,
+  `<O>/*/triple_store:graph/*`, W's own for a workspace in none, and the schema graph), and W's only Denies,
+  `OfferGraphsDeny` (`CreateGraph` on `${scope}/triple_store:graph/*`: creation closed) and `OfferGraphsDeny2`...
+  (every graph action on `${scope}/triple_store:graph/<iri>` of each own graph it excludes, and the name of
+  `given_graphs.NEW_GRAPH`, which says it excludes them). Never `ClearGraph` nor `DropGraph`; Nexus's own graphs
+  never. Capped per person: a Viewer reads, a Member and an admin write.
+- **Names.** Settings › Graphs names a graph it adds as IAM placed it (`graph_iam.graph_name`), which the caller must
+  hold (core's held check, unscoped); the migration and a configuration name it wherever placed
+  (`given_graphs.anywhere_names`). The graphs that stay keep their names (`fields_of(current=)`), so a workspace
+  admin removes one without holding the others.
+- **Who changes them:** Settings › Graphs (`resource_access.py`, kind `graphs`) through
+  `FeatureAccessService.set_graphs`, as the caller and audited. `read_all` turned on also needs `ManageSystem`.
+  A Deny of W's bound restricts W's own admins (core: only whom it does not restrict lifts it): reopening creation or
+  W's own graphs is an organization admin's or the platform admin's. `read_offer` says `graphs`
+  (`given_graphs.summary`), which the offer editor shows.
+- **The move** `graphs_offer_v1` (`graphs_offer.py`, `main._offer_moves` after `files_offer`): each workspace's
+  effective assignment (`load_resource_policy`: its row, else its configuration's) becomes its sections, then the
+  policies are detached from everyone and deleted. A workspace with something to move and no access policy waits
+  (its policies kept, not recorded). Reported: `written`, `kept`, `waiting`, `policies_deleted`,
+  `attachments_deleted`, `widened` (a policy of theirs passed `MAX_PATTERNS` names, never written: given for the
+  first time), `failed`. A configured workspace made later gets its graphs with its access policy
+  (`container_defaults.migrate`, `configured_graphs`); its organization's offer never takes them.
 
 ## The upgrade: sets and toggles become policies
 

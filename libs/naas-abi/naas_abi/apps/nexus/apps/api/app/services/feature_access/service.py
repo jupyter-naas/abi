@@ -15,7 +15,9 @@ policy for the feature gives it to some people.
 Its Files part gives what lies outside the workspace (``iam/given_files``, ADR
 ``20261125_offer_gives_outside_resources``): Organization, Platform and System Files,
 each Off, Read or Read and write, as given sections of "<W> access". Whoever holds a
-section may give it; a workspace's admin may narrow or remove one, never add it.
+section may give it; a workspace's admin may narrow or remove one, never add it. Its
+Graphs part (``iam/given_graphs``), written by Settings › Graphs: the graphs it is given
+to read or write, every graph of its organization, and what it closes of its own.
 
 Every write is an ordinary IAM call made as the caller and audited first
 (``iam:UpdatePolicy`` on "<W> access"), so IAM's own rules apply: grant only what
@@ -28,7 +30,7 @@ wins.
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -37,7 +39,7 @@ from naas_abi.apps.nexus.apps.api.app.services.feature_access.port import (
     FeatureChange,
     FeaturePolicyStore,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam import given_files
+from naas_abi.apps.nexus.apps.api.app.services.iam import given_files, given_graphs
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.given_files import (
     LABELS,
@@ -49,6 +51,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.given_files import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import PLATFORM, nexus_resource, org_of
 from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
+    GRAPH_FIELDS,
     SECTIONS,
     WHOLE_MODULE,
     Offer,
@@ -638,6 +641,8 @@ class FeatureAccessService:
                     widen=widen,
                 ),
                 "my_files": my_files_json(),
+                # Settings › Graphs edits it: shown here, not changed.
+                "graphs": given_graphs.summary(offer),
             }
 
         return await run_in_threadpool(snapshot)
@@ -747,6 +752,50 @@ class FeatureAccessService:
             lambda offer: replace(offer, ontologies=wanted),
         )
         _log.info(f"Ontologies of {workspace_id}: {len(wanted)} offered")
+        policy = await run_in_threadpool(self._gateway.policy, access_id)
+        return offer_of(policy.document)
+
+    async def set_graphs(
+        self,
+        user: Any,
+        workspace_id: str,
+        config: Any,
+        *,
+        owned: Iterable[str] = (),
+        name_of: given_graphs.NameOf = given_graphs.anywhere_names,
+    ) -> Offer:
+        """What the workspace is given of the graphs outside it, and what it closes of its
+        own (Settings › Graphs: a ``WorkspaceGraphPolicyConfig``), in one write of "<W>
+        access" as the caller. The graphs that stay keep their names; ``name_of`` names a
+        new one (as IAM placed it), ``owned`` are the graphs the workspace owns. IAM
+        refuses a graph the caller does not hold for what it is given
+        (``PermissionDeniedError``, 403) and nothing changes; taking one away needs only
+        the right to change the policy. Answers the offer after."""
+        container, record = await self._where(workspace_id)
+        access_id = getattr(record, "access_policy_id", None)
+        owned = frozenset(owned)
+
+        def apply(offer: Offer) -> Offer:
+            current = {f: getattr(offer, f) for f in GRAPH_FIELDS}
+            fields = given_graphs.fields_of(
+                config, container=container, owned=owned, name_of=name_of, current=current
+            )
+            return replace(offer, **fields)
+
+        summary = given_graphs.summary(
+            given_graphs.fields_of(config, container=container, owned=owned)
+        )
+        detail = ",".join(f"{k}={v}" for k, v in summary.items())
+        await self._set_offer(
+            user,
+            workspace_id,
+            access_id,
+            "workspace-offer.graphs",
+            workspace_id,
+            apply,
+            detail=detail,
+        )
+        _log.info(f"Graphs of {workspace_id}: {detail}")
         policy = await run_in_threadpool(self._gateway.policy, access_id)
         return offer_of(policy.document)
 
