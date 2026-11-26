@@ -934,7 +934,8 @@ class IAMService(IIAMService, PolicySource):
         """Where a policy attached at ``${my workspaces}`` applies: each
         ``(container, membership group)`` of ``memberships`` within the owner of
         the policy and of the group holding it (``holder_group``; None: the
-        principal itself, the platform's), each container once."""
+        principal itself, the platform's), each container once; a built-in role
+        never at a container whose type is marked ``no_membership_roles``."""
         policy = (
             self._load_policy(policy_id) if fresh else self._cached_policy(policy_id)
         )
@@ -944,9 +945,12 @@ class IAMService(IIAMService, PolicySource):
         if holder_group is not None:
             group = self._find_group(holder_group)
             holder_owner = group.owner_scope if group is not None else UNRESOLVED
+        is_role = policy_id in roles.ROLES
         reached: dict[str, str] = {}
         for membership_group, container in memberships:
             if container in reached:
+                continue
+            if is_role and not self._membership_roles_at(container):
                 continue
             if within_owner(policy.owner_scope, container) and within_owner(
                 holder_owner, container
@@ -3677,6 +3681,16 @@ class IAMService(IIAMService, PolicySource):
                 self.store.attach(Attachment(new_id("att"), companion, principal_id))
             elif companion != wanted and present:
                 self.store.detach(companion, principal_id, None)
+
+    def _membership_roles_at(self, container: str) -> bool:
+        """Whether a built-in role attached at ``${my workspaces}`` applies at
+        ``container``: not at one whose type is marked ``no_membership_roles``
+        (Nexus's organization)."""
+        if container in (PLATFORM_SCOPE, UNRESOLVED) or is_below(container):
+            return True
+        last = parse_container(as_container(container))[-1]
+        found = self._registry.resource_type(last.service, last.type)
+        return found is None or not found.no_membership_roles
 
     def _brings_companions(self, scope: str) -> bool:
         """Whether a role at ``scope`` brings the platform companions: below a

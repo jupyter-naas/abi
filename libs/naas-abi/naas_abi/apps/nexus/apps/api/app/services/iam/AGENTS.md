@@ -263,7 +263,7 @@ policy tree of issue #1413's journeys, the groups of #1585 ("Levels as groups"):
 | "<W> access" | the workspace | "<O> access"; none for a workspace in no organization | its offer (`workspace_offer`) | by "<W> workspace" at W: **W's bound** (core "Bounds"), not a grant |
 | "<W> workspace" | W, a membership group of W | | its people | "<W> access" at W (the bound) |
 | "<W> admins" | W, a membership group of W | | its admins | `builtin.admin` and "Workspace admin access" at `${my workspaces}` (W alone: its owner) |
-| "<O> people" | O, a membership group of O | | the organization's people | `builtin.viewer` and "Viewer access" at `${my workspaces}` |
+| "<O> people" | O, a membership group of O | | the organization's people (its admins, and whoever holds a role at O) | "Organization view" at `${my workspaces}` and at O (O's bound): they see O, nothing it holds; `organization` is `no_membership_roles`, so no level's built-in role reaches O (ADR decision 12, `org_people_view_v1`) |
 | "<O> admins" | O | | its admins | "<O> access" below O, `builtin.admin` at O and below it |
 
 A container recorded before #1585 has "<X> members" (every user holding a role at X itself) in place of its

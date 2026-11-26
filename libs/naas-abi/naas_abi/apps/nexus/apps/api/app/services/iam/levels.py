@@ -10,6 +10,11 @@
 | "Workspace admins" | the admin model sets (every model), unscoped: whoever is in a "<W> admins" or "<O> admins" |
 | "Platform admins" | ``builtin.platform_admin``, unscoped (``users.is_superadmin``) |
 
+"Organization view" (``GetOrganization``, ``ListOrganizations`` on ``${scope}``) is what
+"<O> people" holds, at ``${my workspaces}`` and at O, its bound (``container_defaults``):
+the organization is ``no_membership_roles``, so the level's built-in role gives nothing
+there, and the bound keeps the level policies to that view.
+
 A level is a pair. The built-in role is the level's actions: IAM generates it from the
 catalogs by level (``list``/``read``, ``write``, ``admin``), keeps it in step with every
 catalog change, and derives the platform companion of a role reached through
@@ -61,6 +66,7 @@ ADMIN_FEATURES: tuple[str, ...] = KNOWN_FEATURE_KEYS
 VIEWER_ACCESS = "Viewer access"
 MEMBER_ACCESS = "Member access"
 WORKSPACE_ADMIN_ACCESS = "Workspace admin access"
+ORG_VIEW = "Organization view"
 
 VIEWERS = "Viewers"
 MEMBERS = "Members"
@@ -93,6 +99,10 @@ _DESCRIBED: dict[str, tuple[str, str]] = {
         "offers: ",
         ", its agents, apps, workflows and pipelines.",
     ),
+    ORG_VIEW: (
+        'What an organization\'s people do at it ("<O> people", and its bound there): ',
+        "see it and list it, nothing it holds.",
+    ),
 }
 # The level each configurable level policy is (``feature_flags.level_features``).
 _CONFIGURED: dict[str, str] = {VIEWER_ACCESS: VIEWER, MEMBER_ACCESS: MEMBER}
@@ -121,6 +131,8 @@ def level_features(name: str) -> tuple[str, ...]:
 def description(name: str) -> str:
     """The description of the level policy ``name``, its features named."""
     before, after = _DESCRIBED[name]
+    if name == ORG_VIEW:
+        return before + after + _KEPT
     features = level_features(name)
     named = (
         "every feature"
@@ -212,6 +224,16 @@ def ontologies_statement() -> dict[str, Any]:
     }
 
 
+def org_view_statement() -> dict[str, Any]:
+    """What "Organization view" allows: seeing the organization, and listing it."""
+    return {
+        "sid": "Organization",
+        "effect": "Allow",
+        "actions": ["nexus:GetOrganization", "nexus:ListOrganizations"],
+        "resources": ["${scope}"],
+    }
+
+
 def viewer_my_files() -> bool:
     """Whether a Viewer reads their My Files: the deployment's
     ``feature_flags.viewer_my_files`` (on by default)."""
@@ -252,7 +274,12 @@ def level_document(name: str) -> PolicyDocument:
     ``WORKSPACE_ADMIN_ACCESS``): its features, the module scopes it uses and the
     search sources, every one of a type (the workspace's bound names which). The
     actions of the level are the built-in role's, held beside it. "Viewer access"
-    denies My Files when the deployment keeps it from Viewers."""
+    denies My Files when the deployment keeps it from Viewers. "Organization view"
+    (``ORG_VIEW``): the organization's view only."""
+    if name == ORG_VIEW:
+        return PolicyDocument.from_dict(
+            {"version": POLICY_VERSION, "statements": [org_view_statement()]}
+        )
     statements = [
         features_statement(level_features(name)),
         instances_statement(LEVEL_INSTANCES[name]),
@@ -279,6 +306,7 @@ class Levels:
     viewer_access: str
     member_access: str
     workspace_admin_access: str
+    org_view: str
 
     def group_of(self, level: str) -> str:
         return {VIEWER: self.viewers, MEMBER: self.members}[level]
@@ -359,6 +387,7 @@ def find_levels(iam: Any) -> Levels | None:
             _policy(iam, VIEWER_ACCESS, make=False),
             _policy(iam, MEMBER_ACCESS, make=False),
             _policy(iam, WORKSPACE_ADMIN_ACCESS, make=False),
+            _policy(iam, ORG_VIEW, make=False),
         )
     if any(item is None for item in found):
         return None
@@ -391,6 +420,7 @@ def ensure_levels(iam: Any) -> Levels:
             viewer_access=str(_policy(iam, VIEWER_ACCESS)),
             member_access=str(_policy(iam, MEMBER_ACCESS)),
             workspace_admin_access=str(_policy(iam, WORKSPACE_ADMIN_ACCESS)),
+            org_view=str(_policy(iam, ORG_VIEW)),
         )
         for group, role, policy in (
             (levels.viewers, roles.VIEWER, levels.viewer_access),

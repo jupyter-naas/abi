@@ -205,6 +205,11 @@ REASONS: dict[str, tuple[str, bool]] = {
         "The org Member role goes: reached the organization only through a workspace",
         True,
     ),
+    "org_people_view": (
+        "The organization's people see it and nothing it holds (Organization view): the "
+        "roles stop at the organization",
+        True,
+    ),
     "level_global": ("A level is one choice: the highest held anywhere applies everywhere", False),
     "level_features": ("The level's features, within what the workspace offers", True),
     "viewer_features": (
@@ -1573,6 +1578,8 @@ def reason_of(
         return "model_sets"
     if org and is_org_container(container) and org in plan.org_roles_removed:
         return "org_member_role"
+    if org and is_org_container(container) and not after and org not in plan.org_admin_of:
+        return "org_people_view"
     if not after and action.startswith("nexus:") and _deletes(action):
         return "owners_lose_delete"
     if action.startswith("triple_store:"):

@@ -803,6 +803,112 @@ async def test_a_viewer_reads_my_files_unless_the_deployment_says_not(world):
     )
 
 
+# -- the organization's people (B1) ------------------------------------------------------
+
+_AT_ORG = {
+    "ListSecrets": ("nexus:ListSecrets", f"{ORG}/nexus:secret/s1"),
+    "ListOrgFiles": ("nexus:ListOrgFiles", f"{ORG}/nexus:file/organization"),
+    "GetOrgFile": ("nexus:GetOrgFile", f"{ORG}/nexus:file/organization/report.pdf"),
+    "PutOrgFile": ("nexus:PutOrgFile", f"{ORG}/nexus:file/organization/report.pdf"),
+    "GetObject": (
+        "object_storage:GetObject",
+        f"{ORG}/object_storage:object/naas_abi/organization-drive/org-1/report.pdf",
+    ),
+    "Query": ("triple_store:Query", f"{ORG}/triple_store:graph/org-level"),
+    "GetOrganization": ("nexus:GetOrganization", ORG),
+    "ListOrganizations": ("nexus:ListOrganizations", ORG),
+}
+
+
+def _at_org(world, person: str) -> dict[str, bool]:
+    return {label: _can(world, person, *probe) for label, probe in _AT_ORG.items()}
+
+
+@pytest.mark.asyncio
+async def test_the_organizations_people_see_it_and_nothing_it_holds(world):
+    """ "<O> people" holds "Organization view" (``GetOrganization``,
+    ``ListOrganizations``), not ``builtin.viewer``: a Viewer or a Member of the
+    organization sees it, and reads nothing it holds (secrets, Organization Files, its
+    drive, its graphs); the roles of their level stop at the organization
+    (``no_membership_roles``). Its admins keep what ``builtin.admin`` gives at it."""
+    await _team(world)
+    await MEMBERSHIPS.grant("bob", "member", ORG)
+    await MEMBERSHIPS.grant("stranger", "viewer", ORG)
+    sees_only = {label: label in ("GetOrganization", "ListOrganizations") for label in _AT_ORG}
+    assert _at_org(world, "stranger") == sees_only
+    assert _at_org(world, "bob") == sees_only
+    assert all(_at_org(world, "oadmin").values())
+    # The people of a workspace are not the organization's: unchanged.
+    assert not any(_at_org(world, "member").values())
+
+
+@pytest.mark.asyncio
+async def test_a_group_given_organization_files_at_it_reads_them(world):
+    """Organization Files for someone the offers do not give them to: a group holding a
+    policy at the organization (not at ``${my workspaces}``) gives them there."""
+    await _team(world)
+    with as_service_account("api"):
+        policy = world.iam.create_policy(
+            "Org Files read",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "sid": "OrgFiles",
+                        "effect": "Allow",
+                        "actions": ["nexus:ListOrgFiles", "nexus:GetOrgFile"],
+                        "resources": [
+                            "${scope}/nexus:file/organization",
+                            "${scope}/nexus:file/organization/*",
+                        ],
+                    }
+                ],
+            },
+            scope=ORG,
+        )
+        group = world.iam.create_group("Org Files Group", scope=ORG)
+        world.iam.attach_policy(policy.id, group.id, ORG)
+        world.iam.add_group_member(group.id, world.principal("viewer"))
+    seen = _at_org(world, "viewer")
+    assert seen["ListOrgFiles"] and seen["GetOrgFile"]
+    assert not seen["PutOrgFile"] and not seen["ListSecrets"] and not seen["Query"]
+
+
+@pytest.mark.asyncio
+async def test_the_move_gives_each_organizations_people_the_view_only(world):
+    """``org_people_view_v1``: an organization made before holds ``builtin.viewer``
+    and "Viewer access" at ``${my workspaces}`` on "<O> people"; the move takes them
+    away and attaches "Organization view" there and at the organization (its bound).
+    Idempotent."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import org_people_view
+    from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+        CONTAINER_DEFAULTS,
+    )
+    from naas_abi_core.services.iam.names import MY_CONTAINERS_SCOPE
+
+    await MEMBERSHIPS.grant("stranger", "viewer", ORG)
+    levels = LEVELS.get(world.iam)
+    people = CONTAINER_DEFAULTS._known[ORG].members_group_id
+    with as_service_account("api"):
+        for policy_id, scope in ((levels.org_view, MY_CONTAINERS_SCOPE), (levels.org_view, ORG)):
+            world.iam.detach_policy(policy_id, people, scope)
+        world.iam.attach_policy(roles.VIEWER, people, MY_CONTAINERS_SCOPE)
+        world.iam.attach_policy(levels.viewer_access, people, MY_CONTAINERS_SCOPE)
+    # With catalog 21 the role of before already gives nothing at the organization, its
+    # view included: the move gives the view back.
+    assert not any(_at_org(world, "stranger").values())
+
+    report = org_people_view.apply(world.iam, {ORG: people})
+    assert report.converted == [ORG] and not report.failed
+    with as_service_account("api"):
+        held = {(a.policy_id, a.scope) for a in world.iam.list_attachments(principal_id=people)}
+    assert held == {(levels.org_view, MY_CONTAINERS_SCOPE), (levels.org_view, ORG)}
+    assert _at_org(world, "stranger") == {
+        label: label in ("GetOrganization", "ListOrganizations") for label in _AT_ORG
+    }
+    assert org_people_view.apply(world.iam, {ORG: people}).converted == []
+
+
 @pytest.mark.asyncio
 async def test_a_workspace_offers_its_models_and_the_chatting_levels_use_them_there(world):
     """``UseModel`` is granted by the levels that chat (``${scope}/nexus:model/*``) and

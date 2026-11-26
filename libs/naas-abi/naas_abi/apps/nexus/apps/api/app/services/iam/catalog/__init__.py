@@ -71,7 +71,9 @@ SERVICE = "nexus"
 # 20: ``PutOrgFile`` and ``DeleteOrgFile`` are ``write``, not ``admin``: an organization's
 #     members write Organization Files, and a workspace's offer that gives them
 #     (``GivenOrgFiles``) lets its Members write them, its Viewers read them.
-# 21: (branch fix-org-people-rights) the organization is ``no_membership_roles``.
+# 21: the organization is ``no_membership_roles``: a built-in role attached at
+#     ``${my workspaces}`` gives nothing at an organization ("<O> people" holds
+#     "Organization view"; its admins their roles attached at it).
 # 22: chat models (``model``, ``UseModel``): no role's, granted by the level policies
 #     that chat and bounded by each workspace's offer (``OfferModels``).
 VERSION = 22

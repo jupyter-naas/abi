@@ -621,7 +621,8 @@ def _install_workspace_models() -> None:
 async def _offer_moves() -> None:
     """What moves into each access policy, once each (``search_sources_offer``,
     ``ontologies_offer``, ``files_offer``, ``graphs_offer``, ``models_offer``,
-    ``maps_offer``). Not while IAM's moves wait: the next start does it."""
+    ``maps_offer``), and what each organization's people hold (``org_people_view``). Not
+    while IAM's moves wait: the next start does it."""
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
     from naas_abi.apps.nexus.apps.api.app.services.iam import (
         authz,
@@ -630,6 +631,7 @@ async def _offer_moves() -> None:
         maps_offer,
         models_offer,
         ontologies_offer,
+        org_people_view,
         search_sources_offer,
     )
     from naas_abi.apps.nexus.apps.api.app.services.iam import runtime as iam_runtime
@@ -641,6 +643,7 @@ async def _offer_moves() -> None:
         ontologies_offer,
         files_offer,
         graphs_offer,
+        org_people_view,
         models_offer,
         maps_offer,
     ):

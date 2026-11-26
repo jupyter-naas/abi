@@ -515,8 +515,11 @@ def group_attachments(
         found += [
             (roles.ADMIN, admins, container),
             (roles.ADMIN, admins, below),
-            (roles.VIEWER, membership, MY_CONTAINERS_SCOPE),
-            (levels.viewer_access, membership, MY_CONTAINERS_SCOPE),
+            # "<O> people" sees O, nothing it holds: "Organization view" grants it
+            # through ``${my workspaces}``, and held at O it is O's bound, which keeps
+            # the level policies to it there (the roles stop at O: no_membership_roles).
+            (levels.org_view, membership, MY_CONTAINERS_SCOPE),
+            (levels.org_view, membership, container),
         ]
     else:
         if access:
