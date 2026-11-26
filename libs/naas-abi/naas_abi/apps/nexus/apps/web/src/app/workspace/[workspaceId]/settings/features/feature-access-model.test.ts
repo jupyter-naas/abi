@@ -74,9 +74,9 @@ describe('what a row may choose', () => {
     expect(choices.some((c) => c.enabled)).toBe(false);
   });
 
-  it('Nobody says platform admins still see every feature', () => {
+  it('Nobody says nobody in the workspace uses it, admins included', () => {
     const nobody = choicesOf(row({ key: 'chat', label: 'Chat' })).find((c) => c.value === 'nobody');
-    expect(nobody?.hint).toMatch(/Platform admins still see every feature/);
+    expect(nobody?.hint).toMatch(/admins included/);
   });
 });
 

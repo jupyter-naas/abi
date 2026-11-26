@@ -13,7 +13,7 @@ export const FEATURE_CHOICES: { value: FeatureChoice; label: string; hint: strin
   {
     value: 'nobody',
     label: 'Nobody',
-    hint: 'Not offered by the workspace. Platform admins still see every feature.',
+    hint: 'Not offered by the workspace: nobody in it uses it, admins included.',
   },
 ];
 

@@ -5,6 +5,8 @@ import {
   BrainCircuit,
   Network,
   Globe,
+  HardDrive,
+  SlidersHorizontal,
   Cpu,
   KeyRound,
   Users,
@@ -53,6 +55,8 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     label: 'General',
     items: [
       { href: '/settings/general', label: 'General', icon: Globe }, // the Organization's and Platform's icon
+      // Whether the workspace offers each feature (its offer's Features part).
+      { href: '/settings/features', label: 'Features', icon: SlidersHorizontal },
       { href: '/settings/users', label: 'Users', icon: Users },
       { href: '/settings/analytics', label: 'Analytics', icon: BarChart3, needs: 'analytics' },
     ],
@@ -70,6 +74,8 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       // Agents the workspace builds itself (a model and a prompt) need no module.
       { href: '/settings/agents', label: 'Agents', icon: Bot, feature: 'agents' },
       { href: '/settings/apps', label: 'Apps', icon: AppWindow, feature: 'apps', kinds: ['apps'] },
+      // Every kind of files: shown even when Workspace Files is off, which is turned on here.
+      { href: '/settings/files', label: 'Files', icon: HardDrive },
       { href: '/settings/graphs', label: 'Graphs', icon: Network, feature: 'graph' },
       { href: '/settings/maps', label: 'Maps', icon: Map, feature: 'maps' },
       { href: '/settings/models', label: 'Models', icon: Cpu },

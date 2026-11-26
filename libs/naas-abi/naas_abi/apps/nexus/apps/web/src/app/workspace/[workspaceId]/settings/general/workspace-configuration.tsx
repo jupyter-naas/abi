@@ -10,7 +10,6 @@ import {
 import { authFetch } from '@/stores/auth';
 import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { describeModuleResources } from '@/lib/workspace-resources';
-import { FeatureAccess } from './feature-access';
 
 interface SeedRow {
   kind: string;
@@ -81,7 +80,6 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
     <>
       {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
 
-      <FeatureAccess workspaceId={workspaceId} />
 
       <SettingsSection
         title={

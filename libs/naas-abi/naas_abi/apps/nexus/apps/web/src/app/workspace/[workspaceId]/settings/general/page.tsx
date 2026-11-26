@@ -32,7 +32,6 @@ import {
 } from '@/stores/workspace';
 import { BackgroundImageEditor } from '../../home/components/background-image-editor';
 import { resolveDeskImageUrl } from '../../home/home-desk';
-import { PlatformFiles } from './platform-files';
 import { WorkspaceConfiguration } from './workspace-configuration';
 import { WorkspaceGroupSelect } from '@/app/organizations/[orgId]/settings/workspaces/workspace-group-select';
 import '@/app/account/profile/profile.css';
@@ -249,7 +248,7 @@ export default function GeneralSettingsPage() {
     <div className="workspace-general space-y-6">
       <AccountPageHeader
         title="General"
-        subtitle="The workspace name, group, description, logo, desk wallpaper and colors, plus its features and config preseeding."
+        subtitle="The workspace name, group, description, logo, desk wallpaper and colors, plus its modules and config preseeding. Its features and files have their own pages."
         actions={
           canEdit ? (
             <button
@@ -522,8 +521,6 @@ export default function GeneralSettingsPage() {
 
         </div>
       </SettingsSection>
-
-      <PlatformFiles workspaceId={workspace.id} />
 
       {canEdit && workspace && <WorkspaceConfiguration workspaceId={workspace.id} />}
     </div>

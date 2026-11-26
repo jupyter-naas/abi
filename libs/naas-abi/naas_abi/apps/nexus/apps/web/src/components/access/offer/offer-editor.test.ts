@@ -3,10 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createOfferApi, type OfferApi, type OfferState, type OntologyRow } from '@/lib/access-model/workspace-offer';
 import type { ResourceQuery } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import type { FeatureAccessApi } from '@/app/workspace/[workspaceId]/settings/general/feature-access-api';
-import type { FeatureAccessState, FeatureRow } from '@/app/workspace/[workspaceId]/settings/general/feature-access-model';
+import type { FeatureAccessApi } from '@/app/workspace/[workspaceId]/settings/features/feature-access-api';
+import type { FeatureAccessState, FeatureRow } from '@/app/workspace/[workspaceId]/settings/features/feature-access-model';
 import { WS, fakeApi, publishedType, resourcePage } from '../access-fixtures';
-import { FeatureAccessError } from '@/app/workspace/[workspaceId]/settings/general/feature-access-api';
+import { FeatureAccessError } from '@/app/workspace/[workspaceId]/settings/features/feature-access-api';
 import { WorkspaceOfferEditor } from './offer-editor';
 
 let mounted: Mounted | null = null;

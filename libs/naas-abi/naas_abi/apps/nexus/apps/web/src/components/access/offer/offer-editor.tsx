@@ -26,8 +26,8 @@ import type { PublishersView } from '@/lib/iam-admin/types';
 import {
   createFeatureAccessApi,
   type FeatureAccessApi,
-} from '@/app/workspace/[workspaceId]/settings/general/feature-access-api';
-import type { FeatureAccessState, FeatureRow } from '@/app/workspace/[workspaceId]/settings/general/feature-access-model';
+} from '@/app/workspace/[workspaceId]/settings/features/feature-access-api';
+import type { FeatureAccessState, FeatureRow } from '@/app/workspace/[workspaceId]/settings/features/feature-access-model';
 import {
   draftKey,
   featureChanges,

@@ -25,8 +25,11 @@ function message(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+/** The Files feature (Workspace Files) is Settings › Files', with the other files a workspace gives. */
+const FILES_FEATURE = 'files';
+
 /**
- * General › Features: one row per enabled feature, whether the workspace offers it: Everyone or
+ * Settings › Features: one row per enabled feature but Files (Settings › Files), whether the workspace offers it: Everyone or
  * Nobody. A feature is part of the workspace's offer, its access policy "<W> access" (the API
  * writes it as the caller), edited with its agents, apps, workflows and pipelines on that policy's
  * page; a row is editable when IAM lets the caller give the feature here. Other policies naming a
@@ -56,7 +59,10 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
     void load();
   }, [load]);
 
-  const rows = useMemo(() => sortedRows(state?.features ?? []), [state]);
+  const rows = useMemo(
+    () => sortedRows(state?.features ?? []).filter((row) => row.key !== FILES_FEATURE),
+    [state]
+  );
   const draftFor = (row: FeatureRow) => drafts[row.key] ?? draftOf(row);
   const changes = changesFrom(rows, drafts);
 
@@ -105,8 +111,9 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
               (<Link href={offerHref}>{access.name}</Link>)
             </>
           ) : null}
-          ; each person&apos;s level decides what they may do with them. Other policies may grant or deny a feature
-          too, and a Deny always wins. Platform admins see every feature, whatever is chosen here.
+          ; each person&apos;s level decides what they may do with them, for everyone, admins included. Other
+          policies may grant or deny a feature too, and a Deny always wins. Files are in{' '}
+          <Link href={`/workspace/${workspaceId}/settings/files`}>Files</Link>.
         </>
       }
     >

@@ -47,6 +47,7 @@ function state(features: FeatureRow[], errors?: Record<string, string>): Feature
 const BEFORE = state([
   row({ key: 'chat', label: 'Chat', choice: 'everyone', also: [CHAT_FILES] }),
   row({ key: 'files', label: 'Files', also: [CHAT_FILES] }),
+  row({ key: 'maps', label: 'Maps', also: [CHAT_FILES] }),
   row({ key: 'marketplace', label: 'Marketplace', also: [MARKETPLACE] }),
   row({ key: 'graph', label: 'Graph', offered: false }),
   row({
@@ -84,24 +85,26 @@ const at = (m: Mounted, feature: string, selector: string) =>
 const saveButton = (m: Mounted) => m.host.querySelector('.workspace-features-save') as HTMLButtonElement;
 
 describe('FeatureAccess', () => {
-  it('shows each feature with its choice and the other policies granting it', async () => {
+  it('shows each feature but Files (Settings › Files) with its choice and the other policies granting it', async () => {
     const m = await render(fakeApi());
 
     expect([...m.host.querySelectorAll('tr[data-feature]')].map((tr) => tr.getAttribute('data-feature'))).toEqual([
       'chat',
-      'files',
       'graph',
+      'maps',
       'marketplace',
       'search',
     ]);
+    expect(m.host.querySelector('a[href="/workspace/ws1/settings/files"]')?.textContent).toBe('Files');
     expect(at(m, 'chat', '[data-choice="everyone"]')?.getAttribute('aria-checked')).toBe('true');
     expect(at(m, 'chat', '[data-effect="Allow"]')?.textContent).toBe('Also granted by Chat + Files');
-    expect(at(m, 'files', '[data-effect="Allow"] a')?.getAttribute('href')).toContain('pol_cf');
+    expect(at(m, 'maps', '[data-effect="Allow"] a')?.getAttribute('href')).toContain('pol_cf');
     expect(at(m, 'marketplace', '[data-effect="Allow"]')?.textContent).toBe(
       'Also granted by Marketplace (attached nowhere)',
     );
     expect(m.host.textContent).not.toContain('Roles & permissions');
-    expect(m.host.textContent).toContain('Platform admins see every feature');
+    expect(m.host.textContent).toContain('admins included');
+    expect(m.host.textContent).not.toContain('Platform admins see every feature');
     // Features are the workspace's offer: the description links to "<W> access".
     expect(m.host.querySelector('a[href*="pol_access"]')?.textContent).toBe('Alpha access');
     expect(m.host.querySelector('[data-choice="only"]')).toBeNull();
@@ -125,15 +128,15 @@ describe('FeatureAccess', () => {
   it('saves several changes in one step and keeps the refused one as a draft', async () => {
     const after = state(
       [
-        ...BEFORE.features.filter((r) => r.key !== 'files'),
-        row({ key: 'files', label: 'Files', choice: 'everyone', also: [CHAT_FILES] }),
+        ...BEFORE.features.filter((r) => r.key !== 'maps'),
+        row({ key: 'maps', label: 'Maps', choice: 'everyone', also: [CHAT_FILES] }),
       ],
       { marketplace: 'IAM refused the attachment.' },
     );
     const api = fakeApi(after);
     const m = await render(api);
 
-    await m.click(at(m, 'files', '[data-choice="everyone"]'));
+    await m.click(at(m, 'maps', '[data-choice="everyone"]'));
     await m.click(at(m, 'marketplace', '[data-choice="everyone"]'));
     expect(m.host.textContent).toContain('2 unsaved changes');
 
@@ -141,10 +144,10 @@ describe('FeatureAccess', () => {
     await m.flush();
     expect(api.save).toHaveBeenCalledTimes(1);
     expect(api.save).toHaveBeenCalledWith('ws1', [
-      { feature: 'files', choice: 'everyone' },
+      { feature: 'maps', choice: 'everyone' },
       { feature: 'marketplace', choice: 'everyone' },
     ]);
-    expect(at(m, 'files', '[data-choice="everyone"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(at(m, 'maps', '[data-choice="everyone"]')?.getAttribute('aria-checked')).toBe('true');
     expect(at(m, 'marketplace', '[role="alert"]')?.textContent).toBe('IAM refused the attachment.');
     expect(at(m, 'marketplace', '[data-choice="everyone"]')?.getAttribute('aria-checked')).toBe('true');
     expect(m.host.textContent).toContain('1 unsaved change');

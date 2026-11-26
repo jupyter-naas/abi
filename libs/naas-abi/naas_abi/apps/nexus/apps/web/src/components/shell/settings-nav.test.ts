@@ -106,6 +106,9 @@ describe('workspace settings nav', () => {
     // No feature: always there.
     expect(shown).toContain('Models');
     expect(shown).toContain('General');
+    // Features (General) and Files (Features): Files is where Workspace Files is turned on.
+    expect(shown).toContain('Features');
+    expect(shown).toContain('Files');
   });
 
   it('hides Apps and Workflows when the caller may use none of theirs', () => {
