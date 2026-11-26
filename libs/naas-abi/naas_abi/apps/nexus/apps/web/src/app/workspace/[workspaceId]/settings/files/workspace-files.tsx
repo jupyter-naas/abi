@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { HardDrive } from 'lucide-react';
 import { SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
 import {
   createOfferApi,
@@ -105,15 +104,7 @@ export function WorkspaceFiles({
     }, `${row.label}: ${MODE_LABELS[mode]}.`);
 
   return (
-    <SettingsSection
-      title={
-        <span className="flex items-center gap-2">
-          <HardDrive size={16} className="text-muted-foreground" />
-          Files
-        </span>
-      }
-      description="What the people of this workspace open in Files, each within their level: a Viewer reads, a Member also writes where it is given for writing."
-    >
+    <SettingsSection>
       {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
       {notice && (
         <p className="text-xs text-muted-foreground" role="status" data-files-notice="">
