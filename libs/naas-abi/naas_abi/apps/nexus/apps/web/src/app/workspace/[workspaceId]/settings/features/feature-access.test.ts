@@ -85,11 +85,12 @@ const at = (m: Mounted, feature: string, selector: string) =>
 const saveButton = (m: Mounted) => m.host.querySelector('[data-action="save"]') as HTMLButtonElement;
 
 describe('FeatureAccess', () => {
-  it('shows each feature but Files (Settings › Files) with its choice and the other policies granting it', async () => {
+  it('shows each feature, the Nexus Files one included, with its choice and the other policies granting it', async () => {
     const m = await render(fakeApi());
 
     expect([...m.host.querySelectorAll('tr[data-feature]')].map((tr) => tr.getAttribute('data-feature'))).toEqual([
       'chat',
+      'files',
       'graph',
       'maps',
       'marketplace',
@@ -161,16 +162,16 @@ describe('FeatureAccess', () => {
     const m = await render(fakeApi());
     const keys = () => [...m.host.querySelectorAll('tr[data-feature]')].map((tr) => tr.getAttribute('data-feature'));
 
-    expect(m.host.textContent).toContain('2 offered · 3 not offered');
-    expect(m.host.textContent).toContain('5 features');
+    expect(m.host.textContent).toContain('2 offered · 4 not offered');
+    expect(m.host.textContent).toContain('6 features');
     await m.click(m.host.querySelector('[data-sort="offered"]'));
-    expect(keys()).toEqual(['chat', 'search', 'graph', 'maps', 'marketplace']);
+    expect(keys()).toEqual(['chat', 'search', 'files', 'graph', 'maps', 'marketplace']);
 
     await m.type(m.host.querySelector('input[type="search"], input') as HTMLInputElement, 'not offered');
     expect(keys()).toEqual(['graph']);
-    expect(m.host.textContent).toContain('1 of 5 features');
+    expect(m.host.textContent).toContain('1 of 6 features');
     await m.click(m.host.querySelector('[data-action="clear-filters"]'));
-    expect(keys()).toHaveLength(5);
+    expect(keys()).toHaveLength(6);
   });
 
   it('discards the drafts', async () => {

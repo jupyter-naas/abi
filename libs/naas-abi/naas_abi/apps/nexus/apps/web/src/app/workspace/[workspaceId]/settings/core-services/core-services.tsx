@@ -141,7 +141,7 @@ export function CoreServices({
         }
         actions={
           <>
-            <PolicyPicker policies={state?.policies} value={edited?.id} onChange={pick} disabled={saving} />
+            <PolicyPicker policies={state?.policies} current={edited} value={edited?.id} onChange={pick} disabled={saving} />
             <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
           </>
         }

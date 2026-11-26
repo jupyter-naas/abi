@@ -56,8 +56,8 @@ describe('workspace settings nav', () => {
       ['Groups', '/settings/groups'],
       ['Policies', '/settings/policies'],
       ['Features', '/settings/features'],
-      ['Modules', '/settings/modules'],
       ['Services', '/settings/core-services'],
+      ['Modules', '/settings/modules'],
     ]);
     expect(labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { access: IAM }))).not.toContain('Roles & permissions');
   });

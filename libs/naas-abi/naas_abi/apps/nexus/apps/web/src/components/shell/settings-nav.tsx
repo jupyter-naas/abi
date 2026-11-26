@@ -69,9 +69,9 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       // The workspace's offer ("<W> access"): which features and which modules it offers; the
       // pages under Features then show what is offered.
       { href: '/settings/features', label: 'Features', icon: SlidersHorizontal },
-      { href: '/settings/modules', label: 'Modules', icon: Package },
       // How far people go with each core service of the engine (graphs, files, vectors...).
       { href: '/settings/core-services', label: 'Services', icon: Database },
+      { href: '/settings/modules', label: 'Modules', icon: Package },
     ],
   },
   {

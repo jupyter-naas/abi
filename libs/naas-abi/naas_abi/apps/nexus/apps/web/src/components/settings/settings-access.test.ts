@@ -152,7 +152,7 @@ describe('who sees what in Settings', () => {
     expect(seen.level).toBe('Workspace');
     expect(Object.keys(seen.column)).toEqual(['Workspace', 'Access', 'Features']);
     expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users']));
-    expect(seen.column.Access).toEqual(['Groups', 'Policies', 'Features', 'Modules', 'Services']);
+    expect(seen.column.Access).toEqual(['Groups', 'Policies', 'Features', 'Services', 'Modules']);
 
     const platform = await seenBy(root, seen.opens.Platform);
     expect(seen.opens.Platform).toBe('/settings/general');
@@ -201,7 +201,7 @@ describe('who sees what in Settings', () => {
     };
     const seen = await seenBy(olivia);
     expect(seen.tabs).toEqual(['Organization', 'Workspace', 'Account']);
-    expect(seen.column.Access).toEqual(['Policies', 'Features', 'Modules', 'Services']);
+    expect(seen.column.Access).toEqual(['Policies', 'Features', 'Services', 'Modules']);
     const organization = await seenBy(olivia, seen.opens.Organization);
     expect(organization.level).toBe('Organization');
     expect(organization.column).toEqual({
@@ -220,7 +220,7 @@ describe('who sees what in Settings', () => {
     expect(seen.tabs).toEqual(['Workspace', 'Account']);
     expect(seen.settings).toBe('/workspace/ws-1/settings/general');
     expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users']));
-    expect(seen.column.Access).toEqual(['Policies', 'Features', 'Modules', 'Services']);
+    expect(seen.column.Access).toEqual(['Policies', 'Features', 'Services', 'Modules']);
   });
 
   it('a workspace owner IAM gives no right over access: the workspace with Members, Access with the offer alone', async () => {
@@ -233,7 +233,7 @@ describe('who sees what in Settings', () => {
     expect(seen.level).toBe('Workspace');
     expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users']));
     // Features and Modules are the workspace's offer, read by its owner (changed as IAM lets them).
-    expect(seen.column.Access).toEqual(['Features', 'Modules', 'Services']);
+    expect(seen.column.Access).toEqual(['Features', 'Services', 'Modules']);
     expect(Object.values(seen.column).flat()).not.toContain('Policies');
   });
 

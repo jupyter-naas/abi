@@ -61,8 +61,6 @@ function message(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-/** The Files feature (Workspace Files) is Settings › Files', with the other files a workspace gives. */
-const FILES_FEATURE = 'files';
 
 /**
  * Settings › Features, laid out as Settings › Users (a header with its count and actions, a search,
@@ -125,7 +123,7 @@ export function FeatureAccess({
 
   // By name first: rows that tie on the sorted column stay A to Z.
   const rows = useMemo(
-    () => sortedRows(state?.features ?? []).filter((row) => row.key !== FILES_FEATURE),
+    () => sortedRows(state?.features ?? []),
     [state]
   );
   const offer = editsOffer(state);
@@ -219,8 +217,8 @@ export function FeatureAccess({
             <>
               What{' '}
               {editedHref ? <Link href={editedHref}>{edited.name}</Link> : edited.name} grants whoever holds it,
-              within the workspace&apos;s offer{access ? ` (${access.name})` : ''}. Files are in{' '}
-              <Link href={`/workspace/${workspaceId}/settings/files`}>Files</Link>.
+              within the workspace&apos;s offer{access ? ` (${access.name})` : ''}. The files given from outside the
+              workspace are in <Link href={`/workspace/${workspaceId}/settings/files`}>Files</Link>.
             </>
           ) : (
           <>
@@ -232,7 +230,8 @@ export function FeatureAccess({
                 (<Link href={offerHref}>{access.name}</Link>)
               </>
             ) : null}
-            ; files are in <Link href={`/workspace/${workspaceId}/settings/files`}>Files</Link>.
+            ; the files given from outside the workspace (Organization, Platform, System) are in{' '}
+            <Link href={`/workspace/${workspaceId}/settings/files`}>Files</Link>.
           </>
           )
         }
@@ -240,6 +239,7 @@ export function FeatureAccess({
           <>
             <PolicyPicker
               policies={state?.policies}
+              current={edited ?? access}
               value={edited?.id ?? access?.id}
               onChange={pick}
               disabled={saving || unsavedCount > 0}

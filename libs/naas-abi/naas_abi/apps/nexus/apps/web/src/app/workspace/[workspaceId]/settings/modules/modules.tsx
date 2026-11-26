@@ -211,7 +211,7 @@ export function WorkspaceModules({
         }
         actions={
           <>
-            <PolicyPicker policies={offer?.policies} value={edited?.id} onChange={pick} disabled={saving} />
+            <PolicyPicker policies={offer?.policies} current={edited} value={edited?.id} onChange={pick} disabled={saving} />
             <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
           </>
         }
