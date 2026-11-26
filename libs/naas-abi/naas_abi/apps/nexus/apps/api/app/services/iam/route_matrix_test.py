@@ -221,20 +221,6 @@ def test_the_capability_routes_declare_what_they_authorize(table) -> None:
     assert found == CAPABILITY_ROUTES
 
 
-# Workspace settings > General › Platform Files (``iam/platform_files_routes``): read as
-# the workspace's configuration, saved as the write the caller makes of "<W> access" (its
-# ``GivenPlatformFiles``).
-PLATFORM_FILES_ROUTES: dict[tuple[str, str], tuple[str, ...]] = {
-    ("GET", "/api/workspaces/{workspace_id}/platform-files"): ("GetWorkspaceConfiguration",),
-    ("PUT", "/api/workspaces/{workspace_id}/platform-files"): ("iam:UpdatePolicy",),
-}
-
-
-def test_the_platform_files_routes_declare_what_they_authorize(table) -> None:
-    found = {key: tuple(d.action for d in _declared(table[key])) for key in PLATFORM_FILES_ROUTES}
-    assert found == PLATFORM_FILES_ROUTES
-
-
 def test_a_write_method_never_authorizes_only_a_read(table) -> None:
     offenders = []
     for key, calls in table.items():

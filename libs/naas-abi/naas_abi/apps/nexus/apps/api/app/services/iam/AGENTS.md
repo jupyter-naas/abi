@@ -39,7 +39,6 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `graphs_offer.py` | Startup, once: each workspace's graph assignment into its offer, the `workspace.<ws>.graphs.read|write` policies and their per-person attachments deleted (`iam_migrations` `graphs_offer_v1`); `configured_graphs` for a seeded workspace made later |
 | `given_maps.py` | The Maps items a workspace's offer gives it without owning them, and the deployment items it closes: `GivenMaps`, `GivenBasemaps`, `OfferMapsDeny`, `OfferBasemapsDeny` (`statements`, `fields_of` from a `MapsAssignment`, `assignment_of` back, `with_item`, `summary`) |
 | `maps_offer.py` | Startup, once: what each workspace may use per `maps_grants` into its offer (`iam_migrations` `maps_offer_v1`); `maps_grants` kept for a workspace whose access policy is no allow-list yet |
-| `platform_files_routes.py` | `GET`/`PUT /api/workspaces/{id}/platform-files`: `{workspace_id, mode, can_change}`, the offer's `GivenPlatformFiles`; read as the configuration, written as the caller |
 | `container_defaults.py` | Each organization's and workspace's access policy and groups ("Access policies and default groups"): "<O> access", "<O> admins", "<O> people"; "<W> access" (W's bound), "<W> workspace", "<W> admins"; made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), forgotten with it (`dropped`); `grouped` / `grouped_record` (whether its people are groups, #1585); a container recorded before #1585 keeps its "<X> members" and admins in step with the roles (`sync_scope`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
 | `access_model.py` | Startup, once, after `container_defaults_v1`: per-person attachments become groups, with the report of every access change, compared after the start ("The access move"; `migrate_access`, `complete_report`, `iam_migrations` `access_model_v1`; `abi iam migrate-access --dry-run`, `migrate_from_cli`) |
 | `shadow_iam.py` | A copy of an IAM in memory (`shadow_of`), or kept as JSON (`snapshot`, `store_of`): the access move tries its plan there first, and reads its report from the copies' decisions |
@@ -495,7 +494,7 @@ lock; it waits for `container_defaults_v1`. Built from what IAM holds now with S
   half (`<sid>2`); read lists and reads, write also puts and deletes. Core IAM gives them to W's people while they
   belong to W, each action within their level there (core "Given statements"): a Viewer reads, a Member writes.
 - **Who changes them:** a write of "<W> access" as the caller (`feature_access.FeatureAccessService.set_files`,
-  `PUT /api/workspaces/{id}/offer/files`, and `platform_files_routes.py`), held-checked by IAM: the platform admin
+  `PUT /api/workspaces/{id}/offer/files`), held-checked by IAM: the platform admin
   gives Platform and System Files, an organization's admins its Organization Files; a workspace admin narrows or
   removes. `read_offer` says per row the mode, the `choices` the caller has (held, per `grantable` at the platform,
   or narrower than now) and `editable`.

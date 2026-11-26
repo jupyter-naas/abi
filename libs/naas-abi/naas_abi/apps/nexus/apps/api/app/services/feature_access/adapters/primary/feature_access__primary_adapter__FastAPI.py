@@ -1,6 +1,7 @@
-"""``/api/workspaces/{workspace_id}/feature-access`` (Workspace settings > General ›
-Features) and ``/api/workspaces/{workspace_id}/offer`` (the agents, apps, workflows
-and pipelines it offers): both edit the workspace's allow-list, "<W> access".
+"""``/api/workspaces/{workspace_id}/feature-access`` (Workspace settings › Features, and
+Workspace Files in › Files) and ``/api/workspaces/{workspace_id}/offer`` (the agents, apps,
+workflows and pipelines it offers, and the files it gives, in › Files): both edit
+the workspace's allow-list, "<W> access".
 
 Reading is reading the workspace's configuration (``GetWorkspaceConfiguration``, as
 ``/configuration``). Saving is IAM's own write made as the caller (``UpdatePolicy``
