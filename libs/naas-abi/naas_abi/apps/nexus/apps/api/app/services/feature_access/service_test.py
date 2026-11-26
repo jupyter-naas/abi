@@ -57,7 +57,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import WorkspaceC
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import WorkspaceService
 from naas_abi_core.engine.call_context import as_service_account, use_call_context
 from naas_abi_core.services.iam import module_scopes
-from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError, PermissionDeniedError
 
 NOW = datetime(2026, 1, 1)
 FEATURES = ["chat", "files", "marketplace"]
@@ -85,9 +85,17 @@ def _forget() -> None:
 
 
 @pytest.fixture
-def nexus():
+def enabled_features() -> list[str]:
+    """The deployment's features (a test class may enable more)."""
+    return FEATURES
+
+
+@pytest.fixture
+def nexus(enabled_features):
     _forget()
-    world = NexusIam(FeatureFlagsConfig(enabled_features=FEATURES), features_with_roles=False)
+    world = NexusIam(
+        FeatureFlagsConfig(enabled_features=enabled_features), features_with_roles=False
+    )
     with world.installed():
         yield world
     _forget()
@@ -402,3 +410,153 @@ async def test_search_sources_are_offered_in_the_workspaces_access_policy(
     state = await service.save_search_sources("olivia", "alpha", {"web.wikipedia": False})
     assert state["offered"]["search_sources"] == ["chat"]
     assert not _uses_source(nexus, "dave", "web.wikipedia")
+
+
+# -- ontologies ---------------------------------------------------------------------------
+
+# The deployment's ontology files, as Settings › Ontologies names them.
+ONTOLOGY_FILES = [
+    {"id": "core:bfo.ttl", "path": "/o/ontologies/modules/BFO.ttl", "name": "BFO core"},
+    {"id": "core:agent.ttl", "path": "/o/ontologies/modules/Agent.ttl", "name": "Agent"},
+    {"id": "acme.sales:sales.ttl", "path": "/o/ontologies/modules/Sales.ttl", "name": "Sales"},
+]
+# Who may assign every file to Alpha (``AssignOntology`` in Acme): its owner, root.
+ASSIGNERS = ("olivia", "root")
+
+
+async def ontology_catalog(user, workspace_id: str):
+    """Every file, and those ``user`` may assign: the caller's own (``AssignOntology``)."""
+    entries = [{**f, "module": f["id"].split(":")[0]} for f in ONTOLOGY_FILES]
+    user_id = getattr(user, "id", user)
+    return entries, {e["id"] for e in entries} if user_id in ASSIGNERS else set()
+
+
+@pytest.fixture
+def ontologies(nexus, acme, nexus_db, audit) -> FeatureAccessService:
+    """The service with the deployment's ontology files; Acme allows every one (as
+    ``ontologies_offer_v1`` writes it) and Alpha offers BFO by its seed's ref."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import ontologies_offer
+
+    with use_call_context(NexusIam.context("root")):
+        access = nexus.iam.get_policy(acme.access_policy_id)
+        org = nexus.iam.get_policy(access.parent_id)
+        nexus.iam.update_policy(
+            org.id,
+            expected_revision=org.revision,
+            document=ontologies_offer.with_ontologies(org.document, org_container("acme"), []),
+        )
+        nexus.iam.update_policy(
+            access.id,
+            expected_revision=access.revision,
+            document=with_offer(
+                access.document,
+                offer_of(access.document).merged(Offer.of(ontologies=["Core:BFO.ttl"])),
+            ),
+        )
+    return FeatureAccessService(
+        EngineIamGateway(),
+        SqlFeaturePolicyStore(nexus_db),
+        audit,
+        container_of=AUTHZ.container_of,
+        defaults_of=CONTAINER_DEFAULTS.record_of,
+        features=lambda: FEATURES,
+        ontology_catalog=ontology_catalog,
+    )
+
+
+def _ontology_rows(state: dict) -> dict[str, dict]:
+    return {row["id"]: row for row in state["ontologies"]["rows"]}
+
+
+class TestOntologies:
+    """The offer's ontologies, on a deployment with the ontology feature (its levels
+    use every file the offer names)."""
+
+    @pytest.fixture
+    def enabled_features(self) -> list[str]:
+        return [*FEATURES, "ontology"]
+
+    @pytest.mark.asyncio
+    async def test_the_offer_reads_its_ontologies_and_what_the_caller_may_assign(
+        self, nexus, acme, ontologies
+    ):
+        state = await ontologies.read_offer("olivia", "alpha")
+        assert state["ontologies"]["offered"] == ["Core:BFO.ttl"]
+        assert state["ontologies"]["error"] is None
+        rows = _ontology_rows(state)
+        # Every file of the deployment, by label; the offer's ref matched to its file.
+        assert [row["label"] for row in state["ontologies"]["rows"]] == [
+            "Agent",
+            "BFO core",
+            "Sales",
+        ]
+        assert rows["core:bfo.ttl"]["offered"] and not rows["core:agent.ttl"]["offered"]
+        assert rows["core:bfo.ttl"]["module"] == "core"
+        assert all(row["editable"] and row["assignable"] for row in rows.values())
+        # A workspace's admin who may not assign: what is offered stays removable, the
+        # others are read-only and say who gives them.
+        await MEMBERSHIPS.grant("frank", "admin", ALPHA)
+        rows = _ontology_rows(await ontologies.read_offer("frank", "alpha"))
+        assert rows["core:bfo.ttl"]["editable"] and not rows["core:bfo.ttl"]["assignable"]
+        assert not rows["core:agent.ttl"]["editable"]
+        assert "AssignOntology" in rows["core:agent.ttl"]["reason"]
+
+    @pytest.mark.asyncio
+    async def test_an_offered_ref_outside_the_catalog_is_shown_and_can_be_removed(
+        self, nexus, acme, ontologies
+    ):
+        with use_call_context(NexusIam.context("root")):
+            access = nexus.iam.get_policy(acme.access_policy_id)
+            nexus.iam.update_policy(
+                access.id,
+                expected_revision=access.revision,
+                document=with_offer(
+                    access.document,
+                    offer_of(access.document).merged(Offer.of(ontologies=["gone:Old.ttl"])),
+                ),
+            )
+        row = _ontology_rows(await ontologies.read_offer("olivia", "alpha"))["gone:Old.ttl"]
+        assert row["offered"] and not row["available"] and row["editable"]
+        state = await ontologies.save_ontologies("olivia", "alpha", {"gone:Old.ttl": False})
+        assert state["ontologies"]["offered"] == ["Core:BFO.ttl"]
+
+    @pytest.mark.asyncio
+    async def test_an_admin_of_the_organization_adds_an_ontology_and_its_workspace_admin_removes_it(
+        self, nexus, acme, ontologies, audit
+    ):
+        state = await ontologies.save_ontologies("olivia", "alpha", {"core:agent.ttl": True})
+        assert state["ontologies"]["offered"] == ["Core:BFO.ttl", "core:agent.ttl"]
+        assert _ontology_rows(state)["core:agent.ttl"]["offered"]
+        assert audit.phases("workspace-offer.ontologies") == ["requested", "succeeded"]
+        # The other sections are kept: one policy, sections apart.
+        assert offer_of(_access(nexus, acme).document).features == {"chat", "files"}
+        # A workspace's admin may remove one (by its file, whatever ref named it), not add.
+        await MEMBERSHIPS.grant("frank", "admin", ALPHA)
+        state = await ontologies.save_ontologies("frank", "alpha", {"core:bfo.ttl": False})
+        assert state["ontologies"]["offered"] == ["core:agent.ttl"]
+        with pytest.raises(PermissionDeniedError, match="AssignOntology"):
+            await ontologies.save_ontologies("frank", "alpha", {"core:bfo.ttl": True})
+        assert offer_of(_access(nexus, acme).document).ontologies == {"core:agent.ttl"}
+
+    @pytest.mark.asyncio
+    async def test_an_ontology_outside_the_catalog_or_no_change_is_refused(
+        self, nexus, acme, ontologies
+    ):
+        with pytest.raises(ValueError, match="catalog"):
+            await ontologies.save_ontologies("olivia", "alpha", {"nope:Nope.ttl": True})
+        with pytest.raises(ValueError):
+            await ontologies.save_ontologies("olivia", "alpha", {})
+        # Taking back what is not offered changes nothing.
+        state = await ontologies.save_ontologies("olivia", "alpha", {"core:agent.ttl": False})
+        assert state["ontologies"]["offered"] == ["Core:BFO.ttl"]
+
+    @pytest.mark.asyncio
+    async def test_a_member_cannot_change_the_ontologies(self, nexus, acme, ontologies):
+        with pytest.raises((PermissionDeniedError, IAMNotFoundError)):
+            await ontologies.save_ontologies("dave", "alpha", {"core:bfo.ttl": False})
+        assert offer_of(_access(nexus, acme).document).ontologies == {"Core:BFO.ttl"}
+
+
+@pytest.mark.asyncio
+async def test_the_offer_has_no_ontologies_where_the_deployment_lists_none(nexus, acme, service):
+    assert (await service.read_offer("olivia", "alpha"))["ontologies"] is None

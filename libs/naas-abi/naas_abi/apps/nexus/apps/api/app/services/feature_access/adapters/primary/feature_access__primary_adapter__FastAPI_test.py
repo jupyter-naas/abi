@@ -16,11 +16,16 @@ from naas_abi.apps.nexus.apps.api.app.services.feature_access.adapters.primary.f
     router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.feature_access.service_test import (  # noqa: F401
+    ALPHA,
+    FEATURES,
     acme,
     audit,
+    enabled_features,
     nexus,
+    ontologies,
     service,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 
 PATH = "/api/workspaces/alpha/feature-access"
 
@@ -122,3 +127,49 @@ def test_the_files_given_are_read_with_the_offer_and_saved_as_the_caller(client)
         403,
         404,
     )
+
+
+class TestOntologies:
+    """On a deployment with the ontology feature."""
+
+    @pytest.fixture
+    def enabled_features(self) -> list[str]:
+        return [*FEATURES, "ontology"]
+
+    @pytest.fixture
+    def client(self, ontologies):  # noqa: F811
+        previous = runtime.configure(lambda: ontologies)
+        app = FastAPI()
+        app.include_router(router, prefix="/api/workspaces")
+        app.dependency_overrides[get_current_user_required] = _by_header
+        yield TestClient(app)
+        runtime.configure(previous)
+
+    @pytest.mark.asyncio
+    async def test_the_ontologies_are_read_with_the_offer_and_saved_as_the_caller(self, client):
+        """Olivia, Acme's owner, assigns any ontology; Alpha's admin Frank, who may
+        not, is refused one (403) and removes one; a file outside the catalog or no
+        change is 422; a member changes nothing."""
+        path = "/api/workspaces/alpha/offer/ontologies"
+        olivia, frank = {"x-user": "olivia"}, {"x-user": "frank"}
+        state = client.get("/api/workspaces/alpha/offer", headers=olivia).json()
+        assert state["ontologies"]["offered"] == ["Core:BFO.ttl"]
+        rows = {row["id"]: row for row in state["ontologies"]["rows"]}
+        assert rows["core:bfo.ttl"]["offered"] and rows["core:agent.ttl"]["editable"]
+        saved = client.put(path, json={"changes": {"core:agent.ttl": True}}, headers=olivia)
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["ontologies"]["offered"] == ["Core:BFO.ttl", "core:agent.ttl"]
+        await MEMBERSHIPS.grant("frank", "admin", ALPHA)
+        refused = client.put(path, json={"changes": {"acme.sales:sales.ttl": True}}, headers=frank)
+        assert refused.status_code == 403
+        assert "AssignOntology" in refused.json()["detail"]
+        removed = client.put(path, json={"changes": {"core:agent.ttl": False}}, headers=frank)
+        assert removed.status_code == 200, removed.text
+        assert removed.json()["ontologies"]["offered"] == ["Core:BFO.ttl"]
+        unknown = client.put(path, json={"changes": {"nope:Nope.ttl": True}}, headers=olivia)
+        assert unknown.status_code == 422
+        assert client.put(path, json={"changes": {}}, headers=olivia).status_code == 422
+        member = client.put(
+            path, json={"changes": {"core:bfo.ttl": False}}, headers={"x-user": "dave"}
+        )
+        assert member.status_code in (403, 404)

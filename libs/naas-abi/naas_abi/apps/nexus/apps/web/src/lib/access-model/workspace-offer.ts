@@ -7,6 +7,8 @@
  * (Organization, Platform and System Files, `PUT /offer/files`), within each person's level. Its
  * Graphs part (the graphs it is given to read or write, every graph of its organization, what it
  * closes of its own) is Settings › Graphs' (`/resource-access/graphs`): the offer shows its summary.
+ * Its ontology files (`ontologies`) are switched here (`PUT /offer/ontologies`) as in Settings ›
+ * Ontologies: an organization's admins add one, a workspace admin may take one back.
  */
 import { authFetch } from '@/stores/auth';
 
@@ -41,7 +43,27 @@ export type OfferState = {
   my_files?: MyFiles;
   /** The Graphs part, as Settings › Graphs edits it: shown here, not changed. */
   graphs?: GraphsSummary;
+  /** The ontology files it offers; null where the deployment has no ontology. */
+  ontologies?: OfferOntologies | null;
 };
+
+/** An ontology file of the deployment, as the offer names it; or a ref no file answers to. */
+export type OntologyRow = {
+  /** Its id in the catalog (`core:bfo.ttl`), what a change names. */
+  id: string;
+  label: string;
+  module: string | null;
+  offered: boolean;
+  /** False: a ref of the offer no file of the deployment answers to (removable). */
+  available: boolean;
+  /** The caller may assign it here (`nexus:AssignOntology` in the workspace's organization). */
+  assignable: boolean;
+  editable: boolean;
+  reason: string | null;
+};
+
+/** The Ontologies part: the offer's refs as written, a row per file, or why they are not listed. */
+export type OfferOntologies = { offered: string[]; rows: OntologyRow[]; error: string | null };
 
 /** What the offer gives of the graphs outside the workspace, and closes of its own. */
 export type GraphsSummary = {
@@ -159,6 +181,16 @@ export function createOfferApi(fetcher: Fetcher = authFetch) {
         body: JSON.stringify(changes),
       });
       if (!response.ok) throw await failure(response, `Could not save the files (HTTP ${response.status}).`);
+      return (await response.json()) as OfferState;
+    },
+    /** Offer or stop offering ontology files (`{row id: offered}`), in one write of "<W> access". */
+    saveOntologies: async (workspaceId: string, changes: Record<string, boolean>): Promise<OfferState> => {
+      const response = await fetcher(`${path(workspaceId)}/ontologies`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ changes }),
+      });
+      if (!response.ok) throw await failure(response, `Could not save the ontologies (HTTP ${response.status}).`);
       return (await response.json()) as OfferState;
     },
   };

@@ -13,6 +13,7 @@ import {
   type OfferApi,
   type OfferKind,
   type OfferState,
+  type OntologyRow,
 } from '@/lib/access-model/workspace-offer';
 import { workspaceGroupName } from '@/lib/access-model/levels';
 import { FEATURE_SCOPES, WEB_ENGINES, webEngineScopeId } from '@/lib/search-scopes';
@@ -288,6 +289,13 @@ export function WorkspaceOfferEditor({
       return true;
     }, `${row.label}: ${FILE_MODE_LABELS[mode]}.`);
 
+  const toggleOntology = (row: OntologyRow, on: boolean) =>
+    void saveNow(async () => {
+      if (row.offered === on) return false;
+      setOffer(await offerApi.saveOntologies(workspaceId, { [row.id]: on }));
+      return true;
+    }, `${row.label} ${on ? 'added to' : 'removed from'} the offer.`);
+
   const featureRow = (row: FeatureRow, label = row.label) => {
     const on = row.choice === 'everyone';
     const disabled = !row.editable || saving || (!row.offered && !on);
@@ -406,6 +414,40 @@ export function WorkspaceOfferEditor({
           <a className="access-policy-link" href={graphsSettingsHref(workspaceId)}>
             Change them in Settings › Graphs
           </a>
+        </div>
+      )}
+
+      {offer.ontologies && (
+        <div className="access-offer-section" data-offer-section="ontologies">
+          <h4 className="access-offer-heading">Ontologies</h4>
+          <p className="access-policy-muted">
+            The ontology files its people read here, as in Settings › Ontologies. An administrator of its organization
+            adds one; a workspace admin may take one back.
+          </p>
+          {offer.ontologies.error ? (
+            <p className="access-policy-error" role="alert">
+              {offer.ontologies.error}
+            </p>
+          ) : offer.ontologies.rows.length === 0 ? (
+            <p className="access-policy-muted">No ontology file is listed on this deployment.</p>
+          ) : (
+            <ul className="access-offer-list">
+              {offer.ontologies.rows.map((row) => (
+                <li key={row.id} className="access-offer-row" data-offer-ontology={row.id}>
+                  <OfferSwitch
+                    label={`Offer ${row.label}`}
+                    on={row.offered}
+                    disabled={!editable || !row.editable || saving}
+                    onChange={(next) => toggleOntology(row, next)}
+                  />
+                  <span className="access-offer-name">{row.label}</span>
+                  {row.module && <span className="access-offer-note">{row.module}</span>}
+                  {!row.available && <span className="access-offer-note">Unavailable in the current catalog</span>}
+                  {!row.editable && row.reason && <span className="access-offer-note">{row.reason}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

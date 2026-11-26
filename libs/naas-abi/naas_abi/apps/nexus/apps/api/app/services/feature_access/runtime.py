@@ -33,8 +33,12 @@ def _default() -> FeatureAccessService:
         EngineIamGateway,
     )
     from naas_abi.apps.nexus.apps.api.app.services.iam_admin.runtime import AUDIT_PREFIX
+    from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
     from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.sql_audit_log import (  # noqa: E501
         SqlAdminAuditLog,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary.resource_access import (  # noqa: E501
+        offer_ontology_catalog,
     )
 
     return FeatureAccessService(
@@ -44,6 +48,8 @@ def _default() -> FeatureAccessService:
         container_of=AUTHZ.container_of,
         defaults_of=CONTAINER_DEFAULTS.record_of,
         features=_features,
+        # The ontology files as Settings › Ontologies lists them (its catalog).
+        ontology_catalog=offer_ontology_catalog(lambda: ServiceRegistry.instance().ontology),
     )
 
 

@@ -813,7 +813,12 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   overviews, and its path is not found there. Enabling one in a workspace (`AssignOntology`, admin level) is
   decided in the workspace's organization, on `<organization>/nexus:ontology/<path>` (the platform's for a
   workspace in none): Workspace settings › Ontologies offers only what the caller may assign plus what the
-  workspace already enables, and its save refuses another, naming it. naas_abi lists ontologies for the
+  workspace already enables, and its save refuses another, naming it. The policy page › Configuration of
+  "<W> access" has an Ontologies section with the same data (`read_offer`'s `ontologies`: the offer's refs and a
+  row per file of the deployment, `assignable`, `editable`, `reason`; a ref no file answers to is a row to
+  remove), switched one at a time through `PUT /api/workspaces/{id}/offer/ontologies` (`{changes: {id:
+  offered}}`, `FeatureAccessService.save_ontologies`, then `set_ontologies` as the caller): 403 for a file the
+  caller may not assign, 422 for one of no file of the deployment. naas_abi lists ontologies for the
   builder (`listers.ontologies`): every file of the deployment at an organization or the platform, a
   workspace's enabled ones there. *Consequences:* an organization's admins and owners assign any ontology to
   its workspaces by their role there (an admin-level action in their container), and the platform admin

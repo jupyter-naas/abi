@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { OfferApi, OfferState } from '@/lib/access-model/workspace-offer';
+import { createOfferApi, type OfferApi, type OfferState, type OntologyRow } from '@/lib/access-model/workspace-offer';
 import type { ResourceQuery } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
 import type { FeatureAccessApi } from '@/app/workspace/[workspaceId]/settings/general/feature-access-api';
@@ -384,5 +384,146 @@ describe('WorkspaceOfferEditor: graphs', () => {
     mounted = null;
     await render(setup());
     expect(document.querySelector('[data-offer-section="graphs"]')).toBeNull();
+  });
+});
+
+describe('WorkspaceOfferEditor: ontologies', () => {
+  const row = (over: Partial<OntologyRow> & Pick<OntologyRow, 'id' | 'label'>): OntologyRow => ({
+    module: 'core',
+    offered: false,
+    available: true,
+    assignable: true,
+    editable: true,
+    reason: null,
+    ...over,
+  });
+  const ONTOLOGIES: OfferState = {
+    ...OFFER,
+    ontologies: {
+      offered: ['Core:BFO.ttl', 'gone:Old.ttl'],
+      error: null,
+      rows: [
+        row({ id: 'core:agent.ttl', label: 'Agent' }),
+        row({ id: 'core:bfo.ttl', label: 'BFO core', offered: true }),
+        row({ id: 'gone:Old.ttl', label: 'gone:Old.ttl', module: null, offered: true, available: false, assignable: false }),
+        row({
+          id: 'acme.sales:sales.ttl',
+          label: 'Sales',
+          module: 'acme.sales',
+          assignable: false,
+          editable: false,
+          reason: 'Not yours to assign: an administrator of its organization may (nexus:AssignOntology).',
+        }),
+      ],
+    },
+  };
+  const ontologySwitch = (id: string) => switchOf(`[data-offer-ontology="${id}"]`);
+
+  it('shows each ontology file as a toggle: offered, read-only with its reason, or out of the catalog', async () => {
+    await render(setup(ONTOLOGIES));
+    const section = document.querySelector('[data-offer-section="ontologies"]');
+    expect(section?.querySelector('h4')?.textContent).toBe('Ontologies');
+    expect(ontologySwitch('core:bfo.ttl')?.getAttribute('aria-checked')).toBe('true');
+    expect(ontologySwitch('core:agent.ttl')?.getAttribute('aria-checked')).toBe('false');
+    expect(ontologySwitch('core:agent.ttl')?.disabled).toBe(false);
+    expect(document.querySelector('[data-offer-ontology="core:agent.ttl"]')?.textContent).toContain('core');
+    // What the caller may not give: read-only, saying who gives it.
+    expect(ontologySwitch('acme.sales:sales.ttl')?.disabled).toBe(true);
+    expect(document.querySelector('[data-offer-ontology="acme.sales:sales.ttl"]')?.textContent).toContain(
+      'an administrator of its organization may (nexus:AssignOntology)',
+    );
+    // A ref no file answers to: on, and removable.
+    expect(document.querySelector('[data-offer-ontology="gone:Old.ttl"]')?.textContent).toContain(
+      'Unavailable in the current catalog',
+    );
+    expect(ontologySwitch('gone:Old.ttl')?.getAttribute('aria-checked')).toBe('true');
+    expect(ontologySwitch('gone:Old.ttl')?.disabled).toBe(false);
+  });
+
+  it('saves each toggle in the offer at once, by the file’s id', async () => {
+    const after: OfferState = {
+      ...ONTOLOGIES,
+      ontologies: {
+        ...ONTOLOGIES.ontologies!,
+        offered: [...ONTOLOGIES.ontologies!.offered, 'core:agent.ttl'],
+        rows: ONTOLOGIES.ontologies!.rows.map((r) => (r.id === 'core:agent.ttl' ? { ...r, offered: true } : r)),
+      },
+    };
+    const parts = setup(ONTOLOGIES);
+    const saveOntologies = vi.fn().mockResolvedValue(after);
+    Object.assign(parts.offerApi, { saveOntologies });
+    const onChanged = vi.fn();
+    mounted = await mount(WorkspaceOfferEditor, {
+      workspaceId: 'ws-1',
+      scope: WS,
+      workspaceName: 'Sales',
+      api: parts.api,
+      offerApi: parts.offerApi as unknown as OfferApi,
+      featureApi: parts.featureApi as unknown as FeatureAccessApi,
+      onChanged,
+    });
+    await mounted.flush();
+    await mounted.click(ontologySwitch('core:agent.ttl'));
+    await mounted.flush();
+    expect(saveOntologies).toHaveBeenCalledWith('ws-1', { 'core:agent.ttl': true });
+    expect(ontologySwitch('core:agent.ttl')?.getAttribute('aria-checked')).toBe('true');
+    expect(document.querySelector('[data-offer-notice]')?.textContent).toBe('Agent added to the offer.');
+    expect(onChanged).toHaveBeenCalledTimes(1);
+
+    await mounted.click(ontologySwitch('gone:Old.ttl'));
+    await mounted.flush();
+    expect(saveOntologies).toHaveBeenLastCalledWith('ws-1', { 'gone:Old.ttl': false });
+  });
+
+  it('says a refusal and keeps the switch as it was', async () => {
+    const parts = setup(ONTOLOGIES);
+    const saveOntologies = vi.fn().mockRejectedValue(new Error('You may not assign core:agent.ttl to this workspace'));
+    Object.assign(parts.offerApi, { saveOntologies });
+    await render(parts);
+    await mounted!.click(ontologySwitch('core:agent.ttl'));
+    await mounted!.flush();
+    expect(document.querySelector('.access-policy-error[role="alert"]')?.textContent).toContain('You may not assign core:agent.ttl');
+    expect(ontologySwitch('core:agent.ttl')?.getAttribute('aria-checked')).toBe('false');
+    expect(document.querySelector('[data-offer-notice]')).toBeNull();
+  });
+
+  it('is read-only where IAM does not let the caller change "<W> access"', async () => {
+    const readOnly = {
+      ...ONTOLOGIES,
+      editable: false,
+      ontologies: {
+        ...ONTOLOGIES.ontologies!,
+        rows: ONTOLOGIES.ontologies!.rows.map((r) => ({ ...r, editable: false, reason: 'IAM does not let you change Sales access.' })),
+      },
+    };
+    await render(setup(readOnly));
+    for (const id of ['core:agent.ttl', 'core:bfo.ttl', 'gone:Old.ttl']) expect(ontologySwitch(id)?.disabled).toBe(true);
+  });
+
+  it('says when the files could not be listed, and shows no section where the deployment has none', async () => {
+    await render(setup({ ...OFFER, ontologies: { offered: ['core:bfo.ttl'], rows: [], error: 'The ontology files could not be listed.' } }));
+    expect(document.querySelector('[data-offer-section="ontologies"]')?.textContent).toContain(
+      'The ontology files could not be listed.',
+    );
+    await mounted?.unmount();
+    mounted = null;
+    await render(setup({ ...OFFER, ontologies: null }));
+    expect(document.querySelector('[data-offer-section="ontologies"]')).toBeNull();
+  });
+
+  it('writes a change with PUT /offer/ontologies', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(ONTOLOGIES), { status: 200 }));
+    const state = await createOfferApi(fetcher).saveOntologies('ws 1', { 'core:bfo.ttl': false });
+    expect(fetcher).toHaveBeenCalledWith('/api/workspaces/ws%201/offer/ontologies', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ changes: { 'core:bfo.ttl': false } }),
+    });
+    expect(state.ontologies?.offered).toEqual(['Core:BFO.ttl', 'gone:Old.ttl']);
+    const refused = vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: 'You may not assign x' }), { status: 403 }));
+    await expect(createOfferApi(refused).saveOntologies('ws-1', { x: true })).rejects.toMatchObject({
+      status: 403,
+      message: 'You may not assign x',
+    });
   });
 });
