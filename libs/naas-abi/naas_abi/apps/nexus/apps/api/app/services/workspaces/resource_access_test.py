@@ -455,6 +455,42 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await offered("admin"), ["BFO core", "Agent"])
             self.assertEqual((await save("admin", ["core:bfo.ttl"])).status_code, 200)
 
+    async def test_the_offer_editor_lists_every_file_and_those_the_caller_may_assign(self):
+        """The policy page's Configuration reads the same catalog as Settings ›
+        Ontologies: every file of the deployment by its portable id, and the ones the
+        caller may assign (``AssignOntology`` in the workspace's organization)."""
+        from naas_abi.apps.nexus.apps.api.app.services.graph.testing import knowledge_team
+        from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary import (
+            resource_access as http,
+        )
+
+        files = [
+            SimpleNamespace(
+                path="/o/ontologies/modules/BFO.ttl", name="BFO core", module_name="core"
+            ),
+            SimpleNamespace(
+                path="/o/ontologies/modules/Agent.ttl", name="Agent", module_name="core"
+            ),
+        ]
+        listing = http.offer_ontology_catalog(
+            lambda: SimpleNamespace(list_ontology_files=AsyncMock(return_value=files))
+        )
+        async with self.sessions() as db:
+            db.add(
+                WorkspaceModel(
+                    id="ws-1", name="W", slug="ws-1", owner_id="admin", organization_id="org"
+                )
+            )
+            await db.commit()
+        with knowledge_team() as nexus:
+            nexus.grant("orgadmin", "admin", nexus.org("org-1"))
+            entries, assignable = await listing(SimpleNamespace(id="orgadmin"), "ws-1")
+            self.assertEqual([e["id"] for e in entries], ["core:bfo.ttl", "core:agent.ttl"])
+            self.assertEqual([e["name"] for e in entries], ["BFO core", "Agent"])
+            self.assertEqual(assignable, {"core:bfo.ttl", "core:agent.ttl"})
+            # The workspace's admin assigns nothing by their role there.
+            self.assertEqual((await listing("admin", "ws-1"))[1], set())
+
     async def test_a_view_answers_what_the_first_read_would_store_and_stores_nothing(self):
         from naas_abi.apps.nexus.apps.api.app.services.view_as.active import use_view
         from naas_abi.apps.nexus.apps.api.app.services.view_as.testing import a_view

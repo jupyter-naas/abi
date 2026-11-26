@@ -143,7 +143,9 @@ async def read_workspace_offer(
 ) -> dict[str, Any]:
     """The agents, apps, workflows and pipelines the workspace offers (its
     allow-list, "<W> access"), by name or whole module; the files it gives outside it
-    (``files``: a mode each, the modes the caller may choose) and what My Files is."""
+    (``files``: a mode each, the modes the caller may choose) and what My Files is; its
+    ontologies (``ontologies``: its refs and a row per file, whether the caller may
+    assign it)."""
     return await _call(service.read_offer(user, workspace_id))
 
 
@@ -216,6 +218,27 @@ async def save_workspace_files(
     Answers the offer after."""
     changes = {k: v for k, v in body.model_dump().items() if v is not None}
     return await _call(service.set_files(user, workspace_id, changes))
+
+
+class OntologiesBody(BaseModel):
+    # ``{catalog id: offered}``: ``core:bfo.ttl``... (the ``id`` of an ``ontologies`` row).
+    changes: dict[str, bool] = Field(min_length=1, max_length=200)
+
+
+@router.put(
+    "/{workspace_id}/offer/ontologies",
+    dependencies=[declares(action) for action in WRITES],
+)
+async def save_workspace_ontologies(
+    workspace_id: str,
+    body: OntologiesBody,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+) -> dict[str, Any]:
+    """Offer or stop offering ontology files, through the write Settings › Ontologies
+    makes, as the caller (403 for a file the caller may not assign there, 422 for one
+    of no file of the deployment). Answers the offer after."""
+    return await _call(service.save_ontologies(user, workspace_id, body.changes))
 
 
 @router.put(
