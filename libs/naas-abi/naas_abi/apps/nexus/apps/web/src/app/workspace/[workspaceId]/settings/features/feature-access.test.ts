@@ -82,7 +82,7 @@ async function render(api: ReturnType<typeof fakeApi>) {
 
 const at = (m: Mounted, feature: string, selector: string) =>
   m.host.querySelector(`tr[data-feature="${feature}"] ${selector}`) as HTMLButtonElement | null;
-const saveButton = (m: Mounted) => m.host.querySelector('.workspace-features-save') as HTMLButtonElement;
+const saveButton = (m: Mounted) => m.host.querySelector('[data-action="save"]') as HTMLButtonElement;
 
 describe('FeatureAccess', () => {
   it('shows each feature but Files (Settings › Files) with its choice and the other policies granting it', async () => {
@@ -153,13 +153,29 @@ describe('FeatureAccess', () => {
     expect(m.host.textContent).toContain('1 unsaved change');
   });
 
+  it('lays the features out as Users: a count, a search that narrows the table, columns that sort', async () => {
+    const m = await render(fakeApi());
+    const keys = () => [...m.host.querySelectorAll('tr[data-feature]')].map((tr) => tr.getAttribute('data-feature'));
+
+    expect(m.host.textContent).toContain('2 offered · 3 not offered');
+    expect(m.host.textContent).toContain('5 features');
+    await m.click(m.host.querySelector('[data-sort="offered"]'));
+    expect(keys()).toEqual(['chat', 'search', 'graph', 'maps', 'marketplace']);
+
+    await m.type(m.host.querySelector('input[type="search"], input') as HTMLInputElement, 'not offered');
+    expect(keys()).toEqual(['graph']);
+    expect(m.host.textContent).toContain('1 of 5 features');
+    await m.click(m.host.querySelector('[data-action="clear-filters"]'));
+    expect(keys()).toHaveLength(5);
+  });
+
   it('discards the drafts', async () => {
     const api = fakeApi();
     const m = await render(api);
 
     await m.click(at(m, 'chat', '[data-choice="nobody"]'));
     expect(m.host.textContent).toContain('1 unsaved change');
-    await m.click(m.host.querySelector('.workspace-features-discard'));
+    await m.click(m.host.querySelector('[data-action="discard"]'));
     expect(at(m, 'chat', '[data-choice="everyone"]')?.getAttribute('aria-checked')).toBe('true');
     expect(m.host.textContent).toContain('No unsaved change');
     expect(api.save).not.toHaveBeenCalled();

@@ -1,7 +1,7 @@
 /**
- * General › Features (`GET` / `PUT /api/workspaces/{id}/feature-access`): whether the workspace
- * offers each feature, as the API answers it, and the changes a save sends. Pure: the view is
- * `feature-access.tsx`. A feature is part of the workspace's offer, "<W> access" (S3, #1586):
+ * Settings › Features (`GET` / `PUT /api/workspaces/{id}/feature-access`): whether the workspace
+ * offers each feature, as the API answers it, the changes a save sends, and the table's columns
+ * (search, sort, filter, export, as Settings › Users). Pure: the view is `feature-access.tsx`. A feature is part of the workspace's offer, "<W> access" (S3, #1586):
  * Everyone puts it in, Nobody takes it out. Only… is gone: an exception for some people is a group
  * holding a policy. What may be changed is IAM's answer (`editable`, `reason`), never a role.
  */
@@ -125,4 +125,62 @@ export function otherPolicies(row: FeatureRow): { policy: OtherPolicy; text: str
       }`,
       href: ownerHref(policy.owner_scope, policy.id),
     }));
+}
+
+/** The columns of the features table: each sorts and filters, as Settings › Users. */
+export type FeatureColumnId = 'feature' | 'offered' | 'policies';
+export const FEATURE_COLUMNS: { id: FeatureColumnId; label: string }[] = [
+  { id: 'feature', label: 'Feature' },
+  { id: 'offered', label: 'Offered to' },
+  { id: 'policies', label: 'Other policies' },
+];
+export type SortDir = 'asc' | 'desc';
+
+const CHOICE_LABELS: Record<FeatureChoice, string> = { everyone: 'Everyone', nobody: 'Nobody' };
+
+/** What a column filter sees of a row (what it holds, not an unsaved draft: a row never leaves
+ *  the table while it is being changed). */
+export function featureCellValues(row: FeatureRow, column: FeatureColumnId): string[] {
+  if (column === 'feature') return [row.label];
+  if (column === 'offered') return [CHOICE_LABELS[row.choice]];
+  return row.also.length === 0 ? ['None'] : otherPolicies(row).map(({ policy }) => policy.name);
+}
+
+/** What the search bar reads of a row: its name and key, who it is offered to, the other
+ *  policies, and whether it is not offered here or was changed on its policy's page. */
+export function featureSearchTexts(row: FeatureRow): string[] {
+  return [
+    row.label,
+    row.key,
+    CHOICE_LABELS[row.choice],
+    ...row.also.map((policy) => `${policy.name} ${policy.effect === 'Deny' ? 'denied' : 'granted'}`),
+    row.offered ? '' : 'not offered',
+    row.hand_edited ? 'changed by hand' : '',
+  ];
+}
+
+/** The rows sorted by a column, the name breaking ties. */
+export function sortFeatures(rows: FeatureRow[], key: FeatureColumnId, dir: SortDir): FeatureRow[] {
+  const text = (row: FeatureRow) => featureCellValues(row, key).join(', ');
+  const sign = dir === 'asc' ? 1 : -1;
+  return [...rows].sort(
+    (a, b) =>
+      sign * text(a).localeCompare(text(b), undefined, { sensitivity: 'base' }) ||
+      a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+  );
+}
+
+export const FEATURE_EXPORT_HEADERS = ['Feature', 'Key', 'Offered to', 'Offered here', 'Other policies'];
+
+/** A row of the CSV / Excel export, as the table shows it saved. */
+export function featureExportRow(row: FeatureRow): string[] {
+  return [
+    row.label,
+    row.key,
+    CHOICE_LABELS[row.choice],
+    row.offered ? 'Yes' : 'No',
+    otherPolicies(row)
+      .map(({ text }) => text)
+      .join('; '),
+  ];
 }

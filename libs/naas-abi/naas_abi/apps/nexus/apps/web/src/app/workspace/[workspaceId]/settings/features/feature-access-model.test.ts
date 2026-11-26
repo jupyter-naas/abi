@@ -4,8 +4,12 @@ import {
   changesFrom,
   choicesOf,
   draftOf,
+  featureCellValues,
+  featureExportRow,
+  featureSearchTexts,
   otherPolicies,
   rowNotes,
+  sortFeatures,
   sortedRows,
   type FeatureAccessState,
   type FeatureRow,
@@ -138,5 +142,34 @@ describe('the other policies naming a feature', () => {
       { text: 'Also granted by Chat + Files', href: ownerHref(SCOPE, 'pol_cf') },
       { text: 'Also granted by Marketplace (attached nowhere)', href: ownerHref(SCOPE, 'pol_mkt') },
     ]);
+  });
+});
+
+describe('the features table (as Settings › Users)', () => {
+  const deny = { id: 'pol_no', name: 'No maps', owner_scope: SCOPE, effect: 'Deny' as const, attached: true };
+  const chat = row({ key: 'chat', label: 'Chat', choice: 'everyone' });
+  const maps = row({ key: 'maps', label: 'Maps', also: [deny] });
+  const graph = row({ key: 'graph', label: 'Graph', choice: 'everyone', offered: false });
+
+  it('filters a column on what a row holds, None for no other policy', () => {
+    expect(featureCellValues(chat, 'offered')).toEqual(['Everyone']);
+    expect(featureCellValues(chat, 'policies')).toEqual(['None']);
+    expect(featureCellValues(maps, 'policies')).toEqual(['No maps']);
+  });
+
+  it('searches the name, who it is offered to, the policies and not offered', () => {
+    expect(featureSearchTexts(maps).join(' ')).toContain('No maps denied');
+    expect(featureSearchTexts(graph)).toContain('not offered');
+    expect(featureSearchTexts(chat)).not.toContain('not offered');
+  });
+
+  it('sorts by a column, the name breaking ties', () => {
+    expect(sortFeatures([maps, graph, chat], 'feature', 'asc').map((r) => r.key)).toEqual(['chat', 'graph', 'maps']);
+    expect(sortFeatures([maps, graph, chat], 'offered', 'desc').map((r) => r.key)).toEqual(['maps', 'chat', 'graph']);
+  });
+
+  it('exports a row as the table shows it', () => {
+    expect(featureExportRow(maps)).toEqual(['Maps', 'maps', 'Nobody', 'Yes', 'Also denied by No maps']);
+    expect(featureExportRow(graph)[3]).toBe('No');
   });
 });
