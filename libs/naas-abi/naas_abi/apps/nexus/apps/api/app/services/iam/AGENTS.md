@@ -37,6 +37,8 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `workspace_models.py` | The chat models a workspace uses (its offer's `OfferModels`, `*` every one, and `OfferDefaultModel`; ADR `20261126_models_in_the_offer`): `WorkspaceModels` (`model_for` switches to the default, `require` refuses), `models_in_workspace`/`models_in_container` (the offer cache), `for_turn`/`set_for_turn`/`models_for_turn` (the turn's), `turn_llm_model` (by provider: switch, the engine's, or refuse), `install_substitute` (the engine's model registry asks it for a remote module's turn) |
 | `models_offer.py` | Startup, once: every model (`*`) into each recorded access policy that names none (`iam_migrations` `models_offer_v1`) |
 | `graphs_offer.py` | Startup, once: each workspace's graph assignment into its offer, the `workspace.<ws>.graphs.read|write` policies and their per-person attachments deleted (`iam_migrations` `graphs_offer_v1`); `configured_graphs` for a seeded workspace made later |
+| `given_maps.py` | The Maps items a workspace's offer gives it without owning them, and the deployment items it closes: `GivenMaps`, `GivenBasemaps`, `OfferMapsDeny`, `OfferBasemapsDeny` (`statements`, `fields_of` from a `MapsAssignment`, `assignment_of` back, `with_item`, `summary`) |
+| `maps_offer.py` | Startup, once: what each workspace may use per `maps_grants` into its offer (`iam_migrations` `maps_offer_v1`); `maps_grants` kept for a workspace whose access policy is no allow-list yet |
 | `platform_files_routes.py` | `GET`/`PUT /api/workspaces/{id}/platform-files`: `{workspace_id, mode, can_change}`, the offer's `GivenPlatformFiles`; read as the configuration, written as the caller |
 | `container_defaults.py` | Each organization's and workspace's access policy and groups ("Access policies and default groups"): "<O> access", "<O> admins", "<O> people"; "<W> access" (W's bound), "<W> workspace", "<W> admins"; made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), forgotten with it (`dropped`); `grouped` / `grouped_record` (whether its people are groups, #1585); a container recorded before #1585 keeps its "<X> members" and admins in step with the roles (`sync_scope`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
 | `access_model.py` | Startup, once, after `container_defaults_v1`: per-person attachments become groups, with the report of every access change, compared after the start ("The access move"; `migrate_access`, `complete_report`, `iam_migrations` `access_model_v1`; `abi iam migrate-access --dry-run`, `migrate_from_cli`) |
@@ -370,7 +372,7 @@ there is a level. Nothing is attached to a person.
 - **Workspace creation** takes `admin_id` (default the creator; in an organization, someone of its directory, else
   400), who joins "<W> admins" and "<W> workspace"; the defaults are made before the grant.
 - **Shared graphs** are the Graphs part of W's offer (`given_graphs.py`): IAM gives them to W's people while they
-  belong there; nothing is kept in step with the groups.
+  belong there; nothing is kept in step with the groups. So are the **Maps items** W does not own (`given_maps.py`).
 
 ### The upgrade (`container_defaults_v1`)
 
@@ -534,6 +536,36 @@ lock; it waits for `container_defaults_v1`. Built from what IAM holds now with S
   `attachments_deleted`, `widened` (a policy of theirs passed `MAX_PATTERNS` names, never written: given for the
   first time), `failed`. A configured workspace made later gets its graphs with its access policy
   (`container_defaults.migrate`, `configured_graphs`); its organization's offer never takes them.
+
+## Maps given by the workspace's offer (ADR `20261125_offer_gives_outside_resources`, "Maps")
+
+- **Sections** of "<W> access" (`given_maps.py`, read and written by `workspace_offer`, fields `maps` and
+  `maps_closed`): `GivenMaps` (parts `GivenMaps2`...: `ListLayouts`, `GetLayout`) and `GivenBasemaps` (`ListBasemaps`,
+  `GetBasemap`) on absolute names: the deployment's feeds or basemaps, `abi:nexus:<kind>/*` (every one, the ones
+  added later too) or `abi:nexus:<kind>/<id>`, and an item another workspace V shares with W, `<V>/nexus:<kind>/<id>`;
+  and W's Denies `OfferMapsDeny`, `OfferBasemapsDeny` (the same actions on `${scope}/nexus:<kind>/<id>`: a deployment
+  item W does not use though every one is given). List and read only: W administers its own copies through its
+  roles. A feed's layers follow their feed; built-in feeds and graph layers are never in it. Hiding an item stays
+  W's display choice (`maps_settings.hidden_*`), not the offer's.
+- **Read by Nexus** as W's `MapsAssignment` (`given_maps.assignment_of`, `maps/permissions` `IamMapsOffers` through
+  `AUTHZ.offer_of`): which deployment items W seeds and lists, which shared items it lists. A workspace whose access
+  policy is no allow-list yet (`offer_of` None) still goes by `maps_grants`.
+- **Who changes them:** Settings › Maps › Access (`/api/maps/permissions`, item by item) writes the offer of each
+  workspace whose answer changes, through `FeatureAccessService.set_maps`, as the caller and audited. Its rules
+  first (a deployment item and "every workspace" are the platform admin's, a workspace's item is shared from it to
+  workspaces the caller administers), then IAM's: only the platform admin gives a deployment item, an item of V is
+  given by whoever holds it in V, a workspace admin closes a deployment item and never reopens it. A change a
+  workspace with no allow-list would need is refused (409) before anything is written; the writes are one per
+  workspace. `read_offer` says `maps` (`given_maps.summary`), which the offer editor shows.
+- **New workspaces** are given every deployment feed and basemap (`container_defaults.platform_maps`, in
+  `new_workspace_offer` and for a configured workspace made by `migrate`); their organization's offer never takes it.
+- **The move** `maps_offer_v1` (`maps_offer.py`, `main._offer_moves` after `graphs_offer`): each workspace gets every
+  deployment item, each one a `maps_grants` row narrowed away from it closed, and each item another workspace
+  shared with it (by list or with every workspace) by its name there. Its other sections are kept; idempotent.
+  A workspace with no access policy waits (not recorded). Reported: `written`, `kept`, `waiting`, `closed`,
+  `shared_with_all` (given to each workspace now, not to one made later), `dropped` (shared by a workspace that is
+  gone), `failed`. `maps_grants` stays for the workspaces that are no allow-list yet; one written into a ceiling of
+  an older version is kept when the access migration converts it (`access_model.ceiling_offer`).
 
 ## The upgrade: sets and toggles become policies
 

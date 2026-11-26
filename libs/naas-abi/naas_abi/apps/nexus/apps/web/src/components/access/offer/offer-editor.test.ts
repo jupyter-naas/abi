@@ -437,5 +437,36 @@ describe('WorkspaceOfferEditor: models', () => {
     mounted = null;
     await render(setup(OFFER));
     expect(document.querySelector('[data-offer-section="models"]')).toBeNull();
+
+describe('WorkspaceOfferEditor: maps', () => {
+  it('shows the Maps part as a summary, changed in Settings › Maps', async () => {
+    const maps = {
+      feeds: { every: true, named: 0, closed: 2, shared: 1 },
+      basemaps: { every: false, named: 3, closed: 0, shared: 0 },
+    };
+    await render(setup({ ...OFFER, maps }));
+    const section = document.querySelector('[data-offer-section="maps"]');
+    expect([...(section?.querySelectorAll('[data-offer-maps] li') ?? [])].map((li) => li.textContent)).toEqual([
+      'Every map feed of the platform, the ones added later too.',
+      '2 map feeds of the platform not used here.',
+      '1 map feed shared by other workspaces.',
+      '3 basemaps of the platform.',
+    ]);
+    // Read only here: no toggle, a link to where it is changed.
+    expect(section?.querySelector('[role="switch"], select')).toBeNull();
+    expect(section?.querySelector('a')?.getAttribute('href')).toBe('/workspace/ws-1/settings/maps');
+  });
+
+  it('says when nothing is given, and shows no section for an offer that does not say', async () => {
+    const none = { every: false, named: 0, closed: 0, shared: 0 };
+    await render(setup({ ...OFFER, maps: { feeds: none, basemaps: none } }));
+    expect([...document.querySelectorAll('[data-offer-maps] li')].map((li) => li.textContent)).toEqual([
+      'No map feed of the platform.',
+      'No basemap of the platform.',
+    ]);
+    await mounted?.unmount();
+    mounted = null;
+    await render(setup());
+    expect(document.querySelector('[data-offer-section="maps"]')).toBeNull();
   });
 });

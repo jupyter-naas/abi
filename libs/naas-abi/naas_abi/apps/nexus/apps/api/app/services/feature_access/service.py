@@ -17,7 +17,9 @@ Its Files part gives what lies outside the workspace (``iam/given_files``, ADR
 each Off, Read or Read and write, as given sections of "<W> access". Whoever holds a
 section may give it; a workspace's admin may narrow or remove one, never add it. Its
 Graphs part (``iam/given_graphs``), written by Settings › Graphs: the graphs it is given
-to read or write, every graph of its organization, and what it closes of its own.
+to read or write, every graph of its organization, and what it closes of its own. Its
+Maps part (``iam/given_maps``), written by Settings › Maps › Access: the deployment's
+feeds and basemaps it uses, and those other workspaces share with it.
 
 Every write is an ordinary IAM call made as the caller and audited first
 (``iam:UpdatePolicy`` on "<W> access"), so IAM's own rules apply: grant only what
@@ -39,7 +41,7 @@ from naas_abi.apps.nexus.apps.api.app.services.feature_access.port import (
     FeatureChange,
     FeaturePolicyStore,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam import given_files, given_graphs
+from naas_abi.apps.nexus.apps.api.app.services.iam import given_files, given_graphs, given_maps
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.given_files import (
     LABELS,
@@ -682,6 +684,8 @@ class FeatureAccessService:
                 # Settings › Graphs edits it: shown here, not changed.
                 "graphs": given_graphs.summary(offer),
                 "models": models_json(offer, listed_chat_models()),
+                # Settings › Maps › Access edits it: shown here, not changed.
+                "maps": given_maps.summary(offer),
             }
 
         return await run_in_threadpool(snapshot)
@@ -860,6 +864,34 @@ class FeatureAccessService:
             detail=detail,
         )
         _log.info(f"Graphs of {workspace_id}: {detail}")
+        policy = await run_in_threadpool(self._gateway.policy, access_id)
+        return offer_of(policy.document)
+
+    async def set_maps(
+        self,
+        user: Any,
+        workspace_id: str,
+        change: Callable[[Offer], Offer],
+        *,
+        detail: str = "",
+    ) -> Offer:
+        """Change the Maps part of the workspace's offer (``iam/given_maps``: Settings ›
+        Maps › Access, one item at a time), in one write of "<W> access" as the caller.
+        IAM refuses an item given that the caller does not hold
+        (``PermissionDeniedError``, 403) and nothing changes; taking one away needs only
+        the right to change the policy. Answers the offer after."""
+        _container, record = await self._where(workspace_id)
+        access_id = getattr(record, "access_policy_id", None)
+        await self._set_offer(
+            user,
+            workspace_id,
+            access_id,
+            "workspace-offer.maps",
+            workspace_id,
+            change,
+            detail=detail,
+        )
+        _log.info(f"Maps of {workspace_id}: {detail}")
         policy = await run_in_threadpool(self._gateway.policy, access_id)
         return offer_of(policy.document)
 

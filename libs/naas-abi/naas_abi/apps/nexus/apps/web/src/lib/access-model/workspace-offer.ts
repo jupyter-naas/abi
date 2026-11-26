@@ -9,6 +9,8 @@
  * closes of its own) is Settings › Graphs' (`/resource-access/graphs`): the offer shows its summary.
  * Its Models part names the chat models it uses (`*`: every model its people's model sets allow) and
  * the default an agent on a model it does not offer switches to (`PUT /offer/models`).
+ * Its Maps part (the platform's feeds and basemaps it uses, those other workspaces share with it) is
+ * Settings › Maps' (`/api/maps/permissions`): the offer shows its summary too.
  */
 import { authFetch } from '@/stores/auth';
 
@@ -45,6 +47,8 @@ export type OfferState = {
   graphs?: GraphsSummary;
   /** The Models part: the chat models it uses and its default. */
   models?: ModelsPart;
+  /** The Maps part, as Settings › Maps edits it: shown here, not changed. */
+  maps?: MapsSummary;
 };
 
 /** The model naming every model (the people's model sets decide which). */
@@ -110,6 +114,40 @@ export function graphsSummaryLines(graphs: GraphsSummary): string[] {
 /** Where the Graphs part is changed. */
 export const graphsSettingsHref = (workspaceId: string) =>
   `/workspace/${encodeURIComponent(workspaceId)}/settings/graphs`;
+
+/** What the offer gives of one kind of Maps item the workspace does not own. */
+export type MapsKindSummary = {
+  /** Every one of the platform, the ones added later too. */
+  every: boolean;
+  /** Those of the platform given by name. */
+  named: number;
+  /** Those of the platform it does not use, though every one is given. */
+  closed: number;
+  /** Those other workspaces share with it. */
+  shared: number;
+};
+
+/** The Maps part: the platform's feeds and basemaps it uses, and those shared with it. */
+export type MapsSummary = { feeds: MapsKindSummary; basemaps: MapsKindSummary };
+
+function mapsKindLines(kind: MapsKindSummary, one: string, many: string): string[] {
+  const lines: string[] = [];
+  if (kind.every) lines.push(`Every ${one} of the platform, the ones added later too.`);
+  else if (kind.named > 0) lines.push(`${plural(kind.named, one, many)} of the platform.`);
+  else lines.push(`No ${one} of the platform.`);
+  if (kind.every && kind.closed > 0) lines.push(`${plural(kind.closed, one, many)} of the platform not used here.`);
+  if (kind.shared > 0) lines.push(`${plural(kind.shared, one, many)} shared by other workspaces.`);
+  return lines;
+}
+
+/** The Maps part in words, one line each: its feeds, then its basemaps. */
+export function mapsSummaryLines(maps: MapsSummary): string[] {
+  return [...mapsKindLines(maps.feeds, 'map feed', 'map feeds'), ...mapsKindLines(maps.basemaps, 'basemap', 'basemaps')];
+}
+
+/** Where the Maps part is changed (Settings › Maps, each item's Access). */
+export const mapsSettingsHref = (workspaceId: string) =>
+  `/workspace/${encodeURIComponent(workspaceId)}/settings/maps`;
 
 export type OfferChange = { kind: OfferKind; module: string; name: string; offered: boolean };
 

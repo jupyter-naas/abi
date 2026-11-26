@@ -532,3 +532,68 @@ def test_merging_and_removing_models_keep_a_default_that_is_still_offered():
 def test_a_new_workspace_offers_every_model():
     offer = container_defaults.new_workspace_offer(None, None)
     assert offer.models == {"*"} and offer.default_model is None
+
+
+# -- the Maps part -------------------------------------------------------------------------
+
+
+def test_the_maps_given_and_closed_are_sections_of_the_offer():
+    """The Maps part: given Allows on absolute names (every deployment feed, a basemap by
+    id, a feed another workspace shares), in parts past the pattern limit, and the Denies
+    W writes within ``${scope}``, read back as they were; merged and taken away as the
+    graphs are; never what a re-seed adds."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import given_maps
+
+    shared = frozenset(
+        given_maps.shared_name(W2, "layout", f"f{i:03}") for i in range(MAX_PATTERNS + 1)
+    )
+    given = shared | {given_maps.every_name("layout"), given_maps.platform_name("basemap", "osm")}
+    closed = frozenset({given_maps.closed_name("layout", "narrowed")})
+    offer = Offer.of(features=["maps"], maps=given, maps_closed=closed)
+    document = offer_document(offer)
+    assert [s["sid"] for s in document["statements"]] == [
+        "OfferFeatures",
+        "GivenMaps",
+        "GivenMaps2",
+        "GivenBasemaps",
+        "OfferMapsDeny",
+    ]
+    parse_policy_document(document)
+    assert offer_of(document) == offer
+    assert in_offer_form(document)
+    assert offer_section("GivenMaps2") == "GivenMaps"
+    assert offer_section("OfferBasemapsDeny") == "OfferBasemapsDeny"
+    # Only W's Denies may be Denies.
+    stray = {**document, "statements": [*document["statements"]]}
+    stray["statements"][1] = {**stray["statements"][1], "effect": "Deny"}
+    assert not in_offer_form(stray)
+    # Merged keeps what either says (merging never reopens what one closes).
+    other = Offer.of(maps=frozenset({given_maps.platform_name("basemap", "dark")}))
+    assert offer.merged(other).maps == given | other.maps
+    assert offer.merged(other).maps_closed == closed
+    assert offer.without(offer).is_empty()
+    assert not Offer.of(maps_closed=closed).is_empty()
+    # Rewriting the sections keeps the rest; a re-seed never adds them.
+    narrowed = with_offer(document, replace(offer, maps=frozenset()))
+    assert offer_of(narrowed) == replace(offer, maps=frozenset())
+    assert instances_only(offer).is_empty()
+
+
+def test_a_new_workspace_is_given_every_platform_map_its_organization_never_is(world):
+    """What a workspace was given before its offer said it (no ``maps_grants`` row: every
+    deployment feed and basemap) is what a new one is made with; its organization's offer,
+    which takes the seed, takes none of it."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import given_maps
+
+    every = Offer(
+        **given_maps.fields_of(given_maps.every_platform_map(), container_of=lambda _w: None)
+    )
+    assert container_defaults.new_workspace_offer(None, None).maps == every.maps
+    seeded = Offer.of(features=["chat"]).merged(every)
+    records, report = _make(world, {"w": seeded})
+    assert not report.failed
+    with as_service_account("api"):
+        w_access = world.iam.get_policy(records[W].access_policy_id)
+        org_access = world.iam.get_policy(records[org_container("acme")].access_policy_id)
+    assert offer_of(w_access.document) == seeded
+    assert offer_of(org_access.document) == Offer.of(features=["chat"])

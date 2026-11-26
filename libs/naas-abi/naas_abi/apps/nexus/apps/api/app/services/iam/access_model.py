@@ -77,7 +77,7 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import unquote
 
-from naas_abi.apps.nexus.apps.api.app.services.iam import files_offer, runtime
+from naas_abi.apps.nexus.apps.api.app.services.iam import files_offer, given_maps, runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import NEXUS_CATALOG
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
     CONTAINER_DEFAULTS,
@@ -117,6 +117,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     Item,
     Offer,
     in_offer_form,
+    maps_only,
     offer_of,
     offer_section,
     with_offer,
@@ -537,7 +538,9 @@ def ceiling_offer(
     held = Offer()
     for statement in _statements_of(document):
         sid, effect, actions, resources = _statement_parts(statement)
-        if offer_section(sid) is not None and effect == "Allow":
+        section = offer_section(sid)
+        if section is not None and (effect == "Allow" or section in given_maps.DENY_SIDS):
+            # Its sections are kept; of its Denies, the deployment maps it closes.
             held = held.merged(offer_of({"statements": [statement]}))
             continue
         if sid == NOTHING_SID:
@@ -601,7 +604,8 @@ def ceiling_offer(
         **{kind: frozenset(items) for kind, items in offered.items()},
         features=frozenset(wanted_features | set(held.features)),
     )
-    return offer, dropped
+    # The Maps part ``maps_offer_v1`` wrote into a ceiling not converted yet is kept.
+    return offer.merged(maps_only(held)), dropped
 
 
 # -- what each person holds and gets --------------------------------------------------
