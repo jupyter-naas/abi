@@ -8,11 +8,16 @@ import {
   createOfferApi,
   graphsSettingsHref,
   graphsSummaryLines,
+  modelsAfter,
+  mapsSettingsHref,
+  mapsSummaryLines,
   type FileMode,
   type FileRow,
+  type ModelsPart,
   type OfferApi,
   type OfferKind,
   type OfferState,
+  type OntologyRow,
 } from '@/lib/access-model/workspace-offer';
 import { workspaceGroupName } from '@/lib/access-model/levels';
 import { FEATURE_SCOPES, WEB_ENGINES, webEngineScopeId } from '@/lib/search-scopes';
@@ -288,6 +293,86 @@ export function WorkspaceOfferEditor({
       return true;
     }, `${row.label}: ${FILE_MODE_LABELS[mode]}.`);
 
+  const changeModels = (
+    part: ModelsPart,
+    change: Parameters<typeof modelsAfter>[1],
+    done: string,
+  ) =>
+    void saveNow(async () => {
+      const next = modelsAfter(part, change);
+      setOffer(await offerApi.saveModels(workspaceId, next.models, next.default));
+      return true;
+    }, done);
+
+  const modelsSection = (part: ModelsPart) => {
+    const choices = [...new Set([...part.available, ...(part.every ? [] : part.offered)])].sort();
+    return (
+      <div className="access-offer-section" data-offer-section="models">
+        <h4 className="access-offer-heading">Models</h4>
+        <p className="access-policy-muted">
+          The chat models used here, within each person’s model set. An agent built on another model runs on the
+          default; one with a provider of its own on another model is refused.
+        </p>
+        <ul className="access-offer-list">
+          <li className="access-offer-row" data-offer-models-every="">
+            <OfferSwitch
+              label="Every model"
+              on={part.every}
+              disabled={!editable || saving || (part.every && choices.length === 0)}
+              onChange={(on) =>
+                changeModels(part, { every: on }, on ? 'Every model is used here.' : 'Limited to some models.')
+              }
+            />
+            <span className="access-offer-name">Every model</span>
+          </li>
+          {!part.every &&
+            choices.map((model) => {
+              const on = part.offered.includes(model);
+              const last = on && part.offered.length === 1;
+              return (
+                <li key={model} className="access-offer-row" data-offer-model={model}>
+                  <OfferSwitch
+                    label={`Use ${model}`}
+                    on={on}
+                    disabled={!editable || saving || last}
+                    onChange={(next) =>
+                      changeModels(part, { model, on: next }, `${model} ${next ? 'added to' : 'removed from'} the models.`)
+                    }
+                  />
+                  <span className="access-offer-name">{model}</span>
+                  {last && <span className="access-offer-note">The last model: use every model instead</span>}
+                </li>
+              );
+            })}
+        </ul>
+        {!part.every && (
+          <label className="access-offer-row" data-offer-models-default="">
+            <span className="access-offer-name">Default model</span>
+            <select
+              className="access-offer-select"
+              aria-label="Default model"
+              value={part.default ?? ''}
+              disabled={!editable || saving}
+              onChange={(e) => changeModels(part, { default: e.target.value }, `${e.target.value} is the default model.`)}
+            >
+              {part.offered.map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+    );
+  };
+  const toggleOntology = (row: OntologyRow, on: boolean) =>
+    void saveNow(async () => {
+      if (row.offered === on) return false;
+      setOffer(await offerApi.saveOntologies(workspaceId, { [row.id]: on }));
+      return true;
+    }, `${row.label} ${on ? 'added to' : 'removed from'} the offer.`);
+
   const featureRow = (row: FeatureRow, label = row.label) => {
     const on = row.choice === 'everyone';
     const disabled = !row.editable || saving || (!row.offered && !on);
@@ -406,6 +491,58 @@ export function WorkspaceOfferEditor({
           <a className="access-policy-link" href={graphsSettingsHref(workspaceId)}>
             Change them in Settings › Graphs
           </a>
+        </div>
+      )}
+
+      {offer.models && modelsSection(offer.models)}
+      {offer.maps && (
+        <div className="access-offer-section" data-offer-section="maps">
+          <h4 className="access-offer-heading">Maps</h4>
+          <p className="access-policy-muted">
+            The feeds and basemaps of the platform its people read on its map, and those other workspaces share with
+            it. Its admins still hide any of them in the workspace.
+          </p>
+          <ul className="access-offer-list" data-offer-maps="">
+            {mapsSummaryLines(offer.maps).map((line) => (
+              <li key={line} className="access-offer-row">
+                <span className="access-offer-name">{line}</span>
+              </li>
+            ))}
+          </ul>
+          <a className="access-policy-link" href={mapsSettingsHref(workspaceId)}>
+            Change them in Settings › Maps
+          </a>
+      {offer.ontologies && (
+        <div className="access-offer-section" data-offer-section="ontologies">
+          <h4 className="access-offer-heading">Ontologies</h4>
+          <p className="access-policy-muted">
+            The ontology files its people read here, as in Settings › Ontologies. An administrator of its organization
+            adds one; a workspace admin may take one back.
+          </p>
+          {offer.ontologies.error ? (
+            <p className="access-policy-error" role="alert">
+              {offer.ontologies.error}
+            </p>
+          ) : offer.ontologies.rows.length === 0 ? (
+            <p className="access-policy-muted">No ontology file is listed on this deployment.</p>
+          ) : (
+            <ul className="access-offer-list">
+              {offer.ontologies.rows.map((row) => (
+                <li key={row.id} className="access-offer-row" data-offer-ontology={row.id}>
+                  <OfferSwitch
+                    label={`Offer ${row.label}`}
+                    on={row.offered}
+                    disabled={!editable || !row.editable || saving}
+                    onChange={(next) => toggleOntology(row, next)}
+                  />
+                  <span className="access-offer-name">{row.label}</span>
+                  {row.module && <span className="access-offer-note">{row.module}</span>}
+                  {!row.available && <span className="access-offer-note">Unavailable in the current catalog</span>}
+                  {!row.editable && row.reason && <span className="access-offer-note">{row.reason}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

@@ -201,6 +201,18 @@ def search_sources_statement() -> dict[str, Any]:
     }
 
 
+def models_statement() -> dict[str, Any]:
+    """Every chat model, by type, for a level that chats: the workspace's offer names
+    which (``OfferModels``; ``*`` every one), the person's model set which of those
+    they may use (``model_sets``)."""
+    return {
+        "sid": "Models",
+        "effect": "Allow",
+        "actions": ["nexus:UseModel"],
+        "resources": ["${scope}/nexus:model/*"],
+    }
+
+
 def ontologies_statement() -> dict[str, Any]:
     """Every ontology file, by type, for a level that reads ontologies: the workspace's
     offer names which (``OfferOntologies``)."""
@@ -276,6 +288,8 @@ def level_document(name: str) -> PolicyDocument:
         statements.append(search_sources_statement())
     if "ontology" in level_features(name):
         statements.append(ontologies_statement())
+    if "chat" in level_features(name):
+        statements.append(models_statement())
     if name == VIEWER_ACCESS and not viewer_my_files():
         statements.append(no_my_files_statement())
     return PolicyDocument.from_dict({"version": POLICY_VERSION, "statements": statements})

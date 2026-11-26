@@ -4,7 +4,10 @@ import { LayoutApiError } from './layouts-api';
 
 /**
  * Settings → Maps → Access (`/api/maps/permissions`): which workspaces may use
- * a deployment layer / basemap, or a custom one this workspace shares.
+ * a deployment layer / basemap, or a custom one this workspace shares. Each
+ * workspace's offer says it ("<W> access", its Maps part): a change is written
+ * into the offer of each workspace it touches, as the caller (403 for one IAM
+ * does not let them change, 409 for one whose access policy is no allow-list yet).
  */
 
 export type MapsItemKind = 'layout' | 'basemap';

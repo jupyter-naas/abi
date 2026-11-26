@@ -1585,3 +1585,81 @@ async def test_build_user_context_addendum_empty_when_lookup_fails() -> None:
     )
 
     assert addendum == ""
+
+
+@pytest.mark.asyncio
+async def test_complete_chat_request_keeps_to_the_workspaces_models(monkeypatch) -> None:
+    """In a workspace limited to some models (``iam/workspace_models``): an agent with a
+    provider of its own on another model is refused, an in-process agent's picked model
+    runs on the workspace's default."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import workspace_models
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import WorkspaceModels
+
+    async def only_qwen(workspace_id):
+        return WorkspaceModels(frozenset({"qwen-3.8"}), "qwen-3.8")
+
+    monkeypatch.setattr(workspace_models, "models_in_workspace", only_qwen)
+    now = datetime.now()
+    captured: dict = {}
+
+    async def _fake_complete_chat(
+        messages, config, system_prompt, thread_id=None, injection_preamble=None, workspace_id=None
+    ):
+        captured["llm_model"] = config.llm_model
+        return "answer"
+
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.chat.service.complete_with_provider",
+        _fake_complete_chat,
+    )
+
+    async def turn(provider: ResolvedProvider, llm_model: str | None):
+        adapter = SimpleNamespace(
+            get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+            create_message=AsyncMock(),
+            touch_conversation=AsyncMock(),
+        )
+        service = ChatService(adapter=adapter)
+        service.get_or_create_conversation = AsyncMock(return_value="conv-1")
+        service.resolve_provider = AsyncMock(return_value=provider)
+        service.build_provider_messages_with_agents = AsyncMock(
+            return_value=[ChatInputMessage(role="user", content="hello")]
+        )
+        return await service.complete_chat_request(
+            request=CompleteChatInput(
+                message="hello",
+                agent="aia",
+                workspace_id="ws-1",
+                messages=[ChatInputMessage(role="user", content="hello")],
+            ),
+            user_id="user-1",
+            now=now,
+        )
+
+    own = ResolvedProvider(
+        id="p1",
+        name="OpenAI",
+        type="openai",
+        enabled=True,
+        endpoint="https://api.openai.com/v1",
+        api_key="k",
+        account_id=None,
+        model="gpt-4o-mini",
+    )
+    refused = await turn(own, None)
+    assert refused.provider_used == "OpenAI (refused)"
+    assert "not offered in this workspace" in refused.assistant_content
+    assert "llm_model" not in captured
+    inprocess = ResolvedProvider(
+        id="p2",
+        name="Abi",
+        type="abi",
+        enabled=True,
+        endpoint="inprocess://abi",
+        api_key=None,
+        account_id=None,
+        model="Abi",
+        llm_model="gpt-x",
+    )
+    done = await turn(inprocess, None)
+    assert done.assistant_content == "answer" and captured["llm_model"] == "qwen-3.8"

@@ -37,6 +37,11 @@ ChatProviderFactory = Callable[[str], BaseChatModel]
 EmbeddingProviderFactory = Callable[[str], Embeddings]
 
 
+# A host's answer to "which chat model does this container use instead of this one":
+# ``(container, canonical_id) -> canonical_id`` (``register_model_substitute``).
+ModelSubstitute = Callable[[str | None, str], str]
+
+
 class ModelNotFoundError(Exception):
     """Raised when a canonical id has no registered entry and no off-catalog
     construction is possible (no default provider factory available)."""
@@ -90,6 +95,19 @@ class IModelRegistry:
         factory: EmbeddingProviderFactory,
     ) -> None:
         """Register a generic embedding-model constructor for a provider."""
+        raise NotImplementedError
+
+    def register_model_substitute(self, substitute: ModelSubstitute) -> None:
+        """Let a host say which chat model a container uses instead of the one asked
+        (``substitute(container, canonical_id) -> canonical_id``, or raise
+        ``PermissionDeniedError`` to refuse it there). One substitute; a later
+        registration replaces it. Core does not know why (Nexus: a workspace's
+        offer)."""
+        raise NotImplementedError
+
+    def substitute_chat_model(self, canonical_id: str, container: str | None) -> str:
+        """The chat model used for ``canonical_id`` in ``container``: itself without a
+        substitute. Never for an embedding model."""
         raise NotImplementedError
 
     # ------------------------------------------------------------------ lookup

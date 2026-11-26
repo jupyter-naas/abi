@@ -66,6 +66,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     offer_of,
     with_offer,
     without_graphs_fields,
+    without_maps_fields,
 )
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
@@ -317,24 +318,40 @@ def enabled_features() -> list[str]:
 
 def new_workspace_offer(slug: str | None, catalog_seed: dict[str, Any] | None) -> Offer:
     """What a new workspace offers: its seed's agents, apps and shared modules
-    (``workspace_offer.seeded_offer``), and every enabled feature. The unresolved
-    seed refs are logged."""
+    (``workspace_offer.seeded_offer``), every enabled feature, and every map of the
+    platform (``platform_maps``). The unresolved seed refs are logged."""
     from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import seeded_offer
 
     features = enabled_features()
     seeded = seeded_offer(slug, catalog_seed, features=features)
     if seeded is None:
         from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
+            EVERY_MODEL,
             default_search_sources,
         )
 
-        return Offer(features=frozenset(features), search_sources=default_search_sources())
+        return Offer(
+            features=frozenset(features),
+            search_sources=default_search_sources(),
+            models=frozenset({EVERY_MODEL}),
+        ).merged(platform_maps())
     offer, unresolved = seeded
     if unresolved:
         logger.warning(
             f"Workspace {slug}: not offered, its module is not loaded: {', '.join(unresolved)}"
         )
-    return offer
+    return offer.merged(platform_maps())
+
+
+def platform_maps() -> Offer:
+    """Every feed and basemap of the deployment, the ones added later too
+    (``given_maps.every_platform_map``): what a workspace used before its offer said it
+    (``maps_grants`` with no row), and what a new one is given."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import given_maps
+
+    return Offer(
+        **given_maps.fields_of(given_maps.every_platform_map(), container_of=lambda _w: None)
+    )
 
 
 def widen_offer(iam: Any, policy_id: str | None, offer: Offer) -> bool:
@@ -887,8 +904,9 @@ class ContainerDefaults:
         # A workspace in an organization offers its seed and the enabled features,
         # bounded by the organization's offer (its parent): the creator's picks never
         # reach beyond it. One in none has no parent to bound it: it offers nothing
-        # until the platform administrators widen it, as before.
-        offer = None
+        # until the platform administrators widen it, as before; only the platform's
+        # maps are given to it, as to any workspace (``platform_maps``).
+        offer = platform_maps()
         if org_id:
             seed_of = getattr(store, "workspace_seed", None)
             seed = await seed_of(workspace_id) if callable(seed_of) else None
@@ -1153,9 +1171,10 @@ def apply_seeded_offers(
             logger.exception(f"The seed of {workspace_id} is not in its access policy")
             report.failed.append(f"{workspace_id}: {exc}")
         if org_id:
-            # What a workspace is given of the graphs is its own: never its organization's.
+            # What a workspace is given of the graphs and the maps is its own: never its
+            # organization's.
             by_org[org_id] = by_org.get(org_id, Offer()).merged(
-                replace(offer, **without_graphs_fields())
+                replace(offer, **without_graphs_fields(), **without_maps_fields())
             )
     for org_id, offer in sorted(by_org.items()):
         record = records.get(org_container(org_id))
@@ -1365,6 +1384,8 @@ async def migrate(db: AsyncSession, defaults: ContainerDefaults = CONTAINER_DEFA
 
         graphs = await configured_graphs(db, missing)
         offers = {w: o.merged(graphs[w]) if w in graphs else o for w, o in offers.items()}
+        # And every map of the platform, as any new workspace (``new_workspace_offer``).
+        offers = {w: o.merged(platform_maps()) if w in missing else o for w, o in offers.items()}
     made, report = await run_in_threadpool(
         lambda: _as_api(lambda iam: plan_and_apply(iam, orgs, workspaces, known, offers))
     )

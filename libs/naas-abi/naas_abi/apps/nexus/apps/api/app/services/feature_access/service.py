@@ -17,7 +17,12 @@ Its Files part gives what lies outside the workspace (``iam/given_files``, ADR
 each Off, Read or Read and write, as given sections of "<W> access". Whoever holds a
 section may give it; a workspace's admin may narrow or remove one, never add it. Its
 Graphs part (``iam/given_graphs``), written by Settings › Graphs: the graphs it is given
-to read or write, every graph of its organization, and what it closes of its own.
+to read or write, every graph of its organization, and what it closes of its own. Its
+Maps part (``iam/given_maps``), written by Settings › Maps › Access: the deployment's
+feeds and basemaps it uses, and those other workspaces share with it. Its
+ontologies (``OfferOntologies``, by ref): Settings › Ontologies and the Configuration's
+Ontologies section, each file assigned only by whoever may assign it there
+(``AssignOntology`` in the workspace's organization).
 
 Every write is an ordinary IAM call made as the caller and audited first
 (``iam:UpdatePolicy`` on "<W> access"), so IAM's own rules apply: grant only what
@@ -34,12 +39,13 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
+from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import ontology_matches_seed
 from naas_abi.apps.nexus.apps.api.app.services.feature_access.port import (
     CHOICES,
     FeatureChange,
     FeaturePolicyStore,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam import given_files, given_graphs
+from naas_abi.apps.nexus.apps.api.app.services.iam import given_files, given_graphs, given_maps
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.given_files import (
     LABELS,
@@ -93,6 +99,11 @@ MAX_CHAIN = 8
 ContainerOf = Callable[[str], Awaitable[str | None]]
 DefaultsOf = Callable[[str], Awaitable[Any]]
 Features = Callable[[], Sequence[str]]
+# The deployment's ontology files as Settings › Ontologies names them (``id``, ``path``,
+# ``name``, ``module``) and the ids the caller may assign to the workspace
+# (``AssignOntology`` in its organization); None where the deployment lists none.
+OntologyListing = tuple[list[dict[str, Any]], set[str]]
+OntologyCatalog = Callable[[Any, str], Awaitable[OntologyListing | None]]
 
 
 def feature_label(key: str) -> str:
@@ -233,6 +244,44 @@ def _offer_json(offer: Offer) -> dict[str, Any]:
     }
 
 
+def models_json(offer: Offer, available: list[str] | None = None) -> dict[str, Any]:
+    """The Models section as the offer editor shows it: the models W uses (``*``: every
+    one), its default model, whether it uses every model, and the chat models the
+    caller may list (``available``: what the editor offers to pick)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import (
+        EVERY_MODEL,
+        models_of,
+    )
+
+    models = models_of(offer)
+    offered = sorted(models.offered) if models.offered is not None else [EVERY_MODEL]
+    return {
+        "offered": offered,
+        "default": models.default,
+        "every": not models.restricted,
+        "available": list(available or []),
+    }
+
+
+def listed_chat_models() -> list[str]:
+    """The chat models of the engine's registry the caller may list (``ListModels``, in
+    the caller's context); none without an engine."""
+    try:
+        from naas_abi import ABIModule
+        from naas_abi_core.models.Model import ChatModel
+
+        registry = ABIModule.get_instance().engine.services.model_registry
+        return sorted(
+            {
+                cid
+                for cid, model in registry.list_registered_models()
+                if isinstance(model, ChatModel)
+            }
+        )
+    except Exception:  # noqa: BLE001 - no engine (a test): nothing listed to pick from
+        return []
+
+
 def check_file_changes(changes: Mapping[str, str]) -> None:
     """Refuse (``ValueError``) no change, an unknown section or a mode it does not have."""
     if not changes:
@@ -332,6 +381,77 @@ def check_source_changes(changes: Mapping[str, bool]) -> None:
         raise ValueError(f"Not a search source: {', '.join(unknown)}")
 
 
+ASSIGNS_ONTOLOGY = "an administrator of its organization may (nexus:AssignOntology)"
+
+
+def _refs_naming(entry: Mapping[str, Any] | None, ref: str, refs: Iterable[str]) -> set[str]:
+    """The ``refs`` that name ``ref`` (a catalog id): itself, or any alias of its file."""
+    return {
+        r
+        for r in refs
+        if r == ref
+        or (entry is not None and ontology_matches_seed(entry["path"], entry["module"], [r]))
+    }
+
+
+def ontology_rows(
+    refs: Iterable[str],
+    entries: Sequence[Mapping[str, Any]],
+    assignable: set[str],
+    *,
+    access: Policy | None,
+    widen: bool,
+) -> list[dict[str, Any]]:
+    """The Ontologies rows of the offer, by label: each file of the deployment, whether
+    the offer names it (by any of its refs), whether the caller may assign it, and why
+    they may not change it. A file the offer names stays removable; one it does not is
+    given only by whoever may assign it. A ref no file answers to is a row of its own
+    (``available`` false), to remove."""
+    refs = set(refs)
+    named: set[str] = set()
+    rows: list[dict[str, Any]] = []
+
+    def reason(editable: bool) -> str | None:
+        if access is None:
+            return "This workspace has no access policy yet."
+        if not widen:
+            return f"IAM does not let you change {access.name}."
+        return None if editable else f"Not yours to assign: {ASSIGNS_ONTOLOGY}."
+
+    for entry in entries:
+        hits = _refs_naming(entry, entry["id"], refs)
+        named |= hits
+        on, may_give = bool(hits), entry["id"] in assignable
+        editable = access is not None and widen and (on or may_give)
+        rows.append(
+            {
+                "id": entry["id"],
+                "label": entry.get("name") or entry["id"],
+                "module": entry.get("module"),
+                "offered": on,
+                "available": True,
+                "assignable": may_give,
+                "editable": editable,
+                "reason": reason(editable),
+            }
+        )
+    for ref in sorted(refs - named):
+        editable = access is not None and widen
+        rows.append(
+            {
+                "id": ref,
+                "label": ref,
+                "module": None,
+                "offered": True,
+                "available": False,
+                "assignable": False,
+                "editable": editable,
+                "reason": reason(editable),
+            }
+        )
+    return sorted(rows, key=lambda row: (str(row["label"]).lower(), row["id"]))
+
+
 class FeatureAccessService:
     def __init__(
         self,
@@ -342,6 +462,7 @@ class FeatureAccessService:
         container_of: ContainerOf,
         defaults_of: DefaultsOf,
         features: Features,
+        ontology_catalog: OntologyCatalog | None = None,
     ) -> None:
         self._gateway = gateway
         self._store = store
@@ -349,6 +470,7 @@ class FeatureAccessService:
         self._container_of = container_of
         self._defaults_of = defaults_of
         self._features = features
+        self._ontology_catalog = ontology_catalog
 
     # -- reading --------------------------------------------------------------------
 
@@ -619,6 +741,7 @@ class FeatureAccessService:
         container, record = await self._where(workspace_id)
         access_id = getattr(record, "access_policy_id", None)
         session = self._gateway.bind(user)
+        listing = await self._ontology_listing(user, workspace_id)
 
         def snapshot() -> dict[str, Any]:
             access = self._gateway.policy(access_id) if access_id else None
@@ -643,6 +766,10 @@ class FeatureAccessService:
                 "my_files": my_files_json(),
                 # Settings › Graphs edits it: shown here, not changed.
                 "graphs": given_graphs.summary(offer),
+                "models": models_json(offer, listed_chat_models()),
+                # Settings › Maps › Access edits it: shown here, not changed.
+                "maps": given_maps.summary(offer),
+                "ontologies": self._ontologies_json(offer, listing, access, widen),
             }
 
         return await run_in_threadpool(snapshot)
@@ -736,6 +863,31 @@ class FeatureAccessService:
         _log.info(f"Files given by {workspace_id}: {dict(sorted(changes.items()))}")
         return await self.read_offer(user, workspace_id)
 
+    async def set_models(
+        self, user: Any, workspace_id: str, models: Sequence[str], default: str | None
+    ) -> dict[str, Any]:
+        """The chat models the workspace uses (``*``: every model its people's model
+        sets allow) and its default model, which a model it does not offer is switched
+        to (``iam/workspace_models``), in one write of "<W> access" as the caller: IAM
+        refuses a model beyond the organization's offer (422) or one the caller does not
+        hold (403). A list needs one of its models as the default (422). Answers the
+        offer after."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import validated
+
+        wanted, wanted_default = validated(models, default)
+        _container, record = await self._where(workspace_id)
+        await self._set_offer(
+            user,
+            workspace_id,
+            getattr(record, "access_policy_id", None),
+            "workspace-offer.models",
+            workspace_id,
+            lambda offer: replace(offer, models=wanted, default_model=wanted_default),
+            detail=f"models={','.join(sorted(wanted))},default={wanted_default or '-'}",
+        )
+        _log.info(f"Models of {workspace_id}: {sorted(wanted)}, default {wanted_default}")
+        return await self.read_offer(user, workspace_id)
+
     async def set_ontologies(self, user: Any, workspace_id: str, refs: Sequence[str]) -> Offer:
         """The ontology files the workspace offers (Settings › Ontologies, by ref), in one
         write of "<W> access" as the caller: IAM refuses a file beyond the organization's
@@ -754,6 +906,84 @@ class FeatureAccessService:
         _log.info(f"Ontologies of {workspace_id}: {len(wanted)} offered")
         policy = await run_in_threadpool(self._gateway.policy, access_id)
         return offer_of(policy.document)
+
+    async def _ontology_listing(self, user: Any, workspace_id: str) -> OntologyListing | str | None:
+        """The deployment's ontology files and those the caller may assign; None where
+        it lists none, the failure's words where the listing failed (the rest of the
+        offer is still read)."""
+        if self._ontology_catalog is None:
+            return None
+        try:
+            return await self._ontology_catalog(user, workspace_id)
+        except Exception:  # noqa: BLE001 - said in the section, the offer still read
+            _log.warning(f"Ontology files of {workspace_id} not listed", exc_info=True)
+            return "The ontology files could not be listed."
+
+    @staticmethod
+    def _ontologies_json(
+        offer: Offer,
+        listing: OntologyListing | str | None,
+        access: Policy | None,
+        widen: bool,
+    ) -> dict[str, Any] | None:
+        """The Ontologies part: the offer's refs, and a row per file (``ontology_rows``)."""
+        if listing is None:
+            return None
+        if isinstance(listing, str):
+            return {"offered": sorted(offer.ontologies), "rows": [], "error": listing}
+        entries, assignable = listing
+        rows = ontology_rows(offer.ontologies, entries, assignable, access=access, widen=widen)
+        return {"offered": sorted(offer.ontologies), "rows": rows, "error": None}
+
+    async def save_ontologies(
+        self, user: Any, workspace_id: str, changes: Mapping[str, bool]
+    ) -> dict[str, Any]:
+        """Offer (or stop offering) ontology files (``{catalog id: offered}``, as the
+        Configuration's switches name them), through ``set_ontologies`` as the caller.
+        Adding a file needs the right to assign it there (``AssignOntology``,
+        ``PermissionDeniedError``: 403); a ref of no file of the deployment is refused
+        (``ValueError``: 422); taking one back removes every ref naming its file. IAM's
+        own rules apply to the write. Answers the offer after."""
+        if not changes:
+            raise ValueError("Name an ontology to change")
+        _container, record = await self._where(workspace_id)
+        access_id = getattr(record, "access_policy_id", None)
+        listing = (
+            await self._ontology_catalog(user, workspace_id) if self._ontology_catalog else None
+        )
+        if listing is None:
+            raise ValueError("This deployment lists no ontology file")
+        entries, assignable = listing
+        policy = await run_in_threadpool(self._gateway.policy, access_id) if access_id else None
+        if policy is None:
+            raise IAMNotFoundError("This workspace has no access policy yet")
+        refs = set(offer_of(policy.document).ontologies)
+        by_id = {entry["id"]: entry for entry in entries}
+        wanted = set(refs)
+        refused: list[str] = []
+        for ref, on in sorted(changes.items()):
+            entry = by_id.get(ref)
+            naming = _refs_naming(entry, ref, refs)
+            if not on:
+                wanted -= naming
+            elif naming:
+                continue
+            elif entry is None:
+                raise ValueError(
+                    f"{ref} is not an ontology file of this deployment: select one from the catalog."
+                )
+            elif ref not in assignable:
+                refused.append(ref)
+            else:
+                wanted.add(ref)
+        if refused:
+            raise PermissionDeniedError(
+                message=f"You may not assign {', '.join(refused)} to this workspace: "
+                f"{ASSIGNS_ONTOLOGY}."
+            )
+        if wanted != refs:
+            await self.set_ontologies(user, workspace_id, sorted(wanted))
+        return await self.read_offer(user, workspace_id)
 
     async def set_graphs(
         self,
@@ -799,6 +1029,34 @@ class FeatureAccessService:
         policy = await run_in_threadpool(self._gateway.policy, access_id)
         return offer_of(policy.document)
 
+    async def set_maps(
+        self,
+        user: Any,
+        workspace_id: str,
+        change: Callable[[Offer], Offer],
+        *,
+        detail: str = "",
+    ) -> Offer:
+        """Change the Maps part of the workspace's offer (``iam/given_maps``: Settings ›
+        Maps › Access, one item at a time), in one write of "<W> access" as the caller.
+        IAM refuses an item given that the caller does not hold
+        (``PermissionDeniedError``, 403) and nothing changes; taking one away needs only
+        the right to change the policy. Answers the offer after."""
+        _container, record = await self._where(workspace_id)
+        access_id = getattr(record, "access_policy_id", None)
+        await self._set_offer(
+            user,
+            workspace_id,
+            access_id,
+            "workspace-offer.maps",
+            workspace_id,
+            change,
+            detail=detail,
+        )
+        _log.info(f"Maps of {workspace_id}: {detail}")
+        policy = await run_in_threadpool(self._gateway.policy, access_id)
+        return offer_of(policy.document)
+
     async def _change(
         self,
         user: Any,
@@ -829,4 +1087,5 @@ __all__ = [
     "check_file_changes",
     "check_offer_changes",
     "file_rows",
+    "ontology_rows",
 ]

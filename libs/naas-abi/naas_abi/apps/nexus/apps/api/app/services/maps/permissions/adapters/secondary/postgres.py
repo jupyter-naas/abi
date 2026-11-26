@@ -91,3 +91,12 @@ class PostgresWorkspaceDirectory(WorkspaceDirectoryPort):
                 ),
             )
         return [WorkspaceRef(str(row.id), str(row.name)) for row in rows]
+
+    async def every(self) -> list[WorkspaceRef]:
+        async with AsyncSessionLocal() as db:
+            rows = (
+                await db.execute(
+                    select(WorkspaceModel.id, WorkspaceModel.name).order_by(WorkspaceModel.name)
+                )
+            ).all()
+        return [WorkspaceRef(str(row.id), str(row.name)) for row in rows]

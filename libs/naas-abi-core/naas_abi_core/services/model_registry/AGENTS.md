@@ -118,6 +118,14 @@ and `<owner>.stream_close`; a large call also uses the `transfer.*` subjects).
   the model's own action. Any other model, and `Embed`, stay the caller's. A
   context variable, set in process only; `gated_model_ids(model)` reads which
   models an agent was built with from the registry's gates.
+- **A host's substitute** (`register_model_substitute`, `substitute_chat_model`).
+  The host (Nexus) may say which chat model a container uses instead of the one
+  asked: `(container, canonical id) -> canonical id`, or `PermissionDeniedError`
+  to refuse it there. The NATS primary asks it with the request's container
+  before it resolves a chat model (`resolve`, `chat`, `chat_stream`) and drops the
+  pinned provider and variant when it switches; never for an embedding. In-process
+  turns are the host's to retarget (it holds their models). Core does not know why
+  (Nexus: a workspace's offer, ADR `20261126_models_in_the_offer`).
 
 ## Remote registry and inference
 

@@ -675,6 +675,38 @@ async def stream_chat_response(
         resolved = resolve_inprocess_llm_model_for_turn(provider.model, routed_llm)
         if resolved:
             routed_llm = resolved
+    # The models the conversation's workspace uses (its offer's Models section): the
+    # turn runs on one of them, or is refused, before its model is announced and stored.
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import (
+        UNRESTRICTED,
+        ModelNotOfferedError,
+        models_in_workspace,
+        set_for_turn,
+        turn_llm_model,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+        inprocess_agent_model_ids,
+    )
+
+    turn_models = await models_in_workspace(str(turn_workspace)) if turn_workspace else UNRESTRICTED
+    set_for_turn(turn_models)
+    try:
+        routed_llm = turn_llm_model(
+            turn_models,
+            provider_type=provider.type,
+            endpoint=provider.endpoint,
+            provider_model=provider.model,
+            llm_model=routed_llm,
+            agent_models=lambda: inprocess_agent_model_ids(provider.model),
+        )
+    except ModelNotOfferedError as exc:
+        refusal = str(exc)
+
+        async def not_offered_stream():
+            yield f"data: {json.dumps({'error': refusal})}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(not_offered_stream(), media_type="text/event-stream")
     provider_config = ProviderConfig(
         id=provider.id,
         name=provider.name,

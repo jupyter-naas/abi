@@ -21,6 +21,7 @@ import re
 import time
 import uuid
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -135,10 +136,13 @@ async def _stream_agent_text(
     user_context_preamble: str | None = None,
     allowed: frozenset[str] | None = None,
     processes: frozenset[tuple[str, str, str]] | None = None,
+    models: Any = None,
 ) -> AsyncGenerator[str, None]:
     """Invoke an abi agent in-process and yield text deltas only; ``allowed``
     are the agent classes the caller may use (the agent and its sub-agents),
-    ``processes`` the module workflows and pipelines its tools may run."""
+    ``processes`` the module workflows and pipelines its tools may run, ``models``
+    the chat models of the workspace the turn is decided in
+    (``iam/workspace_models``: its agents switched to its default)."""
     from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
         Message,
         ProviderConfig,
@@ -155,6 +159,10 @@ async def _stream_agent_text(
         agent_workspace_enabled_class_names.set(allowed)
     if processes is not None:
         agent_usable_module_scopes.set(processes)
+    if models is not None:
+        from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import set_for_turn
+
+        set_for_turn(models)
 
     pr_messages = [Message(role=_coerce_role(m.role), content=m.content) for m in messages]
     config = ProviderConfig(id="abi", name="abi", type="abi", enabled=True, model=model)
@@ -286,6 +294,7 @@ async def _sse(
     user_context_preamble: str | None = None,
     allowed: frozenset[str] | None = None,
     processes: frozenset[tuple[str, str, str]] | None = None,
+    models: Any = None,
 ) -> AsyncGenerator[str, None]:
     yield f"data: {json.dumps(_chunk(completion_id, model, role='assistant'))}\n\n"
     async for delta in _stream_agent_text(
@@ -297,6 +306,7 @@ async def _sse(
         user_context_preamble,
         allowed=allowed,
         processes=processes,
+        models=models,
     ):
         yield f"data: {json.dumps(_chunk(completion_id, model, content=delta))}\n\n"
     if marker:
@@ -441,6 +451,12 @@ async def chat_completions(
         raise AuthzDenied(403, detail="You may not use this agent")
     allowed = await _usable_classes(current_user, where)
     processes = await usable_process_scopes(current_user, where)
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import (
+        models_in_workspace,
+    )
+
+    # The turn runs on the models of the workspace it is decided in.
+    models = await models_in_workspace(where)
     completion_id = f"chatcmpl-{uuid.uuid4().hex}"
     # Stable per-conversation thread id (recovered from / embedded in the reply)
     # so follow-up turns keep the agent's checkpointer memory.
@@ -463,6 +479,7 @@ async def chat_completions(
                 preamble,
                 allowed,
                 processes,
+                models,
             ),
             media_type="text/event-stream",
         )
@@ -477,6 +494,7 @@ async def chat_completions(
         preamble,
         allowed=allowed,
         processes=processes,
+        models=models,
     ):
         text += delta
     text += marker

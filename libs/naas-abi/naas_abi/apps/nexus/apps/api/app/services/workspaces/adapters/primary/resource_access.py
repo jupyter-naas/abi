@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import Counter
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Literal
@@ -36,7 +37,11 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.workspac
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import given_graphs
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ as authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import feature_exists
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
+from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_access import (
+    FEATURE as ONTOLOGY_FEATURE,
+)
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_access import assignable_paths
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
@@ -163,6 +168,24 @@ async def assignment_catalog(
         if entry["path"] in assignable
         or ontology_matches_seed(entry["path"], entry["module"], enabled or [])
     ]
+
+
+def offer_ontology_catalog(
+    ontologies_of: Callable[[], Any],
+) -> Callable[[Any, str], Awaitable[tuple[list[dict], set[str]] | None]]:
+    """The catalog the offer's Configuration shows (``FeatureAccessService``'s
+    ``ontology_catalog``): every ontology file, as this editor names them, and the ids
+    the caller may assign to the workspace; None where the deployment has no ontology."""
+
+    async def listing(user: Any, workspace_id: str) -> tuple[list[dict], set[str]] | None:
+        if not feature_exists(ONTOLOGY_FEATURE):
+            return None
+        entries = await _ontology_entries(ontologies_of())
+        user_id = getattr(user, "id", user)
+        paths = await assignable_paths(user_id, workspace_id, [e["path"] for e in entries])
+        return entries, {entry["id"] for entry in entries if entry["path"] in paths}
+
+    return listing
 
 
 async def _offered_ontologies(workspace_id: str) -> ResourcePolicy | None:

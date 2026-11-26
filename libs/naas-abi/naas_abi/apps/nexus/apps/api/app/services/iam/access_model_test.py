@@ -536,6 +536,32 @@ def test_a_ceiling_of_more_modules_than_one_statement_holds_becomes_an_offer_in_
     assert offer_of(document) == offer
 
 
+def test_a_ceiling_keeps_the_maps_a_move_gave_and_closed_in_it():
+    """A ceiling of an older version holds the Maps part ``maps_offer_v1`` wrote into it
+    (its given Allows, and its Denies within ``${scope}``): both stay in the offer it
+    becomes."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import given_maps
+
+    universe = access_model.Universe(agents=frozenset({("acme.sales", "Agent")}))
+    given = frozenset({given_maps.every_name("layout"), given_maps.every_name("basemap")})
+    closed = frozenset({given_maps.closed_name("layout", "narrowed")})
+    ceiling = {
+        "version": POLICY_VERSION,
+        "statements": [
+            {
+                "sid": "Agents",
+                "effect": "Allow",
+                "actions": ["module:UseAgent"],
+                "resources": ["${scope}/module:agent/*"],
+            },
+            *given_maps.statements(given, closed),
+        ],
+    }
+    offer, _dropped = access_model.ceiling_offer(ceiling, universe=universe, features=())
+    assert offer.agents == {("acme.sales", "*")}
+    assert (offer.maps, offer.maps_closed) == (given, closed)
+
+
 @pytest.mark.asyncio
 async def test_it_waits_for_the_records_of_container_defaults(nexus_db, caplog):
     nexus = previous._world()

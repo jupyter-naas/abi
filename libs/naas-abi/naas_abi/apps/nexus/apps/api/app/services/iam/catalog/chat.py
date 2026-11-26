@@ -1,8 +1,14 @@
-"""Chat conversations: personal, so a member reaches their own."""
+"""Chat conversations: personal, so a member reaches their own. And the chat models a
+workspace uses (``model/<canonical id>``): where its offer names them
+(``OfferModels``), no role's, the level policies grant the type and the offer bounds
+it (``iam/workspace_models``)."""
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import action, rtype
 
-TYPES = (rtype("conversation", id="path", personal=True),)
+TYPES = (
+    rtype("conversation", id="path", personal=True),
+    rtype("model", policy_only=True),
+)
 
 ACTIONS = (
     action("ListConversations", "list", "conversation", feature="chat"),
@@ -18,4 +24,7 @@ ACTIONS = (
     action("IngestConversationFile", "write", "conversation", feature="chat"),
     action("ExportConversation", "read", "conversation", feature="chat"),
     action("GetIngestionJob", "read", "conversation", feature="chat"),
+    # Chat with a model in the workspace: its offer names which (``*``: every model the
+    # person's model set allows), with the model an agent of another is switched to.
+    action("UseModel", "write", "model", feature="chat"),
 )

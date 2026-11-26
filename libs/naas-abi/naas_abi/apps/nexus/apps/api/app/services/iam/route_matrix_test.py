@@ -186,6 +186,7 @@ FEATURE_ACCESS_ROUTES: dict[tuple[str, str], tuple[str, ...]] = {
     ("GET", "/api/workspaces/{workspace_id}/offer"): ("GetWorkspaceConfiguration",),
     ("PUT", "/api/workspaces/{workspace_id}/offer"): ("iam:UpdatePolicy",),
     ("PUT", "/api/workspaces/{workspace_id}/offer/files"): ("iam:UpdatePolicy",),
+    ("PUT", "/api/workspaces/{workspace_id}/offer/ontologies"): ("iam:UpdatePolicy",),
 }
 
 

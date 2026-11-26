@@ -12,10 +12,10 @@ written as the caller, and IAM decides every call.
 | File | Role |
 |---|---|
 | `port.py` | `FeatureChange`, `CHOICES`, `FeaturePolicyStore` (the "Feature · X" policies an older version wrote, for the marks on Access › Policies) |
-| `service.py` | `FeatureAccessService.read / save / read_offer / save_offer / managed_among`; the pure checks `offered`, `holds`, `names_feature`, `check_changes`, `check_offer_changes` |
+| `service.py` | `FeatureAccessService.read / save / read_offer / save_offer / save_search_sources / set_files / set_ontologies / save_ontologies / set_graphs / managed_among`; the pure checks `offered`, `holds`, `names_feature`, `check_changes`, `check_offer_changes`; the offer's rows `file_rows`, `ontology_rows` |
 | `adapters/secondary/postgres.py` | `SqlFeaturePolicyStore`, table `workspace_feature_policies` (migration `0074_workspace_feature_policies.sql`): read only now |
-| `adapters/primary/feature_access__primary_adapter__FastAPI.py` | `GET` / `PUT /api/workspaces/{workspace_id}/feature-access`, `GET` / `PUT /api/workspaces/{workspace_id}/offer` |
-| `runtime.py` | The service on the engine's IAM (`iam_admin`'s `EngineIamGateway`), `AUTHZ.container_of`, `CONTAINER_DEFAULTS.record_of`, the audit log; `configure` for tests |
+| `adapters/primary/feature_access__primary_adapter__FastAPI.py` | `GET` / `PUT /api/workspaces/{workspace_id}/feature-access`, `GET` / `PUT /api/workspaces/{workspace_id}/offer`, `PUT .../offer/search-sources`, `PUT .../offer/files`, `PUT .../offer/ontologies` |
+| `runtime.py` | The service on the engine's IAM (`iam_admin`'s `EngineIamGateway`), `AUTHZ.container_of`, `CONTAINER_DEFAULTS.record_of`, the audit log, the ontology catalog (`workspaces/.../resource_access.offer_ontology_catalog`, Settings › Ontologies' own); `configure` for tests |
 
 ## Rules
 
@@ -34,12 +34,22 @@ written as the caller, and IAM decides every call.
   row is read-only and says so.
 - **Coexistence**: other policies naming the feature at the workspace are listed with it, Allow or
   Deny. A Deny wins as anywhere.
+- **Ontologies** (`OfferOntologies`, by ref): `read_offer` answers `ontologies` (`offered`: the refs as
+  written; `rows`: every file of the deployment, by label, `offered` when a ref names it, `assignable` when
+  the caller may assign it there, `AssignOntology` in the workspace's organization, `editable`, `reason`; a ref
+  no file answers to is a row with `available` false; `error` when the files could not be listed), or null
+  where the deployment has no ontology. `save_ontologies` (`PUT .../offer/ontologies`, `{changes: {id:
+  offered}}`) adds a file only for whoever may assign it (`PermissionDeniedError`, 403), refuses an id of no
+  file (422), takes a file back by every ref naming it, then writes through `set_ontologies`, as Settings ›
+  Ontologies does: an organization's admins add, a workspace admin removes.
 
 ## Tests
 
 `service_test.py` (real IAM, SQLite, the real organization and workspace creation): Everyone and
 Nobody as the offer, Only… refused, a caller who does not hold the feature (and IAM refusing her the
 widening itself), the organization's bound, a Deny elsewhere winning and listed, a statement written on
-the policy's page, a newcomer, the mark of older policies, agents offered and withdrawn. The routes: `adapters/primary/*_test.py`; the store and
+the policy's page, a newcomer, the mark of older policies, agents offered and withdrawn, the ontologies
+(`TestOntologies`: read with what the caller may assign, added by an organization's admin, removed by a
+workspace admin, refused outside the catalog). The routes: `adapters/primary/*_test.py`; the store and
 its migration: `adapters/secondary/postgres_test.py`; the routes' declarations:
 `services/iam/route_matrix_test.py` (`FEATURE_ACCESS_ROUTES`).

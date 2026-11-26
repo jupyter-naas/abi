@@ -74,7 +74,9 @@ SERVICE = "nexus"
 # 21: the organization is ``no_membership_roles``: a built-in role attached at
 #     ``${my workspaces}`` gives nothing at an organization ("<O> people" holds
 #     "Organization view"; its admins their roles attached at it).
-VERSION = 21
+# 22: chat models (``model``, ``UseModel``): no role's, granted by the level policies
+#     that chat and bounded by each workspace's offer (``OfferModels``).
+VERSION = 22
 
 _MODULES = (
     organizations,
