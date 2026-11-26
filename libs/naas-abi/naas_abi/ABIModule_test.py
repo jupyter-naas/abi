@@ -311,3 +311,81 @@ def test_nexus_urls_follow_the_environment_unless_yaml_sets_them(
         **nexus_settings_kwargs(NexusConfig(api_url="https://abi.example"))
     )
     assert configured.api_url == "https://abi.example"
+
+
+def test_the_shared_pages_sso_secret_loads_and_is_ignored() -> None:
+    """``pages_sso_secret`` signed every portal's token; a project that still
+    sets it loads (``NexusConfig`` forbids unknown keys), and nothing signs with it."""
+    from naas_abi_core import logger
+
+    from naas_abi import nexus_settings_kwargs
+
+    said: list[str] = []
+    sink = logger.add(lambda message: said.append(str(message)), level="WARNING")
+    try:
+        config = NexusConfig.model_validate({"pages_sso_secret": "old-shared"})
+    finally:
+        logger.remove(sink)
+    assert "pages_sso_secret" not in nexus_settings_kwargs(config)
+    assert config.pages_sso_secrets == {}
+    assert any(
+        "pages_sso_secret is ignored" in line and "pages_sso_secrets" in line
+        for line in said
+    ), said
+    assert not any("old-shared" in line for line in said)
+
+
+def test_an_empty_pages_sso_secret_left_by_an_old_template_loads_silently() -> None:
+    from naas_abi_core import logger
+
+    from naas_abi import nexus_settings_kwargs
+
+    said: list[str] = []
+    sink = logger.add(lambda message: said.append(str(message)), level="WARNING")
+    try:
+        for empty in ("", "  ", None):
+            config = NexusConfig.model_validate({"pages_sso_secret": empty})
+            assert "pages_sso_secret" not in nexus_settings_kwargs(config)
+    finally:
+        logger.remove(sink)
+    assert not any("pages_sso_secret" in line for line in said), said
+
+
+def test_portal_sso_secrets_come_from_the_environment_as_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``PAGES_SSO_SECRETS`` is the map as JSON. An empty yaml map does not
+    override it, and an entry with an empty secret is no entry."""
+    from naas_abi import nexus_settings_kwargs
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    monkeypatch.setenv(
+        "PAGES_SSO_SECRETS", '{"acme.portal:site": "from-env", "acme.portal:other": ""}'
+    )
+    for yaml in (
+        {},
+        {"pages_sso_secrets": {}},
+        {"pages_sso_secrets": {"acme.portal:x": " "}},
+    ):
+        kwargs = nexus_settings_kwargs(NexusConfig.model_validate(yaml))
+        assert "pages_sso_secrets" not in kwargs, yaml
+        settings = Settings(_env_file=None, **kwargs)
+        assert settings.pages_sso_secrets == {"acme.portal:site": "from-env"}, yaml
+
+    configured = NexusConfig(
+        pages_sso_secrets={"acme.portal:site": "from-yaml", "b:c": ""}
+    )
+    settings = Settings(_env_file=None, **nexus_settings_kwargs(configured))
+    assert settings.pages_sso_secrets == {"acme.portal:site": "from-yaml"}
+
+
+def test_the_old_pages_sso_secret_env_signs_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    monkeypatch.setenv("PAGES_SSO_SECRET", "old-shared")
+    monkeypatch.delenv("PAGES_SSO_SECRETS", raising=False)
+    settings = Settings(_env_file=None)
+    assert settings.pages_sso_secrets == {}
+    assert not hasattr(settings, "pages_sso_secret")

@@ -143,6 +143,67 @@ export function pagesSsoAudience(url: string): string | null {
   }
 }
 
+/** The body of `POST /api/apps/sso-token` for an app framed from `url`. */
+export type PortalSsoTokenRequest = { workspace_id: string; audience: string; app_id: string };
+
+/**
+ * What to ask for the app framed from `url` (after any dev rewrite), or null when it
+ * needs no portal sign-in: a bundled or remote app (`/app-html/…`, opened with a link
+ * or a grant) or a URL that is no web origin. The audience is the host framed.
+ */
+export function portalSsoTokenRequest(
+  appId: string,
+  url: string,
+  workspaceId: string,
+): PortalSsoTokenRequest | null {
+  if (isBundledAppHtmlUrl(url)) return null;
+  const audience = pagesSsoAudience(url);
+  if (!audience) return null;
+  return { workspace_id: workspaceId, audience, app_id: appId };
+}
+
+/** `id=url` pairs, comma-separated. The first `=` separates the catalog id from the URL. */
+export function parseDevAppUrls(raw: string | undefined | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!raw) return out;
+  for (const part of raw.split(',')) {
+    const trimmed = part.trim();
+    const eq = trimmed.indexOf('=');
+    if (eq <= 0) continue;
+    const id = trimmed.slice(0, eq).trim();
+    const target = trimmed.slice(eq + 1).trim();
+    if (!id || !target) continue;
+    out[id] = target;
+  }
+  return out;
+}
+
+/**
+ * URL Nexus should open for a catalog app while developing.
+ * `overrides` (from `NEXUS_DEV_APP_URLS`) win. Anything else keeps `url`.
+ * Non-local environments keep `url` so a public Nexus never frames loopback.
+ */
+export function resolveDevAppUrl(
+  appId: string,
+  url: string,
+  options?: { env?: string; overrides?: Record<string, string> },
+): string {
+  if ((options?.env ?? 'local') !== 'local') return url;
+  const override = options?.overrides?.[appId];
+  if (override) return override;
+  return url;
+}
+
+/** `resolveDevAppUrl`, except a production bundle always keeps the manifest URL. */
+export function applyDevAppUrl(
+  appId: string,
+  url: string,
+  options?: { env?: string; overrides?: Record<string, string> },
+): string {
+  if (process.env.NODE_ENV === 'production') return url;
+  return resolveDevAppUrl(appId, url, options);
+}
+
 /** Attach ``?sso=`` for a Cloudflare Pages portal handshake. */
 export function withPagesSsoToken(url: string, token: string): string {
   if (!url || !token) return url;

@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   appIframeSandbox,
+  applyDevAppUrl,
   isBundledAppHtmlUrl,
+  parseDevAppUrls,
   REMOTE_APP_SANDBOX,
   remoteAppGrantUrl,
   remoteAppParts,
   pagesSsoAudience,
+  portalSsoTokenRequest,
+  resolveDevAppUrl,
   withAppHtmlAccessToken,
   withPagesSsoToken,
   withRemoteAppWorkspace,
@@ -95,6 +99,74 @@ describe('app-html helpers', () => {
     expect(appIframeSandbox('/app-html/report/counter_uas/dashboard/')).toContain(
       'allow-same-origin',
     );
+  });
+});
+
+describe('local dev catalog URLs', () => {
+  const appId = 'acme.portal:site';
+  const published = 'https://portal.example.com';
+
+  it('keeps the manifest URL when the env map has no entry', () => {
+    expect(resolveDevAppUrl(appId, published, { env: 'local' })).toBe(published);
+    expect(resolveDevAppUrl(appId, published, { env: 'local', overrides: {} })).toBe(published);
+  });
+
+  it('keeps the manifest URL outside local, even when an override is set', () => {
+    const overrides = { [appId]: 'http://localhost:9' };
+    expect(resolveDevAppUrl(appId, published, { env: 'cloudflare', overrides })).toBe(published);
+    expect(resolveDevAppUrl(appId, published, { env: 'staging', overrides })).toBe(published);
+  });
+
+  it('reads NEXUS_DEV_APP_URLS as catalog id to origin', () => {
+    const raw = 'acme.portal:site=http://localhost:9, other.app=http://127.0.0.1:8080';
+    expect(parseDevAppUrls(raw)).toEqual({
+      'acme.portal:site': 'http://localhost:9',
+      'other.app': 'http://127.0.0.1:8080',
+    });
+    expect(resolveDevAppUrl(appId, published, { env: 'local', overrides: parseDevAppUrls(raw) })).toBe(
+      'http://localhost:9',
+    );
+  });
+
+  it('drops the rewrite in a production bundle', () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      expect(
+        applyDevAppUrl(appId, published, { env: 'local', overrides: { [appId]: 'http://localhost:9' } }),
+      ).toBe(published);
+    } finally {
+      process.env.NODE_ENV = previous;
+    }
+  });
+});
+
+describe('the portal SSO request of an opened app', () => {
+  const appId = 'acme.portal:site';
+
+  it('names the app and the host actually framed', () => {
+    expect(portalSsoTokenRequest(appId, 'https://Portal.Example.com/login?x=1', 'ws-1')).toEqual({
+      workspace_id: 'ws-1',
+      audience: 'portal.example.com',
+      app_id: appId,
+    });
+    const framed = resolveDevAppUrl(appId, 'https://portal.example.com', {
+      env: 'local',
+      overrides: { [appId]: 'http://localhost:9/' },
+    });
+    expect(portalSsoTokenRequest(appId, framed, 'ws-1')?.audience).toBe('localhost');
+  });
+
+  it('asks nothing for a bundled or remote app, or a URL that is no web origin', () => {
+    expect(portalSsoTokenRequest('acme.ops:map', '/app-html/acme/ops/map/index.html', 'ws-1')).toBeNull();
+    expect(
+      portalSsoTokenRequest('remote/acme.research:console', '/app-html/remote/acme.research/console/', 'ws-1'),
+    ).toBeNull();
+    expect(
+      portalSsoTokenRequest('remote/acme.research:console', 'https://nexus.example.com/app-html/remote/acme.research/console/', 'ws-1'),
+    ).toBeNull();
+    expect(portalSsoTokenRequest(appId, 'mailto:someone@example.com', 'ws-1')).toBeNull();
+    expect(portalSsoTokenRequest(appId, 'not a url', 'ws-1')).toBeNull();
   });
 });
 

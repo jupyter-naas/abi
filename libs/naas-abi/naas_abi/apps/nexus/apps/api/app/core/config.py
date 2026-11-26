@@ -2,7 +2,10 @@
 Application configuration using pydantic-settings.
 """
 
+import os
+from collections.abc import Mapping
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Literal
 
 from naas_abi.apps.nexus.access_config import NexusMigrationConfig, NexusModelsConfig
@@ -599,9 +602,18 @@ class Settings(BaseSettings):
     # Lifetime of a link for opening /app-html apps (Bearer or ?token=): an IAM
     # grant: a longer setting is accepted and clamped to eight hours.
     app_html_access_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
-    # HMAC secret for opening Cloudflare Pages portals from Nexus (empty = off).
-    pages_sso_secret: str = ""
+    # Portal sign-in (``services/apps/AGENTS.md``, "Portal SSO"): an app id
+    # (``<module_path>:<app_dir>``) to the HMAC secret its portal alone shares
+    # (env PAGES_SSO_SECRETS, as JSON). An app that is not listed gets no token.
+    # The old single ``pages_sso_secret`` / PAGES_SSO_SECRET signs nothing.
+    # ``| str``: a value that is not JSON reaches the validator instead of failing
+    # the settings source; it is read as no secrets, with an error logged.
+    pages_sso_secrets: dict[str, str] | str = Field(default_factory=dict)
     pages_sso_expire_seconds: int = Field(default=300, ge=30, le=15 * 60)
+    # Local development: `id=url` pairs, comma-separated (NEXUS_DEV_APP_URLS). The
+    # SSO route takes the host of an app's entry as an audience only on a local
+    # Nexus on loopback (`services/apps/pages_sso.dev_app_url`); `next dev` frames it.
+    nexus_dev_app_urls: str = ""
     # Apps builder: "Submit" sends an app project to its source repository
     # (GitHub owner/name) as a review branch. Off unless both the repo and
     # APPS_SUBMIT_TOKEN (env only, never in config files) are set.
@@ -643,6 +655,15 @@ class Settings(BaseSettings):
     # (the redirect URI's and the web app's) are implied.
     idp_client_origins: list[str] = Field(default_factory=list)
 
+    @field_validator("pages_sso_secrets", mode="before")
+    @classmethod
+    def _read_portal_secrets(cls, value: Any) -> dict[str, str]:
+        from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import (
+            read_portal_secrets,
+        )
+
+        return read_portal_secrets(value)
+
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""
         # Make Ollama autostart opt-in and local-only
@@ -682,6 +703,22 @@ class Settings(BaseSettings):
     # Local AI (Ollama) autostart
     # Default OFF; enabled automatically in local development.
     enable_ollama_autostart: bool = False
+
+
+def settings_environment(environ: Mapping[str, str] | None = None) -> dict[str, str]:
+    """What ``Settings`` reads its values from: its ``env_file`` (``.env``),
+    overridden by the process environment, as pydantic-settings orders them."""
+    from dotenv import dotenv_values
+
+    env_file = Settings.model_config.get("env_file")
+    files = env_file if isinstance(env_file, (list, tuple)) else [env_file] if env_file else []
+    merged: dict[str, str] = {}
+    for path in files:
+        if Path(path).is_file():
+            values = dotenv_values(path, encoding=Settings.model_config.get("env_file_encoding"))
+            merged.update({k: v for k, v in values.items() if v is not None})
+    merged.update(os.environ if environ is None else environ)
+    return merged
 
 
 @lru_cache

@@ -10,7 +10,7 @@ Routes
 * ``POST   /api/apps/access-token``            — scoped link for ``/app-html/``
 * ``POST   /api/apps/remote-grant``            — open a remote module's app
 * ``POST   /api/apps/remote-grant/revoke``     — end the caller's remote app grants
-* ``POST   /api/apps/sso-token``               — HMAC handshake for a Pages portal
+* ``POST   /api/apps/sso-token``               — sign-in token for one app's portal (OpenApp on ``app_id``)
 
 Discovery mirrors the pattern used by the agents adapter
 (``agents__primary_adapter__FastAPI._get_agent_class_registry``): we walk
@@ -42,7 +42,10 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.links import LinkLimitReached
 from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import (
+    dev_app_url,
     mint_pages_sso_token,
+    pages_sso_audiences,
+    portal_secrets,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
     AppInfo,
@@ -54,6 +57,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     MODULE_ID_PATTERN,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.scopes import app_scope
+from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
@@ -61,6 +65,7 @@ from naas_abi.apps.nexus.apps.api.app.services.view_as.runtime import audited_op
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
     resolve_public_module_asset_url,
 )
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.iam.module_scopes import APP
 from pydantic import BaseModel, Field
 
@@ -599,7 +604,11 @@ async def revoke_remote_app_grants(
 
 
 class PagesSsoTokenRequest(BaseModel):
-    """Mint a short-lived HMAC token for a Cloudflare Pages portal."""
+    """Mint a short-lived HMAC token for the portal of one app the caller may open.
+
+    ``app_id`` (required) is the app (``module:OpenApp``), ``audience`` its portal
+    hostname. The email is the signed-in user; the body cannot name another.
+    """
 
     workspace_id: str = Field(..., min_length=1, max_length=100)
     audience: str = Field(
@@ -608,6 +617,7 @@ class PagesSsoTokenRequest(BaseModel):
         max_length=255,
         description="Portal hostname, e.g. portal.example.com",
     )
+    app_id: str = Field(..., min_length=1, max_length=200)
 
 
 class PagesSsoTokenResponse(BaseModel):
@@ -620,27 +630,58 @@ class PagesSsoTokenResponse(BaseModel):
 @router.post(
     "/sso-token",
     response_model=PagesSsoTokenResponse,
-    dependencies=[declares("UseApp")],
+    dependencies=[declares("module:OpenApp")],
 )
 async def create_pages_sso_token(
     body: PagesSsoTokenRequest,
     current_user: User = Depends(get_current_user_required),
 ) -> PagesSsoTokenResponse:
-    """Issue a handshake token so a Pages portal can skip a second login."""
-    await authz.require("UseApp", user=current_user, workspace=body.workspace_id, id="-")
+    """Issue a token so the portal of one app can skip a second login.
+
+    The email is always the signed-in user. The caller must be allowed to open
+    the app (``module:OpenApp``), and the audience must be that app's host. On a
+    local Nexus on loopback, ``nexus_dev_app_urls`` may add the host of that
+    app's dev origin (``dev_app_url``). The token names the app and is signed
+    with that app's own secret (``pages_sso_secrets``): an app without one has
+    no portal sign-in (404), said only to someone who may open it.
+    """
+    try:
+        # The portal's session would be a credential of its own (oidc/AGENTS.md).
+        credentials.refuse_a_limited_credential("sign in to a portal")
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     live = _live_settings()
-    if not live.pages_sso_secret:
-        raise HTTPException(status_code=503, detail="Pages SSO is not configured")
+    audience = body.audience.strip().lower()
+    app_id = body.app_id.strip()
+    scope = app_scope(app_id)
+    if scope is None:
+        raise HTTPException(status_code=400, detail="app_id names no app")
+    await authz.require_scope(scope, user=current_user, workspace=body.workspace_id)
+    app = next((item for item in _scan_apps_catalog() if item.app_id == app_id), None)
+    if app is None:
+        raise HTTPException(status_code=400, detail="app_id names no app")
+    dev_url = dev_app_url(
+        app_id,
+        dev_app_urls=getattr(live, "nexus_dev_app_urls", ""),
+        nexus_env=getattr(live, "nexus_env", ""),
+        frontend_url=getattr(live, "frontend_url", ""),
+    )
+    if audience not in pages_sso_audiences(app.url, dev_url):
+        raise HTTPException(status_code=400, detail="audience is not this app")
+    secret = portal_secrets(getattr(live, "pages_sso_secrets", None)).get(app_id)
+    if not secret:
+        raise HTTPException(status_code=404, detail="This app has no portal sign-in")
     try:
         token, expires_in = mint_pages_sso_token(
             email=str(current_user.email),
-            audience=body.audience,
-            secret=live.pages_sso_secret,
+            audience=audience,
+            app_id=app_id,
+            secret=secret,
             expires_seconds=live.pages_sso_expire_seconds,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return PagesSsoTokenResponse(token=token, expires_in=expires_in, audience=body.audience.lower())
+    return PagesSsoTokenResponse(token=token, expires_in=expires_in, audience=audience)
 
 
 @router.get(

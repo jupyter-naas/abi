@@ -20,6 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.core.database import init_db
 from naas_abi.apps.nexus.apps.api.app.core.frame_headers import (
     embed_csp,
     frame_ancestors,
+    ignored_frame_origins,
     is_embeddable,
 )
 from naas_abi.apps.nexus.apps.api.app.core.logging import configure_logging
@@ -581,6 +582,17 @@ async def _hint_unlinked_users() -> None:
         )
 
 
+def _warn_of_the_shared_pages_sso_secret() -> None:
+    """``PAGES_SSO_SECRET`` signed every portal's token; each app has its own now.
+    Read where ``Settings`` read it: the process environment and ``.env``."""
+    from naas_abi.apps.nexus.apps.api.app.core.config import settings_environment
+    from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import shared_secret_warning
+
+    message = shared_secret_warning(settings_environment())
+    if message:
+        logging.getLogger(__name__).warning(message)
+
+
 async def _migrate_pending_invitations() -> None:
     """Pending invitations become invited people, once (``services/invites/migration.py``),
     in the background: the identity provider they name may answer after the API
@@ -637,6 +649,7 @@ async def _startup(app: FastAPI) -> None:
     await _prepare_iam()
     _watch_upgrade()
     await _hint_unlinked_users()
+    _warn_of_the_shared_pages_sso_secret()
 
     # Apply config-driven user/org/workspace seeds from config.yaml.
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds
@@ -981,6 +994,11 @@ def _configure_middleware(app: FastAPI) -> None:
     logger.info(
         f"[CORS] Configured origins: {cors_origins} (regex: {cors_kwargs.get('allow_origin_regex')})"
     )
+    # The same entries make the embeddable paths' frame-ancestors, which keeps
+    # only real origins (core/frame_headers): name the rest once, here.
+    ignored = ignored_frame_origins(getattr(settings, "frontend_url", ""), cors_origins)
+    if ignored:
+        logger.warning(f"[frame-ancestors] ignored origins: {ignored}")
     # Settings pages' 24h API cache. Added before CORS so it sits inside it: cached
     # answers still go out through CORS and get its headers.
     from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (

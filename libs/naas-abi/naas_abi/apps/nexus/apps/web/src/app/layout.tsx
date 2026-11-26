@@ -7,6 +7,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { ViewBanner } from '@/components/view-as/view-banner';
 import { TenantProvider } from '@/contexts/tenant-context';
 import { WebSocketProvider } from '@/contexts/websocket-context';
+import { parseDevAppUrls } from '@/lib/app-html';
 import { VIEW_STORAGE_GUARD } from '@/lib/view-storage-guard';
 import './globals.css';
 
@@ -109,6 +110,10 @@ function getServerRuntimeConfig() {
       process.env.NEXUS_FRONTEND_URL ||
       process.env.NEXT_PUBLIC_FRONTEND_URL ||
       '',
+    devAppUrls:
+      process.env.NODE_ENV === 'production'
+        ? {}
+        : parseDevAppUrls(process.env.NEXUS_DEV_APP_URLS),
   };
 }
 
