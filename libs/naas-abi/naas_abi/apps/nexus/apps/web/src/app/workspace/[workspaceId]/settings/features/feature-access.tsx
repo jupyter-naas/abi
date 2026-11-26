@@ -2,9 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp, Filter } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { ownerHref } from '@/components/access/policies/policy-owners';
-import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
 import { Button } from '@/components/ui/button';
 import {
   SettingsEmpty,
@@ -14,14 +13,15 @@ import {
   SettingsTableToolbar,
   countLabel,
 } from '@/components/settings/settings-ui';
-import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
+import {
+  SettingsTableClear,
+  SettingsTableHead,
+  SettingsTableNoMatch,
+  useSettingsTable,
+} from '@/components/settings/users-table/settings-table';
+import { TablePager } from '@/components/settings/users-table/table-pager';
 import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
-import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-table-filter';
-import { matchesSearch } from '@/app/settings/lib/search';
-import { countFacets } from '@/app/settings/lib/page-helpers';
-import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
-import type { FacetBucket } from '@/lib/graph-query/types';
 import { createFeatureAccessApi, type FeatureAccessApi } from './feature-access-api';
 import {
   FEATURE_COLUMNS,
@@ -34,13 +34,11 @@ import {
   featureSearchTexts,
   otherPolicies,
   rowNotes,
-  sortFeatures,
+  sortedRows,
   type FeatureAccessState,
   type FeatureChoice,
-  type FeatureColumnId,
   type FeatureDraft,
   type FeatureRow,
-  type SortDir,
 } from './feature-access-model';
 
 const DEFAULT_API = createFeatureAccessApi();
@@ -68,11 +66,6 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
   const [drafts, setDrafts] = useState<Record<string, FeatureDraft>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filters, setFilters] = useState<Partial<Record<FeatureColumnId, ColumnFilterState>>>({});
-  const [sortKey, setSortKey] = useState<FeatureColumnId>('feature');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [openFilter, setOpenFilter] = useState<{ id: FeatureColumnId; left: number; top: number } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -90,30 +83,19 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
     void load();
   }, [load]);
 
-  const rows = useMemo(() => (state?.features ?? []).filter((row) => row.key !== FILES_FEATURE), [state]);
-  const shown = useMemo(
-    () =>
-      sortFeatures(
-        rows.filter(
-          (row) =>
-            matchesSearch(featureSearchTexts(row), searchQuery) &&
-            FEATURE_COLUMNS.every((column) => rowMatchesColumnFilter(featureCellValues(row, column.id), filters[column.id]))
-        ),
-        sortKey,
-        sortDir
-      ),
-    [rows, searchQuery, filters, sortKey, sortDir]
+  // By name first: rows that tie on the sorted column stay A to Z.
+  const rows = useMemo(
+    () => sortedRows(state?.features ?? []).filter((row) => row.key !== FILES_FEATURE),
+    [state]
   );
-  const paged = usePagedRows(shown, JSON.stringify([searchQuery, filters, sortKey, sortDir]));
-  const loadFacets = useCallback(
-    async (columnId: string, query: string): Promise<FacetBucket[]> => {
-      const needle = query.trim().toLowerCase();
-      return countFacets(rows.flatMap((row) => featureCellValues(row, columnId as FeatureColumnId))).filter((bucket) =>
-        bucket.value.toLowerCase().includes(needle)
-      );
-    },
-    [rows]
-  );
+  const table = useSettingsTable({
+    rows,
+    columns: FEATURE_COLUMNS,
+    cellValues: featureCellValues,
+    searchTexts: featureSearchTexts,
+    initialSort: 'feature',
+  });
+  const shown = table.shown;
 
   const draftFor = (row: FeatureRow) => drafts[row.key] ?? draftOf(row);
   const changes = changesFrom(rows, drafts);
@@ -142,15 +124,6 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
     setRowErrors({});
   };
 
-  const toggleSort = (column: FeatureColumnId) => {
-    if (sortKey === column) {
-      setSortDir((dir) => (dir === 'asc' ? 'desc' : 'asc'));
-      return;
-    }
-    setSortKey(column);
-    setSortDir('asc');
-  };
-  const filtered = searchQuery.trim() !== '' || FEATURE_COLUMNS.some((column) => !isBlank(filters[column.id]));
   const exportShown = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
     downloadTableExport(FEATURE_EXPORT_HEADERS, shown.map(featureExportRow), format, `features_${date}`, 'Features');
@@ -215,25 +188,13 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
       ) : (
         <div className="space-y-4">
           <SettingsTableToolbar
-            search={searchQuery}
-            onSearchChange={setSearchQuery}
+            search={table.search}
+            onSearchChange={table.setSearch}
             searchPlaceholder="Search feature, everyone, nobody, policy, not offered…"
             meta={
               <>
                 {`${countLabel(shown.length, rows.length, 'feature')} · ${unsaved}`}
-                {filtered && (
-                  <button
-                    type="button"
-                    className="org-settings-users-filter-clear ml-3"
-                    data-action="clear-filters"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setFilters({});
-                    }}
-                  >
-                    Clear search and filters
-                  </button>
-                )}
+                <SettingsTableClear table={table} />
               </>
             }
           />
@@ -242,76 +203,10 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
           </p>
           <div className="org-settings-users-table-wrap">
             <table className="org-settings-users-table">
-              <thead>
-                <tr>
-                  {FEATURE_COLUMNS.map((column) => {
-                    const sorted = sortKey === column.id;
-                    const active = !isBlank(filters[column.id]);
-                    return (
-                      <th key={column.id}>
-                        <div className="org-settings-users-th">
-                          <button
-                            type="button"
-                            className="org-settings-users-sort"
-                            data-sort={column.id}
-                            onClick={() => toggleSort(column.id)}
-                            title="Sort"
-                          >
-                            <span>{column.label}</span>
-                            {sorted && sortDir === 'asc' && <ChevronUp size={12} />}
-                            {sorted && sortDir === 'desc' && <ChevronDown size={12} />}
-                          </button>
-                          <button
-                            type="button"
-                            className={`org-settings-users-filter${active ? ' is-active' : ''}`}
-                            data-filter-trigger={column.id}
-                            title="Filter"
-                            onClick={(event) => {
-                              if (openFilter?.id === column.id) {
-                                setOpenFilter(null);
-                                return;
-                              }
-                              const rect = event.currentTarget.getBoundingClientRect();
-                              setOpenFilter({ id: column.id, left: rect.left, top: rect.bottom + 4 });
-                            }}
-                          >
-                            <Filter size={11} />
-                          </button>
-                        </div>
-                        {openFilter?.id === column.id && (
-                          <ColumnFilterPopover
-                            columnId={column.id}
-                            label={column.label}
-                            datatype="string"
-                            facetable
-                            anchor={{ left: openFilter.left, top: openFilter.top }}
-                            state={filters[column.id]}
-                            onChange={(next) => setFilters((current) => ({ ...current, [column.id]: next }))}
-                            onClear={() =>
-                              setFilters((current) => {
-                                const next = { ...current };
-                                delete next[column.id];
-                                return next;
-                              })
-                            }
-                            loadFacets={loadFacets}
-                            onClose={() => setOpenFilter(null)}
-                          />
-                        )}
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
+              <SettingsTableHead table={table} />
               <tbody>
-                {shown.length === 0 && (
-                  <tr>
-                    <td colSpan={FEATURE_COLUMNS.length} className="org-settings-users-no-match">
-                      No features match the current search and filters
-                    </td>
-                  </tr>
-                )}
-                {paged.pageRows.map((row) => {
+                {shown.length === 0 && <SettingsTableNoMatch colSpan={FEATURE_COLUMNS.length} noun="features" />}
+                {table.paged.pageRows.map((row) => {
                   const draft = draftFor(row);
                   return (
                     <tr key={row.key} data-feature={row.key} className="align-top">
@@ -379,7 +274,7 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
           </div>
         </div>
       )}
-      <TablePager total={shown.length} paged={paged} />
+      <TablePager total={shown.length} paged={table.paged} />
     </div>
   );
 }

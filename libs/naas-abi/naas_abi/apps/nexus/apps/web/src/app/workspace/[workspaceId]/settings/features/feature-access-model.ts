@@ -134,7 +134,6 @@ export const FEATURE_COLUMNS: { id: FeatureColumnId; label: string }[] = [
   { id: 'offered', label: 'Offered to' },
   { id: 'policies', label: 'Other policies' },
 ];
-export type SortDir = 'asc' | 'desc';
 
 const CHOICE_LABELS: Record<FeatureChoice, string> = { everyone: 'Everyone', nobody: 'Nobody' };
 
@@ -157,17 +156,6 @@ export function featureSearchTexts(row: FeatureRow): string[] {
     row.offered ? '' : 'not offered',
     row.hand_edited ? 'changed by hand' : '',
   ];
-}
-
-/** The rows sorted by a column, the name breaking ties. */
-export function sortFeatures(rows: FeatureRow[], key: FeatureColumnId, dir: SortDir): FeatureRow[] {
-  const text = (row: FeatureRow) => featureCellValues(row, key).join(', ');
-  const sign = dir === 'asc' ? 1 : -1;
-  return [...rows].sort(
-    (a, b) =>
-      sign * text(a).localeCompare(text(b), undefined, { sensitivity: 'base' }) ||
-      a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
-  );
 }
 
 export const FEATURE_EXPORT_HEADERS = ['Feature', 'Key', 'Offered to', 'Offered here', 'Other policies'];

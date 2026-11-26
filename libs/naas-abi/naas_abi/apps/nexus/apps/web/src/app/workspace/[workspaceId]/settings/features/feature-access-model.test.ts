@@ -9,7 +9,6 @@ import {
   featureSearchTexts,
   otherPolicies,
   rowNotes,
-  sortFeatures,
   sortedRows,
   type FeatureAccessState,
   type FeatureRow,
@@ -161,11 +160,6 @@ describe('the features table (as Settings › Users)', () => {
     expect(featureSearchTexts(maps).join(' ')).toContain('No maps denied');
     expect(featureSearchTexts(graph)).toContain('not offered');
     expect(featureSearchTexts(chat)).not.toContain('not offered');
-  });
-
-  it('sorts by a column, the name breaking ties', () => {
-    expect(sortFeatures([maps, graph, chat], 'feature', 'asc').map((r) => r.key)).toEqual(['chat', 'graph', 'maps']);
-    expect(sortFeatures([maps, graph, chat], 'offered', 'desc').map((r) => r.key)).toEqual(['maps', 'chat', 'graph']);
   });
 
   it('exports a row as the table shows it', () => {
