@@ -613,3 +613,41 @@ describe('WorkspaceOfferEditor: ontologies', () => {
     });
   });
 });
+
+describe('WorkspaceOfferEditor: a part on its settings page', () => {
+  it('shows only the parts asked for, bare, the modules read where the offer says', async () => {
+    const parts = setup();
+    mounted = await mount(WorkspaceOfferEditor, {
+      workspaceId: 'ws-1',
+      api: parts.api,
+      offerApi: parts.offerApi as unknown as OfferApi,
+      featureApi: parts.featureApi as unknown as FeatureAccessApi,
+      parts: ['agents'],
+      bare: true,
+    });
+    await mounted.flush();
+    expect([...document.querySelectorAll('[data-offer-section]')].map((s) => s.getAttribute('data-offer-section'))).toEqual([
+      'agents',
+    ]);
+    expect(document.querySelector('.access-offer-header')).toBeNull();
+    // No scope given: the publishers are read at the offer's own; the features are not read.
+    expect(parts.api.publishers).toHaveBeenCalledWith(OFFER.scope);
+    expect(parts.featureApi.read).not.toHaveBeenCalled();
+    expect(switchOf('[data-offer-section="agents"] [data-offer-module="acme.people"]')).not.toBeNull();
+  });
+
+  it('shows the Models part alone, with no module read', async () => {
+    const parts = setup();
+    mounted = await mount(WorkspaceOfferEditor, {
+      workspaceId: 'ws-1',
+      api: parts.api,
+      offerApi: parts.offerApi as unknown as OfferApi,
+      featureApi: parts.featureApi as unknown as FeatureAccessApi,
+      parts: ['models'],
+      bare: true,
+    });
+    await mounted.flush();
+    expect(parts.api.publishers).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-offer-section="features"]')).toBeNull();
+  });
+});

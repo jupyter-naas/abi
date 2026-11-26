@@ -21,7 +21,7 @@ import {
 } from '@/lib/access-model/workspace-offer';
 import { workspaceGroupName } from '@/lib/access-model/levels';
 import { FEATURE_SCOPES, WEB_ENGINES, webEngineScopeId } from '@/lib/search-scopes';
-import type { IamAdminApi } from '@/lib/iam-admin/api';
+import { createIamAdminApi, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { PublishersView } from '@/lib/iam-admin/types';
 import {
   createFeatureAccessApi,
@@ -40,6 +40,20 @@ import {
 import './offer.css';
 
 const DEFAULT_OFFER_API = createOfferApi();
+const DEFAULT_IAM_API = createIamAdminApi();
+
+/** A part of the offer, each shown where its settings page shows it. */
+export type OfferPart = 'features' | 'files' | 'graphs' | 'models' | 'maps' | 'ontologies' | 'search' | OfferKind;
+const ALL_PARTS: readonly OfferPart[] = [
+  'features',
+  'files',
+  'graphs',
+  'models',
+  'maps',
+  'ontologies',
+  'search',
+  ...OFFER_KINDS.map((k) => k.kind),
+];
 
 /** The sources of the search, in the search page's order: its features, then the web engines. */
 const SEARCH_SOURCE_ROWS: { id: string; label: string }[] = [
@@ -108,14 +122,19 @@ export function OfferSwitch({
 
 export type WorkspaceOfferEditorProps = {
   workspaceId: string;
-  /** The workspace's container: where IAM says what the caller may give (`/publishers`). */
-  scope: string;
+  /** The workspace's container: where IAM says what the caller may give (`/publishers`); the
+   *  offer's own `scope` when left out. */
+  scope?: string;
   /** Only this policy's page shows it: the editor stays empty when "<W> access" is another. */
   policyId?: string;
   /** The workspace's name, for the words. */
   workspaceName?: string;
-  api: IamAdminApi;
+  api?: IamAdminApi;
   offerApi?: OfferApi;
+  /** The parts shown (a settings page shows its own); every part by default. */
+  parts?: readonly OfferPart[];
+  /** Without the header that says what the offer is (the page around it says it). */
+  bare?: boolean;
   featureApi?: FeatureAccessApi;
   nonce?: number;
   /** Told after each switch is saved: "<W> access" has a new revision. */
@@ -123,7 +142,8 @@ export type WorkspaceOfferEditorProps = {
 };
 
 /**
- * "<W> access" as the workspace's offer (its policy page › Configuration): its features, then
+ * "<W> access" as the workspace's offer, shown by part on the workspace's settings pages (`parts`;
+ * Agents, Apps, Workflows and Models show theirs through `WorkspaceOfferPart`): its features, then
  * its agents, apps, workflows and pipelines by module, each a toggle (a module offered whole, or
  * item by item). Everyone in "<W> workspace" reaches what is on; their level decides what they
  * do with it. Each toggle is saved at once, as the caller: a write of "<W> access" (`PUT
@@ -136,12 +156,16 @@ export function WorkspaceOfferEditor({
   scope,
   policyId,
   workspaceName,
-  api,
+  api = DEFAULT_IAM_API,
   offerApi = DEFAULT_OFFER_API,
   featureApi = DEFAULT_FEATURE_API,
   nonce = 0,
   onChanged,
+  parts = ALL_PARTS,
+  bare = false,
 }: WorkspaceOfferEditorProps) {
+  // A string, so that a page's new array of the same parts reads nothing again.
+  const partsKey = parts.join(',');
   const [offer, setOffer] = useState<OfferState | null>(null);
   const [features, setFeatures] = useState<FeatureAccessState | null>(null);
   const [publishers, setPublishers] = useState<PublishersView | null>(null);
@@ -173,18 +197,24 @@ export function WorkspaceOfferEditor({
   // The offer shows as soon as it is read; its features and its modules' names follow (each
   // waited for at most READ_TIMEOUT_MS), never holding it back (UX-24).
   const load = useCallback(async () => {
+    const shown = partsKey.split(',');
+    const needsFeatures = shown.includes('features') || shown.includes('files');
+    const needsModules = OFFER_KINDS.some((k) => shown.includes(k.kind));
+    const publishersAt = (at: string) => answered(api.publishers(at)).then(setPublishers, () => setPublishers(null));
     const rest = Promise.allSettled([
-      loadFeatures(),
-      answered(api.publishers(scope)).then(setPublishers, () => setPublishers(null)),
+      needsFeatures ? loadFeatures() : Promise.resolve(),
+      needsModules && scope ? publishersAt(scope) : Promise.resolve(),
     ]);
     try {
-      setOffer(await answered(offerApi.read(workspaceId)));
+      const read = await answered(offerApi.read(workspaceId));
+      setOffer(read);
       setError(null);
+      if (needsModules && !scope) await publishersAt(read.scope);
     } catch (e) {
       setError(message(e, 'Could not read what this workspace offers.'));
     }
     await rest;
-  }, [api, loadFeatures, offerApi, scope, workspaceId]);
+  }, [api, loadFeatures, offerApi, scope, workspaceId, partsKey]);
 
   useEffect(() => {
     setNotice(null);
@@ -198,6 +228,8 @@ export function WorkspaceOfferEditor({
   );
   const featureRows = useMemo(() => allFeatureRows.filter((row) => row.key !== FILES_FEATURE), [allFeatureRows]);
   const workspaceFiles = useMemo(() => allFeatureRows.find((row) => row.key === FILES_FEATURE) ?? null, [allFeatureRows]);
+  const where = scope ?? offer?.scope ?? '';
+  const has = (part: OfferPart) => partsKey.split(',').includes(part);
 
   const loadItems = useCallback(
     async (kind: OfferKind, module: string) => {
@@ -205,7 +237,7 @@ export function WorkspaceOfferEditor({
       setItems((current) => ({ ...current, [key]: { status: 'loading' } }));
       const type = OFFER_KINDS.find((k) => k.kind === kind)!.type;
       try {
-        const page = await api.resources({ scope, service: 'module', type, module, limit: ITEM_LIMIT });
+        const page = await api.resources({ scope: where, service: 'module', type, module, limit: ITEM_LIMIT });
         setItems((current) => ({
           ...current,
           [key]: {
@@ -218,7 +250,7 @@ export function WorkspaceOfferEditor({
         setItems((current) => ({ ...current, [key]: { status: 'failed', error: message(e, 'Could not list them.') } }));
       }
     },
-    [api, scope],
+    [api, where],
   );
 
   if (error && !offer)
@@ -394,6 +426,7 @@ export function WorkspaceOfferEditor({
 
   return (
     <section className="access-offer" aria-label="Workspace offer" data-offer={offer.workspace_id}>
+      {!bare && (
       <header className="access-offer-header">
         <h3 className="access-policy-title">What this workspace offers</h3>
         <p className="access-policy-muted">
@@ -401,14 +434,15 @@ export function WorkspaceOfferEditor({
           they may do with it. It is also the workspace’s ceiling: nothing given here reaches beyond it. A module
           added to the platform is offered nowhere until it is turned on here.
         </p>
-        {!editable && (
-          <p className="access-policy-muted" data-offer-readonly="">
-            {offer.access_policy
-              ? `Read-only: IAM does not let you change ${offer.access_policy.name}.`
-              : 'This workspace has no access policy yet.'}
-          </p>
-        )}
       </header>
+      )}
+      {!editable && (
+        <p className="access-policy-muted" data-offer-readonly="">
+          {offer.access_policy
+            ? `Read-only: IAM does not let you change ${offer.access_policy.name}.`
+            : 'This workspace has no access policy yet.'}
+        </p>
+      )}
       {error && <p className="access-policy-error" role="alert">{error}</p>}
       {notice && (
         <p className="access-policy-notice" role="status" data-offer-notice="">
@@ -416,6 +450,7 @@ export function WorkspaceOfferEditor({
         </p>
       )}
 
+      {has('features') && (
       <div className="access-offer-section" data-offer-section="features">
         <h4 className="access-offer-heading">Features</h4>
         {features === null ? (
@@ -437,7 +472,9 @@ export function WorkspaceOfferEditor({
           <ul className="access-offer-list">{featureRows.map((row) => featureRow(row))}</ul>
         )}
       </div>
+      )}
 
+      {has('files') && (
       <div className="access-offer-section" data-offer-section="files">
         <h4 className="access-offer-heading">Files</h4>
         <p className="access-policy-muted">
@@ -474,8 +511,9 @@ export function WorkspaceOfferEditor({
           </p>
         )}
       </div>
+      )}
 
-      {offer.graphs && (
+      {has('graphs') && offer.graphs && (
         <div className="access-offer-section" data-offer-section="graphs">
           <h4 className="access-offer-heading">Graphs</h4>
           <p className="access-policy-muted">
@@ -495,8 +533,8 @@ export function WorkspaceOfferEditor({
         </div>
       )}
 
-      {offer.models && modelsSection(offer.models)}
-      {offer.maps && (
+      {has('models') && offer.models && modelsSection(offer.models)}
+      {has('maps') && offer.maps && (
         <div className="access-offer-section" data-offer-section="maps">
           <h4 className="access-offer-heading">Maps</h4>
           <p className="access-policy-muted">
@@ -516,7 +554,7 @@ export function WorkspaceOfferEditor({
         </div>
       )}
 
-      {offer.ontologies && (
+      {has('ontologies') && offer.ontologies && (
         <div className="access-offer-section" data-offer-section="ontologies">
           <h4 className="access-offer-heading">Ontologies</h4>
           <p className="access-policy-muted">
@@ -550,6 +588,7 @@ export function WorkspaceOfferEditor({
         </div>
       )}
 
+      {has('search') && (
       <div className="access-offer-section" data-offer-section="search-sources">
         <h4 className="access-offer-heading">Search sources</h4>
         <p className="access-policy-muted">
@@ -572,8 +611,9 @@ export function WorkspaceOfferEditor({
           })}
         </ul>
       </div>
+      )}
 
-      {OFFER_KINDS.map(({ kind, label }) => {
+      {OFFER_KINDS.filter(({ kind }) => has(kind)).map(({ kind, label }) => {
         const ofKind = modules.filter((m) => m.kinds.includes(kind));
         return (
           <div key={kind} className="access-offer-section" data-offer-section={kind}>

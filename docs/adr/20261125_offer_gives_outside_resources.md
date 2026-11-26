@@ -38,6 +38,8 @@ The reason they are not in the offer is the bound rule (#1585). What a membershi
    - **Maps**: by layer, feed and basemap.
 
    General › Platform Files, the graph assignments and Maps' "which workspaces" become this editor, or read from it.
+
+   *Amended 2026-11-26:* the editor is the workspace's settings pages, one part each: Features, Files, Search, Graphs, Maps, Ontologies, and the offer's part on Agents, Apps, Workflows (with pipelines) and Models. The policy page of "<W> access" no longer has a Configuration tab: it shows the document (Advanced, Builder, Code), so each part has one editor.
 5. **Migration** (`offer_gives_v1`), run once and reported:
    - Each "Platform Files · <W>" group becomes `GivenPlatformFiles` in "<W> access", in the same mode. The groups and the two platform policies are deleted.
    - Each `workspace.<ws>.graphs.read|write` becomes `GivenGraphs` statements. The per-person attachments and the policies go. The two workspaces past 100 patterns get their grants for the first time: they are reported as widenings.

@@ -1,5 +1,6 @@
 'use client';
 
+import { WorkspaceOfferPart } from '@/components/settings/workspace-offer-part';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Workflow } from 'lucide-react';
@@ -141,6 +142,14 @@ export default function WorkflowsSettingsPage() {
           </div>
           <TablePager total={shown.length} paged={table.paged} />
         </div>
+      )}
+      {workspaceId && (
+        <WorkspaceOfferPart
+          workspaceId={workspaceId}
+          parts={['workflows', 'pipelines']}
+          description="The workflows and pipelines its people run here, by module: a module offered whole (its new ones too), or one by one."
+          onChanged={() => void load()}
+        />
       )}
     </div>
   );

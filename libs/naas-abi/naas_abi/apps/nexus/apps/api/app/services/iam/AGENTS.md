@@ -846,8 +846,8 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   overviews, and its path is not found there. Enabling one in a workspace (`AssignOntology`, admin level) is
   decided in the workspace's organization, on `<organization>/nexus:ontology/<path>` (the platform's for a
   workspace in none): Workspace settings › Ontologies offers only what the caller may assign plus what the
-  workspace already enables, and its save refuses another, naming it. The policy page › Configuration of
-  "<W> access" has an Ontologies section with the same data (`read_offer`'s `ontologies`: the offer's refs and a
+  workspace already enables, and its save refuses another, naming it. The offer editor
+  (`components/access/offer/offer-editor.tsx`) has an Ontologies part with the same data (`read_offer`'s `ontologies`: the offer's refs and a
   row per file of the deployment, `assignable`, `editable`, `reason`; a ref no file answers to is a row to
   remove), switched one at a time through `PUT /api/workspaces/{id}/offer/ontologies` (`{changes: {id:
   offered}}`, `FeatureAccessService.save_ontologies`, then `set_ontologies` as the caller): 403 for a file the

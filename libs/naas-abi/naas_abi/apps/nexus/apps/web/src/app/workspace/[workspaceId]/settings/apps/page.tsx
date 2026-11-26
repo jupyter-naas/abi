@@ -1,5 +1,6 @@
 'use client';
 
+import { WorkspaceOfferPart } from '@/components/settings/workspace-offer-part';
 import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { AppWindow, Globe, Tag, ExternalLink } from 'lucide-react';
@@ -181,6 +182,14 @@ export default function AppsSettingsPage() {
           </div>
           <TablePager total={shown.length} paged={table.paged} />
         </div>
+      )}
+      {workspaceId && (
+        <WorkspaceOfferPart
+          workspaceId={workspaceId}
+          parts={['apps']}
+          description="The apps its people open here, by module: a module offered whole (its new apps too), or app by app."
+          onChanged={() => void fetchApps(workspaceId)}
+        />
       )}
     </div>
   );

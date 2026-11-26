@@ -21,7 +21,6 @@ import {
 import { NEW_POLICY } from '../access-paths';
 import { PLATFORM, ownerOf, parseScope } from '../access-scope';
 import { listedOnPolicies } from '../builtins';
-import { WorkspaceOfferEditor } from '../offer/offer-editor';
 import { roleOfPolicy } from '../roles/role-change';
 import { levelPolicyOf, workspaceGroupName } from '@/lib/access-model/levels';
 import { PolicyAttachments } from './policy-attachments';
@@ -360,22 +359,6 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
               selection.kind === 'policy' && offerWorkspaceOf(selection.policy)
                 ? workspaceGroupName(selection.policy.name.replace(/ access$/, ''))
                 : null
-            }
-            configuration={
-              // A workspace's offer ("<W> access"): its switches are the policy's Configuration.
-              selection.kind === 'policy' && offerWorkspaceOf(selection.policy)
-                ? (changed) => (
-                    <WorkspaceOfferEditor
-                      workspaceId={offerWorkspaceOf(selection.policy)!}
-                      scope={selection.policy.owner_scope ?? here}
-                      policyId={selection.policy.id}
-                      workspaceName={selection.policy.name.replace(/ access$/, '')}
-                      api={api}
-                      nonce={nonce}
-                      onChanged={changed}
-                    />
-                  )
-                : undefined
             }
           />
           </>
