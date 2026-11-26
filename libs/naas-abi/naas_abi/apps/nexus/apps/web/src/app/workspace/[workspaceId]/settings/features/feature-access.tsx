@@ -23,6 +23,7 @@ import { TablePager } from '@/components/settings/users-table/table-pager';
 import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { PolicyPicker } from '@/components/settings/policy-picker';
 import { createFeatureAccessApi, type FeatureAccessApi } from './feature-access-api';
 import {
   FEATURE_COLUMNS,
@@ -30,7 +31,9 @@ import {
   changesFrom,
   choicesOf,
   draftOf,
+  editsOffer,
   featureCellValues,
+  featureColumns,
   featureExportRow,
   featureSearchTexts,
   otherPolicies,
@@ -38,6 +41,7 @@ import {
   sortedRows,
   type FeatureAccessState,
   type FeatureChoice,
+  type FeatureColumnId,
   type FeatureDraft,
   type FeatureRow,
 } from './feature-access-model';
@@ -61,7 +65,20 @@ const FILES_FEATURE = 'files';
  * wins), and a statement written on the policy's page is shown read-only. Several rows are saved in
  * one step.
  */
-export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId: string; api?: FeatureAccessApi }) {
+export function FeatureAccess({
+  workspaceId,
+  api = DEFAULT_API,
+  initialPolicy = null,
+  onPolicyChange,
+}: {
+  workspaceId: string;
+  api?: FeatureAccessApi;
+  /** The policy edited first (`?policy=`); "<W> access" when null. */
+  initialPolicy?: string | null;
+  /** Told when another policy is picked (null: "<W> access"), e.g. to keep it in the URL. */
+  onPolicyChange?: (policyId: string | null) => void;
+}) {
+  const [policyId, setPolicyId] = useState<string | null>(initialPolicy);
   const [state, setState] = useState<FeatureAccessState | null>(null);
   const [error, setError] = useState('');
   const [drafts, setDrafts] = useState<Record<string, FeatureDraft>>({});
@@ -70,12 +87,12 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
 
   const load = useCallback(async () => {
     try {
-      setState(await api.read(workspaceId));
+      setState(await api.read(workspaceId, policyId));
       setError('');
     } catch (e) {
       setError(message(e, 'Could not read who uses the features.'));
     }
-  }, [api, workspaceId]);
+  }, [api, workspaceId, policyId]);
 
   useEffect(() => {
     setState(null);
@@ -89,10 +106,12 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
     () => sortedRows(state?.features ?? []).filter((row) => row.key !== FILES_FEATURE),
     [state]
   );
+  const offer = editsOffer(state);
+  const columns = useMemo(() => featureColumns(offer), [offer]);
   const table = useSettingsTable({
     rows,
-    columns: FEATURE_COLUMNS,
-    cellValues: featureCellValues,
+    columns,
+    cellValues: (row: FeatureRow, column: FeatureColumnId) => featureCellValues(row, column, offer),
     searchTexts: featureSearchTexts,
     initialSort: 'feature',
   });
@@ -107,14 +126,14 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
   const save = async () => {
     setSaving(true);
     try {
-      const next = await api.save(workspaceId, changes);
+      const next = await api.save(workspaceId, changes, policyId);
       const refused = next.errors ?? {};
       setState(next);
       setRowErrors(refused);
       setDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => refused[key])));
       setError('');
       // The nav's pages under Features follow what is offered.
-      void useWorkspaceStore.getState().fetchWorkspaces();
+      if (editsOffer(next)) void useWorkspaceStore.getState().fetchWorkspaces();
     } catch (e) {
       setError(message(e, 'Could not save.'));
     } finally {
@@ -134,7 +153,16 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
 
   const access = state?.access_policy ?? null;
   const offerHref = access ? ownerHref(access.owner_scope, access.id) : null;
+  const edited = state?.policy ?? null;
+  const editedHref = edited ? ownerHref(edited.owner_scope, edited.id) : null;
   const offeredCount = rows.filter((row) => row.choice === 'everyone').length;
+  const pick = (id: string) => {
+    const next = access && id === access.id ? null : id;
+    setDrafts({});
+    setRowErrors({});
+    setPolicyId(next);
+    onPolicyChange?.(next);
+  };
   const unsaved =
     changes.length === 0 ? 'No unsaved change' : `${changes.length} unsaved change${changes.length === 1 ? '' : 's'}`;
 
@@ -142,8 +170,22 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
     <div className="space-y-6">
       <SettingsPageHeader
         title="Features"
-        badge={state ? `${offeredCount} offered · ${rows.length - offeredCount} not offered` : undefined}
+        badge={
+          state
+            ? offer
+              ? `${offeredCount} offered · ${rows.length - offeredCount} not offered`
+              : `${offeredCount} granted · ${rows.length - offeredCount} not granted`
+            : undefined
+        }
         description={
+          !offer && edited ? (
+            <>
+              What{' '}
+              {editedHref ? <Link href={editedHref}>{edited.name}</Link> : edited.name} grants whoever holds it,
+              within the workspace&apos;s offer{access ? ` (${access.name})` : ''}. Files are in{' '}
+              <Link href={`/workspace/${workspaceId}/settings/files`}>Files</Link>.
+            </>
+          ) : (
           <>
             Whether this workspace offers each feature: Everyone in it, or Nobody. Each person&apos;s level decides
             what they may do with it, admins included. Part of what the workspace offers
@@ -155,9 +197,16 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
             ) : null}
             ; files are in <Link href={`/workspace/${workspaceId}/settings/files`}>Files</Link>.
           </>
+          )
         }
         actions={
           <>
+            <PolicyPicker
+              policies={state?.policies}
+              value={edited?.id ?? access?.id}
+              onChange={pick}
+              disabled={saving || changes.length > 0}
+            />
             <UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />
             <Button
               variant="secondary"
@@ -208,7 +257,7 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
             <table className="org-settings-users-table">
               <SettingsTableHead table={table} />
               <tbody>
-                {shown.length === 0 && <SettingsTableNoMatch colSpan={FEATURE_COLUMNS.length} noun="features" />}
+                {shown.length === 0 && <SettingsTableNoMatch colSpan={columns.length} noun="features" />}
                 {table.paged.pageRows.map((row) => {
                   const draft = draftFor(row);
                   return (
@@ -223,7 +272,7 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
                           role="radiogroup"
                           aria-label={`Who ${row.label} is offered to`}
                         >
-                          {choicesOf(row).map((choice) => (
+                          {choicesOf(row, offer).map((choice) => (
                             <button
                               key={choice.value}
                               type="button"

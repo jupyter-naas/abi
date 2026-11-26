@@ -143,10 +143,14 @@ describe('FeatureAccess', () => {
     await m.click(saveButton(m));
     await m.flush();
     expect(api.save).toHaveBeenCalledTimes(1);
-    expect(api.save).toHaveBeenCalledWith('ws1', [
-      { feature: 'maps', choice: 'everyone' },
-      { feature: 'marketplace', choice: 'everyone' },
-    ]);
+    expect(api.save).toHaveBeenCalledWith(
+      'ws1',
+      [
+        { feature: 'maps', choice: 'everyone' },
+        { feature: 'marketplace', choice: 'everyone' },
+      ],
+      null,
+    );
     expect(at(m, 'maps', '[data-choice="everyone"]')?.getAttribute('aria-checked')).toBe('true');
     expect(at(m, 'marketplace', '[role="alert"]')?.textContent).toBe('IAM refused the attachment.');
     expect(at(m, 'marketplace', '[data-choice="everyone"]')?.getAttribute('aria-checked')).toBe('true');
@@ -179,5 +183,42 @@ describe('FeatureAccess', () => {
     expect(at(m, 'chat', '[data-choice="everyone"]')?.getAttribute('aria-checked')).toBe('true');
     expect(m.host.textContent).toContain('No unsaved change');
     expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it('edits another policy of the workspace, picked in the header: what it grants, saved into it', async () => {
+    const GRANTS = { id: 'pol_grants', name: 'Analysts grants', owner_scope: SCOPE };
+    const ACCESS = { id: 'pol_access', name: 'Alpha access', owner_scope: SCOPE };
+    const onOffer = { ...BEFORE, policy: ACCESS, policies: [ACCESS, GRANTS] };
+    const onGrants = { ...onOffer, policy: GRANTS };
+    const api = {
+      read: vi.fn(async (_ws: string, policy?: string | null) => (policy === 'pol_grants' ? onGrants : onOffer)),
+      save: vi.fn().mockResolvedValue(onGrants),
+    };
+    const onPolicyChange = vi.fn();
+    mounted = await mount(FeatureAccess, {
+      workspaceId: 'ws1',
+      api: api as unknown as FeatureAccessApi,
+      onPolicyChange,
+    });
+    await mounted.flush();
+    const picker = mounted.host.querySelector('select[data-field="policy"]') as HTMLSelectElement;
+    expect([...picker.options].map((o) => o.textContent)).toEqual(['Alpha access', 'Analysts grants']);
+    expect(at(mounted, 'chat', '[data-choice="everyone"]')?.textContent).toBe('Everyone');
+
+    await mounted.select(picker, 'pol_grants');
+    await mounted.flush();
+    expect(api.read).toHaveBeenLastCalledWith('ws1', 'pol_grants');
+    expect(onPolicyChange).toHaveBeenCalledWith('pol_grants');
+    expect(at(mounted, 'chat', '[data-choice="everyone"]')?.textContent).toBe('Granted');
+    expect(mounted.host.textContent).toContain('grants whoever holds it');
+
+    await mounted.click(at(mounted, 'maps', '[data-choice="everyone"]'));
+    await mounted.click(saveButton(mounted));
+    await mounted.flush();
+    expect(api.save).toHaveBeenCalledWith('ws1', [{ feature: 'maps', choice: 'everyone' }], 'pol_grants');
+
+    // Back to the offer: the URL loses its policy.
+    await mounted.select(mounted.host.querySelector('select[data-field="policy"]'), 'pol_access');
+    expect(onPolicyChange).toHaveBeenLastCalledWith(null);
   });
 });

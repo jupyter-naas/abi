@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Awaitable
 from typing import Any, Literal, TypeVar
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_required,
 )
@@ -65,6 +65,9 @@ async def _call(call: Awaitable[T]) -> T:
 
 Service = Depends(get_feature_access_service)
 Signed = Depends(get_current_user_required)
+# The policy a page edits: "<W> access" (the workspace's offer) when left out, or another
+# policy the workspace owns (what it grants its holders, within the offer).
+PolicyParam = Query(default=None, alias="policy", min_length=1, max_length=200)
 
 
 class ChangeBody(BaseModel):
@@ -91,11 +94,12 @@ async def read_feature_access(
     workspace_id: str,
     user: User = Signed,
     service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
 ) -> dict[str, Any]:
     """Each enabled feature: who may use it here (Everyone, Only…, Nobody), the
     other policies naming it, whether the workspace offers it, and whether the caller
     may change it."""
-    return await _call(service.read(user, workspace_id))
+    return await _call(service.read(user, workspace_id, policy_id))
 
 
 @router.put(
@@ -107,13 +111,14 @@ async def save_feature_access(
     body: SaveBody,
     user: User = Signed,
     service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
 ) -> dict[str, Any]:
     """Several features at once, each as the caller; ``errors`` names those IAM (or
     the row's rules) refused, the others are saved. Answers the state after."""
     changes = [
         FeatureChange(c.feature, c.choice, tuple(dict.fromkeys(c.principals))) for c in body.changes
     ]
-    return await _call(service.save(user, workspace_id, changes))
+    return await _call(service.save(user, workspace_id, changes, policy_id))
 
 
 class OfferChangeBody(BaseModel):
@@ -141,13 +146,14 @@ async def read_workspace_offer(
     workspace_id: str,
     user: User = Signed,
     service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
 ) -> dict[str, Any]:
     """The agents, apps, workflows and pipelines the workspace offers (its
     allow-list, "<W> access"), by name or whole module; the files it gives outside it
     (``files``: a mode each, the modes the caller may choose) and what My Files is; its
     ontologies (``ontologies``: its refs and a row per file, whether the caller may
     assign it)."""
-    return await _call(service.read_offer(user, workspace_id))
+    return await _call(service.read_offer(user, workspace_id, policy_id))
 
 
 class SearchSourcesBody(BaseModel):
@@ -251,9 +257,10 @@ async def save_workspace_offer(
     body: OfferBody,
     user: User = Signed,
     service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
 ) -> dict[str, Any]:
     """Offer or stop offering items, in one write of "<W> access" as the caller
     (403 for an item the caller does not hold, 422 for one beyond the
     organization's offer: nothing changes). Answers the offer after."""
     changes = [OfferChange(c.kind, c.module, c.name, c.offered) for c in body.changes]
-    return await _call(service.save_offer(user, workspace_id, changes))
+    return await _call(service.save_offer(user, workspace_id, changes, policy_id))

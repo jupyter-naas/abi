@@ -23,6 +23,9 @@ import { TablePager } from '@/components/settings/users-table/table-pager';
 import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import { reloadWorkspaceResources } from '@/hooks/use-workspace-resources';
+import { PolicyPicker } from '@/components/settings/policy-picker';
+import { ownerHref } from '@/components/access/policies/policy-owners';
+import Link from 'next/link';
 import {
   OFFER_KINDS,
   WHOLE_MODULE,
@@ -55,6 +58,10 @@ type Items =
 
 const message = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 
+/** Whether the state read is "<W> access", the workspace's offer (not another policy of it). */
+const editsOffer = (state: OfferState | null) =>
+  !state?.policy || !state.access_policy || state.policy.id === state.access_policy.id;
+
 /**
  * Settings › Access › Modules: what the workspace offers of each module, laid out as Users. A row
  * is a module's agents, apps, workflows or pipelines: offered whole (what the module adds later
@@ -65,11 +72,18 @@ export function WorkspaceModules({
   workspaceId,
   api = DEFAULT_IAM_API,
   offerApi = DEFAULT_OFFER_API,
+  initialPolicy = null,
+  onPolicyChange,
 }: {
   workspaceId: string;
   api?: IamAdminApi;
   offerApi?: OfferApi;
+  /** The policy edited first (`?policy=`); "<W> access" when null. */
+  initialPolicy?: string | null;
+  /** Told when another policy is picked (null: "<W> access"). */
+  onPolicyChange?: (policyId: string | null) => void;
 }) {
+  const [policyId, setPolicyId] = useState<string | null>(initialPolicy);
   const [offer, setOffer] = useState<OfferState | null>(null);
   const [publishers, setPublishers] = useState<PublishersView | null>(null);
   const [error, setError] = useState('');
@@ -80,14 +94,14 @@ export function WorkspaceModules({
 
   const load = useCallback(async () => {
     try {
-      const read = await offerApi.read(workspaceId);
+      const read = await offerApi.read(workspaceId, policyId);
       setOffer(read);
       setError('');
       setPublishers(await api.publishers(read.scope).catch(() => null));
     } catch (e) {
       setError(message(e, 'Could not read what this workspace offers.'));
     }
-  }, [api, offerApi, workspaceId]);
+  }, [api, offerApi, workspaceId, policyId]);
 
   useEffect(() => {
     setOffer(null);
@@ -142,11 +156,13 @@ export function WorkspaceModules({
     setSaving(true);
     setNotice('');
     try {
-      setOffer(await offerApi.save(workspaceId, changes));
+      const next = await offerApi.save(workspaceId, changes, policyId);
+      setOffer(next);
       setError('');
-      setNotice(`${label} ${on ? 'added to' : 'removed from'} the offer.`);
+      const name = editsOffer(next) ? 'the offer' : (next.policy?.name ?? 'the policy');
+      setNotice(`${label} ${on ? 'added to' : 'removed from'} ${name}.`);
       // The nav and the pages under Features follow what is offered.
-      void reloadWorkspaceResources(workspaceId);
+      if (editsOffer(next)) void reloadWorkspaceResources(workspaceId);
     } catch (e) {
       setError(message(e, 'Could not save the offer.'));
     } finally {
@@ -161,15 +177,44 @@ export function WorkspaceModules({
 
   const editable = offer?.editable ?? false;
   const offeredCount = rows.filter((row) => row.offer !== 'none').length;
+  const onOffer = editsOffer(offer);
+  const access = offer?.access_policy ?? null;
+  const edited = offer?.policy ?? access;
+  const editedHref = edited ? ownerHref(edited.owner_scope, edited.id) : null;
+  const pick = (id: string) => {
+    const next = access && id === access.id ? null : id;
+    setPolicyId(next);
+    onPolicyChange?.(next);
+  };
   const colSpan = MODULE_COLUMNS.length + 1;
 
   return (
     <div className="space-y-6">
       <SettingsPageHeader
         title="Modules"
-        badge={offer ? `${offeredCount} offered · ${rows.length - offeredCount} not offered` : undefined}
-        description="What this workspace offers of each module: its agents, apps, workflows and pipelines, whole (what the module adds later too) or item by item. The pages under Features then show what is offered; each person's level decides what they do with it."
-        actions={<UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />}
+        badge={
+          offer
+            ? onOffer
+              ? `${offeredCount} offered · ${rows.length - offeredCount} not offered`
+              : `${offeredCount} granted · ${rows.length - offeredCount} not granted`
+            : undefined
+        }
+        description={
+          !onOffer && edited ? (
+            <>
+              What {editedHref ? <Link href={editedHref}>{edited.name}</Link> : edited.name} grants whoever holds it of
+              each module, whole or item by item, within the workspace&apos;s offer{access ? ` (${access.name})` : ''}.
+            </>
+          ) : (
+            "What this workspace offers of each module: its agents, apps, workflows and pipelines, whole (what the module adds later too) or item by item. The pages under Features then show what is offered; each person's level decides what they do with it."
+          )
+        }
+        actions={
+          <>
+            <PolicyPicker policies={offer?.policies} value={edited?.id} onChange={pick} disabled={saving} />
+            <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
+          </>
+        }
       />
 
       {error && (
@@ -184,8 +229,8 @@ export function WorkspaceModules({
       )}
       {offer && !editable && (
         <SettingsNotice tone="info">
-          {offer.access_policy
-            ? `Read-only: IAM does not let you change ${offer.access_policy.name}.`
+          {edited
+            ? `Read-only: IAM does not let you change ${edited.name}.`
             : 'This workspace has no access policy yet.'}
         </SettingsNotice>
       )}

@@ -602,3 +602,71 @@ class TestOntologies:
 @pytest.mark.asyncio
 async def test_the_offer_has_no_ontologies_where_the_deployment_lists_none(nexus, acme, service):
     assert (await service.read_offer("olivia", "alpha"))["ontologies"] is None
+
+
+# -- another policy of the workspace, edited as Features and Modules edit "<W> access" ----
+
+
+def _grants(nexus: NexusIam) -> object:
+    """A policy Alpha owns beside its offer, granting Files."""
+    with use_call_context(NexusIam.context("root")):
+        return nexus.iam.create_policy(
+            "Analysts grants", offer_document(Offer.of(features=["files"])), scope=ALPHA
+        )
+
+
+@pytest.mark.asyncio
+async def test_features_read_and_save_another_policy_of_the_workspace(nexus, acme, service):
+    grants = _grants(nexus)
+    state = await service.read("olivia", "alpha", grants.id)
+    assert state["policy"]["name"] == "Analysts grants"
+    assert state["access_policy"]["name"] == "Alpha access"
+    # "<W> access" first, then the workspace's other policies.
+    names = [p["name"] for p in state["policies"]]
+    assert names[0] == "Alpha access" and "Analysts grants" in names
+    rows = _rows(state)
+    assert rows["chat"]["choice"] == "nobody" and rows["chat"]["editable"]
+    # Its ceiling is the workspace's offer: Alpha does not offer the marketplace.
+    assert rows["marketplace"]["offered"] is False
+    assert "Alpha access" in {a["name"] for a in rows["chat"]["also"]}
+
+    saved = await service.save("olivia", "alpha", [FeatureChange("chat", "everyone")], grants.id)
+    assert saved["errors"] == {}
+    assert _rows(saved)["chat"]["choice"] == "everyone"
+    with as_service_account("api"):
+        assert offer_of(nexus.iam.get_policy(grants.id).document).features == {"chat", "files"}
+    # "<W> access" is left as it was.
+    assert offer_of(_access(nexus, acme).document).features == {"chat", "files"}
+
+    # Even the platform admin, who holds it: the workspace's offer allows it first.
+    refused = await service.save(
+        "root", "alpha", [FeatureChange("marketplace", "everyone")], grants.id
+    )
+    assert "Alpha access allows it first" in refused["errors"]["marketplace"]
+
+
+@pytest.mark.asyncio
+async def test_modules_read_and_save_another_policy_of_the_workspace(nexus, acme, service):
+    grants = _grants(nexus)
+    state = await service.read_offer("olivia", "alpha", grants.id)
+    assert state["policy"]["id"] == grants.id and state["editable"]
+    change = OfferChange("agents", "acme.sales", "*", True)
+    saved = await service.save_offer("olivia", "alpha", [change], grants.id)
+    assert saved["offered"]["agents"] == [{"module": "acme.sales", "name": "*"}]
+    with as_service_account("api"):
+        assert offer_of(nexus.iam.get_policy(grants.id).document).agents == {("acme.sales", "*")}
+    assert offer_of(_access(nexus, acme).document).agents == frozenset()
+
+
+@pytest.mark.asyncio
+async def test_a_policy_of_another_scope_is_not_edited_here(nexus, acme, service):
+    with use_call_context(NexusIam.context("root")):
+        elsewhere = nexus.iam.create_policy(
+            "Org grants", _features("chat"), scope=org_container("acme")
+        )
+    with pytest.raises(IAMNotFoundError):
+        await service.read("olivia", "alpha", elsewhere.id)
+    with pytest.raises(IAMNotFoundError):
+        await service.save_offer(
+            "olivia", "alpha", [OfferChange("agents", "acme.sales", "*", True)], elsewhere.id
+        )

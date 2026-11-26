@@ -45,6 +45,11 @@ export type FeatureAccessState = {
   workspace_id: string;
   scope: string;
   access_policy: PolicyRef | null;
+  /** The policy edited: "<W> access" (the workspace's offer) by default, or another policy of
+   *  the workspace (what it grants its holders, within the offer). */
+  policy?: PolicyRef | null;
+  /** The policies that may be edited ("<W> access" first). */
+  policies?: PolicyRef[];
   members_group: PrincipalRef | null;
   can: { create: boolean; attach: boolean; detach: boolean; widen: boolean };
   features: FeatureRow[];
@@ -73,12 +78,24 @@ export function changesFrom(rows: FeatureRow[], drafts: Record<string, FeatureDr
   });
 }
 
-/** Each choice of a row and whether it can be picked: an editable row; a feature the workspace
- *  does not offer can only be taken back (Nobody). */
+/** The choices of another policy than "<W> access": what it grants whoever holds it. */
+export const GRANT_CHOICES: { value: FeatureChoice; label: string; hint: string }[] = [
+  { value: 'everyone', label: 'Granted', hint: 'Whoever holds this policy uses it here, within the workspace’s offer.' },
+  { value: 'nobody', label: 'Not granted', hint: 'This policy does not grant it.' },
+];
+
+/** Whether the state is "<W> access", the workspace's offer (not another policy of it). */
+export function editsOffer(state: Pick<FeatureAccessState, 'policy' | 'access_policy'> | null): boolean {
+  return !state?.policy || !state.access_policy || state.policy.id === state.access_policy.id;
+}
+
+/** Each choice of a row and whether it can be picked: an editable row; a feature the ceiling
+ *  does not offer can only be taken back (Nobody). Another policy than the offer says Granted. */
 export function choicesOf(
   row: FeatureRow,
+  offer = true,
 ): { value: FeatureChoice; label: string; hint: string; enabled: boolean }[] {
-  return FEATURE_CHOICES.map((choice) => ({
+  return (offer ? FEATURE_CHOICES : GRANT_CHOICES).map((choice) => ({
     ...choice,
     enabled: row.editable && (row.offered || choice.value === 'nobody'),
   }));
@@ -136,12 +153,18 @@ export const FEATURE_COLUMNS: { id: FeatureColumnId; label: string }[] = [
 ];
 
 const CHOICE_LABELS: Record<FeatureChoice, string> = { everyone: 'Everyone', nobody: 'Nobody' };
+const GRANT_LABELS: Record<FeatureChoice, string> = { everyone: 'Granted', nobody: 'Not granted' };
+
+/** The columns for the policy edited: another policy than the offer says Granted. */
+export function featureColumns(offer: boolean): { id: FeatureColumnId; label: string }[] {
+  return offer ? FEATURE_COLUMNS : FEATURE_COLUMNS.map((c) => (c.id === 'offered' ? { ...c, label: 'Granted' } : c));
+}
 
 /** What a column filter sees of a row (what it holds, not an unsaved draft: a row never leaves
  *  the table while it is being changed). */
-export function featureCellValues(row: FeatureRow, column: FeatureColumnId): string[] {
+export function featureCellValues(row: FeatureRow, column: FeatureColumnId, offer = true): string[] {
   if (column === 'feature') return [row.label];
-  if (column === 'offered') return [CHOICE_LABELS[row.choice]];
+  if (column === 'offered') return [offer ? CHOICE_LABELS[row.choice] : GRANT_LABELS[row.choice]];
   return row.also.length === 0 ? ['None'] : otherPolicies(row).map(({ policy }) => policy.name);
 }
 

@@ -35,6 +35,10 @@ export type OfferState = {
   scope: string;
   /** "<W> access"; null for a workspace that has none yet. */
   access_policy: { id: string; name: string; owner_scope: string } | null;
+  /** The policy read: "<W> access" by default, or another policy of the workspace. */
+  policy?: { id: string; name: string; owner_scope: string } | null;
+  /** The policies that may be read so ("<W> access" first). */
+  policies?: { id: string; name: string; owner_scope: string }[];
   /** IAM lets the caller update "<W> access". */
   editable: boolean;
   whole_module: string;
@@ -220,15 +224,17 @@ async function failure(response: Response, fallback: string): Promise<OfferError
 
 export function createOfferApi(fetcher: Fetcher = authFetch) {
   const path = (workspaceId: string) => `/api/workspaces/${encodeURIComponent(workspaceId)}/offer`;
+  // `?policy=<id>`: another policy of the workspace, edited as its offer is (Access › Modules).
+  const of = (policyId?: string | null) => (policyId ? `?policy=${encodeURIComponent(policyId)}` : '');
   return {
-    read: async (workspaceId: string): Promise<OfferState> => {
-      const response = await fetcher(path(workspaceId));
+    read: async (workspaceId: string, policyId?: string | null): Promise<OfferState> => {
+      const response = await fetcher(`${path(workspaceId)}${of(policyId)}`);
       if (!response.ok) throw await failure(response, `Could not read the workspace's offer (HTTP ${response.status}).`);
       return (await response.json()) as OfferState;
     },
     /** One write of "<W> access": every change or none (403, 422 name why). */
-    save: async (workspaceId: string, changes: OfferChange[]): Promise<OfferState> => {
-      const response = await fetcher(path(workspaceId), {
+    save: async (workspaceId: string, changes: OfferChange[], policyId?: string | null): Promise<OfferState> => {
+      const response = await fetcher(`${path(workspaceId)}${of(policyId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ changes }),

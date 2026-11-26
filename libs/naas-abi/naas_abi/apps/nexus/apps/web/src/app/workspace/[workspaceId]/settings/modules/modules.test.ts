@@ -98,9 +98,11 @@ describe('Settings › Access › Modules', () => {
     });
     await m.click(m.host.querySelector('[data-offer-item="acme.sales/Sync"] [role="switch"]'));
     await m.flush();
-    expect(parts.offerApi.save).toHaveBeenCalledWith('ws-1', [
-      { kind: 'workflows', module: 'acme.sales', name: 'Sync', offered: true },
-    ]);
+    expect(parts.offerApi.save).toHaveBeenCalledWith(
+      'ws-1',
+      [{ kind: 'workflows', module: 'acme.sales', name: 'Sync', offered: true }],
+      null,
+    );
     expect(m.host.querySelector('[data-modules-notice]')?.textContent).toBe('Sync added to the offer.');
     expect(m.host.querySelector('tr[data-module="workflows|acme.sales"] [data-field="offer"]')?.textContent).toContain(
       '1 item: Sync',
@@ -108,9 +110,11 @@ describe('Settings › Access › Modules', () => {
 
     await m.click(wholeSwitch(m, 'agents|acme.people'));
     await m.flush();
-    expect(parts.offerApi.save).toHaveBeenLastCalledWith('ws-1', [
-      { kind: 'agents', module: 'acme.people', name: '*', offered: false },
-    ]);
+    expect(parts.offerApi.save).toHaveBeenLastCalledWith(
+      'ws-1',
+      [{ kind: 'agents', module: 'acme.people', name: '*', offered: false }],
+      null,
+    );
   });
 
   it('is read-only when IAM does not let the caller change "<W> access"', async () => {
@@ -119,5 +123,44 @@ describe('Settings › Access › Modules', () => {
     const m = await render(parts);
     expect(wholeSwitch(m, 'agents|acme.people')?.disabled).toBe(true);
     expect(m.host.textContent).toContain('Read-only: IAM does not let you change Sales access.');
+  });
+
+  it('edits another policy of the workspace, picked in the header', async () => {
+    const GRANTS = { id: 'pol_grants', name: 'Analysts grants', owner_scope: WS };
+    const ACCESS = OFFER.access_policy!;
+    const onOffer = { ...OFFER, policy: ACCESS, policies: [ACCESS, GRANTS] } as OfferState;
+    const onGrants = {
+      ...onOffer,
+      policy: GRANTS,
+      offered: { agents: [], apps: [], workflows: [], pipelines: [] },
+    } as OfferState;
+    const parts = setup(onGrants);
+    parts.offerApi.read.mockImplementation(async (_ws: string, policy?: string | null) =>
+      policy === 'pol_grants' ? onGrants : onOffer,
+    );
+    const onPolicyChange = vi.fn();
+    mounted = await mount(WorkspaceModules, {
+      workspaceId: 'ws-1',
+      api: parts.api,
+      offerApi: parts.offerApi as unknown as OfferApi,
+      onPolicyChange,
+    });
+    await mounted.flush();
+    await mounted.select(mounted.host.querySelector('select[data-field="policy"]'), 'pol_grants');
+    await mounted.flush();
+    expect(parts.offerApi.read).toHaveBeenLastCalledWith('ws-1', 'pol_grants');
+    expect(onPolicyChange).toHaveBeenCalledWith('pol_grants');
+    expect(mounted.host.textContent).toContain('0 granted · 2 not granted');
+
+    await mounted.click(wholeSwitch(mounted, 'agents|acme.people'));
+    await mounted.flush();
+    expect(parts.offerApi.save).toHaveBeenLastCalledWith(
+      'ws-1',
+      [{ kind: 'agents', module: 'acme.people', name: '*', offered: true }],
+      'pol_grants',
+    );
+    expect(mounted.host.querySelector('[data-modules-notice]')?.textContent).toBe(
+      'Every agent of acme.people added to Analysts grants.',
+    );
   });
 });

@@ -480,16 +480,51 @@ class FeatureAccessService:
             raise IAMNotFoundError("Workspace not found")
         return container, await self._defaults_of(container)
 
-    async def read(self, user: Any, workspace_id: str) -> dict[str, Any]:
-        """Each enabled feature: whether the workspace offers it (Everyone) or not
-        (Nobody), the other policies naming it there, whether its organization
-        offers it, and whether the caller may change it."""
+    async def read(
+        self, user: Any, workspace_id: str, policy_id: str | None = None
+    ) -> dict[str, Any]:
+        """Each enabled feature: whether the policy edited (``policy_id``, "<W> access"
+        by default: the workspace's offer) allows it (Everyone) or not (Nobody), the
+        other policies naming it there, whether the ceiling above offers it, and whether
+        the caller may change it."""
         container, record = await self._where(workspace_id)
         session = self._gateway.bind(user)
         features = list(self._features())
         return await run_in_threadpool(
-            self._snapshot, session, workspace_id, container, record, features
+            self._snapshot, session, workspace_id, container, record, features, policy_id
         )
+
+    def _target(
+        self, container: str, access_id: str | None, policy_id: str | None
+    ) -> Policy | None:
+        """The policy a page edits: "<W> access" by default (the workspace's offer),
+        or another policy the workspace owns, not managed by IAM (what it grants its
+        holders, within the offer)."""
+        if not policy_id or policy_id == access_id:
+            return self._gateway.policy(access_id) if access_id else None
+        policy = self._gateway.policy(policy_id)
+        if policy is None or policy.owner_scope != container:
+            raise IAMNotFoundError("This workspace has no such policy")
+        if policy.managed:
+            raise ValueError(f"{policy.name} is managed by IAM: it is not edited here")
+        return policy
+
+    def _choices(
+        self, session: IIAMService, container: str, access: Policy | None
+    ) -> list[dict[str, Any]]:
+        """The policies a page may edit: "<W> access" first, then the workspace's own
+        policies the caller may list, by name."""
+        others = sorted(
+            (
+                p
+                for p in self._policies_at(session, container)
+                if not p.managed
+                and p.owner_scope == container
+                and (access is None or p.id != access.id)
+            ),
+            key=lambda p: p.name.lower(),
+        )
+        return [_ref(p) for p in ([access] if access is not None else []) + others]
 
     def _chain(self, policy_id: str | None) -> list[Policy]:
         """The access policy and the policies above it, read as Nexus (the ceiling is
@@ -552,16 +587,27 @@ class FeatureAccessService:
         container: str,
         record: Any,
         features: list[str],
+        policy_id: str | None = None,
     ) -> dict[str, Any]:
         access_id = getattr(record, "access_policy_id", None)
         members_id = getattr(record, "members_group_id", None)
         can = self._can(session, container, access_id)
         chain = self._chain(access_id)
         access = chain[0] if chain else None
-        offer = offer_of(access.document) if access is not None else Offer()
+        target = self._target(container, access_id, policy_id)
+        on_offer = target is None or access is None or target.id == access.id
+        if not on_offer and target is not None:
+            can = {
+                **can,
+                "widen": session.authorize(
+                    "iam:UpdatePolicy", policy_resource(target.id, container)
+                ).allowed,
+            }
+        offer = offer_of(target.document) if target is not None else Offer()
         grantable = session.grantable(container)
+        target_id = target.id if target is not None else access_id
         others = [
-            p for p in self._policies_at(session, container) if not p.managed and p.id != access_id
+            p for p in self._policies_at(session, container) if not p.managed and p.id != target_id
         ]
         attached: dict[str, bool] = {}
 
@@ -593,12 +639,17 @@ class FeatureAccessService:
                     key,
                     resource,
                     container,
-                    access=access,
+                    access=target,
                     offer=offer,
                     can=can,
-                    # What the organization offers (the chain above "<W> access");
-                    # a workspace in none has nothing above it.
-                    offered_here=offered(chain[1:], resource, container) if chain[1:] else True,
+                    # The ceiling: for "<W> access", what the organization offers (the
+                    # chain above it; a workspace in none has nothing above it); for
+                    # another policy, what the workspace offers.
+                    offered_here=(
+                        (offered(chain[1:], resource, container) if chain[1:] else True)
+                        if on_offer
+                        else (offered(chain, resource, container) if chain else True)
+                    ),
                     held=holds(grantable, resource, container),
                     also=also,
                 )
@@ -607,6 +658,9 @@ class FeatureAccessService:
             "workspace_id": workspace_id,
             "scope": container,
             "access_policy": _ref(access) if access is not None else None,
+            # The policy edited, and those that may be ("<W> access" first).
+            "policy": _ref(target) if target is not None else None,
+            "policies": self._choices(session, container, access),
             "members_group": self._principal(members_id) if members_id else None,
             "can": can,
             "features": rows,
@@ -657,14 +711,20 @@ class FeatureAccessService:
     # -- changing -------------------------------------------------------------------
 
     async def save(
-        self, user: Any, workspace_id: str, changes: Sequence[FeatureChange]
+        self,
+        user: Any,
+        workspace_id: str,
+        changes: Sequence[FeatureChange],
+        policy_id: str | None = None,
     ) -> dict[str, Any]:
-        """Apply each change, feature by feature, as the caller; a refused one is
-        named in ``errors`` and the others still apply. Answers the state after."""
+        """Apply each change, feature by feature, as the caller, to the policy edited
+        (``policy_id``, "<W> access" by default); a refused one is named in ``errors``
+        and the others still apply. Answers the state after."""
         container, record = await self._where(workspace_id)
         features = list(self._features())
         check_changes(changes, features)
-        before = await self.read(user, workspace_id)
+        before = await self.read(user, workspace_id, policy_id)
+        target_id = (before.get("policy") or {}).get("id")
         rows = {row["key"]: row for row in before["features"]}
         errors: dict[str, str] = {}
         for change in changes:
@@ -679,7 +739,7 @@ class FeatureAccessService:
                 await self._set_offer(
                     user,
                     workspace_id,
-                    record.access_policy_id,
+                    target_id,
                     f"feature-access.{change.choice}",
                     f"{workspace_id}/{change.feature}",
                     lambda offer, key=change.feature, on=change.choice == "everyone": replace(
@@ -689,7 +749,7 @@ class FeatureAccessService:
                 )
             except (PermissionDeniedError, IAMNotFoundError, IAMConflictError, ValueError) as exc:
                 errors[change.feature] = str(exc)
-        after = await self.read(user, workspace_id)
+        after = await self.read(user, workspace_id, policy_id)
         return {**after, "errors": errors}
 
     @staticmethod
@@ -699,6 +759,12 @@ class FeatureAccessService:
         if not row["editable"]:
             return row["reason"]
         if change.choice != "nobody" and not row["offered"]:
+            edited, access = state.get("policy"), state.get("access_policy")
+            if edited and access and edited.get("id") != access.get("id"):
+                return (
+                    f"{row['label']} is not offered in this workspace: "
+                    f"{access.get('name')} allows it first."
+                )
             return (
                 f"{row['label']} is not offered in this workspace's organization: "
                 "a platform administrator widens it first."
@@ -735,9 +801,12 @@ class FeatureAccessService:
 
     # -- agents, apps, workflows and pipelines ----------------------------------------
 
-    async def read_offer(self, user: Any, workspace_id: str) -> dict[str, Any]:
-        """The agents, apps, workflows and pipelines "<W> access" offers by name (or
-        whole module), and whether the caller may change them."""
+    async def read_offer(
+        self, user: Any, workspace_id: str, policy_id: str | None = None
+    ) -> dict[str, Any]:
+        """The agents, apps, workflows and pipelines the policy edited (``policy_id``,
+        "<W> access" by default: the workspace's offer) allows by name (or whole
+        module), and whether the caller may change them."""
         container, record = await self._where(workspace_id)
         access_id = getattr(record, "access_policy_id", None)
         session = self._gateway.bind(user)
@@ -745,13 +814,20 @@ class FeatureAccessService:
 
         def snapshot() -> dict[str, Any]:
             access = self._gateway.policy(access_id) if access_id else None
-            offer = offer_of(access.document) if access is not None else Offer()
-            can = self._can(session, container, access_id)
-            widen = access is not None and can["widen"]
+            target = self._target(container, access_id, policy_id)
+            offer = offer_of(target.document) if target is not None else Offer()
+            widen = (
+                target is not None
+                and session.authorize(
+                    "iam:UpdatePolicy", policy_resource(target.id, container)
+                ).allowed
+            )
             return {
                 "workspace_id": workspace_id,
                 "scope": container,
                 "access_policy": _ref(access) if access is not None else None,
+                "policy": _ref(target) if target is not None else None,
+                "policies": self._choices(session, container, access),
                 "editable": widen,
                 "whole_module": WHOLE_MODULE,
                 "offered": _offer_json(offer),
@@ -760,7 +836,7 @@ class FeatureAccessService:
                     organization=org_of(container),
                     # What the caller holds, given grants left out (IAM's ``grantable``).
                     grantable=session.grantable(PLATFORM) if widen else [],
-                    access=access,
+                    access=target,
                     widen=widen,
                 ),
                 "my_files": my_files_json(),
@@ -769,20 +845,26 @@ class FeatureAccessService:
                 "models": models_json(offer, listed_chat_models()),
                 # Settings › Maps › Access edits it: shown here, not changed.
                 "maps": given_maps.summary(offer),
-                "ontologies": self._ontologies_json(offer, listing, access, widen),
+                "ontologies": self._ontologies_json(offer, listing, target, widen),
             }
 
         return await run_in_threadpool(snapshot)
 
     async def save_offer(
-        self, user: Any, workspace_id: str, changes: Sequence[OfferChange]
+        self,
+        user: Any,
+        workspace_id: str,
+        changes: Sequence[OfferChange],
+        policy_id: str | None = None,
     ) -> dict[str, Any]:
         """Offer (or stop offering) each item, in one write of "<W> access" as the
         caller: IAM refuses an item the caller does not hold
         (``PermissionDeniedError``, 403) or one beyond the organization's offer
         (``ValueError``, 422), and then nothing changes."""
         check_offer_changes(changes)
-        _container, record = await self._where(workspace_id)
+        container, record = await self._where(workspace_id)
+        access_id = getattr(record, "access_policy_id", None)
+        target = await run_in_threadpool(self._target, container, access_id, policy_id)
 
         def apply(offer: Offer) -> Offer:
             items = {kind: set(offer.items(kind)) for kind in SECTIONS}
@@ -796,12 +878,12 @@ class FeatureAccessService:
         await self._set_offer(
             user,
             workspace_id,
-            getattr(record, "access_policy_id", None),
+            target.id if target is not None else None,
             "workspace-offer.update",
             workspace_id,
             apply,
         )
-        state = await self.read_offer(user, workspace_id)
+        state = await self.read_offer(user, workspace_id, policy_id)
         _log.info(f"Offer of {workspace_id} changed: {detail}")
         return state
 
