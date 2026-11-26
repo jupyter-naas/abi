@@ -30,6 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphProtectedError,
     GraphServiceUnavailableError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import LastOrgAdminError
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
     OntologyFileNotFoundError,
     OntologyParseError,
@@ -106,6 +107,8 @@ EXCEPTION_TO_HTTP: dict[type[Exception], tuple[int, DetailResolver]] = {
     SecretAlreadyExistsError: (400, lambda _exc: "Secret with this key already exists"),
     SecretNotFoundError: (404, lambda _exc: "Secret not found"),
     UserNotFoundError: (404, lambda _exc: "User not found"),
+    # The last Org Admin of an organization stays (#1585).
+    LastOrgAdminError: (409, lambda _exc: "An organization keeps at least one admin"),
 }
 
 

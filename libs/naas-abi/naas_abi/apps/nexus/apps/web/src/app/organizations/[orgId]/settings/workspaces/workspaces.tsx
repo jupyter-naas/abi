@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
+import { readOrganization } from '@/lib/organization-resource';
 import { useOrganizationStore } from '@/stores/organization';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspaceHomePath } from '@/lib/feature-access';
@@ -165,7 +166,7 @@ export default function OrganizationWorkspacesPage() {
       try {
         const [wsRes, orgRes] = await Promise.all([
           authFetch(`/api/organizations/${orgId}/workspaces`),
-          authFetch(`/api/organizations/${orgId}`),
+          readOrganization(orgId),
         ]);
         if (cancelled) return;
         if (!wsRes.ok) {

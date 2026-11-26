@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v0.5.0 (2026-11-23)
+
+### Chores
+
+- Maintenance across core, nexus, marketplace and deploy templates
+  ([`232291c`](https://github.com/jupyter-naas/abi/commit/232291c110f3961bfeabc00fbcc3db6c1dc72537))
+
+### Features
+
+- **iam**: Membership groups and the ${my workspaces} scope
+  ([#1584](https://github.com/jupyter-naas/abi/pull/1584),
+  [`ae12cc4`](https://github.com/jupyter-naas/abi/commit/ae12cc444fd44d2c67a3ca506846deee1ab9c97c))
+
+
 ## v0.4.0 (2026-11-16)
 
 ### Features

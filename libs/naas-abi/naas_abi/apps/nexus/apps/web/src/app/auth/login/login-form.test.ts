@@ -19,6 +19,12 @@ vi.mock('next/link', () => ({
     React.createElement('a', { href }, children),
 }));
 vi.mock('@/lib/config', () => ({ getApiUrl: () => 'https://api.test' }));
+// What the tenant configuration sets on top of the defaults, per test.
+let tenantOverrides: Record<string, unknown> = {};
+vi.mock('@/contexts/tenant-context', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/contexts/tenant-context')>();
+  return { ...actual, useTenant: () => ({ ...actual.useTenant(), ...tenantOverrides }) };
+});
 const storage = new Map<string, string>();
 vi.mock('@/lib/safe-storage', () => ({
   getSafeStorage: () => ({
@@ -91,6 +97,7 @@ describe('the login page', () => {
     storage.clear();
     push.mockReset();
     search = '';
+    tenantOverrides = {};
     providerList = [{ name: 'acme', display_name: 'Acme' }];
     defaultProvider = 'acme';
     signInWithProvider.mockReset();
@@ -204,5 +211,88 @@ describe('the login page', () => {
     await submit();
     expect(signInWithProvider).not.toHaveBeenCalled();
     expect(host.textContent).toContain('Enter a valid email address');
+  });
+});
+
+describe('the login page branding', () => {
+  beforeEach(() => {
+    search = '';
+    tenantOverrides = {};
+    providerList = [{ name: 'acme', display_name: 'Acme' }];
+    defaultProvider = 'acme';
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => api(String(url), init)));
+    useAuthStore.setState({ isAuthenticated: false, signInWithProvider });
+  });
+  afterEach(() => {
+    act(() => root?.unmount());
+    host?.remove();
+    vi.unstubAllGlobals();
+  });
+
+  const heading = () => host.querySelector('h1')!;
+  const logo = () => host.querySelector<HTMLImageElement>('img')!;
+  const footerLink = () => host.querySelector<HTMLAnchorElement>('a[target="_blank"]');
+
+  it('keeps the Welcome typewriter, a 48px logo and no footer link by default', async () => {
+    tenantOverrides = { logo_rectangle_url: 'https://example.org/logo.png' };
+    await mount();
+    // The typewriter: the typed phrase and its caret.
+    expect(heading().querySelectorAll('span')).toHaveLength(2);
+    expect(host.textContent!.match(/Sign in to continue/g)).toHaveLength(1);
+    expect(logo().style.height).toBe('48px');
+    expect(footerLink()).toBeNull();
+  });
+
+  it('shows the configured heading in place of the typewriter', async () => {
+    tenantOverrides = { login_heading: 'Acme Platform' };
+    await mount();
+    expect(heading().textContent).toBe('Acme Platform');
+    expect(heading().querySelector('span')).toBeNull();
+    expect(host.textContent!.match(/Sign in to continue/g)).toHaveLength(1);
+  });
+
+  it('sizes the wide logo, and the square one with its radius, from logo_height', async () => {
+    tenantOverrides = { logo_rectangle_url: 'https://example.org/wide.png', logo_height: 96 };
+    await mount();
+    expect(logo().style.height).toBe('96px');
+    expect(logo().className).toContain('max-w-full');
+    act(() => root.unmount());
+    host.remove();
+
+    tenantOverrides = { logo_url: 'https://example.org/square.png', logo_height: 96, login_border_radius: '8' };
+    await mount();
+    // Square, and shrinking with the card on a narrow screen (its height follows the width).
+    expect([logo().style.width, logo().style.maxWidth, logo().style.height, logo().style.borderRadius]).toEqual([
+      '96px',
+      '100%',
+      'auto',
+      '8px',
+    ]);
+    expect(logo().className).toContain('max-w-full');
+  });
+
+  it('opens the footer link in a new tab', async () => {
+    tenantOverrides = {
+      login_footer_link_label: 'Grant 123',
+      login_footer_link_url: 'https://example.org/grant/123',
+    };
+    await mount();
+    const link = footerLink()!;
+    expect(link.textContent).toBe('Grant 123');
+    expect(link.getAttribute('href')).toBe('https://example.org/grant/123');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(link.className).toContain('whitespace-nowrap');
+  });
+
+  it('puts the footer link on its own line under the footer text', async () => {
+    tenantOverrides = {
+      login_footer_text: 'Acme Research operates this platform.',
+      login_footer_link_label: 'Grant 123',
+      login_footer_link_url: 'https://example.org/grant/123',
+    };
+    await mount();
+    const footer = footerLink()!.parentElement!;
+    expect([...footer.childNodes].map((n) => n.nodeName)).toEqual(['#text', 'BR', 'A']);
+    expect(footer.textContent).toBe('Acme Research operates this platform.Grant 123');
   });
 });

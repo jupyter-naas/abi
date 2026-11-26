@@ -21,6 +21,13 @@ TABLES = (UserModel, OrganizationModel, WorkspaceModel)
 def iam(nexus_iam):
     """Roles are IAM's: ``u-existing`` already holds ``member`` of ``org-1``, changed
     after the snapshot was taken, and ``admin`` of nothing else."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+        CONTAINER_DEFAULTS,
+    )
+
+    # The records another test's IAM made are not this one's.
+    CONTAINER_DEFAULTS._known.clear()
+    CONTAINER_DEFAULTS._missing.clear()
     nexus_iam.org("org-1")
     nexus_iam.workspace("org-1", "ws-1")
     nexus_iam.grant("u-existing", "member", "abi:nexus:organization/org-1")
@@ -201,3 +208,77 @@ def test_load_entries_reads_the_snapshot_format(tmp_path) -> None:
     path.write_text("# header\nusers:\n  - email: a@example.com\n    name: A\n")
 
     assert load_entries(path) == [{"email": "a@example.com", "name": "A"}]
+
+
+@pytest.mark.asyncio
+async def test_the_access_model_format_is_read(db) -> None:
+    """#1589: a level, org admin, workspace admin. An organization named with no
+    org admin and none of its workspaces is "<O> people" (its ``member`` here)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+    ws = "abi:nexus:organization/org-1/nexus:workspace/ws-1"
+    org = "abi:nexus:organization/org-1"
+    report = await import_users(
+        db,
+        [
+            {
+                "email": "viewer@example.com",
+                "level": "viewer",
+                "organizations": [{"slug": "org"}],
+                "workspaces": [{"slug": "one"}],
+            },
+            {"email": "oadmin@example.com", "organizations": [{"slug": "org", "org_admin": True}]},
+            {"email": "people@example.com", "organizations": [{"slug": "org"}]},
+            {"email": "wadmin@example.com", "workspaces": [{"slug": "one", "admin": True}]},
+        ],
+    )
+    await db.commit()
+    ids = {u.email: u.id for u in (await db.execute(select(UserModel))).scalars()}
+
+    assert await MEMBERSHIPS.role_at(ids["viewer@example.com"], ws) == "viewer"
+    assert await MEMBERSHIPS.role_at(ids["viewer@example.com"], org) is None
+    assert await MEMBERSHIPS.role_at(ids["oadmin@example.com"], org) == "admin"
+    assert await MEMBERSHIPS.role_at(ids["people@example.com"], org) == "member"
+    assert await MEMBERSHIPS.role_at(ids["wadmin@example.com"], ws) == "admin"
+    assert report.organization_memberships_created == 2
+    assert report.workspace_memberships_created == 2
+
+
+@pytest.mark.asyncio
+async def test_the_role_keys_of_before_are_read_with_a_warning(db, caplog) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+    with caplog.at_level("WARNING"):
+        await import_users(
+            db, [{"email": "old@example.com", "organizations": [{"slug": "org", "role": "owner"}]}]
+        )
+    await db.commit()
+    old = (
+        await db.execute(select(UserModel).where(UserModel.email == "old@example.com"))
+    ).scalar_one()
+
+    # Owner is no longer assigned: an org admin.
+    assert await MEMBERSHIPS.role_at(old.id, "abi:nexus:organization/org-1") == "admin"
+    assert "deprecated" in caplog.text and "org_admin" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_capabilities_are_joined_in_each_of_the_persons_organizations(db) -> None:
+    report = await import_users(
+        db,
+        [
+            {
+                "email": "runner@example.com",
+                "workspaces": [{"slug": "one"}],
+                "capabilities": ["models_all", "workflow_runners", "nope"],
+            }
+        ],
+    )
+
+    # "Models · all" is the platform's; "Workflow runners" needs the organization's
+    # access to bound it, which an organization recorded before #1585 has not.
+    assert report.capabilities_joined == 1
+    assert {m for m in report.missing if m.startswith("capability")} == {
+        "capability workflow_runners of org-1: no organization access to bound it",
+        "capability nope: not a capability group",
+    }

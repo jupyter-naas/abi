@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.3.1 (2026-11-23)
+
+### Bug Fixes
+
+- **idp**: Publish P-256 coordinates at their full width
+  ([`ea99fa2`](https://github.com/jupyter-naas/abi/commit/ea99fa23cf3c586bf1ed07f91ef0eaa4c39fa843))
+
+### Testing
+
+- **idp**: Add PyJWT to the dev group
+  ([`bcae9b5`](https://github.com/jupyter-naas/abi/commit/bcae9b5a562efa5aef9fadcee39a2db05e007e15))
+
+
 ## v0.3.0 (2026-11-18)
 
 ### Bug Fixes

@@ -4,17 +4,16 @@ import { Suspense, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { CreateUserForm } from '@/components/people/create-user-form';
-import { workspaceAccessScope } from '@/components/access/access-scope';
 import { workspaceOrganization } from '@/components/shell/settings-nav';
-import { addableRoles } from '@/components/people/add-people-model';
 import { AlertCircle } from 'lucide-react';
 import { SettingsLoading, SettingsNotice } from '@/components/settings/settings-ui';
 import { createUserPrefill, createdMessage, membersAddedHref } from '@/lib/people';
 
 /**
  * Create user (Workspace settings › Members › New): the form Organization settings › Users ›
- * New uses, with the workspace's organization shown read-only, this workspace attached, and no
- * org role (a workspace admin grants none). Opened from Add people's "Create user '<text>'",
+ * New uses, with the workspace's organization shown read-only and this workspace joined: their
+ * level (in all their workspaces), the workspace admin toggle and capability groups (#1589). A
+ * workspace admin makes nobody an org admin. Opened from Add people's "Create user '<text>'",
  * prefilled from `?email=` or `?name=`.
  */
 function WorkspaceCreateUser() {
@@ -26,17 +25,13 @@ function WorkspaceCreateUser() {
   const organizationId = workspaceOrganization(workspace);
   const membersPath = `/workspace/${workspaceId}/settings/users`;
   const prefill = useMemo(() => createUserPrefill(search), [search]);
-  const policyScope = useMemo(
-    () => (workspace?.id ? workspaceAccessScope(organizationId, workspace.id).value : null),
-    [organizationId, workspace?.id]
-  );
 
   if (!workspace) return <SettingsLoading label="Loading workspace…" />;
   // The API decides; a known role that may not add anyone is told so before typing.
   if (workspace.currentUserRole && !['owner', 'admin'].includes(workspace.currentUserRole)) {
     return (
       <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
-        Only workspace owners and admins can add members.
+        Only workspace admins can add members.
       </SettingsNotice>
     );
   }
@@ -45,11 +40,9 @@ function WorkspaceCreateUser() {
     <CreateUserForm
       organization={{ fixed: { id: organizationId ?? '', name: workspace.organizationName ?? '' } }}
       attachedWorkspace={{ id: workspace.id, name: workspace.name }}
-      orgRoles={[]}
-      workspaceRoles={addableRoles(workspace.currentUserRole)}
+      organizationRoute={false}
       prefill={prefill}
-      policyScope={policyScope}
-      subtitle="Add someone to this workspace. They are created at once and invited until they first sign in; an email that already has an account is linked to it. They join the organization's directory with no organization role."
+      subtitle="Add someone to this workspace. They are created at once and invited until they first sign in; an email that already has an account is linked to it. They join the organization's directory through this workspace."
       back={{ href: membersPath, label: 'Users' }}
       onCancel={() => router.push(membersPath)}
       onCreated={(created) => {

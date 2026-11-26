@@ -24,8 +24,10 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
+from naas_abi.apps.nexus.access_config import NexusMigrationConfig, NexusModelsConfig
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
+from naas_abi.apps.nexus.tenant_login_config import TenantLoginConfig
 from naas_abi.apps.nexus.user_seed_config import UserSeedConfig
 
 
@@ -141,8 +143,12 @@ class MarketplaceConfig(BaseModel):
     )
 
 
-class TenantConfig(BaseModel):
-    """Tenant branding surfaced to the browser (tab title, favicon, etc.)."""
+class TenantConfig(TenantLoginConfig):
+    """Tenant branding surfaced to the browser (tab title, favicon, etc.).
+
+    The login heading, logo height and footer link come from
+    :class:`TenantLoginConfig`, shared with the other configuration model.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -171,12 +177,6 @@ class TenantConfig(BaseModel):
     show_terms_footer: bool = False
     show_powered_by: bool = True
     login_footer_text: str | None = None
-    # Static login heading. Unset keeps the Welcome typewriter.
-    login_heading: str | None = None
-    # Logo image height in pixels. 48 matches the login page h-12 default.
-    logo_height: int = 48
-    login_footer_link_label: str | None = None
-    login_footer_link_url: str | None = None
     apps: list["ExternalAppConfig"] = Field(default_factory=list)
 
 
@@ -249,6 +249,9 @@ class FeatureFlagsConfig(BaseModel):
     enabled_features: list[FeatureKey] = Field(
         default_factory=_default_enabled_features
     )
+    # The features each level uses, within each workspace's offer (the Nexus
+    # Settings' feature_flags.level_features): unset, every level its default.
+    level_features: dict[Literal["viewer", "member"], list[FeatureKey]] | None = None
     # Deprecated: no role brings a feature, a policy does. Nexus reads these once,
     # when it moves what each role had into each workspace's policies, then
     # warns while a configuration still sets them. Left unset (None), Nexus
@@ -299,7 +302,10 @@ class OrganizationMemberSeedConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     email: EmailStr
+    # Deprecated (#1589): ``org_admin`` and ``level``.
     role: Literal["owner", "admin", "member"] = "member"
+    org_admin: bool = False
+    level: Literal["viewer", "member"] | None = None
 
 
 class WorkspaceMemberSeedConfig(BaseModel):
@@ -308,7 +314,10 @@ class WorkspaceMemberSeedConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     email: EmailStr
+    # Deprecated (#1589): ``admin`` and ``level``.
     role: Literal["owner", "admin", "member", "viewer"] = "member"
+    admin: bool = False
+    level: Literal["viewer", "member"] | None = None
 
 
 class WorkspaceSeedConfig(BaseModel):
@@ -344,6 +353,10 @@ class WorkspaceSeedConfig(BaseModel):
     # Catalog ``app_id`` values (``module.path:folder``) to enable at boot.
     # ``None`` means no seed; missing app-config rows default to off.
     apps: list[str] | None = None
+    # Shared modules the workspace offers whole (every agent, app, workflow and
+    # pipeline of each, by module id): listed in its access policy, "<W> access",
+    # beside the agents and apps above. A module listed nowhere is offered nowhere.
+    modules: list[str] | None = None
     # Ontology catalog ids (``module:filename.ttl``). Exclusive when a list
     # is set: listed on, others off. Missing, null and empty lists show none.
     # owl:imports are not implied; explicitly list shared dependency files too.
@@ -529,6 +542,14 @@ class NexusConfig(BaseModel):
     )
     users: list[UserSeedConfig] = Field(default_factory=list)
     organizations: list[OrganizationSeedConfig] = Field(default_factory=list)
+    # Off: only organization admins create workspaces (in their organization) and
+    # only the platform admins create organizations. On: every user may also
+    # create a personal workspace, in no organization.
+    personal_workspaces: bool = False
+    # The model sets of the levels (``NexusModelsConfig``).
+    models: NexusModelsConfig = Field(default_factory=NexusModelsConfig)
+    # The access move's choices (``NexusMigrationConfig``).
+    migration: NexusMigrationConfig = Field(default_factory=NexusMigrationConfig)
 
 
 # Settings the Nexus ``Settings`` also reads from the environment. Passing
@@ -631,6 +652,15 @@ class ABIModule(BaseModule):
                 tenant:
                     tab_title: "My Portal"
                     favicon_url: "https://example.com/favicon.ico"
+                    # Login page: a static heading in place of the Welcome
+                    # typewriter, the logo image height (16 to 256 px,
+                    # default 48), and a footer link under the footer text
+                    # (label and absolute http(s) URL, set together).
+                    login_heading: "Acme Platform"
+                    logo_height: 96
+                    login_footer_text: "Acme Research operates this platform."
+                    login_footer_link_label: "Grant 123"
+                    login_footer_link_url: "https://example.org/grant/123"
                 # Extra Slides seed trees. Additive: ABI's own seeds are
                 # always served, under the reserved "abi" namespace.
                 slides_template_sources:

@@ -78,4 +78,18 @@ describe('the access store', () => {
 
     expect(store.getState()).toMatchObject({ userId: 'u2', status: 'error', actions: null });
   });
+
+  it('does not resurrect an old grant after the same account returns', async () => {
+    let finish!: (response: Response) => void;
+    const fetcher = vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }))
+      .mockImplementation(async () => answer(200, { actions: {} }));
+    const store = createPlatformSettingsAccessStore(fetcher);
+    const older = store.getState().load('u1');
+    await store.getState().load('u2');
+    await store.getState().load('u1');
+    finish(answer(200, { actions: ADMIN }));
+    await older;
+    expect(store.getState()).toMatchObject({ userId: 'u1', status: 'ready', actions: {} });
+  });
 });

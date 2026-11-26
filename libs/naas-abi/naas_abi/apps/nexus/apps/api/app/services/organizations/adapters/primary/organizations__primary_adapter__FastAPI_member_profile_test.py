@@ -198,24 +198,11 @@ def test_admin_cannot_change_own_org_role() -> None:
     assert resp.status_code == 400
 
 
-def test_admin_cannot_change_owner_org_role() -> None:
-    # IAM: only an owner takes the owner role away.
-    client, _ = _client(user="admin")
-    resp = client.patch("/organizations/org-1/members/owner", json={"role": "admin"})
-    assert resp.status_code == 403
-
-
-def test_only_an_owner_assigns_the_owner_role() -> None:
-    client, _ = _client(user="admin")
-    assert (
-        client.patch("/organizations/org-1/members/member", json={"role": "owner"}).status_code
-        == 403
-    )
-    client, _ = _client(user="owner")
-    assert (
-        client.patch("/organizations/org-1/members/member", json={"role": "owner"}).status_code
-        == 200
-    )
+def test_owner_is_no_longer_assigned() -> None:
+    for user in ("admin", "owner"):
+        client, _ = _client(user=user)
+        resp = client.patch("/organizations/org-1/members/member", json={"role": "owner"})
+        assert resp.status_code == 400, resp.text
 
 
 def test_admin_reads_account_and_membership_details(team) -> None:
@@ -234,7 +221,14 @@ def test_admin_reads_account_and_membership_details(team) -> None:
     assert body["organization_profile"]["name"] == "Member (Acme)"
     assert body["organization_profile"]["organization"] is None
     assert body["workspaces"] == [
-        {"id": "ws-1", "name": "Audit", "slug": "audit", "role": "member", "source": "workspace"}
+        {
+            "id": "ws-1",
+            "name": "Audit",
+            "slug": "audit",
+            "role": "member",
+            "source": "workspace",
+            "admin": False,
+        }
     ]
 
 
@@ -251,8 +245,22 @@ def test_an_org_admin_reaches_every_workspace_of_the_org_and_it_shows(team) -> N
     assert resp.status_code == 200, resp.text
     # In ws-1 the admin holds the role itself; ws-2 they reach through the org.
     assert resp.json()["workspaces"] == [
-        {"id": "ws-1", "name": "Audit", "slug": "audit", "role": "admin", "source": "workspace"},
-        {"id": "ws-2", "name": "Tax", "slug": "tax", "role": "admin", "source": "organization"},
+        {
+            "id": "ws-1",
+            "name": "Audit",
+            "slug": "audit",
+            "role": "admin",
+            "source": "workspace",
+            "admin": True,
+        },
+        {
+            "id": "ws-2",
+            "name": "Tax",
+            "slug": "tax",
+            "role": "admin",
+            "source": "organization",
+            "admin": True,
+        },
     ]
 
 

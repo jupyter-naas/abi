@@ -117,6 +117,23 @@ describe('NewUser', () => {
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ email: 'carol@example.com' });
   });
 
+  it('makes them a platform admin when "Platform admin" is ticked', async () => {
+    const { fetcher, calls } = api(() => ({ status: 200, body: INVITED }));
+    mounted = await mount(NewUser, { fetcher });
+    await mounted.flush();
+    await mounted.type(field('invite-email'), 'carol@example.com');
+    expect((field('invite-platform-admin') as HTMLInputElement).checked).toBe(false);
+    await mounted.click(field('invite-platform-admin'));
+    await mounted.click(create());
+    await mounted.flush();
+    expect(calls.find((c) => c.method === 'POST')?.body).toEqual({
+      email: 'carol@example.com',
+      provider: 'builtin',
+      platform_admin: true,
+    });
+    expect((field('invite-platform-admin') as HTMLInputElement).checked).toBe(false);
+  });
+
   it('says why the API refused', async () => {
     const { fetcher } = api(() => ({ status: 403, body: { detail: 'Not allowed to invite users' } }));
     mounted = await mount(NewUser, { fetcher });

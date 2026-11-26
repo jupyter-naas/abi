@@ -6,13 +6,20 @@ export type Loaded<T> =
   | { ok: true; data: T }
   | { ok: false; status: number; source?: string; reason: string };
 
-type Fetcher = (url: string) => Promise<Response>;
+type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
 
-/** GET a SysAdmin view. A 503 names the source that is down (NATS, discovery, monitor). */
-export async function loadSystem<T>(path: string, fetcher: Fetcher = authFetch): Promise<Loaded<T>> {
+/**
+ * GET a SysAdmin view. A 503 names the source that is down (NATS, discovery, monitor).
+ * ``signal`` cancels the request when the view no longer wants it.
+ */
+export async function loadSystem<T>(
+  path: string,
+  fetcher: Fetcher = authFetch,
+  signal?: AbortSignal,
+): Promise<Loaded<T>> {
   let res: Response;
   try {
-    res = await fetcher(`${SYSTEM_API}${path}`);
+    res = await (signal ? fetcher(`${SYSTEM_API}${path}`, { signal }) : fetcher(`${SYSTEM_API}${path}`));
   } catch (error) {
     return { ok: false, status: 0, reason: error instanceof Error ? error.message : String(error) };
   }

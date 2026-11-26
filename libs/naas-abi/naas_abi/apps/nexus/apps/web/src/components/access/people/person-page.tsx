@@ -55,8 +55,7 @@ export function PersonPage({
     () => ({ group: showsGroups ? (id) => navigate(groupHref!(id)) : undefined }),
     [showsGroups, groupHref, navigate],
   );
-  if (loading) return <p className="access-empty">Loading…</p>;
-  if (error) {
+  if (!loading && error) {
     return (
       <p className="access-source-note" role="status">
         <strong>Access unavailable.</strong> {error}

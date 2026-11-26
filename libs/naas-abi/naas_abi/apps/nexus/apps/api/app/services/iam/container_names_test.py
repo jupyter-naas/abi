@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -39,6 +39,7 @@ from naas_abi_core.engine.call_context import (
     service_account,
     use_call_context,
 )
+from naas_abi_core.services.iam.adapters.secondary import iam_sql
 from naas_abi_core.services.iam.adapters.secondary.IAMStoreSQLite import IAMStoreSQLite
 from naas_abi_core.services.iam.catalog import (
     ActionCatalog,
@@ -89,6 +90,8 @@ CHANGED = {
         "abi:org-aaaaaaaaaaa1:%2A:iam:attachment/builtin.admin/usr_x",
     ),
 }
+
+SELF_CREATES = ("nexus:CreateOrganization", "nexus:CreateWorkspace")
 
 
 def _org(org: str) -> str:
@@ -177,7 +180,15 @@ def test_nobody_gains_or_loses_access(tmp_path, fixture):
     assert report.counts["containers"] == 6
     after = _decisions(iam, fixture)
     changed = {k for k in before if before[k] != after[k]}
-    assert changed == CHANGED, sorted(changed - CHANGED)
+    # Catalog 16: creating an organization or a personal workspace is no user's own
+    # (``builtin.self``) any more; only lost, never gained.
+    no_longer_self = {
+        k
+        for k in changed
+        if k[1] in SELF_CREATES and k[2].startswith("abi:-:-:") and before[k] and not after[k]
+    }
+    assert no_longer_self
+    assert changed - no_longer_self == CHANGED, sorted(changed - no_longer_self - CHANGED)
     assert sum(before.values()) > 300
 
 
@@ -519,7 +530,17 @@ async def test_a_role_held_in_both_grammars_does_not_stop_the_move(nexus_db, tmp
     assert not {scope for _u, _p, scope in held if scope and scope.startswith("abi:org-1:")}
 
 
+@pytest.fixture
+def ticking_store_clock(monkeypatch):
+    """The store's dates strictly increase: which twin was made first is what these
+    tests are about, and the wall clock can step back during a long run."""
+    start = datetime.now(UTC)
+    ticks = iter(range(1, 10**9))
+    monkeypatch.setattr(iam_sql, "_now", lambda: start + timedelta(milliseconds=next(ticks)))
+
+
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("ticking_store_clock")
 async def test_twin_invitations_keep_their_grant_after_the_move(nexus_db, tmp_path):
     """Two pending invitations of one person to org-1's admin role: one made
     before the upgrade (its grant in the old grammar), one while the move of the
@@ -584,6 +605,7 @@ async def test_twin_invitations_keep_their_grant_after_the_move(nexus_db, tmp_pa
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("ticking_store_clock")
 async def test_a_lost_merge_is_found_again_at_the_next_start(nexus_db, tmp_path, monkeypatch):
     """The start that merged twin invitations' grants stops before its commit (the
     invitations not moved, the move not recorded): IAM's merge is done and its map
@@ -881,3 +903,91 @@ async def test_the_moves_lock_holds_one_process_at_a_time_on_postgresql():
     finally:
         await first.dispose()
         await second.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_lock_taken_without_waiting_is_held_on_sqlite():
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine("sqlite+aiosqlite://")
+    try:
+        async with container_names.lock_if_free(engine, container_names.REPORT_LOCK) as held:
+            assert held
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_lock_taken_without_waiting_is_one_process_s_on_postgresql():
+    """Two API processes after their start: one compares the access move's
+    decisions, the other goes on without waiting for it."""
+    import os
+
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    dsn = os.environ.get("IAM_TEST_POSTGRES_DSN") or os.environ.get("DOCUMENT_TEST_POSTGRES_DSN")
+    if not dsn:
+        pytest.skip("Set IAM_TEST_POSTGRES_DSN to run on PostgreSQL")
+    url = dsn.replace("postgresql://", "postgresql+asyncpg://", 1)
+    first, second = create_async_engine(url), create_async_engine(url)
+    key = container_names.REPORT_LOCK
+    try:
+        async with container_names.lock_if_free(first, key) as one:
+            async with container_names.lock_if_free(second, key) as two:
+                assert one and not two
+        async with container_names.lock_if_free(second, key) as again:
+            assert again
+    finally:
+        await first.dispose()
+        await second.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_new_install_records_every_move_at_its_first_start(nexus_db):
+    """A new install has nothing of the older grammars, but its start makes the
+    level groups and policies (``bootstrap.register_catalog``: "Members" holds
+    "Member access" at ``${my workspaces}``) before the moves run. Every move, as
+    the start runs them, records itself past those: none is left waiting, so
+    module scopes and features are decided (the NATS CLI smoke lists its agents)."""
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+    from naas_abi.apps.nexus.apps.api.app.services.iam import (
+        access_model,
+        authz,
+        container_defaults,
+        feature_overrides,
+        module_moves,
+        policy_tree,
+        role_features,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.iam.levels import LEVELS
+
+    world = LegacyNexusIam()
+    async with nexus_db() as db:
+        await _iam_migrations(db)
+        await db.commit()
+        with world.installed():
+            LEVELS.get(world.iam)
+
+            async def moves() -> None:
+                flags = live_settings().feature_flags
+                await feature_overrides.migrate_feature_overrides(db, flags)
+                await role_features.migrate_role_features(db, flags)
+                await policy_tree.migrate_sets(db)
+
+            assert await container_names.before_names(db, moves) is True
+            await container_names.migrate_names(db)
+            await module_moves.migrate(db)
+            await bootstrap.migrate_role_data(db)
+            await policy_tree.migrate_sets(db)
+            await container_defaults.migrate(db)
+            await access_model.migrate_access(db)
+            for name in (
+                feature_overrides.MIGRATION_NAME,
+                role_features.MIGRATION_NAME,
+                policy_tree.MIGRATION_NAME,
+                container_names.MIGRATION_NAME,
+                container_defaults.MIGRATION_NAME,
+                access_model.MIGRATION_NAME,
+            ):
+                assert await container_names.recorded(db, name), name
+            assert not authz.upgrading()

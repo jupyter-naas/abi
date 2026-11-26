@@ -5,25 +5,30 @@ that header from settings pages only, so the rest of the app always reads live d
 
 Keys are per user (the user ``RequestIdentityMiddleware`` verified, which wraps this
 one; a request with none is never cached), per set of IdP groups, and include the full
-path and query string, so role-dependent answers never leak between users. Only a plain
+path and query string. Every cache read/fill is bracketed by fresh IAM revision and
+invalidation-token reads. An IAM change, including one from another process without
+a notification, makes earlier answers unreachable and refreshes IAM's local caches.
+If that freshness cannot be proved, the endpoint runs live. Only a plain
 session is cached: an API key, a coding key or any credential with a ``scope`` (it narrows
 what the user sees) is answered live and never reads or fills a session's entries;
 every credential can still reload and invalidate its user's entries.
 A request in a view (``services/view_as``, ``nexus_view`` on the scope's state) neither reads nor fills
 the cache: its user is the person's, whose entries are theirs.
 
-Invalidation uses two generation counters stored in the cache itself:
+Invalidation uses opaque random tokens in the authoritative cold cache tier:
 
-* a global one, bumped after any successful write (POST/PUT/PATCH/DELETE) to a
-  settings route, so a change made by anyone is visible to everyone on the next read;
+* a global one for changes of containers or IAM;
+* a resource-family one for narrower writes (agent reconciliation affects agents,
+  not unrelated skills/apps/providers); read-like POSTs do not invalidate;
 * a per-user one, bumped by ``POST /api/settings-cache/refresh`` (the Reload button),
   which drops only the caller's entries.
 
-The global one is also bumped when the API starts (``invalidate_on_startup``): an ABI
-restart is the only event that clears the whole cache on its own. Rebuilding or
-restarting the web app does not.
+The global one is also replaced when the API starts (``invalidate_on_startup``).
+Rebuilding or restarting the web app does not clear these entries.
 
-The cache is best effort: any cache failure falls through to the live endpoint.
+Tokens are replaced rather than incremented, so concurrent writers cannot lose an
+invalidation in a read/modify/write race. Metadata never reads a stale hot tier.
+The cache is best effort: any cache/freshness failure falls through to the live endpoint.
 Pure ASGI, and registered inside CORS so cached answers still carry CORS headers.
 """
 
@@ -33,6 +38,7 @@ import datetime
 import hashlib
 import json
 import logging
+import uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -68,6 +74,51 @@ _KEY_PREFIX = "nexus-settings-api"
 _GLOBAL_GENERATION_KEY = f"{_KEY_PREFIX}:generation:global"
 
 
+def _family(path: str) -> str | None:
+    for prefix in SETTINGS_PATH_PREFIXES:
+        if path == prefix or path.startswith(prefix + "/"):
+            return prefix
+    return None
+
+
+def _family_generation_key(family: str) -> str:
+    return f"{_KEY_PREFIX}:generation:family:{family}"
+
+
+def invalidation_keys(scope: Scope) -> tuple[str, ...]:
+    """The data a successful operation may change; unknown writes stay conservative.
+
+    Reuse the read-by-POST registry, except agent sync which can reconcile rows.
+    Never infer 'read' from POST alone or suppress reconciliation itself.
+    """
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.reads_by_post import BY_ROUTE
+
+    path = scope.get("path", "")
+    route = scope.get("route")
+    declared = getattr(route, "path", path)
+    key = (scope.get("method", "").upper(), declared)
+    if key in BY_ROUTE and path != "/api/agents/sync":
+        return ()
+    family = _family(path)
+    if family is None:
+        return ()
+    if family in {"/api/workspaces", "/api/organizations", "/api/iam/admin"}:
+        return (_GLOBAL_GENERATION_KEY,)
+    # A provider/secret change can also change the enriched agent/app catalog.
+    dependencies = {
+        "/api/providers": ("/api/providers", "/api/agents"),
+        "/api/secrets": ("/api/secrets", "/api/providers", "/api/agents", "/api/apps"),
+    }
+    return tuple(_family_generation_key(f) for f in dependencies.get(family, (family,)) if f)
+
+
+def default_authorization_revision() -> int:
+    """Ask IAM through its service port, never through its database adapter."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.runtime import iam
+
+    return int(iam().authorization_revision())
+
+
 _FALLBACK_CACHE: Any = None
 
 
@@ -93,12 +144,17 @@ def default_cache_resolver() -> Any:
     return _FALLBACK_CACHE
 
 
-def _read_generation(cache: Any, key: str) -> int:
+def _read_generation(cache: Any, key: str) -> str:
     try:
-        value = cache.get(key)
+        value = cache.cold.get(key)
     except (CacheNotFoundError, CacheExpiredError):
-        return 0
-    return int((value or {}).get("v", 0))
+        # Missing metadata starts a new namespace, never reuses generation zero.
+        return _bump_generation(cache, key)
+    token = value.get("v") if isinstance(value, dict) else None
+    if not isinstance(token, str) or len(token) != 32:
+        # Includes metadata written by the old incrementing implementation.
+        return _bump_generation(cache, key)
+    return token
 
 
 def _store_json(cache: Any, key: str, value: dict[str, Any]) -> None:
@@ -107,8 +163,10 @@ def _store_json(cache: Any, key: str, value: dict[str, Any]) -> None:
         cache.hot.set_json(key, value)  # hot tier (fast reads)
 
 
-def _bump_generation(cache: Any, key: str) -> None:
-    _store_json(cache, key, {"v": _read_generation(cache, key) + 1})
+def _bump_generation(cache: Any, key: str) -> str:
+    token = uuid.uuid4().hex
+    cache.cold.set_json(key, {"v": token})
+    return token
 
 
 def invalidate_all(cache: Any) -> None:
@@ -173,12 +231,14 @@ class SettingsCacheMiddleware:
         user_resolver: Callable[[Scope], str | None] = default_user_resolver,
         entry_variant: Callable[[Scope], str | None] = default_entry_variant,
         ttl: datetime.timedelta = DEFAULT_TTL,
+        authorization_revision: Callable[[], int] = default_authorization_revision,
     ) -> None:
         self.app = app
         self.cache_resolver = cache_resolver
         self.user_resolver = user_resolver
         self.entry_variant = entry_variant
         self.ttl = ttl
+        self.authorization_revision = authorization_revision
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -214,10 +274,12 @@ class SettingsCacheMiddleware:
             return
 
         cached = await self._read(key)
-        if cached is not None:
+        if cached is not None and key == await self._entry_key(
+            user_id, variant, path, scope.get("query_string", b"")
+        ):
             await self._send_cached(send, cached)
             return
-        await self._forward_and_store(scope, receive, send, key)
+        await self._forward_and_store(scope, receive, send, key, user_id, variant)
 
     # ------------------------------------------------------------------
     # Request kinds
@@ -236,24 +298,44 @@ class SettingsCacheMiddleware:
         if not user_id:
             await _send_plain(send, 401)
             return
-        await self._bump(_user_generation_key(user_id))
-        await _send_plain(send, 204)
+        invalidated = await self._bump(_user_generation_key(user_id))
+        await _send_plain(send, 204 if invalidated else 503)
 
     async def _handle_write(self, scope: Scope, receive: Receive, send: Send) -> None:
-        status = 500
+        keys: tuple[str, ...] = ()
+        buffered: list[Message] = []
+        defer_response = False
 
         async def send_wrapper(message: Message) -> None:
-            nonlocal status
+            nonlocal keys, defer_response
             if message["type"] == "http.response.start":
                 status = int(message.get("status", 500))
-            await send(message)
+                if 200 <= status < 400:
+                    keys = invalidation_keys(scope)
+                    content_type = Headers(raw=list(message.get("headers", []))).get(
+                        "content-type", ""
+                    )
+                    defer_response = bool(keys) and (
+                        content_type.startswith("application/json") or status == 204
+                    )
+            if defer_response:
+                # Settings writes return finite JSON. Wait for the app's
+                # transaction cleanup and invalidation before acknowledging it:
+                # an immediate client re-read must not race the invalidation.
+                buffered.append(message)
+            else:
+                # Remote-app proxies can stream under /api/apps too: never
+                # hold their event streams or binary responses in memory.
+                await send(message)
 
         await self.app(scope, receive, send_wrapper)
-        if 200 <= status < 400:
-            await self._bump(_GLOBAL_GENERATION_KEY)
+        for key in keys:
+            await self._bump(key)
+        for message in buffered:
+            await send(message)
 
     async def _forward_and_store(
-        self, scope: Scope, receive: Receive, send: Send, key: str
+        self, scope: Scope, receive: Receive, send: Send, key: str, user_id: str, variant: str
     ) -> None:
         start: Message | None = None
         body = bytearray()
@@ -281,7 +363,10 @@ class SettingsCacheMiddleware:
             text = bytes(body).decode("utf-8")
         except UnicodeDecodeError:
             return
-        await self._write(key, {"content_type": content_type, "body": text})
+        if key == await self._entry_key(
+            user_id, variant, scope.get("path", ""), scope.get("query_string", b"")
+        ):
+            await self._write(key, {"content_type": content_type, "body": text})
 
     # ------------------------------------------------------------------
     # Cache access (blocking cache I/O runs in the threadpool)
@@ -291,28 +376,33 @@ class SettingsCacheMiddleware:
         self, user_id: str, variant: str, path: str, query_string: bytes
     ) -> str | None:
         try:
+            revision = await run_in_threadpool(self.authorization_revision)
             global_gen = await self._generation(_GLOBAL_GENERATION_KEY)
             user_gen = await self._generation(_user_generation_key(user_id))
+            family_gen = await self._generation(_family_generation_key(_family(path) or path))
         except Exception as exc:  # noqa: BLE001
             logger.warning("Settings cache unavailable, serving live: %s", exc)
             return None
-        query = "&".join(sorted(query_string.decode("latin-1").split("&"))) if query_string else ""
+        # Repeated query parameters are order-sensitive (e.g. the selected
+        # workspace). Sorting pairs can alias requests with different meanings.
+        query = query_string.decode("latin-1")
         digest = hashlib.sha256(f"{user_id}|{variant}|{path}?{query}".encode()).hexdigest()
-        return f"{_KEY_PREFIX}:entry:{global_gen}:{user_gen}:{digest}"
+        return f"{_KEY_PREFIX}:entry:v2:{revision}:{global_gen}:{user_gen}:{family_gen}:{digest}"
 
-    async def _generation(self, key: str) -> int:
+    async def _generation(self, key: str) -> str:
         return await run_in_threadpool(_read_generation, self.cache_resolver(), key)
 
-    async def _bump(self, key: str) -> None:
+    async def _bump(self, key: str) -> bool:
         try:
             await run_in_threadpool(_bump_generation, self.cache_resolver(), key)
+            return True
         except Exception as exc:  # noqa: BLE001
             logger.warning("Settings cache: could not invalidate %s: %s", key, exc)
+            return False
 
     async def _read(self, key: str) -> dict[str, Any] | None:
-        cache = self.cache_resolver()
         try:
-            return await run_in_threadpool(cache.get, key, self.ttl)
+            return await run_in_threadpool(self.cache_resolver().get, key, self.ttl)
         except (CacheNotFoundError, CacheExpiredError):
             return None
         except Exception as exc:  # noqa: BLE001
@@ -356,4 +446,8 @@ async def _send_plain(send: Send, status: int) -> None:
     await send({"type": "http.response.body", "body": body})
 
 
-_STATUS_TEXT = {401: "Not authenticated", 405: "Method not allowed"}
+_STATUS_TEXT = {
+    401: "Not authenticated",
+    405: "Method not allowed",
+    503: "Settings cache could not be refreshed",
+}

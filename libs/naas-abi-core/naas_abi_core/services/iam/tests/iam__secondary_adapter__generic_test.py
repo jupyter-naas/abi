@@ -18,6 +18,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     KeyRecord,
     LegacyPlacement,
     ManifestRecord,
+    Membership,
     NameRewriter,
     PendingGrant,
     Placement,
@@ -227,6 +228,53 @@ class IAMStoreContract(ABC):
         assert store.groups_of(bob.id) == []
         with pytest.raises(IAMNotFoundError):
             store.add_group_member(sales.id, new_id("usr"))
+
+    def test_group_markers_round_trip(self, store: IAMStore):
+        made = store.create_principal(
+            replace(group("ws-1 workspace"), owner_scope=WS, membership_of=WS)
+        )
+        level = store.create_principal(replace(group("members"), level_group=True))
+        plain = store.create_principal(group("sales"))
+        assert (made.membership_of, made.level_group) == (WS, False)
+        assert store.get_principal(made.id).membership_of == WS
+        assert store.get_principal(level.id).level_group is True
+        assert store.get_principal(plain.id).membership_of is None
+        assert store.get_principal(plain.id).level_group is False
+        before = store.revision()
+        moved = store.update_principal(replace(made, membership_of=WS_2))
+        assert moved.membership_of == WS_2 and store.revision() > before
+        cleared = store.update_principal(
+            replace(store.get_principal(level.id), level_group=False)
+        )
+        assert cleared.level_group is False
+        listed = {p.id: p for p in store.list_principals("group").items}
+        assert listed[made.id].membership_of == WS_2
+        # Renaming keeps the markers.
+        renamed = store.update_principal(replace(moved, name="renamed"))
+        assert renamed.membership_of == WS_2
+
+    def test_memberships_of_a_member_and_groups_of_a_container(self, store: IAMStore):
+        of_ws = store.create_principal(replace(group("a"), membership_of=WS))
+        of_ws_2 = store.create_principal(replace(group("b"), membership_of=WS_2))
+        also_ws = store.create_principal(replace(group("c"), membership_of=WS))
+        plain = store.create_principal(group("plain"))
+        bob = store.create_principal(user())
+        carol = store.create_principal(user("carol"))
+        for g in (of_ws, of_ws_2, plain):
+            store.add_group_member(g.id, bob.id)
+        store.add_group_member(also_ws.id, carol.id)
+        assert store.memberships_of(bob.id) == sorted(
+            [Membership(of_ws.id, WS), Membership(of_ws_2.id, WS_2)],
+            key=lambda m: m.group_id,
+        )
+        assert store.memberships_of(carol.id) == [Membership(also_ws.id, WS)]
+        assert store.membership_groups(WS) == sorted([of_ws.id, also_ws.id])
+        assert store.membership_groups(ORG) == []
+        store.remove_group_member(of_ws.id, bob.id)
+        assert store.memberships_of(bob.id) == [Membership(of_ws_2.id, WS_2)]
+        store.update_principal(replace(of_ws_2, membership_of=None))
+        assert store.memberships_of(bob.id) == []
+        assert store.membership_groups(WS_2) == []
 
     def test_idp_group_mappings(self, store: IAMStore):
         sales = store.create_principal(group("sales"))

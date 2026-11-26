@@ -71,3 +71,44 @@
   border: 1px solid var(--border-hex);
   background-color: var(--card-hex);
 }
+
+/* Above the groups: the levels and the capability groups (how access is given). */
+.access-model-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: var(--space-4);
+}
+
+.access-model-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-hex);
+  background-color: var(--card-hex);
+}
+
+.access-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access-model-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.access-model-name {
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+}
+
+.access-model-via {
+  color: var(--muted-foreground-hex);
+}

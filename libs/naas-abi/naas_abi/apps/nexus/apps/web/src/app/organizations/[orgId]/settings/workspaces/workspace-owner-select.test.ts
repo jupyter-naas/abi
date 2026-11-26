@@ -51,4 +51,39 @@ describe('the Owner picker', () => {
     expect(urls).toEqual(['https://api.example.test/api/workspaces/ws-alpha/members']);
     expect(mounted.host.textContent).toContain('Bob · bob@example.com');
   });
+
+  it('picks the workspace admin at creation, the creator by default', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify([
+            { user_id: 'usr_me', email: 'me@example.com', name: 'Me' },
+            { user_id: 'usr_ann', email: 'ann@example.com', name: 'Ann' },
+          ]),
+          { status: 200 },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    const onChange = vi.fn();
+    mounted = await mount(WorkspaceOwnerSelect, { orgId: 'acme', value: 'usr_me', onChange, role: 'admin' as const });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await mounted.flush();
+    const trigger = mounted.host.querySelector('button[aria-haspopup="listbox"]');
+    expect(trigger?.getAttribute('aria-label')).toBe('Workspace admin: Me · me@example.com');
+    expect(mounted.host.textContent).not.toContain('owner');
+    await mounted.click(trigger);
+    await mounted.flush();
+    const ann = [...document.querySelectorAll('[role="option"]')].find((o) => o.textContent?.includes('Ann'));
+    expect(document.querySelector('[role="listbox"]')?.getAttribute('aria-label')).toBe('Workspace admin');
+    await mounted.click(ann ?? null);
+    expect(onChange).toHaveBeenCalledWith('usr_ann');
+  });
 });

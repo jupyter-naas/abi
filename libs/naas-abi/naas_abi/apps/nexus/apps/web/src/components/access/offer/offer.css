@@ -1,0 +1,117 @@
+/* components/access/offer — "<W> access" as the workspace's offer: toggles, not JSON */
+
+.access-offer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--card-hex);
+}
+
+.access-offer-header,
+.access-offer-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.access-offer-heading {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground-hex);
+}
+
+.access-offer-list,
+.access-offer-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access-offer-items {
+  padding-left: var(--space-6);
+}
+
+.access-offer-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.access-offer-name {
+  color: var(--foreground-hex);
+}
+
+.access-offer-note {
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.access-offer-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+}
+
+.access-offer-expand:hover {
+  color: var(--foreground-hex);
+}
+
+/* A square switch, as the search scopes'. */
+.access-offer-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 25px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  background-color: color-mix(in srgb, var(--muted-foreground-hex) 30%, transparent);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.access-offer-switch[data-on] {
+  background-color: var(--color-primary);
+}
+
+.access-offer-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.access-offer-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  background-color: #fff;
+  transition: left 0.15s;
+}
+
+.access-offer-switch[data-on] .access-offer-switch-knob {
+  left: 13px;
+}
+
+.access-offer-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

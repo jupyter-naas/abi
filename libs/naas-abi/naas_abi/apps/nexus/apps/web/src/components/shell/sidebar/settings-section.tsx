@@ -8,31 +8,42 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 import { SETTINGS_GROUPS, visibleSettingsGroups, workspaceOrganization } from '@/components/shell/settings-nav';
-import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
+import { useFeature } from '@/hooks/use-feature';
+import { useWorkspaceResourcesStore } from '@/hooks/use-workspace-resources';
 import { workspaceContainer } from '@/components/access/access-scope';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
-import { useReadsAnalytics } from '@/hooks/use-analytics-access';
+import { useAnalyticsAccessStore } from '@/hooks/use-analytics-access';
+import { analyticsScopeKey } from '@/components/analytics/scope';
 
 export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const pathname = usePathname();
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const flags = useWorkspaceStore((s) => s.getCurrentWorkspace()?.featureFlags);
-  const { resources } = useWorkspaceResources(currentWorkspaceId);
+  // What a settings page has already read. Asking here starts the slow resources read
+  // in front of Analytics and Access.
+  const resources = useWorkspaceResourcesStore((s) =>
+    currentWorkspaceId ? (s.byWorkspace[currentWorkspaceId]?.resources ?? null) : null
+  );
   const workspace = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId));
+  const roleOpens = useFeature('settings.workspace');
   const basePath = getWorkspacePath(currentWorkspaceId, '/settings');
-  // Each Access page is shown to whoever IAM lets open it in the workspace; asked once the
-  // workspace (and so its organization) is known.
-  const { access } = useIamAccess(
+  // Access stays listed for an owner or admin until this answers, then follows IAM.
+  const { access, loading: accessLoading } = useIamAccess(
     workspace ? workspaceContainer(workspaceOrganization(workspace), workspace.id) : undefined,
     undefined,
     { skip: !workspace }
   );
-  // Analytics is shown to whoever may read the workspace's (its admins, by default).
-  const readsAnalytics = useReadsAnalytics(workspace ? { kind: 'workspace', workspaceId: workspace.id } : null);
+  // Analytics stays listed for that role until a settings page has read it.
+  const analyticsKey = workspace ? analyticsScopeKey({ kind: 'workspace', workspaceId: workspace.id }) : null;
+  const analyticsEntry = useAnalyticsAccessStore((s) => (analyticsKey ? s.entries[analyticsKey] : undefined));
+  const analyticsKnown = analyticsEntry?.status === 'ready' || analyticsEntry?.status === 'error';
   // Only what the caller may use here (the features they hold, the module resources they may use).
   const groups = visibleSettingsGroups(resources, flags, SETTINGS_GROUPS, {
     access: workspace ? access : null,
-    readsAnalytics,
+    readsAnalytics: analyticsEntry?.access?.can_read === true,
+    roleOpens,
+    accessKnown: !!workspace && !accessLoading,
+    analyticsKnown,
   });
 
   return (

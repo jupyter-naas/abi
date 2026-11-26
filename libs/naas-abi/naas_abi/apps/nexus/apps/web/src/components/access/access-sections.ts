@@ -13,19 +13,21 @@ export type AccessSection = AccessPage;
  * (service accounts, approvals, the simulator, the audit) false at an org or a workspace.
  */
 export const ACCESS_SECTIONS: { id: AccessSection; label: string; needs: string[] }[] = [
-  { id: 'policies', label: 'Policies', needs: ['iam:ListPolicies', 'iam:CreatePolicy', 'iam:ListAttachments'] },
+  // Groups first: a person's access is the groups they are in (their workspaces, their level);
+  // the policies are what each group holds.
   { id: 'groups', label: 'Groups', needs: ['iam:ListGroups'] },
+  { id: 'policies', label: 'Policies', needs: ['iam:ListPolicies', 'iam:CreatePolicy', 'iam:ListAttachments'] },
   { id: 'service-accounts', label: 'Service accounts', needs: ['iam:ListPrincipals'] },
   { id: 'approvals', label: 'Module approvals', needs: ['iam:ListManifests'] },
   { id: 'simulator', label: 'Simulator', needs: ['iam:Explain'] },
   { id: 'audit', label: 'Audit', needs: ['nexus:ReadSystem'] },
 ];
 
-/** The pages of each level's Access: an organization and a workspace have Policies and Groups. */
+/** The pages of each level's Access: an organization and a workspace have Groups and Policies. */
 export const LEVEL_SECTIONS: Record<AccessLevel, readonly AccessSection[]> = {
   platform: ACCESS_SECTIONS.map((s) => s.id),
-  organization: ['policies', 'groups'],
-  workspace: ['policies', 'groups'],
+  organization: ['groups', 'policies'],
+  workspace: ['groups', 'policies'],
 };
 
 export function canDo(access: AccessView | null, action: string): boolean {

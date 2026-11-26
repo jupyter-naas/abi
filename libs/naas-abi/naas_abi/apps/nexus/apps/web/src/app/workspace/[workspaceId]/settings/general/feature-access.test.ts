@@ -64,10 +64,6 @@ function fakeApi(after?: FeatureAccessState) {
   return {
     read: vi.fn().mockResolvedValue(BEFORE),
     save: vi.fn().mockResolvedValue(after ?? BEFORE),
-    candidates: vi.fn().mockResolvedValue([
-      { id: 'usr_ann', kind: 'user', name: 'Ann' },
-      { id: 'grp_ops', kind: 'group', name: 'Ops' },
-    ]),
   };
 }
 
@@ -105,20 +101,23 @@ describe('FeatureAccess', () => {
       'Also granted by Marketplace (attached nowhere)',
     );
     expect(m.host.textContent).not.toContain('Roles & permissions');
-    expect(m.host.textContent).toContain('Platform administrators see every feature');
+    expect(m.host.textContent).toContain('Platform admins see every feature');
+    // Features are the workspace's offer: the description links to "<W> access".
+    expect(m.host.querySelector('a[href*="pol_access"]')?.textContent).toBe('Alpha access');
+    expect(m.host.querySelector('[data-choice="only"]')).toBeNull();
     expect(saveButton(m).disabled).toBe(true);
   });
 
   it('makes a hand-edited row read-only with a link, and a feature not offered Nobody-only', async () => {
     const m = await render(fakeApi());
 
-    const search = ['everyone', 'only', 'nobody'].map((c) => at(m, 'search', `[data-choice="${c}"]`)?.disabled);
-    expect(search).toEqual([true, true, true]);
+    const search = ['everyone', 'nobody'].map((c) => at(m, 'search', `[data-choice="${c}"]`)?.disabled);
+    expect(search).toEqual([true, true]);
     expect(at(m, 'search', '.workspace-features-note')?.textContent).toContain('read-only here');
     expect(at(m, 'search', '.workspace-features-note a')?.getAttribute('href')).toContain('pol_search');
 
-    const graph = ['everyone', 'only', 'nobody'].map((c) => at(m, 'graph', `[data-choice="${c}"]`)?.disabled);
-    expect(graph).toEqual([true, true, false]);
+    const graph = ['everyone', 'nobody'].map((c) => at(m, 'graph', `[data-choice="${c}"]`)?.disabled);
+    expect(graph).toEqual([true, false]);
     expect(at(m, 'graph', '.workspace-features-note')?.textContent).toContain('Not offered in this workspace');
     expect(at(m, 'graph', '.workspace-features-note a')?.textContent).toBe('Widen Alpha access');
   });
@@ -135,14 +134,7 @@ describe('FeatureAccess', () => {
     const m = await render(api);
 
     await m.click(at(m, 'files', '[data-choice="everyone"]'));
-    await m.click(at(m, 'marketplace', '[data-choice="only"]'));
-    await m.flush();
-    expect(api.candidates).toHaveBeenCalledWith('ws1', SCOPE);
-    expect(saveButton(m).disabled).toBe(true);
-    expect(at(m, 'marketplace', '.workspace-features-note')?.textContent).toBe('Choose who may use Marketplace.');
-
-    await m.select(at(m, 'marketplace', 'select'), 'usr_ann');
-    expect(at(m, 'marketplace', '[data-principal="usr_ann"]')?.textContent).toContain('Ann');
+    await m.click(at(m, 'marketplace', '[data-choice="everyone"]'));
     expect(m.host.textContent).toContain('2 unsaved changes');
 
     await m.click(saveButton(m));
@@ -150,11 +142,11 @@ describe('FeatureAccess', () => {
     expect(api.save).toHaveBeenCalledTimes(1);
     expect(api.save).toHaveBeenCalledWith('ws1', [
       { feature: 'files', choice: 'everyone' },
-      { feature: 'marketplace', choice: 'only', principals: ['usr_ann'] },
+      { feature: 'marketplace', choice: 'everyone' },
     ]);
     expect(at(m, 'files', '[data-choice="everyone"]')?.getAttribute('aria-checked')).toBe('true');
     expect(at(m, 'marketplace', '[role="alert"]')?.textContent).toBe('IAM refused the attachment.');
-    expect(at(m, 'marketplace', '[data-choice="only"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(at(m, 'marketplace', '[data-choice="everyone"]')?.getAttribute('aria-checked')).toBe('true');
     expect(m.host.textContent).toContain('1 unsaved change');
   });
 

@@ -108,7 +108,7 @@ describe('PlatformUsers', () => {
     expect(row('usr_bob').textContent).not.toContain('usr_bob');
     expect(row('usr_bob').querySelector('[data-field="status"]')?.textContent).toBe('Signed in');
     expect(row('usr_bob').querySelector('[data-field="organizations"]')?.textContent).toBe('Acme');
-    expect(row('usr_admin').querySelector('[data-field="superadmin"]')?.textContent).toContain('Superadmin');
+    expect(row('usr_admin').querySelector('[data-field="superadmin"]')?.textContent).toContain('Platform admin');
     expect(row('invited:new@example.com').querySelector('[data-field="status"]')?.textContent).toBe('Invited, not yet');
     expect(row('invited:new@example.com').textContent).not.toContain('None yet');
   });

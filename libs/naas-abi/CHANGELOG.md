@@ -121,6 +121,154 @@
 
 <!-- version list -->
 
+## v7.3.1 (2026-11-23)
+
+### Bug Fixes
+
+- **nexus-web**: Bind Settings resources as soon as the session is confirmed
+  ([#1606](https://github.com/jupyter-naas/abi/pull/1606),
+  [`ffc15b2`](https://github.com/jupyter-naas/abi/commit/ffc15b279580da35112093119fb69c0e9c9fe4b5))
+
+- **nexus-web**: Keep page state across the session read of a page load
+  ([#1607](https://github.com/jupyter-naas/abi/pull/1607),
+  [`aca927d`](https://github.com/jupyter-naas/abi/commit/aca927de2162e28cc5370716897465b5f7c52856))
+
+- **nexus-web**: Keep permission reads across the session read of a page load
+  ([#1605](https://github.com/jupyter-naas/abi/pull/1605),
+  [`d5f6995`](https://github.com/jupyter-naas/abi/commit/d5f699502043cc96b5d7670d4ec80eb7bf408976))
+
+- **nexus-web**: Keep Settings resources once the session is confirmed
+  ([#1606](https://github.com/jupyter-naas/abi/pull/1606),
+  [`2b49538`](https://github.com/jupyter-naas/abi/commit/2b49538c6928ae3c20ef0967d127932d2d33aea7))
+
+- **nexus-web**: Keep unknown service names on the generic data view
+  ([#1609](https://github.com/jupyter-naas/abi/pull/1609),
+  [`132919c`](https://github.com/jupyter-naas/abi/commit/132919c62bf5ec252188f989987156b40533ff10))
+
+### Performance Improvements
+
+- **nexus**: Batch Settings access summaries and bound lists
+  ([#1608](https://github.com/jupyter-naas/abi/pull/1608),
+  [`9e098dc`](https://github.com/jupyter-naas/abi/commit/9e098dca5f22fd79859faa444b2b2c0afc7df569))
+
+- **nexus-web**: Defer inactive Settings views and bound polling
+  ([#1609](https://github.com/jupyter-naas/abi/pull/1609),
+  [`2180252`](https://github.com/jupyter-naas/abi/commit/21802527b4816fd8d5843fafd83f83e15bc4709c))
+
+- **nexus-web**: Keep Settings page state across navigation
+  ([#1607](https://github.com/jupyter-naas/abi/pull/1607),
+  [`e69e64b`](https://github.com/jupyter-naas/abi/commit/e69e64b50448fd1900260d94668e1103fb87a749))
+
+- **nexus-web**: Share permission reads by session and scope
+  ([#1605](https://github.com/jupyter-naas/abi/pull/1605),
+  [`21702b8`](https://github.com/jupyter-naas/abi/commit/21702b8db3e0536e8b8deb20537c5a7d97f0de5f))
+
+- **nexus-web**: Share Settings resource reads by explicit policy
+  ([#1606](https://github.com/jupyter-naas/abi/pull/1606),
+  [`d5d6209`](https://github.com/jupyter-naas/abi/commit/d5d62098d82cf4b51f9564dbdec3fa51cb4df00c))
+
+
+## v7.3.0 (2026-11-23)
+
+### Bug Fixes
+
+- **nexus**: Config.yaml's level_features reaches the Nexus settings
+  ([`5b7a2fb`](https://github.com/jupyter-naas/abi/commit/5b7a2fbfda46670705af0afccfdf0c9c9a2bb5cb))
+
+### Features
+
+- **nexus**: A deployment sets the features of the Viewer and Member levels
+  ([`413a249`](https://github.com/jupyter-naas/abi/commit/413a2491cf6bc1792b81ce54f1483cf7df942f8e))
+
+
+## v7.2.0 (2026-11-23)
+
+### Bug Fixes
+
+- **nexus**: The role features move skips scopes of the new model
+  ([`b427bc9`](https://github.com/jupyter-naas/abi/commit/b427bc9fe8016e6023cfedab90fd76f6098ee590))
+
+- **nexus**: The sets' move skips grants at ${my workspaces}; a new install's first start records
+  every move
+  ([`44eecff`](https://github.com/jupyter-naas/abi/commit/44eecffbc3bac5dc946b915d5ea129c0974b8c61))
+
+- **nexus**: The Settings measure script is executable; a view answers capabilities by scope
+  ([`4395b3a`](https://github.com/jupyter-naas/abi/commit/4395b3a2e2f0c6ab575fbdc4c382b69e79035802))
+
+- **nexus-api**: Keep Settings cache authorization fresh (#1604)
+  ([#1612](https://github.com/jupyter-naas/abi/pull/1612),
+  [`d4dcbc3`](https://github.com/jupyter-naas/abi/commit/d4dcbc370900a6313d58ed65bc976dd4ef88f35d))
+
+- **nexus-api**: Write an offer section past 100 items in parts
+  ([#1587](https://github.com/jupyter-naas/abi/pull/1587),
+  [`edaaff3`](https://github.com/jupyter-naas/abi/commit/edaaff330ec7990c5b5cdabd3e68b2bf4b940140))
+
+### Features
+
+- **nexus**: A workspace's lists show what it offers, for everyone
+  ([`d12dc91`](https://github.com/jupyter-naas/abi/commit/d12dc91e4e5ad0e3fb628ed2940e57582b32de8c))
+
+- **nexus**: Convert the legacy drive flags in the access move
+  ([#1587](https://github.com/jupyter-naas/abi/pull/1587),
+  [`0f0317f`](https://github.com/jupyter-naas/abi/commit/0f0317f1258e40b7a272c7280eaec51f148ff57c))
+
+- **nexus**: Move per-person attachments to the groups model at start
+  ([#1587](https://github.com/jupyter-naas/abi/pull/1587),
+  [`d04e52f`](https://github.com/jupyter-naas/abi/commit/d04e52f634b2d0c9404d27bd413491fc7fab56de))
+
+- **nexus**: Platform Files setting per workspace, routes, web control and module check
+  ([#1590](https://github.com/jupyter-naas/abi/pull/1590),
+  [`ce0a034`](https://github.com/jupyter-naas/abi/commit/ce0a034ffefc02462d92c4db739844dfcddd3453))
+
+- **nexus**: The access move applies at start and reports after
+  ([`109d384`](https://github.com/jupyter-naas/abi/commit/109d38497dbfdf072e2ebdd543c69f17b0e97d35))
+
+- **nexus-api**: Ceilings as allow-lists, model sets, capability groups, no self-made organizations
+  ([#1586](https://github.com/jupyter-naas/abi/pull/1586),
+  [`de93749`](https://github.com/jupyter-naas/abi/commit/de93749842279f497a762f1568d6e2f3ba04b130))
+
+- **nexus-api**: Levels as groups, generic level policies, no Owner
+  ([#1585](https://github.com/jupyter-naas/abi/pull/1585),
+  [`2b3658c`](https://github.com/jupyter-naas/abi/commit/2b3658c8b9fbf91bc0e0643b3b48864d861a9e54))
+
+- **nexus-api**: People flows give a level and groups at the platform, org and workspace
+  ([#1589](https://github.com/jupyter-naas/abi/pull/1589),
+  [`48da1d2`](https://github.com/jupyter-naas/abi/commit/48da1d27c18f90a76098a0dc2fb0c67abed515ac))
+
+- **nexus-api**: Platform Files given with the workspace, legacy drive flags kept for conversion
+  ([#1590](https://github.com/jupyter-naas/abi/pull/1590),
+  [`6733917`](https://github.com/jupyter-naas/abi/commit/6733917a810a77e73f9ac2e483974d7ff369fbfc))
+
+- **nexus-api**: Workflow runners attached at ${my workspaces}
+  ([#1586](https://github.com/jupyter-naas/abi/pull/1586),
+  [`451d1c2`](https://github.com/jupyter-naas/abi/commit/451d1c28927157968eafd6e6c41ef6b69230aa21))
+
+- **nexus-web**: Align the access model with S2's groups, admin refusal at the picker
+  ([#1588](https://github.com/jupyter-naas/abi/pull/1588),
+  [`bf68dab`](https://github.com/jupyter-naas/abi/commit/bf68dabf88d8a492f2ebf5ea1438d90e302fb9ff))
+
+- **nexus-web**: Groups-first access, workspace offer editor, built-ins hidden, Platform admin
+  ([#1588](https://github.com/jupyter-naas/abi/pull/1588),
+  [`be7050b`](https://github.com/jupyter-naas/abi/commit/be7050bdbc6f557af13811d481ffb240ae9ab193))
+
+- **nexus-web**: People forms give a level, admin toggles and capability groups
+  ([#1589](https://github.com/jupyter-naas/abi/pull/1589),
+  [`4de8713`](https://github.com/jupyter-naas/abi/commit/4de87138416d65989106ba18c2bf9e0d17e7dc1d))
+
+- **nexus-web**: Show settings pages while their permission reads answer
+  ([`e777cf5`](https://github.com/jupyter-naas/abi/commit/e777cf5a98067c90e4d2c3299bffb9560162df21))
+
+### Testing
+
+- **nexus-api**: Give the twin-merge tests a store clock that only moves forward
+  ([#1589](https://github.com/jupyter-naas/abi/pull/1589),
+  [`02ccb65`](https://github.com/jupyter-naas/abi/commit/02ccb655ed8347033fba0b693835185f56e76762))
+
+- **nexus-web**: Add a Settings navigation baseline (#1603)
+  ([#1611](https://github.com/jupyter-naas/abi/pull/1611),
+  [`d5ca24c`](https://github.com/jupyter-naas/abi/commit/d5ca24c7f3f25328fd49e5021c8e1ef5cef7d1a5))
+
+
 ## v7.1.0 (2026-11-20)
 
 ### Bug Fixes

@@ -11,7 +11,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Principal(_message.Message):
-    __slots__ = ("id", "kind", "status", "name", "issuer", "subject", "provider", "email", "email_verified", "display_name", "owner_id", "created_at", "updated_at", "owner_scope")
+    __slots__ = ("id", "kind", "status", "name", "issuer", "subject", "provider", "email", "email_verified", "display_name", "owner_id", "created_at", "updated_at", "owner_scope", "membership_of", "level_group")
     ID_FIELD_NUMBER: _ClassVar[int]
     KIND_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
@@ -26,6 +26,8 @@ class Principal(_message.Message):
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
     OWNER_SCOPE_FIELD_NUMBER: _ClassVar[int]
+    MEMBERSHIP_OF_FIELD_NUMBER: _ClassVar[int]
+    LEVEL_GROUP_FIELD_NUMBER: _ClassVar[int]
     id: str
     kind: str
     status: str
@@ -40,7 +42,9 @@ class Principal(_message.Message):
     created_at: _timestamp_pb2.Timestamp
     updated_at: _timestamp_pb2.Timestamp
     owner_scope: str
-    def __init__(self, id: _Optional[str] = ..., kind: _Optional[str] = ..., status: _Optional[str] = ..., name: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[str] = ..., provider: _Optional[str] = ..., email: _Optional[str] = ..., email_verified: bool = ..., display_name: _Optional[str] = ..., owner_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., owner_scope: _Optional[str] = ...) -> None: ...
+    membership_of: str
+    level_group: bool
+    def __init__(self, id: _Optional[str] = ..., kind: _Optional[str] = ..., status: _Optional[str] = ..., name: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[str] = ..., provider: _Optional[str] = ..., email: _Optional[str] = ..., email_verified: bool = ..., display_name: _Optional[str] = ..., owner_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., owner_scope: _Optional[str] = ..., membership_of: _Optional[str] = ..., level_group: bool = ...) -> None: ...
 
 class Policy(_message.Message):
     __slots__ = ("id", "name", "description", "document_json", "managed", "revision", "created_at", "updated_at", "owner_scope", "parent_id")
@@ -247,7 +251,7 @@ class BoundingStatement(_message.Message):
     def __init__(self, policy_id: _Optional[str] = ..., statement_index: _Optional[int] = ..., sid: _Optional[str] = ...) -> None: ...
 
 class DecidingStatement(_message.Message):
-    __slots__ = ("side", "principal_id", "effect", "policy_id", "statement_index", "sid", "attachment_id", "scope", "via_group", "bounded_by", "through")
+    __slots__ = ("side", "principal_id", "effect", "policy_id", "statement_index", "sid", "attachment_id", "scope", "via_group", "bounded_by", "through", "membership_group")
     SIDE_FIELD_NUMBER: _ClassVar[int]
     PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
     EFFECT_FIELD_NUMBER: _ClassVar[int]
@@ -259,6 +263,7 @@ class DecidingStatement(_message.Message):
     VIA_GROUP_FIELD_NUMBER: _ClassVar[int]
     BOUNDED_BY_FIELD_NUMBER: _ClassVar[int]
     THROUGH_FIELD_NUMBER: _ClassVar[int]
+    MEMBERSHIP_GROUP_FIELD_NUMBER: _ClassVar[int]
     side: str
     principal_id: str
     effect: str
@@ -270,7 +275,8 @@ class DecidingStatement(_message.Message):
     via_group: str
     bounded_by: _containers.RepeatedCompositeFieldContainer[BoundingStatement]
     through: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, side: _Optional[str] = ..., principal_id: _Optional[str] = ..., effect: _Optional[str] = ..., policy_id: _Optional[str] = ..., statement_index: _Optional[int] = ..., sid: _Optional[str] = ..., attachment_id: _Optional[str] = ..., scope: _Optional[str] = ..., via_group: _Optional[str] = ..., bounded_by: _Optional[_Iterable[_Union[BoundingStatement, _Mapping]]] = ..., through: _Optional[_Iterable[str]] = ...) -> None: ...
+    membership_group: str
+    def __init__(self, side: _Optional[str] = ..., principal_id: _Optional[str] = ..., effect: _Optional[str] = ..., policy_id: _Optional[str] = ..., statement_index: _Optional[int] = ..., sid: _Optional[str] = ..., attachment_id: _Optional[str] = ..., scope: _Optional[str] = ..., via_group: _Optional[str] = ..., bounded_by: _Optional[_Iterable[_Union[BoundingStatement, _Mapping]]] = ..., through: _Optional[_Iterable[str]] = ..., membership_group: _Optional[str] = ...) -> None: ...
 
 class Explanation(_message.Message):
     __slots__ = ("allowed", "reason", "action", "resource", "statement")
@@ -639,14 +645,18 @@ class DeletePrincipalResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., principal: _Optional[_Union[Principal, _Mapping]] = ...) -> None: ...
 
 class CreateGroupRequest(_message.Message):
-    __slots__ = ("context", "name", "scope")
+    __slots__ = ("context", "name", "scope", "membership_of", "level")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     SCOPE_FIELD_NUMBER: _ClassVar[int]
+    MEMBERSHIP_OF_FIELD_NUMBER: _ClassVar[int]
+    LEVEL_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     name: str
     scope: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
+    membership_of: str
+    level: bool
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., scope: _Optional[str] = ..., membership_of: _Optional[str] = ..., level: bool = ...) -> None: ...
 
 class CreateGroupResponse(_message.Message):
     __slots__ = ("error", "group")
@@ -793,6 +803,66 @@ class ListPrincipalGroupsResponse(_message.Message):
     error: _common_pb2.CallError
     groups: _containers.RepeatedCompositeFieldContainer[Principal]
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., groups: _Optional[_Iterable[_Union[Principal, _Mapping]]] = ...) -> None: ...
+
+class MarkGroupRequest(_message.Message):
+    __slots__ = ("context", "group_id", "membership_of", "level")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    GROUP_ID_FIELD_NUMBER: _ClassVar[int]
+    MEMBERSHIP_OF_FIELD_NUMBER: _ClassVar[int]
+    LEVEL_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    group_id: str
+    membership_of: str
+    level: bool
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., group_id: _Optional[str] = ..., membership_of: _Optional[str] = ..., level: bool = ...) -> None: ...
+
+class MarkGroupResponse(_message.Message):
+    __slots__ = ("error", "group")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    GROUP_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    group: Principal
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., group: _Optional[_Union[Principal, _Mapping]] = ...) -> None: ...
+
+class Membership(_message.Message):
+    __slots__ = ("group_id", "container")
+    GROUP_ID_FIELD_NUMBER: _ClassVar[int]
+    CONTAINER_FIELD_NUMBER: _ClassVar[int]
+    group_id: str
+    container: str
+    def __init__(self, group_id: _Optional[str] = ..., container: _Optional[str] = ...) -> None: ...
+
+class ListMembershipsRequest(_message.Message):
+    __slots__ = ("context", "principal_id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    principal_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., principal_id: _Optional[str] = ...) -> None: ...
+
+class ListMembershipsResponse(_message.Message):
+    __slots__ = ("error", "memberships")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    MEMBERSHIPS_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    memberships: _containers.RepeatedCompositeFieldContainer[Membership]
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., memberships: _Optional[_Iterable[_Union[Membership, _Mapping]]] = ...) -> None: ...
+
+class ListContainerMembersRequest(_message.Message):
+    __slots__ = ("context", "container")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    CONTAINER_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    container: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., container: _Optional[str] = ...) -> None: ...
+
+class ListContainerMembersResponse(_message.Message):
+    __slots__ = ("error", "principal_ids")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_IDS_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    principal_ids: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., principal_ids: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class MapIdpGroupRequest(_message.Message):
     __slots__ = ("context", "provider", "claim_value", "group_id")

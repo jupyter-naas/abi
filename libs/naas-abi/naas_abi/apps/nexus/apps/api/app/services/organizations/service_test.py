@@ -69,6 +69,78 @@ async def test_list_all_workspaces_delegates_to_adapter() -> None:
     adapter.list_workspaces_for_org.assert_awaited_once_with(org_id="org-1")
 
 
+class _CountedMemberships:
+    """``MEMBERSHIPS``, counting how often the roles' attachments are read."""
+
+    def __init__(self) -> None:
+        from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+        self._memberships = MEMBERSHIPS
+        self.passes: list[str] = []
+
+    def __getattr__(self, name: str):  # type: ignore[no-untyped-def]
+        return getattr(self._memberships, name)
+
+    async def members(self, scope: str):  # type: ignore[no-untyped-def]
+        self.passes.append("members")
+        return await self._memberships.members(scope)
+
+    async def members_of(self, scopes: list[str]):  # type: ignore[no-untyped-def]
+        self.passes.append("members_of")
+        return await self._memberships.members_of(scopes)
+
+
+@pytest.mark.asyncio
+async def test_every_workspaces_roles_are_read_in_one_pass(team) -> None:
+    """#1608: the roles of 60 workspaces in one pass over IAM's role attachments
+    (``members_of``), the same rows one read per workspace gave, in the same order."""
+    workspaces = [SimpleNamespace(id=f"ws-{i:02d}") for i in range(60)]
+    for i, ws in enumerate(workspaces):
+        scope = team.workspace("org-1", ws.id)
+        team.grant(f"user-{i % 9}", ("admin", "member", "viewer")[i % 3], scope)
+    adapter = SimpleNamespace(list_workspaces_for_org=AsyncMock(return_value=workspaces))
+    counted = _CountedMemberships()
+    service = OrganizationService(adapter=adapter, memberships=counted)  # type: ignore[arg-type]
+
+    batched = await service.list_workspace_memberships(org_id="org-1")
+    assert counted.passes == ["members_of"]
+
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
+
+    one_by_one = [
+        (member.user_id, ws.id, member.role)
+        for ws in workspaces
+        for member in await counted.members(workspace_container("org-1", ws.id))
+    ]
+    assert [(r.user_id, r.workspace_id, r.role) for r in batched] == one_by_one
+    assert len(one_by_one) >= 60
+
+
+@pytest.mark.asyncio
+async def test_one_organizations_roles_name_only_its_people(team, monkeypatch) -> None:
+    """Each name is a read: the pass names the holders of the organization asked for, not
+    another organization's (as its directory does)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+    team.grant("elsewhere", "member", team.workspace("org-9", "ws-9"))
+    elsewhere = team.principal("elsewhere")
+    named: list[str] = []
+    user_id = MEMBERSHIPS._user_id
+
+    def naming(iam, principal_id):  # type: ignore[no-untyped-def]
+        named.append(principal_id)
+        return user_id(iam, principal_id)
+
+    monkeypatch.setattr(MEMBERSHIPS, "_user_id", naming)
+    adapter = SimpleNamespace(
+        list_workspaces_for_org=AsyncMock(return_value=[SimpleNamespace(id="ws-1")])
+    )
+    found = await OrganizationService(adapter=adapter).list_workspace_memberships(org_id="org-1")
+
+    assert {r.user_id for r in found} == {"owner", "admin", "member", "viewer"}
+    assert named and elsewhere not in named
+
+
 @pytest.mark.asyncio
 async def test_list_workspace_memberships_reads_each_workspaces_roles(team) -> None:
     adapter = SimpleNamespace(
@@ -158,19 +230,21 @@ async def test_a_member_shows_the_org_profile_and_the_accounts_name(team) -> Non
     }
     adapter = SimpleNamespace(
         get_users_by_ids=AsyncMock(return_value=users),
-        list_organization_member_profiles=AsyncMock(
-            return_value={
-                "member": OrganizationMemberProfileRecord(
-                    name="Ignored", job_title="CTO", organization="Acme", bio=None
-                )
-            }
+        get_organization_member_profile=AsyncMock(
+            return_value=OrganizationMemberProfileRecord(
+                name="Ignored", job_title="CTO", organization="Acme", bio=None
+            )
         ),
+        list_organization_member_profiles=AsyncMock(side_effect=AssertionError("every profile")),
     )
     service = OrganizationService(adapter=adapter)
 
     member = await service.get_organization_member("org-1", "member")
 
     assert member is not None
+    # One member is read alone (#1608): their account and their profile, not the directory's.
+    adapter.get_users_by_ids.assert_awaited_once_with(["member"])
+    adapter.get_organization_member_profile.assert_awaited_once_with("org-1", "member")
     # The name is the account's, the bio falls back to it, the rest is the org's.
     assert (member.name, member.bio) == ("Account Name", "Account bio")
     assert (member.job_title, member.organization, member.avatar) == ("CTO", "Acme", None)
@@ -209,11 +283,11 @@ def _directory_adapter(**extra):
     return SimpleNamespace(
         get_users_by_ids=AsyncMock(
             side_effect=lambda ids: {
-                i: UserRecord(id=i, email=f"{i}@x.io", name=i.title(), status="active")
-                for i in ids
+                i: UserRecord(id=i, email=f"{i}@x.io", name=i.title(), status="active") for i in ids
             }
         ),
         list_organization_member_profiles=AsyncMock(return_value={}),
+        get_organization_member_profile=AsyncMock(return_value=None),
         **extra,
     )
 

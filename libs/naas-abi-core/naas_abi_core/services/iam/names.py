@@ -42,6 +42,11 @@ EVERYWHERE = PREFIX + "*"
 UNRESOLVED = "abi:iam:unresolved/-"
 # The old platform scope, read as the platform.
 _OLD_PLATFORM = "abi:-:-"
+# The attachment scope of the containers the holder is a member of: a policy
+# attached there applies at each container a membership group of the principal
+# names (``PrincipalRecord.membership_of``), ``${scope}`` filled there, and
+# nowhere else (AGENTS.md, "Attachments and scope"). A literal, never a name.
+MY_CONTAINERS_SCOPE = "${my workspaces}"
 
 _SERVICE = re.compile(r"^[a-z][a-z0-9_]*$")
 _ACTION_NAME = re.compile(r"^[A-Z][A-Za-z0-9]*$")
@@ -322,10 +327,16 @@ def container_of_scope(scope: str) -> str:
     return scope.removesuffix(BELOW)
 
 
+def is_membership_scope(scope: str | None) -> bool:
+    """Whether ``scope`` is ``${my workspaces}``: each container the holder is a
+    member of."""
+    return scope == MY_CONTAINERS_SCOPE
+
+
 def validate_scope(scope: str) -> str:
-    """Check an attachment scope: a container, below one (``<container>/*``) or
-    the platform ``abi:``."""
-    if scope == PLATFORM:
+    """Check an attachment scope: a container, below one (``<container>/*``),
+    the platform ``abi:``, or ``${my workspaces}`` (``MY_CONTAINERS_SCOPE``)."""
+    if scope in (PLATFORM, MY_CONTAINERS_SCOPE):
         return scope
     if not isinstance(scope, str) or not scope.startswith(PREFIX):
         raise ValueError(f"A scope is a container's name or abi:: {scope!r}")
@@ -342,7 +353,7 @@ def validate_scope(scope: str) -> str:
 def validate_owner_scope(scope: str) -> str:
     """Check the owner of a policy or a group: the platform or a container,
     never below one."""
-    if is_below(scope):
+    if is_below(scope) or is_membership_scope(scope):
         raise ValueError(f"A policy or a group is owned by a container, not {scope!r}")
     return validate_scope(scope)
 
@@ -350,8 +361,10 @@ def validate_owner_scope(scope: str) -> str:
 def within_owner(owner: str, scope: str | None) -> bool:
     """Whether an attachment at ``scope`` is at ``owner`` or below it: the
     platform's anywhere (unscoped included), a container's at it, below it or at
-    any container inside it."""
-    if owner in (PLATFORM, _OLD_PLATFORM):
+    any container inside it. ``${my workspaces}`` is within every owner: it
+    applies only at the containers within the owners of the attachment's policy
+    and principal (``IAMService._membership_containers``)."""
+    if owner in (PLATFORM, _OLD_PLATFORM) or is_membership_scope(scope):
         return True
     if scope is None:
         return False

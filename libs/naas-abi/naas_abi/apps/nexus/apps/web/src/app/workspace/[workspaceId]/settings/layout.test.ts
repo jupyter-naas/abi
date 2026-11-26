@@ -20,7 +20,9 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 vi.mock('@/components/settings/settings-levels-nav', () => ({ SettingsLevelsNav: () => 'SETTINGS COLUMN' }));
-vi.mock('@/hooks/use-settings-levels', () => ({ useSettingsTabs: () => ({ tabs: [], level: null }) }));
+vi.mock('@/hooks/use-settings-levels', () => ({
+  useSettingsTabs: () => ({ tabs: [], level: null, pagesReady: true }),
+}));
 vi.mock('@/hooks/use-is-mobile', () => ({ useIsMobile: () => state.mobile }));
 vi.mock('@/hooks/use-dev-route-warmup', () => ({ useDevRouteWarmup: () => undefined }));
 vi.mock('@/hooks/use-workspace-resources', () => ({

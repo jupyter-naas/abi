@@ -21,7 +21,7 @@ export async function streamTraffic({
     await withAuth({ headers: { Accept: 'text/event-stream' }, signal }),
   );
   if (!res.ok || !res.body) {
-    throw new Error(res.status === 403 ? 'Platform super admin role required' : `HTTP ${res.status}`);
+    throw new Error(res.status === 403 ? 'Platform admin role required' : `HTTP ${res.status}`);
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

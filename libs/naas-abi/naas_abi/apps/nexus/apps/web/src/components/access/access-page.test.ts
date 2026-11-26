@@ -105,8 +105,8 @@ const SCOPES: [AccessLevel, AccessScope, string | undefined][] = [
   ['workspace', wsScope, 'abi:nexus:organization/acme/nexus:workspace/ws-1'],
 ];
 
-const ALL_PLATFORM: AccessSection[] = ['policies', 'groups', 'service-accounts', 'approvals', 'simulator', 'audit'];
-const CONTAINER: AccessSection[] = ['policies', 'groups'];
+const ALL_PLATFORM: AccessSection[] = ['groups', 'policies', 'service-accounts', 'approvals', 'simulator', 'audit'];
+const CONTAINER: AccessSection[] = ['groups', 'policies'];
 const EXPECTED: Record<string, Record<AccessLevel, AccessSection[]>> = {
   'platform admin': { platform: ALL_PLATFORM, organization: CONTAINER, workspace: CONTAINER },
   'organization admin': { platform: [], organization: CONTAINER, workspace: CONTAINER },
@@ -146,8 +146,8 @@ describe('Access, one page per section at every level', () => {
     }
     // An `iam:` action no page lists opens nothing.
     expect(opensAccess({ actions: { 'iam:Unlisted': true } }, 'platform')).toBe(false);
-    expect(LEVEL_SECTIONS.organization).toEqual(['policies', 'groups']);
-    expect(LEVEL_SECTIONS.workspace).toEqual(['policies', 'groups']);
+    expect(LEVEL_SECTIONS.organization).toEqual(['groups', 'policies']);
+    expect(LEVEL_SECTIONS.workspace).toEqual(['groups', 'policies']);
   });
 
   it('gives a delegated lister the policies to read, and no button to change them', async () => {

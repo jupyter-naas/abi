@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useRef, useState, type Dispatch, 
 import { getApiUrl } from '@/lib/config';
 import { applyTenantShellBranding } from '@/lib/tenant-shell';
 
-interface TenantConfig {
+export interface TenantConfig {
   apps: {
     name: string;
     url: string;

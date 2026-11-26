@@ -32,9 +32,9 @@ import {
 } from '@/stores/workspace';
 import { BackgroundImageEditor } from '../../home/components/background-image-editor';
 import { resolveDeskImageUrl } from '../../home/home-desk';
+import { PlatformFiles } from './platform-files';
 import { WorkspaceConfiguration } from './workspace-configuration';
 import { WorkspaceGroupSelect } from '@/app/organizations/[orgId]/settings/workspaces/workspace-group-select';
-import { WorkspaceOwnerSelect } from '@/app/organizations/[orgId]/settings/workspaces/workspace-owner-select';
 import '@/app/account/profile/profile.css';
 import './general.css';
 
@@ -79,7 +79,6 @@ export default function GeneralSettingsPage() {
   const [description, setDescription] = useState(workspace?.description ?? '');
   const [group, setGroup] = useState(workspace?.group ?? '');
   const [existingGroups, setExistingGroups] = useState<string[]>([]);
-  const [ownerId, setOwnerId] = useState(workspace?.ownerId ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
@@ -119,10 +118,6 @@ export default function GeneralSettingsPage() {
     setDetailsError(null);
   }, [currentWorkspaceId, workspaceName, workspaceDescription, workspaceGroup]);
 
-  useEffect(() => {
-    setOwnerId(workspace?.ownerId ?? '');
-  }, [workspace?.ownerId]);
-
   // As on Home: the wallpaper lives in Workspace Files; when the theme lost
   // its pointer, ask the API for the committed file.
   const themeBackgroundUrl = resolveDeskImageUrl(theme.backgroundImageUrl);
@@ -161,8 +156,7 @@ export default function GeneralSettingsPage() {
   const dirty =
     trimmedName !== workspace.name ||
     trimmedDescription !== (workspace.description ?? '') ||
-    trimmedGroup !== (workspace.group ?? '') ||
-    (workspace.organizationId ? ownerId !== (workspace.ownerId ?? '') : false);
+    trimmedGroup !== (workspace.group ?? '');
 
   /** Save changes (top right): the workspace name, group and description. */
   const handleSaveDetails = async () => {
@@ -180,7 +174,6 @@ export default function GeneralSettingsPage() {
           name: trimmedName,
           description: trimmedDescription,
           workspace_group: trimmedGroup,
-          ...(workspace.organizationId && ownerId ? { owner_id: ownerId } : {}),
         }),
       });
       if (!res.ok) throw new Error(await readApiError(res, 'Failed to save the workspace'));
@@ -188,7 +181,6 @@ export default function GeneralSettingsPage() {
         name: trimmedName,
         description: trimmedDescription,
         group: trimmedGroup || undefined,
-        ...(workspace.organizationId && ownerId ? { ownerId } : {}),
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -387,19 +379,8 @@ export default function GeneralSettingsPage() {
               className="account-profile-field-input"
             />
           </div>
-          {workspace.organizationId && canEdit && (
-            <div className="account-profile-field">
-              <label className="account-profile-field-label">Owner</label>
-              <WorkspaceOwnerSelect
-                orgId={workspace.organizationId}
-                workspaceId={workspace.id}
-                value={ownerId}
-                onChange={setOwnerId}
-                // Only an owner grants, changes or removes an owner.
-                disabled={saving || workspace.currentUserRole !== 'owner'}
-              />
-            </div>
-          )}
+          {/* No Owner here: nothing assigns it any more (ADR access levels and groups). Who
+              administers the workspace is its group "<W> admins" (Access › Groups). */}
         </div>
         <div className="account-profile-field">
           <div className="account-profile-bio-header">
@@ -541,6 +522,8 @@ export default function GeneralSettingsPage() {
 
         </div>
       </SettingsSection>
+
+      <PlatformFiles workspaceId={workspace.id} />
 
       {canEdit && workspace && <WorkspaceConfiguration workspaceId={workspace.id} />}
     </div>

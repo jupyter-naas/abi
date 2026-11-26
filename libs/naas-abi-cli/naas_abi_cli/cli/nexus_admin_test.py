@@ -68,7 +68,11 @@ def test_user_invite_dry_run(runner: CliRunner) -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["path"] == "/api/workspaces/ws-abc/members/invite"
-    assert payload["body"] == {"email": "tester@naas.ai", "role": "member"}
+    assert payload["body"] == {
+        "email": "tester@naas.ai",
+        "admin": False,
+        "level": "member",
+    }
 
 
 def test_user_list_requires_scope(runner: CliRunner) -> None:
@@ -101,7 +105,7 @@ def test_workspace_members_add_dry_run(runner: CliRunner) -> None:
     )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    assert payload["body"]["role"] == "viewer"
+    assert (payload["body"]["level"], payload["body"]["admin"]) == ("viewer", False)
 
 
 def test_workspace_create_postgres_dry_run_requires_owner(runner: CliRunner) -> None:
@@ -366,12 +370,21 @@ def test_workspace_members_search_asks_the_candidates(runner: CliRunner) -> None
     }
 
 
-def test_workspace_members_add_by_user_id_adds_from_the_directory(runner: CliRunner) -> None:
+def test_workspace_members_add_by_user_id_adds_from_the_directory(
+    runner: CliRunner,
+) -> None:
     payload = _dry(
-        runner, "workspace", "members", "add", "--workspace", "ws-1", "--user-id", "usr-9"
+        runner,
+        "workspace",
+        "members",
+        "add",
+        "--workspace",
+        "ws-1",
+        "--user-id",
+        "usr-9",
     )
     assert payload["path"] == "/api/workspaces/ws-1/members"
-    assert payload["body"] == {"role": "member", "user_id": "usr-9"}
+    assert payload["body"] == {"admin": False, "user_id": "usr-9"}
 
 
 def test_workspace_members_add_needs_one_of_user_id_or_email(runner: CliRunner) -> None:
@@ -383,7 +396,16 @@ def test_workspace_members_add_needs_one_of_user_id_or_email(runner: CliRunner) 
 
 
 def test_members_resend(runner: CliRunner) -> None:
-    ws = _dry(runner, "workspace", "members", "resend", "--workspace", "ws-1", "--user-id", "u1")
+    ws = _dry(
+        runner,
+        "workspace",
+        "members",
+        "resend",
+        "--workspace",
+        "ws-1",
+        "--user-id",
+        "u1",
+    )
     org = _dry(runner, "org", "members", "resend", "--org", "org-1", "--user-id", "u1")
     assert ws["path"] == "/api/workspaces/ws-1/members/u1/resend"
     assert org["path"] == "/api/organizations/org-1/members/u1/resend"
@@ -401,24 +423,63 @@ def test_org_invite_names_its_workspaces(runner: CliRunner) -> None:
         "a@b.co",
         "--workspace",
         "ws-1",
+        "--admin",
+        "--level",
+        "member",
+        "--capability",
+        "grp_runners",
+    )
+    assert payload["body"] == {
+        "email": "a@b.co",
+        "level": "member",
+        "workspaces": [{"id": "ws-1", "admin": True}],
+        "capabilities": ["grp_runners"],
+    }
+
+
+def test_org_invite_reads_the_options_of_before(runner: CliRunner) -> None:
+    payload = _dry(
+        runner,
+        "org",
+        "members",
+        "invite",
+        "--org",
+        "org-1",
+        "--email",
+        "a@b.co",
+        "--role",
+        "admin",
+        "--workspace",
+        "ws-1",
         "--workspace-role",
         "viewer",
         "--no-org-role",
     )
     assert payload["body"] == {
         "email": "a@b.co",
-        "role": None,
-        "workspaces": [{"id": "ws-1", "role": "viewer"}],
+        "level": "viewer",
+        "org_admin": True,
+        "workspaces": [{"id": "ws-1", "admin": False}],
     }
 
 
-def test_user_invite_without_an_org_role_needs_a_workspace(runner: CliRunner) -> None:
+def test_owner_is_no_longer_given(runner: CliRunner) -> None:
     result = runner.invoke(
         _main,
-        ["user", "invite", "--email", "a@b.co", "--org", "org-1", "--no-org-role", "--dry-run"],
+        [
+            "user",
+            "invite",
+            "--email",
+            "a@b.co",
+            "--org",
+            "org-1",
+            "--role",
+            "owner",
+            "--dry-run",
+        ],
     )
     assert result.exit_code != 0
-    assert "--no-org-role needs --workspace" in result.output
+    assert "Owner is no longer given" in result.output
 
 
 def _pending_invitation(url: str) -> None:

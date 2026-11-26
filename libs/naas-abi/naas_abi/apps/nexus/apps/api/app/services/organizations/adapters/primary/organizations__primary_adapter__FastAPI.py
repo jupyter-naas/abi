@@ -25,8 +25,16 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
-from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MembershipDenied
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container, workspace_of
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
+    MEMBERSHIPS,
+    LastOrgAdminError,
+    MembershipDenied,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    PLATFORM,
+    org_container,
+    workspace_of,
+)
 from naas_abi.apps.nexus.apps.api.app.services.organizations import domain_proof
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
@@ -60,10 +68,13 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.pos
     WorkspaceSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+    LAST_ORG_ADMIN,
     Grant,
     PeopleServicePort,
     UserStatus,
+    WorkspaceAccess,
     added_result,
+    capability_group_items,
     get_people_service,
     people_errors,
     people_status,
@@ -309,9 +320,18 @@ class OrganizationMember(BaseModel):
     # Their IAM principal, which the access pages link to (an account linked from
     # the old login has another id there).
     principal_id: str | None = None
+    # Their level ("member", "viewer"; #1585), one choice for every workspace.
+    level: str | None = None
+    # They administer the organization ("<O> admins"; #1589).
+    org_admin: bool = False
     user_created: bool = False
     sign_in_email_sent: bool = False
     workspace_member_id: str | None = None
+
+    @model_validator(mode="after")
+    def _org_admin_of_role(self) -> OrganizationMember:
+        self.org_admin = self.role in ("admin", "owner")
+        return self
 
 
 class OrganizationMemberAccount(BaseModel):
@@ -347,6 +367,19 @@ class OrganizationMemberWorkspace(BaseModel):
     slug: str
     role: str
     source: str
+    # They administer it ("<W> admins", or as an org admin; #1589).
+    admin: bool = False
+
+    @model_validator(mode="after")
+    def _admin_of_role(self) -> OrganizationMemberWorkspace:
+        self.admin = self.role in ("admin", "owner")
+        return self
+
+
+class CapabilityGroupRef(BaseModel):
+    id: str
+    name: str
+    owner_scope: str
 
 
 class OrganizationMemberDetails(BaseModel):
@@ -354,29 +387,42 @@ class OrganizationMemberDetails(BaseModel):
     account: OrganizationMemberAccount
     organization_profile: OrganizationMemberProfile
     workspaces: list[OrganizationMemberWorkspace]
+    # The capability groups they are in, of this organization or the platform.
+    capabilities: list[CapabilityGroupRef] = Field(default_factory=list)
 
 
 class WorkspaceGrantInput(BaseModel):
-    """A workspace of the organization the invited person is given a role in."""
+    """A workspace of the organization the person works in, and whether they
+    administer it (#1589). ``role``, the body of before: ``admin`` is ``admin``."""
 
     id: str = Field(..., min_length=1)
-    role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
+    admin: bool | None = None
+    role: str | None = Field(default=None, pattern=r"^(admin|member|viewer)$")
+
+    def is_admin(self) -> bool:
+        return self.admin if self.admin is not None else self.role == "admin"
 
 
 class OrganizationMemberInvite(BaseModel):
     email: str = Field(..., min_length=1)
-    # None: workspace access only (at least one of ``workspaces``), no org role.
-    role: str | None = Field(default="member", pattern=r"^(owner|admin|member)$")
     name: str | None = Field(default=None, min_length=1, max_length=120)
+    # Their level (None: keep theirs; someone with none who joins a workspace is a
+    # Member), whether they administer the organization, the workspaces they join
+    # (each with ``admin``) and capability groups (#1589). With no workspace and no
+    # org admin they join "<O> people" (Viewer access at the organization's level).
+    level: str | None = Field(default=None, pattern=r"^(viewer|member)$")
+    org_admin: bool = False
     workspaces: list[WorkspaceGrantInput] = Field(default_factory=list, max_length=100)
-    # The single workspace of older clients (CLI, agent tools): ``workspaces``' first.
+    capabilities: list[str] = Field(default_factory=list, max_length=20)
+    # The body of before (CLI, agent tools): ``role`` admin is ``org_admin``; owner
+    # is not assigned any more; the single ``workspace_id`` is ``workspaces``' first.
+    role: str | None = Field(default=None, pattern=r"^(owner|admin|member)$")
     workspace_id: str | None = Field(default=None, min_length=1)
-    workspace_role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
+    workspace_role: str | None = Field(default=None, pattern=r"^(admin|member|viewer)$")
     # The identity provider to invite through; by default the one the email's
     # domain routes to, else the default provider.
     provider: str | None = Field(default=None, min_length=1, max_length=32)
-    # Customer policies the new member gets beside the roles: at ``workspace_id``
-    # when given, else at the organization (no role brings a feature).
+    # Customer policies are no longer attached to a person (#1589): refused.
     policy_ids: list[str] = Field(default_factory=list, max_length=20)
     # Member profile in this organization (Organization Settings > Users > Create user).
     organization: str | None = Field(default=None, max_length=200)
@@ -396,14 +442,34 @@ class OrganizationMemberInvite(BaseModel):
             unique.setdefault(grant.id, grant)
         return list(unique.values())
 
-    @model_validator(mode="after")
-    def _someone_is_given_something(self) -> OrganizationMemberInvite:
-        if self.role is None and not self.workspace_grants():
-            raise ValueError("Without an organization role, name at least one workspace")
-        return self
+    def grant(self, org_id: str) -> Grant:
+        """The people service's grant: ``ValueError`` (400) for what is not one."""
+        if self.policy_ids:
+            raise ValueError("Policies are no longer attached to a person: name capability groups")
+        if self.role == "owner":
+            raise ValueError("Owner is no longer assigned: make them an org admin")
+        workspaces = self.workspace_grants()
+        level = self.level
+        if level is None and workspaces and any(w.role for w in workspaces):
+            # The roles of before: the highest that is a level.
+            roles = {w.role for w in workspaces}
+            level = "member" if roles & {"admin", "member"} else "viewer"
+        return Grant(
+            org_id,
+            level=level,  # type: ignore[arg-type]
+            org_admin=self.org_admin or self.role == "admin",
+            workspaces=tuple(WorkspaceAccess(w.id, w.is_admin()) for w in workspaces),
+            capabilities=tuple(self.capabilities),
+        )
 
 
 class OrganizationMemberUpdate(BaseModel):
+    # Whether they administer the organization, their level (everywhere) and the
+    # capability groups wanted (the full set, of the listed ones; #1589).
+    org_admin: bool | None = None
+    level: str | None = Field(default=None, pattern=r"^(viewer|member)$")
+    capabilities: list[str] | None = Field(default=None, max_length=50)
+    # The body of before: ``admin`` is ``org_admin``, ``member`` is not.
     role: str | None = Field(default=None, pattern=r"^(owner|admin|member)$")
     # No name: a member's full name is always their account name (users.name).
     organization: str | None = Field(default=None, max_length=200)
@@ -415,8 +481,19 @@ class OrganizationMemberUpdate(BaseModel):
 
 
 class OrganizationMemberWorkspacesUpdate(BaseModel):
+    """The workspaces of the organization the member works in, each with whether
+    they administer it: the full set (those left out are left). ``workspace_ids``
+    and ``workspace_role``, the body of before."""
+
+    workspaces: list[WorkspaceGrantInput] | None = Field(default=None, max_length=500)
     workspace_ids: list[str] = Field(default_factory=list)
     workspace_role: str = Field(default="member", pattern=r"^(admin|member|viewer)$")
+
+    def wanted(self) -> list[WorkspaceAccess]:
+        if self.workspaces is not None:
+            return [WorkspaceAccess(w.id, w.is_admin()) for w in self.workspaces]
+        admin = self.workspace_role == "admin"
+        return [WorkspaceAccess(w, admin) for w in dict.fromkeys(self.workspace_ids)]
 
 
 class OrganizationWorkspacesBulkUpdate(BaseModel):
@@ -638,11 +715,12 @@ async def update_organization(
 @router.delete(
     "/{org_id}",
     dependencies=[
+        # The platform admin's (#1585): on the platform-level organization_record.
         guard(
-            "DeleteOrganization",
+            "DeletePlatformOrganization",
             workspace=None,
-            org="org_id",
-            denied="Only the organization's owners and the platform administrators can delete it",
+            id="org_id",
+            denied="Only the platform administrators can delete an organization",
         )
     ],
 )
@@ -933,75 +1011,37 @@ async def sync_org_member_workspaces(
     body: OrganizationMemberWorkspacesUpdate,
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
-    workspace_service: WorkspaceService = Depends(get_workspace_service_for_org_invite),
+    people: PeopleServicePort = Depends(get_people_service),
 ) -> dict:
+    """Set the workspaces of the organization the member works in, each with whether
+    they administer it (#1589): they join "<W> workspace" (and "<W> admins") of each
+    named, and leave those of the others. All or nothing, each change checked as
+    the caller. Out of every workspace and not an org admin, they stay among the
+    organization's people ("<O> people")."""
     member = await service.get_organization_member(org_id=org_id, user_id=user_id)
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found")
-
-    org_workspaces = await service.list_all_workspaces(org_id=org_id)
-    org_workspace_by_id = {ws.id: ws for ws in org_workspaces}
-    desired_ids = set(body.workspace_ids)
-    unknown = sorted(desired_ids - set(org_workspace_by_id))
+    org_workspaces = [ws.id for ws in await service.list_all_workspaces(org_id=org_id)]
+    wanted = body.wanted()
+    unknown = sorted({w.id for w in wanted} - set(org_workspaces))
     if unknown:
         raise HTTPException(
             status_code=400,
             detail=f"Workspaces not in this organization: {', '.join(unknown)}",
         )
-
-    memberships = await service.list_workspace_memberships(org_id=org_id)
-    current_ids = {row.workspace_id for row in memberships if row.user_id == user_id}
-
-    added: list[str] = []
-    removed: list[str] = []
-    skipped_owner: list[str] = []
-
-    # Each change is the caller's, checked by IAM at the workspace it touches:
-    # an org owner or admin reaches every workspace of the organization through
-    # their org-wide role, and gives there no role that grants more than they
-    # hold. The role granted is never ``owner`` (the schema), and a workspace
-    # owner is never taken out.
-    iam_memberships = workspace_service.memberships
-    held = await iam_memberships.roles_of(user_id)
-    to_add = sorted(desired_ids - current_ids)
-    to_remove: list[str] = []
-    for workspace_id in sorted(current_ids - desired_ids):
-        if held.get(workspace_container(org_id, workspace_id)) == "owner":
-            skipped_owner.append(workspace_id)
-        else:
-            to_remove.append(workspace_id)
-    try:
-        # Every right is checked before the first change, so a refusal of one
-        # leaves the member's workspaces as they were.
-        for workspace_id in to_add:
-            await iam_memberships.check(
-                user_id,
-                body.workspace_role,
-                workspace_container(org_id, workspace_id),
-                by=current_user,
-            )
-        for workspace_id in to_remove:
-            await iam_memberships.check(
-                user_id, None, workspace_container(org_id, workspace_id), by=current_user
-            )
-        # IAM's GrantNotHeldError (what the role grants beyond what the caller
-        # holds) is a 403 that names it, through the service handlers.
-        for workspace_id in to_add:
-            await iam_memberships.grant(
-                user_id,
-                body.workspace_role,
-                workspace_container(org_id, workspace_id),
-                by=current_user,
-            )
-            added.append(workspace_id)
-        for workspace_id in to_remove:
-            if await iam_memberships.revoke(
-                user_id, workspace_container(org_id, workspace_id), by=current_user
-            ):
-                removed.append(workspace_id)
-    except MembershipDenied as exc:
-        raise _member_denied(str(exc)) from exc
-
+    before = {
+        row.workspace_id
+        for row in await service.list_workspace_memberships(org_id=org_id)
+        if row.user_id == user_id
+    }
+    with people_errors(_member_denied):
+        await people.change_access(
+            user_id=user_id,
+            organization_id=org_id,
+            by=current_user,
+            workspaces=wanted,
+            among=org_workspaces,
+        )
     refreshed = [
         {
             "user_id": row.user_id,
@@ -1015,9 +1055,9 @@ async def sync_org_member_workspaces(
         "user_id": user_id,
         "workspace_ids": [row["workspace_id"] for row in refreshed],
         "memberships": refreshed,
-        "added": added,
-        "removed": removed,
-        "skipped_owner": skipped_owner,
+        "added": sorted({row["workspace_id"] for row in refreshed} - before),
+        "removed": sorted(before - {row["workspace_id"] for row in refreshed}),
+        "skipped_owner": [],
     }
 
 
@@ -1086,6 +1126,8 @@ async def get_org_member_details(
     if details is None:
         raise HTTPException(status_code=404, detail="Member not found")
     workspaces = await service.get_member_workspace_access(org_id=org_id, user_id=user_id)
+    summary = await MEMBERSHIPS.access_of(user_id)
+    org_scope = org_container(org_id)
     return OrganizationMemberDetails(
         member=OrganizationMember(**details.member.__dict__),
         account=OrganizationMemberAccount(**details.account.__dict__),
@@ -1096,7 +1138,32 @@ async def get_org_member_details(
             )
             for w in workspaces
         ],
+        capabilities=[
+            CapabilityGroupRef(id=gid, name=name, owner_scope=owner)
+            for gid, name, owner in (summary.capabilities if summary else ())
+            if owner in (org_scope, PLATFORM)
+        ],
     )
+
+
+@router.get(
+    "/{org_id}/capability-groups",
+    dependencies=[
+        guard(
+            "InviteOrganizationMember",
+            org="org_id",
+            literal="-",
+            denied="Only admins can invite members",
+        )
+    ],
+)
+async def list_org_capability_groups(
+    org_id: str, current_user: User = Depends(get_current_user_required)
+) -> dict[str, object]:
+    """The capability groups a person of the organization may join beside their
+    level: its own, then the platform's. The model's own groups (levels, workspace
+    and admin groups, "<O> people") are not listed."""
+    return {"items": await capability_group_items(org_id)}
 
 
 @router.post(
@@ -1121,11 +1188,15 @@ async def invite_org_member(
     object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> dict[str, object]:
     """Create the person's platform account, or link the one their email has, and
-    give them the org role (none: workspace access only) and a role in each
-    workspace named. The answer is the same either way."""
-    # IAM decided who may invite (the guard) and decides what each role may
-    # give (``by``); ``role`` only tells whether the caller may name an owner.
-    role = await service.get_organization_role(current_user.id, org_id)
+    put them in the organization (#1589): their level, org admin, each workspace
+    named (with whether they administer it) and capability groups; with no
+    workspace and no org admin, among the organization's people. The answer is the
+    same either way. IAM decided who may invite (the guard) and decides what each
+    group may be given by the caller (``by``)."""
+    try:
+        grant = invite.grant(org_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     email = invite.email.lower().strip()
     await check_rate_limit(
         get_rate_limit_identifier(request, current_user.id),
@@ -1142,24 +1213,13 @@ async def invite_org_member(
                 detail="workspace_id must belong to this organization",
             )
     await check_invitation_mail_quota(org_id, workspaces[0].id if workspaces else None)
-
-    # The policies go with the workspaces when there are some, else with the org
-    # (no role brings a feature).
-    policies = tuple(invite.policy_ids)
-    grants: list[Grant] = []
-    if invite.role is not None:
-        grants.append(
-            Grant("organization", org_id, invite.role, () if workspaces else policies)  # type: ignore[arg-type]
-        )
-    grants += [Grant("workspace", w.id, w.role, policies) for w in workspaces]  # type: ignore[arg-type]
     with people_errors(_member_denied):
         result = await people.create_or_link(
             email=email,
             name=invite.name,
             provider=invite.provider,
-            grants=grants,
+            grant=grant,
             by=current_user,
-            may_grant_owner=role == "owner",
             profile=_invite_profile(invite),
             organization_id=org_id,
         )
@@ -1227,24 +1287,37 @@ async def update_org_member(
     updates: OrganizationMemberUpdate,
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
+    people: PeopleServicePort = Depends(get_people_service),
     db: AsyncSession = Depends(get_db),
     object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> OrganizationMember:
+    """Change a member's access in the organization (#1589: org admin, level, the
+    capability groups wanted), all or nothing, and their profile here. 409 when the
+    last org admin would stop being one."""
     member = await service.get_organization_member(org_id=org_id, user_id=user_id)
     if member is None:
         raise HTTPException(status_code=404, detail="Member not found")
 
-    if updates.role is not None:
-        if user_id == current_user.id:
+    if updates.role == "owner":
+        raise HTTPException(
+            status_code=400, detail="Owner is no longer assigned: make them an org admin"
+        )
+    org_admin = updates.org_admin
+    if org_admin is None and updates.role is not None:
+        org_admin = updates.role == "admin"
+    if org_admin is not None or updates.level is not None or updates.capabilities is not None:
+        if user_id == current_user.id and (org_admin is not None or updates.level is not None):
             raise HTTPException(status_code=400, detail="Cannot change your own role")
-        try:
-            member = await service.update_member_role(
-                org_id=org_id, user_id=user_id, role=updates.role, by=current_user
+        with people_errors(_member_denied):
+            await people.change_access(
+                user_id=user_id,
+                organization_id=org_id,
+                by=current_user,
+                level=updates.level,
+                org_admin=org_admin,
+                capabilities=updates.capabilities,
             )
-        except MembershipDenied as exc:
-            raise _member_denied(str(exc)) from exc
-        except LastOwnerError as exc:
-            raise HTTPException(status_code=400, detail="An organization needs an owner") from exc
+        member = await service.get_organization_member(org_id=org_id, user_id=user_id)
         if member is None:
             raise HTTPException(status_code=404, detail="Member not found")
 
@@ -1435,11 +1508,11 @@ async def remove_org_member_access(
     db: AsyncSession = Depends(get_db),
     object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> dict:
-    """Remove someone from the organization in one step: their role in every
-    workspace of it and any org role (Org settings › Users › Remove from
-    organization, for people with workspace access only). Their platform account
-    stays. An org owner is refused, so the last owner never leaves; a workspace's
-    last owner too (409). ``DELETE /members/{user_id}`` takes the org role alone."""
+    """Remove someone from the organization in one step: every group of it they are
+    in, its workspaces' included (Org settings › Users › Remove from organization;
+    ``OrganizationService.remove_from_organization``). Their platform account and
+    level stay. The last org admin is a 409. ``DELETE /members/{user_id}`` takes
+    the org role alone."""
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot remove yourself from the organization")
     try:
@@ -1448,6 +1521,8 @@ async def remove_org_member_access(
         )
     except OrganizationOwnerRemovalError as exc:
         raise HTTPException(status_code=400, detail="Cannot remove the organization owner") from exc
+    except LastOrgAdminError as exc:
+        raise HTTPException(status_code=409, detail=LAST_ORG_ADMIN) from exc
     except LastOwnerError as exc:
         names = {ws.id: ws.name for ws in await service.list_all_workspaces(org_id=org_id)}
         workspace = workspace_of(exc.scope) or ""

@@ -203,10 +203,45 @@ class PrincipalRecord:
     # Groups: the platform (``abi:``) or the container that owns them and names
     # them. Users and service accounts are the platform's.
     owner_scope: str = PLATFORM_SCOPE
+    # Groups: a membership group of this container (its name, at or below the
+    # group's owner): its members are members of it, where the policies held at
+    # ``${my workspaces}`` apply (AGENTS.md, "Groups").
+    membership_of: str | None = None
+    # Groups: a level group ("Members", "Viewers"): the admins of any container
+    # a person is a member of may add or remove that person, audited, even where
+    # they hold less than its ``${my workspaces}`` policies give. Set by the
+    # platform's grants only.
+    level_group: bool = False
 
     @property
     def active(self) -> bool:
         return self.status == "active"
+
+
+@dataclass(frozen=True)
+class Membership:
+    """A principal is a member of ``container`` through the membership group
+    ``group_id``."""
+
+    group_id: str
+    container: str
+
+
+@dataclass(frozen=True)
+class AuditEvent:
+    """A change IAM records for audit: a person joining or leaving a level group
+    (``action`` ``iam:AddGroupMember`` or ``iam:RemoveGroupMember``), made by the
+    actor ``by`` (for the user ``on_behalf_of``). ``containers``: the membership
+    containers of the person whose admin the writer was, empty when the writer
+    holds the action on the group itself (its owner's admins, the platform)."""
+
+    action: str
+    group_id: str
+    member_id: str
+    by: str
+    on_behalf_of: str | None
+    containers: tuple[str, ...]
+    at: datetime
 
 
 @dataclass(frozen=True)
@@ -660,6 +695,17 @@ class IAMStore(ABC):
     def list_group_members(self, group_id: str) -> list[str]: ...
 
     @abstractmethod
+    def memberships_of(self, member_id: str) -> list[Membership]:
+        """The membership groups ``member_id`` is a static member of, with the
+        container each makes it a member of, by group id. Any status: the
+        service keeps the active ones."""
+
+    @abstractmethod
+    def membership_groups(self, container: str) -> list[str]:
+        """The ids of the groups marked as membership groups of ``container``
+        (exactly it), sorted. Any status."""
+
+    @abstractmethod
     def groups_of(self, member_id: str) -> list[str]:
         """The static groups ``member_id`` belongs to."""
 
@@ -987,6 +1033,9 @@ class EffectiveStatement:
     # A statement of a parent reached through a sub-policy's attachment: the
     # sub-policies it came through, the attached one first.
     through: tuple[str, ...] = ()
+    # Reached through an attachment at ``${my workspaces}``: the membership group
+    # that made ``scope`` one of the principal's containers.
+    membership_group: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1027,6 +1076,10 @@ class DecidingStatement:
     via_group: str | None = None
     bounded_by: tuple[BoundingStatement, ...] = ()
     through: tuple[str, ...] = ()
+    # Through ``${my workspaces}``: the membership group that made ``scope`` (the
+    # container it applied at) the principal's; ``via_group`` is the group that
+    # holds the policy (the level group), None when the principal holds it.
+    membership_group: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1152,6 +1205,15 @@ class IIAMService(ABC):
     """
 
     # -- decisions ------------------------------------------------------------
+
+    def authorization_revision(self) -> int:
+        """Read the authoritative revision and refresh local authorization caches.
+
+        Optional for in-process consumers caching already-authorized answers.
+        An implementation unable to prove freshness must raise, never return a
+        previously observed revision. Not exposed as a remote IAM operation.
+        """
+        raise NotImplementedError("Fresh authorization revisions are not available")
 
     @abstractmethod
     def authorize(self, action: str, resource: str) -> Decision: ...
@@ -1347,9 +1409,36 @@ class IIAMService(ABC):
     # -- groups -----------------------------------------------------------------
 
     @abstractmethod
-    def create_group(self, name: str, *, scope: str | None = None) -> PrincipalRecord:
+    def create_group(
+        self,
+        name: str,
+        *,
+        scope: str | None = None,
+        membership_of: str | None = None,
+        level: bool = False,
+    ) -> PrincipalRecord:
         """A group owned by ``scope``: a registered container, else the
-        platform."""
+        platform. ``membership_of``: a membership group of that registered
+        container, at or below its owner; ``level``: a level group (the
+        platform's grants only), as ``mark_group``."""
+
+    @abstractmethod
+    def mark_group(
+        self, group_id: str, *, membership_of: str | None = None, level: bool = False
+    ) -> PrincipalRecord:
+        """Set both markers of a group: ``iam:UpdateGroup`` on it, and on its
+        platform name to change ``level``. A new container is checked as adding
+        each member to a membership group of it."""
+
+    @abstractmethod
+    def list_memberships(self, principal_id: str) -> list[Membership]:
+        """The memberships of ``principal_id`` whose group the caller may read
+        (``iam:GetGroup``)."""
+
+    @abstractmethod
+    def list_container_members(self, container: str) -> list[str]:
+        """The principals that are members of ``container`` through one of its
+        membership groups the caller may read (``iam:GetGroup``), sorted."""
 
     @abstractmethod
     def get_group(self, group_id: str) -> PrincipalRecord: ...
@@ -1607,6 +1696,11 @@ class IIAMService(ABC):
         """The deployment's platform-level resources workspace roles reach (the
         serving engine's IAM only)."""
         raise NotImplementedError("Platform grants are set on the serving engine")
+
+    def set_self_grants(self, grants: Sequence[Any]) -> None:
+        """What the deployment gives every user in ``builtin.self`` (the serving
+        engine's IAM only)."""
+        raise NotImplementedError("Self grants are set on the serving engine")
 
     def retired_policies(self) -> list[Policy]:
         """The retired managed policies still in force (the serving engine's IAM

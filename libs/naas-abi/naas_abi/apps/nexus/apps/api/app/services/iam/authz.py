@@ -23,9 +23,14 @@ IAM and no scope list.
   pipeline: ``ModuleScope``) is decided with the ``module`` catalog, in the
   workspace where it is used (``require_scope``, ``filter_scopes``): one
   source of truth for module resources, whoever hosts them. Agents a workspace
-  builds itself stay ``nexus:UseAgent``. IAM's decision is the whole answer:
-  there is no workspace on/off switch and no set narrowing what a listing
-  shows (a workspace that should not offer a module denies it in a policy).
+  builds itself stay ``nexus:UseAgent``. IAM's decision is the whole answer to
+  "may this person use it": there is no workspace on/off switch.
+* **A workspace's lists show its offer.** What ``filter_scopes`` keeps is also
+  within the workspace's offer ("<W> access", ``workspace_offer``), for everyone:
+  an org admin, who uses the organization's offer in each of its workspaces, and
+  the platform admin, see in W what W offers (ADR ``20261120_access_levels_and_groups``).
+  Only what is shown: a single item (``require_scope``) is IAM's alone. A
+  workspace with no record, or whose policy is no allow-list yet, is not narrowed.
 * **Until the sets are policies** (``policy_tree.pending``: a start that has not
   moved them yet), every module scope and feature is refused: never wider than
   before the upgrade.
@@ -94,6 +99,9 @@ _T = TypeVar("_T")
 # here forgets it at once (``forget_workspace``); one made elsewhere is seen in this
 # time.
 _CONTAINER_CACHE_SECONDS = 30.0
+# How long a workspace's offer is remembered, the same way: a change made here forgets
+# every one (``forget_offers``).
+_OFFER_CACHE_SECONDS = 30.0
 
 
 class AuthzDenied(HTTPException):
@@ -131,6 +139,7 @@ class Decision:
 class Authz:
     def __init__(self) -> None:
         self._containers: dict[str, tuple[str, float]] = {}
+        self._offers: dict[str, tuple[Any, float]] = {}
 
     # -- identity ------------------------------------------------------------
 
@@ -177,6 +186,47 @@ class Authz:
 
     def forget_workspaces(self) -> None:
         self._containers.clear()
+        self._offers.clear()
+
+    def forget_offers(self) -> None:
+        """Read each workspace's offer again (one was changed)."""
+        self._offers.clear()
+
+    async def offer_of(self, container: str) -> Any:
+        """What ``container`` (a workspace's) offers: its "<W> access" read as an
+        allow-list (``workspace_offer.Offer``). None when it has no record, no
+        policy, or a policy that is no allow-list yet (a ceiling the access move
+        converts): nothing to narrow by."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+            CONTAINER_DEFAULTS,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
+            in_offer_form,
+            offer_of,
+        )
+        from naas_abi_core.engine.call_context import as_service_account
+        from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError, ResourceNotFoundError
+
+        now = time.monotonic()
+        found = self._offers.get(container)
+        if found is not None and found[1] > now:
+            return found[0]
+        record = await CONTAINER_DEFAULTS.record_of(container)
+        policy_id = getattr(record, "access_policy_id", None)
+
+        def read() -> Any:
+            if not policy_id:
+                return None
+            try:
+                with as_service_account(NEXUS_IDENTITY):
+                    policy = runtime.iam().get_policy(policy_id)
+            except (IAMNotFoundError, ResourceNotFoundError):
+                return None
+            return offer_of(policy.document) if in_offer_form(policy.document) else None
+
+        offer = await run_in_threadpool(read)
+        self._offers[container] = (offer, now + _OFFER_CACHE_SECONDS)
+        return offer
 
     async def where(self, *, workspace: str | None = None, org: str | None = None) -> str | None:
         """The container a decision is made in: the workspace's (looked up, unless
@@ -477,9 +527,10 @@ class Authz:
         scope_of: Callable[[_T], ModuleScope | None],
         action: str | None = None,
     ) -> list[_T]:
-        """The items the user may use in ``workspace``, in order; an item with no
-        module scope (``scope_of`` answers None) is kept: another check owns it.
-        IAM's ``filter`` alone decides: no set, no workspace switch."""
+        """The items the user may use in ``workspace`` and it offers, in order; an
+        item with no module scope (``scope_of`` answers None) is kept: another check
+        owns it. IAM's ``filter`` decides, then the workspace's offer narrows what
+        is shown (``offer_of``)."""
         found = list(items)
         scopes = [scope_of(item) for item in found]
         if not any(scopes):
@@ -503,10 +554,15 @@ class Authz:
             return allowed
 
         allowed = await run_in_threadpool(run)
+        offer = await self.offer_of(container)
         return [
             item
             for item, scope in zip(found, scopes, strict=True)
-            if scope is None or (scope.action(action), scope.resource(container)) in allowed
+            if scope is None
+            or (
+                (scope.action(action), scope.resource(container)) in allowed
+                and _offered(offer, scope)
+            )
         ]
 
     async def scope_allowed_in_any(
@@ -540,6 +596,16 @@ class Authz:
             if await run_in_threadpool(allows, workspace_container(org, workspace)):
                 return workspace
         return None
+
+
+def _offered(offer: Any, scope: ModuleScope) -> bool:
+    """Whether ``offer`` (None: no offer to narrow by) offers ``scope``."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import KIND_OF_TYPE
+
+    if offer is None:
+        return True
+    kind = KIND_OF_TYPE.get(scope.type)
+    return kind is None or offer.offers(kind, scope.module, scope.name)
 
 
 AUTHZ = Authz()

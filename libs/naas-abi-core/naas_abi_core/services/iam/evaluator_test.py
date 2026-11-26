@@ -20,6 +20,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     ResourceNotFoundError,
 )
 from naas_abi_core.services.iam.IAMService import (
+    LEGACY_NEXUS_ISSUER,
     IAMService,
     group_resource,
     policy_resource,
@@ -414,6 +415,26 @@ def test_a_create_on_a_name_the_caller_can_see_is_denied_otherwise_not_found(h):
 
 
 # -- explain ------------------------------------------------------------------------------------------------
+
+
+def test_explain_finds_a_nexus_user_by_the_id_nexus_names_them(h):
+    """A module asking about the user of a request it serves has Nexus's id for
+    them (a session's user, ``user-...``), as a call made for that user names them:
+    explain finds them as that call is decided. One IAM does not know is not found."""
+    with as_service_account("engine"):
+        bob = h.iam.ensure_user(LEGACY_NEXUS_ISSUER, "user-0123456789ab")
+    h.grant(bob.id, statement("Allow", [QUERY], [graph("a")]))
+    module = h.service_account("module/bob/reader")
+    h.grant(module.id, statement("Allow", ["iam:Explain"], ["abi:iam:principal/*"]))
+
+    with h.as_(module):
+        by_nexus_id = h.iam.explain(QUERY, graph("a"), principal_id="user-0123456789ab")
+        by_iam_id = h.iam.explain(QUERY, graph("a"), principal_id=bob.id)
+        with pytest.raises(IAMNotFoundError):
+            h.iam.explain(QUERY, graph("a"), principal_id="user-unknown000")
+
+    assert by_nexus_id.allowed and by_iam_id.allowed
+    assert by_nexus_id.statement == by_iam_id.statement
 
 
 def test_explain_names_the_deciding_statement(h):

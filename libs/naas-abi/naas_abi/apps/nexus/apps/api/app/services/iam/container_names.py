@@ -633,6 +633,30 @@ async def moves_lock(engine: AsyncEngine) -> AsyncIterator[None]:
             await connection.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": MOVES_LOCK})
 
 
+# The lock of the access move's comparison after the start (``access_model.complete_report``).
+REPORT_LOCK = 0x4E58_4D4F_5645_5332
+
+
+@asynccontextmanager
+async def lock_if_free(engine: AsyncEngine, key: int) -> AsyncIterator[bool]:
+    """Whether this process holds the PostgreSQL advisory lock ``key``, taken
+    without waiting: False while another process holds it. On SQLite, held (one
+    API process, as for ``moves_lock``)."""
+    if engine.dialect.name != "postgresql":
+        yield True
+        return
+    async with engine.connect() as connection:
+        connection = await connection.execution_options(isolation_level="AUTOCOMMIT")
+        held = bool(
+            (await connection.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": key})).scalar()
+        )
+        try:
+            yield held
+        finally:
+            if held:
+                await connection.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": key})
+
+
 async def read_nexus(db: AsyncSession) -> tuple[list[str], dict[str, str | None]]:
     """Nexus's organizations, and each workspace's organization."""
     orgs = [str(row[0]) for row in (await db.execute(text("SELECT id FROM organizations"))).all()]

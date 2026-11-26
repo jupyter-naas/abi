@@ -13,6 +13,9 @@
     - Login card layout: `login_card_max_width`, `login_card_padding`, `login_card_color`
     - Login appearance: `login_text_color`, `login_input_color`, `login_border_radius`, `login_bg_image_url`
     - Footer flags/text: `show_terms_footer`, `show_powered_by`, `login_footer_text`
+    - Login heading: `login_heading` (a static heading in place of the Welcome typewriter; `None` keeps the typewriter)
+    - Logo size: `logo_height` (logo image height in pixels, 16 to 256, default `48`)
+    - Footer link: `login_footer_link_label`, `login_footer_link_url` (a link under `login_footer_text`, opened in a new tab; both set or both `None`, the URL an absolute http(s) URL)
     - External apps: `apps` (defaults to empty list)
 
 - `class TenantResponse.ExternalAppResponse(pydantic.BaseModel)`

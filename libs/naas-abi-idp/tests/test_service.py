@@ -398,6 +398,30 @@ def test_the_signing_key_rotates_and_the_old_one_stays_published(service, clock)
     assert [k["kid"] for k in service.keys.jwks()["keys"]] == [second.kid]
 
 
+def test_a_short_p256_coordinate_is_published_at_full_width():
+    import base64
+
+    import jwt
+    from authlib.jose import JsonWebKey
+
+    from naas_abi_idp.keys import public_jwk
+
+    saw_short = False
+    for index in range(2000):
+        generated = JsonWebKey.generate_key("EC", "P-256", is_private=True)
+        raw = generated.as_dict(is_private=False)
+        for coord in (raw["x"], raw["y"]):
+            decoded = base64.urlsafe_b64decode(coord + "=" * (-len(coord) % 4))
+            if len(decoded) < 32:
+                saw_short = True
+        public = public_jwk(generated, f"k{index}")
+        for coord in (public["x"], public["y"]):
+            decoded = base64.urlsafe_b64decode(coord + "=" * (-len(coord) % 4))
+            assert len(decoded) == 32
+        jwt.PyJWK.from_dict(public, "ES256")
+    assert saw_short
+
+
 def test_no_private_key_is_in_the_documents_or_the_jwks(service):
     service.keys.active()
     jwks = service.keys.jwks()

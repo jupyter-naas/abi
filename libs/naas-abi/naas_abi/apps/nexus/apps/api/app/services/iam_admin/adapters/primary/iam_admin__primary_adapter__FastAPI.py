@@ -28,7 +28,11 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.port import IamUnavailableError
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.runtime import get_iam_admin_service
-from naas_abi.apps.nexus.apps.api.app.services.iam_admin.service import IamAdminService
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.service import (
+    GROUPS_PAGE_DEFAULT,
+    GROUPS_PAGE_MAX,
+    IamAdminService,
+)
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
 from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from naas_abi.apps.nexus.apps.api.app.services.view_as.confinement import outside_this_view
@@ -242,6 +246,39 @@ async def catalogs(
     return await _call(service.catalogs(user, scope, parent, derive=derive))
 
 
+# -- capability groups ----------------------------------------------------------------------
+
+
+@router.get("/capabilities", dependencies=[declares("iam:ListGroups")])
+async def capabilities(
+    scope: str | None = None,
+    user: User = Signed,
+    service: IamAdminService = Service,
+) -> dict[str, Any]:
+    """The capability groups of ``scope``'s level (an organization's "Workflow
+    runners", the platform's "Models · all"): made or not, and whether the caller may
+    make each."""
+    return await _call(service.capabilities(user, scope))
+
+
+class CapabilityBody(BaseModel):
+    capability: str = Field(min_length=1, max_length=64)
+    # An organization's container (a workspace's names its organization); the
+    # platform without one.
+    scope: str | None = None
+
+
+@router.post("/capabilities", dependencies=[declares("iam:CreateGroup")])
+async def ensure_capability(
+    body: CapabilityBody,
+    user: User = Signed,
+    service: IamAdminService = Service,
+) -> dict[str, Any]:
+    """Make a capability group on demand (idempotent), for whoever may create groups
+    (and the policy it holds) at its level."""
+    return await _call(service.ensure_capability(user, body.capability, body.scope))
+
+
 # -- policies -----------------------------------------------------------------------------
 
 
@@ -324,12 +361,15 @@ async def delete_policy(
 
 @router.get("/attachments", dependencies=[declares("iam:ListAttachments")])
 async def list_attachments(
-    principal_id: str | None = None,
+    principal_id: list[str] | None = Query(default=None),  # noqa: B008 - FastAPI's form
     policy_id: str | None = None,
     scope: str | None = None,
     user: User = Signed,
     service: IamAdminService = Service,
 ) -> dict[str, Any]:
+    """``principal_id`` may be repeated (a person and their groups, at most
+    ``MAX_PRINCIPALS_PER_READ``, 422 above): each one's attachments, in the order named,
+    as one request for each would answer them."""
     return await _call(
         service.list_attachments(user, principal_id=principal_id, policy_id=policy_id, scope=scope)
     )
@@ -419,9 +459,24 @@ async def resume_principal(
 
 @router.get("/groups", dependencies=[declares("iam:ListGroups")])
 async def list_groups(
-    scope: str | None = None, user: User = Signed, service: IamAdminService = Service
+    scope: str | None = None,
+    after: str | None = None,
+    limit: int = Query(default=GROUPS_PAGE_DEFAULT, ge=1, le=GROUPS_PAGE_MAX),
+    member_counts: bool = False,
+    user: User = Signed,
+    service: IamAdminService = Service,
 ) -> dict[str, Any]:
-    return await _call(service.list_groups(user, scope))
+    """A page of groups (``next_after`` for the next). ``member_counts``: each group's
+    ``member_count``, None where its detail would be refused (IAM's ``iam:GetGroup``, and
+    in a view a group outside it), so the list needs no detail per group (#1608)."""
+    groups = await _call(
+        service.list_groups(user, scope, after=after, limit=limit, member_counts=member_counts)
+    )
+    if member_counts and viewing():
+        for group in groups["items"]:
+            if outside_this_view(group.get("owner_scope")) is not None:
+                group["member_count"] = None
+    return groups
 
 
 @router.get("/groups/{group_id}", dependencies=[declares("iam:GetGroup")])

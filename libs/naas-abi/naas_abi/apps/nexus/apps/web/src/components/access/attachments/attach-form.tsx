@@ -3,25 +3,13 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { AttachablePolicy, PrincipalKind } from '@/lib/iam-admin/types';
-import { isRoleCompanion, principalKindOf, roleOfPolicy } from '../roles/role-change';
+import { isPlatformAccess, isServiceAccountPolicy } from '../builtins';
+import { principalKindOf, roleOfPolicy } from '../roles/role-change';
 import './attachments.css';
 
+export { isServiceAccountPolicy };
+
 export type PrincipalChoice = { id: string; label: string; kind?: PrincipalKind };
-
-/** The built-in policies of IAM's own service accounts and jobs (core `roles.py`). */
-const SERVICE_ACCOUNT_POLICIES = new Set([
-  'builtin.api',
-  'builtin.engine',
-  'builtin.idp',
-  'builtin.job',
-  'builtin.module_bootstrap',
-]);
-
-/** A policy made for a service account: one of IAM's own accounts', or a module's approved
- *  manifest (`module.<project>.<module>`). */
-export function isServiceAccountPolicy(policyId: string): boolean {
-  return SERVICE_ACCOUNT_POLICIES.has(policyId) || policyId.startsWith('module.');
-}
 
 /** A user's built-in role is a membership (People & roles' role column, Members), never a bare
  *  attachment; a group or a service account takes one. What comes with a role (its platform
@@ -30,7 +18,7 @@ export function isServiceAccountPolicy(policyId: string): boolean {
  *  user holds already, to neither. A principal not among the known
  *  ones is told by its id. */
 export function offeredTo(policy: AttachablePolicy, principal: PrincipalChoice | undefined): boolean {
-  if (isRoleCompanion(policy.id)) return false;
+  if (isPlatformAccess(policy.id)) return false;
   const kind = principal?.kind ?? (principal ? principalKindOf(principal.id) : 'user');
   if (isServiceAccountPolicy(policy.id) && kind !== 'service_account') return false;
   // Every user holds it already, with no attachment (core `roles.SELF`): to a person or a

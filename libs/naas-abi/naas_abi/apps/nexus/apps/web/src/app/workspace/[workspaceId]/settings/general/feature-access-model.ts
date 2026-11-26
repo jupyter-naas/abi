@@ -1,19 +1,19 @@
 /**
- * General › Features (`GET` / `PUT /api/workspaces/{id}/feature-access`): who may use each feature
- * of the workspace, as the API answers it, and the changes a save sends. Pure: the view is
- * `feature-access.tsx`. Each choice is a policy the API writes as the caller (`Feature · <name>`);
- * what may be changed is IAM's answer (`editable`, `reason`), never a role.
+ * General › Features (`GET` / `PUT /api/workspaces/{id}/feature-access`): whether the workspace
+ * offers each feature, as the API answers it, and the changes a save sends. Pure: the view is
+ * `feature-access.tsx`. A feature is part of the workspace's offer, "<W> access" (S3, #1586):
+ * Everyone puts it in, Nobody takes it out. Only… is gone: an exception for some people is a group
+ * holding a policy. What may be changed is IAM's answer (`editable`, `reason`), never a role.
  */
 import { ownerHref } from '@/components/access/policies/policy-owners';
 
-export type FeatureChoice = 'everyone' | 'only' | 'nobody';
+export type FeatureChoice = 'everyone' | 'nobody';
 export const FEATURE_CHOICES: { value: FeatureChoice; label: string; hint: string }[] = [
-  { value: 'everyone', label: 'Everyone', hint: "The workspace's members, newcomers included." },
-  { value: 'only', label: 'Only…', hint: 'The members and groups you choose.' },
+  { value: 'everyone', label: 'Everyone', hint: "Offered by the workspace: everyone in it, newcomers included." },
   {
     value: 'nobody',
     label: 'Nobody',
-    hint: 'Its policy attached to no one here. Platform administrators still see every feature.',
+    hint: 'Not offered by the workspace. Platform admins still see every feature.',
   },
 ];
 
@@ -26,7 +26,7 @@ export type FeatureRow = {
   key: string;
   label: string;
   choice: FeatureChoice;
-  /** Only…: who holds the feature's policy at the workspace. */
+  /** Always empty now (Only… is gone); kept as the API answers it. */
   principals: PrincipalRef[];
   /** The feature's policy, once a save made it. */
   policy: PolicyRef | null;
@@ -52,19 +52,11 @@ export type FeatureAccessState = {
   errors?: Record<string, string>;
 };
 
-export type FeatureDraft = { choice: FeatureChoice; principals: string[] };
-export type FeatureChange = { feature: string; choice: FeatureChoice; principals?: string[] };
+export type FeatureDraft = { choice: FeatureChoice };
+export type FeatureChange = { feature: string; choice: FeatureChoice };
 
 export function draftOf(row: FeatureRow): FeatureDraft {
-  return { choice: row.choice, principals: row.principals.map((p) => p.id) };
-}
-
-function sameDraft(a: FeatureDraft, b: FeatureDraft): boolean {
-  if (a.choice !== b.choice) return false;
-  if (a.choice !== 'only') return true;
-  const left = [...a.principals].sort();
-  const right = [...b.principals].sort();
-  return left.length === right.length && left.every((id, i) => id === right[i]);
+  return { choice: row.choice };
 }
 
 /** The rows by name, A to Z. */
@@ -76,21 +68,9 @@ export function sortedRows(rows: FeatureRow[]): FeatureRow[] {
 export function changesFrom(rows: FeatureRow[], drafts: Record<string, FeatureDraft>): FeatureChange[] {
   return rows.flatMap((row) => {
     const draft = drafts[row.key];
-    if (!draft || sameDraft(draft, draftOf(row))) return [];
-    return [
-      draft.choice === 'only'
-        ? { feature: row.key, choice: draft.choice, principals: draft.principals }
-        : { feature: row.key, choice: draft.choice },
-    ];
+    if (!draft || draft.choice === row.choice) return [];
+    return [{ feature: row.key, choice: draft.choice }];
   });
-}
-
-/** Why a draft cannot be saved (Only… with nobody chosen), else null. */
-export function draftProblem(row: FeatureRow, draft: FeatureDraft | undefined): string | null {
-  if (draft?.choice === 'only' && draft.principals.length === 0) {
-    return `Choose who may use ${row.label}.`;
-  }
-  return null;
 }
 
 /** Each choice of a row and whether it can be picked: an editable row; a feature the workspace
@@ -145,12 +125,4 @@ export function otherPolicies(row: FeatureRow): { policy: OtherPolicy; text: str
       }`,
       href: ownerHref(policy.owner_scope, policy.id),
     }));
-}
-
-/** The members and groups Only… may name, minus those chosen: people first, by name. */
-export function offeredPrincipals(candidates: PrincipalRef[], chosen: string[]): PrincipalRef[] {
-  const taken = new Set(chosen);
-  return candidates
-    .filter((p) => !taken.has(p.id))
-    .sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'user' ? -1 : 1));
 }

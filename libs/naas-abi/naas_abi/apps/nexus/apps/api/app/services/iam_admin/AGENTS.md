@@ -58,7 +58,9 @@ Nexus adds no role check of its own.
   it the caller may list, IAM's `list_sub_policies`). `PUT` takes `parent`: absent keeps it, `null` or `""`
   removes it, an id sets it. Deleting a parent that has sub-policies is a 409 naming them
 - `GET|POST|DELETE /attachments` (`?scope=`, `?principal_id=`, `?policy_id=`; without `scope`, at every level, each
-  attachment kept by IAM where the caller may `iam:ListAttachments` it), `GET /attachable-policies?scope=`.
+  attachment kept by IAM where the caller may `iam:ListAttachments` it; `GET` takes `principal_id` repeated, at most
+  `MAX_PRINCIPALS_PER_READ` (100, else 422): each one's rows in the order named, as one request each would answer
+  them, each policy and principal named once: a person's groups in one read, #1608), `GET /attachable-policies?scope=`.
   `POST` at a container attaches to a user only once related to its top container (an attachment of their own within
   it: a membership, an accepted invitation; `IamGateway.belongs`), unless the caller may attach the policy unscoped
   (the platform admin): anyone else is invited, and an unrelated user is answered 404, as an unknown one, with no
@@ -69,8 +71,22 @@ Nexus adds no role check of its own.
   `GET /principals/{id}/groups` (IAM's `list_principal_groups`: the groups of the principal the caller may
   `iam:GetGroup`, at every level; empty, not a 403, for a principal they see nothing of),
   `POST /principals/{id}/suspend|resume`
-- `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, which names that organization's container, is the owner), `GET|DELETE /groups/{id}`, `PATCH /groups/{id}` (`{name}`: a rename, IAM's `update_group`, `iam:UpdateGroup`), `PUT|DELETE /groups/{id}/members/{member}`,
-  `PUT|DELETE /groups/{id}/idp-mappings`
+- `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, which names that organization's container, is the owner;
+  `GET` is a page in IAM's order, `?after=&limit=` (1 to `GROUPS_PAGE_MAX`, 500; IAM's 100 by default) with `next_after`,
+  and `?member_counts=true` adds each group's `member_count`: decided in one `filter("iam:GetGroup", …)` as
+  `GET /groups/{id}` decides each, null where that detail would be refused, a view's outside included; no member is
+  named, so the Groups list reads no detail per group, #1608), `GET|DELETE /groups/{id}`, `PATCH /groups/{id}` (`{name}`: a rename, IAM's `update_group`, `iam:UpdateGroup`), `PUT|DELETE /groups/{id}/members/{member}`,
+  `PUT|DELETE /groups/{id}/idp-mappings`. After a member is added or removed, `follow_member` (`runtime.py`:
+  `iam/platform_files.follow`, as `api`) puts the person's Platform Files groups back in step with their
+  workspaces (#1590); a failure is logged, the change stands. A group's view carries its markers (core #1584): `membership_of`
+  (the container its members are members of, "<W> workspace") and `level_group` ("Viewers", "Members").
+- `GET /capabilities?scope=` (`iam:ListGroups` at the level) and `POST /capabilities` (`{capability, scope}`,
+  `iam:CreateGroup`): the capability groups (`../iam/capabilities.py`) of a level, an organization's "Workflow
+  runners" (a workspace's scope names its organization's) and the platform's "Models · all"; each
+  `{capability, name, owner_scope, group_id, policy_id, can_create}`. POST makes one on demand, idempotent, as
+  `api` (`IamGateway.capability`) once the caller is checked: `iam:CreateGroup` there, plus `iam:CreatePolicy`
+  there (Workflow runners) or `iam:AttachPolicy` at the platform (Models · all). Workflow runners is bounded by
+  "<O> access" (`org_access_of`, `container_defaults`); an organization without one is refused (422).
 - `GET|POST /service-accounts`, `DELETE /service-accounts/{id}`, `GET|POST /service-accounts/{id}/keys`,
   `DELETE …/keys/{key}`, `POST …/keys/{key}/rotate`
 - `GET /manifests?status=`, `POST /manifests/{principal}/{sha256}/approve` (optional narrowed `document`) and `/reject`
@@ -241,3 +257,12 @@ unattached one and a person holding nothing as empty lists to ws-2's and org-1's
 narrowed `/catalogs` on the same world, with listers registered for graphs, workspaces and features (`listed`
 fixture): a workspace admin's graphs, a stranger's empty pages, a disabled feature listed nowhere, and a user
 holding only agent A and `iam:CreatePolicy`.
+
+`adapters/primary/iam_admin__primary_adapter__FastAPI_batched_reads_test.py` runs the batched reads (#1608): each
+group's count equals its detail's members for the platform admin, an org admin and a workspace admin at each scope,
+none where the detail is refused or outside a view, 500 groups paged, no member named for a count (a counting
+gateway), several principals' attachments equal to one request each per viewer, the level rule at a scope, the bound.
+
+`adapters/primary/iam_admin__primary_adapter__FastAPI_capabilities_test.py` runs `/capabilities`: an org admin makes
+Workflow runners once (bounded by "<O> access"), a workspace page reads its organization's, a member and a
+stranger are refused, Models · all is the platform admin's, and a group's view carries its markers.
