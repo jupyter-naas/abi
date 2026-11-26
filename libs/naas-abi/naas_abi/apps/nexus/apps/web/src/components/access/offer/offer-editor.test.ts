@@ -437,6 +437,8 @@ describe('WorkspaceOfferEditor: models', () => {
     mounted = null;
     await render(setup(OFFER));
     expect(document.querySelector('[data-offer-section="models"]')).toBeNull();
+  });
+});
 
 describe('WorkspaceOfferEditor: maps', () => {
   it('shows the Maps part as a summary, changed in Settings › Maps', async () => {
@@ -468,6 +470,8 @@ describe('WorkspaceOfferEditor: maps', () => {
     mounted = null;
     await render(setup());
     expect(document.querySelector('[data-offer-section="maps"]')).toBeNull();
+  });
+});
 
 describe('WorkspaceOfferEditor: ontologies', () => {
   const row = (over: Partial<OntologyRow> & Pick<OntologyRow, 'id' | 'label'>): OntologyRow => ({
