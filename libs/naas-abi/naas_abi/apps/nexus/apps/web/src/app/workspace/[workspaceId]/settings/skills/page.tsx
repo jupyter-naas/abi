@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Plus, Trash2, XCircle, Zap } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -13,21 +12,31 @@ import {
   SettingsField,
   SettingsNotice,
   SettingsPageHeader,
-  SettingsFilterSelect,
   SettingsSection,
   SettingsTableToolbar,
   countLabel,
-  settingsTable,
 } from '@/components/settings/settings-ui';
-import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
+import {
+  SettingsTableClear,
+  SettingsTableHead,
+  SettingsTableNoMatch,
+  useSettingsTable,
+} from '@/components/settings/users-table/settings-table';
+import { TablePager } from '@/components/settings/users-table/table-pager';
+import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
+import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import { useSkillsStore, type SkillScope } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
-
-const SCOPE_LABELS: Record<SkillScope, string> = {
-  user: 'Private',
-  workspace: 'Workspace',
-  organization: 'Organization',
-};
+import {
+  SCOPE_LABELS,
+  SKILL_COLUMNS,
+  SKILL_EXPORT_HEADERS,
+  lastUsedDay,
+  skillCellValues,
+  skillExportRow,
+  skillSearchTexts,
+  skillSortValue,
+} from './skills-model';
 
 export default function SkillsSettingsPage() {
   const params = useParams();
@@ -38,9 +47,6 @@ export default function SkillsSettingsPage() {
     useSkillsStore();
   const currentUserId = useAuthStore((s) => s.user?.id);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [scopeFilter, setScopeFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [showAddForm, setShowAddForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -62,24 +68,20 @@ export default function SkillsSettingsPage() {
     [skillsByWorkspace, workspaceId]
   );
 
-  const filteredSkills = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return skills.filter((s) => {
-      if (scopeFilter !== 'all' && s.scope !== scopeFilter) return false;
-      if (statusFilter === 'enabled' && !s.enabled) return false;
-      if (statusFilter === 'disabled' && s.enabled) return false;
-      return (
-        !q ||
-        s.name.toLowerCase().includes(q) ||
-        s.slug.toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q)
-      );
-    });
-  }, [skills, searchQuery, scopeFilter, statusFilter]);
-  // 20 a page: the search and the filters reach every skill, and a change of them goes back to
-  // the first page.
-  const paged = usePagedRows(filteredSkills, JSON.stringify([searchQuery, scopeFilter, statusFilter]));
+  const table = useSettingsTable({
+    rows: skills,
+    columns: SKILL_COLUMNS,
+    cellValues: skillCellValues,
+    searchTexts: skillSearchTexts,
+    sortValue: skillSortValue,
+    initialSort: 'skill',
+  });
   const enabledCount = skills.filter((s) => s.enabled).length;
+
+  const exportShown = (format: UsersExportFormat) => {
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTableExport(SKILL_EXPORT_HEADERS, table.shown.map(skillExportRow), format, `skills_${date}`, 'Skills');
+  };
 
   const handleAddSkill = async () => {
     if (!newSkill.name.trim() || !newSkill.prompt.trim()) {
@@ -134,10 +136,13 @@ export default function SkillsSettingsPage() {
           </>
         }
         actions={
-          <Button onClick={() => setShowAddForm(true)}>
-            <Plus size={16} />
-            Add Skill
-          </Button>
+          <>
+            <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
+            <Button onClick={() => setShowAddForm(true)}>
+              <Plus size={16} />
+              Add Skill
+            </Button>
+          </>
         }
       />
 
@@ -214,118 +219,85 @@ export default function SkillsSettingsPage() {
       )}
 
       <SettingsTableToolbar
-        search={searchQuery}
-        onSearchChange={setSearchQuery}
+        search={table.search}
+        onSearchChange={table.setSearch}
         searchPlaceholder="Search skills..."
-        filters={
+        meta={
           <>
-            <SettingsFilterSelect
-              label="Visibility"
-              value={scopeFilter}
-              onChange={setScopeFilter}
-              options={[
-                { value: 'all', label: 'All visibilities' },
-                ...(Object.keys(SCOPE_LABELS) as SkillScope[]).map((scope) => ({
-                  value: scope,
-                  label: SCOPE_LABELS[scope],
-                })),
-              ]}
-            />
-            <SettingsFilterSelect
-              label="Status"
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={[
-                { value: 'all', label: 'All statuses' },
-                { value: 'enabled', label: 'Enabled' },
-                { value: 'disabled', label: 'Disabled' },
-              ]}
-            />
+            {`${countLabel(table.shown.length, skills.length, 'skill')} · ${enabledCount} enabled`}
+            <SettingsTableClear table={table} />
           </>
         }
-        meta={`${countLabel(filteredSkills.length, skills.length, 'skill')} · ${enabledCount} enabled`}
       />
 
-      <div className={settingsTable.wrapper}>
-        <table className={settingsTable.table}>
-          <thead>
-            <tr className={settingsTable.headRow}>
-              <th className={settingsTable.th}>Skill</th>
-              <th className={settingsTable.th}>Command</th>
-              <th className={settingsTable.th}>Visibility</th>
-              <th className={settingsTable.th}>Last used</th>
-              <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
-              <th className={cn(settingsTable.th, 'w-24')}>Actions</th>
-            </tr>
-          </thead>
+      <div className="org-settings-users-table-wrap">
+        <table className="org-settings-users-table">
+          <SettingsTableHead table={table} trailing={<th aria-label="Actions" className="w-24" />} />
           <tbody>
-            {filteredSkills.length === 0 ? (
+            {skills.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                  {skills.length > 0
-                    ? 'No skills match the current search and filters'
-                    : 'No skills yet. Type /create-skill in the chat, or add one here.'}
+                <td colSpan={SKILL_COLUMNS.length + 1} className="org-settings-users-no-match">
+                  No skills yet. Type /create-skill in the chat, or add one here.
                 </td>
               </tr>
             ) : (
-              paged.pageRows.map((skill) => {
-                const canModify = skill.scope !== 'user' || skill.userId === currentUserId;
-                return (
-                  <tr
-                    key={skill.id}
-                    data-skill={skill.slug}
-                    onClick={() => router.push(`/workspace/${workspaceId}/settings/skills/${skill.id}`)}
-                    className={cn(settingsTable.row, 'cursor-pointer')}
-                  >
-                    <td className={settingsTable.td}>
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-muted">
-                          <Zap size={16} className="text-muted-foreground" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium">{skill.name}</p>
-                          {skill.description && (
-                            <p className="truncate text-xs text-muted-foreground">{skill.description}</p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className={cn(settingsTable.td, 'font-mono text-primary')}>/{skill.slug}</td>
-                    <td className={settingsTable.td}>
-                      <Badge variant="outline">{SCOPE_LABELS[skill.scope]}</Badge>
-                    </td>
-                    <td className={cn(settingsTable.td, 'text-muted-foreground')}>
-                      {skill.lastUsedAt ? new Date(skill.lastUsedAt).toLocaleDateString() : '—'}
-                    </td>
-                    <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                        checked={skill.enabled}
-                        onCheckedChange={(checked) => handleToggleEnabled(skill.id, checked)}
-                        disabled={!canModify}
-                        aria-label={skill.enabled ? 'Disable' : 'Enable'}
-                        title={skill.enabled ? 'Disable' : 'Enable'}
-                      />
-                    </td>
-                    <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
-                      {canModify && (
-                        <Button
-                          variant="destructive-ghost"
-                          size="icon"
-                          onClick={() => handleDelete(skill.id, skill.slug)}
-                          title="Delete"
-                        >
-                          <Trash2 size={14} />
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
+              table.shown.length === 0 && <SettingsTableNoMatch colSpan={SKILL_COLUMNS.length + 1} noun="skills" />
             )}
+            {table.paged.pageRows.map((skill) => {
+              const canModify = skill.scope !== 'user' || skill.userId === currentUserId;
+              return (
+                <tr
+                  key={skill.id}
+                  data-skill={skill.slug}
+                  onClick={() => router.push(`/workspace/${workspaceId}/settings/skills/${skill.id}`)}
+                  className="cursor-pointer"
+                >
+                  <td>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-muted">
+                        <Zap size={16} className="text-muted-foreground" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium">{skill.name}</p>
+                        {skill.description && (
+                          <p className="truncate text-xs text-muted-foreground">{skill.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="font-mono text-primary">/{skill.slug}</td>
+                  <td>
+                    <Badge variant="outline">{SCOPE_LABELS[skill.scope]}</Badge>
+                  </td>
+                  <td className="text-muted-foreground">{lastUsedDay(skill) || '—'}</td>
+                  <td data-field="enabled" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={skill.enabled}
+                      onCheckedChange={(checked) => handleToggleEnabled(skill.id, checked)}
+                      disabled={!canModify}
+                      aria-label={skill.enabled ? 'Disable' : 'Enable'}
+                      title={skill.enabled ? 'Disable' : 'Enable'}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                    {canModify && (
+                      <Button
+                        variant="destructive-ghost"
+                        size="icon"
+                        onClick={() => handleDelete(skill.id, skill.slug)}
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
-      <TablePager total={filteredSkills.length} paged={paged} />
+      <TablePager total={table.shown.length} paged={table.paged} />
       {confirmDialog}
     </div>
   );

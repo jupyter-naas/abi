@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { checkPagedTable } from '@/lib/testing/paged-table';
 
 const APPS = vi.hoisted(() =>
   Array.from({ length: 45 }, (_, i) => {
@@ -29,6 +28,7 @@ vi.mock('@/stores/apps', () => ({
 }));
 
 import AppsSettingsPage from './page';
+import { pickColumnFilter as pickFacet } from '@/lib/testing/column-filter';
 
 let mounted: Mounted | null = null;
 afterEach(async () => {
@@ -37,15 +37,46 @@ afterEach(async () => {
 });
 
 describe('Workspace settings › Apps', () => {
-  it('shows 20 apps a page, searches and filters all of them, back to the first page', async () => {
-    mounted = await mount(AppsSettingsPage, {});
-    await mounted.flush();
-    await checkPagedTable(mounted, {
-      row: 'data-app',
-      total: 45,
-      search: 'input[placeholder="Search apps..."]',
-      far: { id: 'app-37', query: 'zebra' },
-      filter: { select: 'select[aria-label="Category"]', value: 'core' },
-    });
+  it('shows 20 apps a page, searches and filters all of them from the columns, back to the first page', async () => {
+    const m = (mounted = await mount(AppsSettingsPage, {}));
+    await m.flush();
+    const q = (selector: string) => m.host.querySelector(selector);
+    const rows = () => [...m.host.querySelectorAll('[data-app]')].map((r) => r.getAttribute('data-app'));
+    const shown = () => q('[data-field="rows-shown"]')?.textContent;
+
+    expect([...m.host.querySelectorAll('[data-filter-trigger]')].map((b) => b.getAttribute('data-filter-trigger'))).toEqual(
+      ['app', 'category', 'source'],
+    );
+    expect(q('select[aria-label="Category"]')).toBeNull();
+    expect(rows()).toHaveLength(20);
+    expect(shown()).toBe('Rows 1–20 of 45');
+    expect(rows()).not.toContain('app-37');
+
+    // The search reaches every row, not only the page shown.
+    await m.type(q('input[placeholder="Search apps..."]'), 'zebra');
+    expect(rows()).toEqual(['app-37']);
+    expect(m.host.textContent).toContain('1 of 45 apps');
+    await m.type(q('input[placeholder="Search apps..."]'), '');
+
+    // The Category column filters, and goes back to the first page.
+    await m.click(q('[data-action="next-page"]'));
+    expect(shown()).toMatch(/^Rows 21–/);
+    await pickFacet(m, 'category', 'core');
+    expect(shown()).toBe('Rows 1–20 of 41');
+    expect(m.host.textContent).toContain('41 of 45 apps');
+    await m.click(q('[data-action="clear-filters"]'));
+    expect(shown()).toBe('Rows 1–20 of 45');
+  });
+
+  it('sorts from a column header', async () => {
+    const m = (mounted = await mount(AppsSettingsPage, {}));
+    await m.flush();
+    const first = () => m.host.querySelector('[data-app]')?.getAttribute('data-app');
+
+    expect(first()).toBe('app-01');
+    await m.click(m.host.querySelector('[data-sort="app"]'));
+    expect(first()).toBe('app-45');
+    await m.click(m.host.querySelector('[data-sort="category"]'));
+    expect(first()).toBe('app-42');
   });
 });

@@ -57,6 +57,8 @@ export function useSettingsTable<T, C extends string>({
   searchTexts,
   sortValue,
   initialSort,
+  initialSearch = '',
+  initialFilters = {},
 }: {
   rows: readonly T[];
   columns: SettingsColumn<C>[];
@@ -67,9 +69,12 @@ export function useSettingsTable<T, C extends string>({
   /** What a column sorts on; its cell values joined by default. */
   sortValue?: (row: T, column: C) => string | number;
   initialSort: C;
+  /** The search and the filters the table opens with (read once). */
+  initialSearch?: string;
+  initialFilters?: Partial<Record<C, ColumnFilterState>>;
 }): SettingsTable<T, C> {
-  const [search, setSearch] = useState('');
-  const [filters, setFilters] = useState<Partial<Record<C, ColumnFilterState>>>({});
+  const [search, setSearch] = useState(initialSearch);
+  const [filters, setFilters] = useState<Partial<Record<C, ColumnFilterState>>>(initialFilters);
   const [sortKey, setSortKey] = useState<C>(initialSort);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { checkPagedTable } from '@/lib/testing/paged-table';
 
 import { FEATURE_SCOPES, WEB_ENGINES } from '@/lib/search-scopes';
 
@@ -50,6 +49,7 @@ vi.mock('@/lib/search-topics-api', () => ({
 }));
 
 import SearchSettingsPage from './page';
+import { pickColumnFilter as filterColumn } from '@/lib/testing/column-filter';
 
 let mounted: Mounted | null = null;
 afterEach(async () => {
@@ -58,16 +58,44 @@ afterEach(async () => {
 });
 
 describe('Workspace settings › Search', () => {
-  it('shows 20 entries a page, searches and filters all of them, back to the first page', async () => {
+  const total = 45 + FEATURE_SCOPES.length + WEB_ENGINES.length;
+  const rows = () => [...mounted!.host.querySelectorAll('[data-entry]')].map((r) => r.getAttribute('data-entry'));
+  const shown = () => mounted!.host.querySelector('[data-field="rows-shown"]')?.textContent;
+  const search = () => mounted!.host.querySelector('input[placeholder="Search topics, features and engines..."]');
+
+  it('shows 20 entries a page, searches all of them, topics first', async () => {
     mounted = await mount(SearchSettingsPage, {});
     await mounted.flush();
-    await checkPagedTable(mounted, {
-      row: 'data-entry',
-      // Topics, then the Nexus features and the web engines.
-      total: 45 + FEATURE_SCOPES.length + WEB_ENGINES.length,
-      search: 'input[placeholder="Search topics, features and engines..."]',
-      far: { id: 'topic-37', query: 'zebras' },
-      filter: { select: 'select[aria-label="Group"]', value: 'Custom' },
-    });
+    expect(rows()).toHaveLength(20);
+    expect(rows()[0]).toBe('topic-01');
+    expect(shown()).toBe(`Rows 1–20 of ${total}`);
+    expect(rows()).not.toContain('topic-37');
+    await mounted.click(mounted.host.querySelector('[data-action="next-page"]'));
+    expect(shown()).toBe(`Rows 21–40 of ${total}`);
+
+    await mounted.type(search(), 'zebras');
+    expect(rows()).toEqual(['topic-37']);
+    expect(mounted.host.textContent).toContain(`1 of ${total} entries`);
+  });
+
+  it('filters on a column (Group and Enabled replace the dropdowns) and goes back to the first page', async () => {
+    mounted = await mount(SearchSettingsPage, {});
+    await mounted.flush();
+    expect(mounted.host.querySelector('select[aria-label="Group"]')).toBeNull();
+    await mounted.click(mounted.host.querySelector('[data-action="next-page"]'));
+    expect(shown()).toMatch(/^Rows 21–/);
+
+    await filterColumn(mounted, 'group', 'Custom');
+    expect(shown()).toBe('Rows 1–20 of 45');
+
+    await mounted.click(mounted.host.querySelector('[data-action="clear-filters"]'));
+    expect(shown()).toBe(`Rows 1–20 of ${total}`);
+    await filterColumn(mounted, 'group', 'Web');
+    expect(rows()).toEqual(WEB_ENGINES.map((engine) => `web.${engine.id}`));
+
+    await mounted.click(mounted.host.querySelector('[data-action="clear-filters"]'));
+    // Features of a workspace that is not loaded are off: Disabled lists them.
+    await filterColumn(mounted, 'enabled', 'Disabled');
+    expect(rows()).toEqual(FEATURE_SCOPES.map((scope) => scope.id));
   });
 });

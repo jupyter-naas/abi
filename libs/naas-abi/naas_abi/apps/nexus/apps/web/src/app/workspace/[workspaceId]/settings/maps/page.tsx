@@ -20,9 +20,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
 import { SettingsReloadButton } from '@/components/settings/settings-reload';
 import {
-  SettingsEmpty, SettingsFilterSelect, SettingsLoading, SettingsNotice, SettingsPageHeader, SettingsSection,
-  SettingsTableToolbar, countLabel, settingsTable,
+  SettingsEmpty, SettingsLoading, SettingsNotice, SettingsPageHeader, SettingsSection,
+  SettingsTableToolbar, countLabel,
 } from '@/components/settings/settings-ui';
+import {
+  SettingsTableClear, SettingsTableHead, SettingsTableNoMatch, useSettingsTable,
+} from '@/components/settings/users-table/settings-table';
+import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
+import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import { cn } from '@/lib/utils';
 import { useMapsStore } from '@/stores/maps';
 import {
@@ -44,12 +49,14 @@ import {
 } from '@/app/workspace/[workspaceId]/maps/lib/maps-route';
 import { mapsDeploymentRestrictsLayerCatalog } from '@/app/workspace/[workspaceId]/maps/lib/maps-deployment';
 import { useMapLayers } from '@/app/workspace/[workspaceId]/maps/lib/use-map-layouts';
-import {
-  feedVisibilityRows, filterFeedRows, type FeedSource, type FeedStatusFilter,
-} from '@/app/workspace/[workspaceId]/maps/lib/maps-feed-visibility';
+import { feedVisibilityRows, type FeedSource } from '@/app/workspace/[workspaceId]/maps/lib/maps-feed-visibility';
 import { resolveMapsPinImageUrl } from '@/app/workspace/[workspaceId]/maps/lib/maps-pin-image-url';
 import { MapsSettingsBasemapsSection } from '@/app/workspace/[workspaceId]/maps/components/maps-settings-basemaps-section';
-import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
+import { TablePager } from '@/components/settings/users-table/table-pager';
+import {
+  EVERY_FEATURE, FEED_COLUMNS, FEED_EXPORT_HEADERS, LAYER_COLUMNS, feedCellValues, feedExportRow, feedSearchTexts,
+  feedSortValue, layerCellValues, layerSearchTexts, layerSortValue, mapsFeedEntries, mapsLayerEntries,
+} from './maps-settings-model';
 
 const NEW = 'new';
 const SEEDED_FEED_HINT = 'Provided by the deployment: hide its layers, or narrow its Access, instead of deleting it';
@@ -92,10 +99,6 @@ function MapsSettings() {
   const loadLayouts = useMapsStore((s) => s.loadLayouts);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);
-  // Feed Layers table search and filters.
-  const [feedSearch, setFeedSearch] = useState('');
-  const [groupFilter, setGroupFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<FeedStatusFilter>('all');
   const permissions = useMapsPermissions(workspaceId, canEdit);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -198,54 +201,60 @@ function MapsSettings() {
     </div>
   );
 
-  // ── Overview rows (read before an item's page returns: the pager's hook comes first) ──
+  // ── Overview rows (read before an item's page returns: the table's hook comes first) ──
   const shownCount = all.filter(
     (e) => !hidden.includes(e.id) && !hiddenFeeds.includes(e.feedId ?? e.id),
   ).length;
   const feedsById = new Map(feeds.map((feed) => [feed.id, feed]));
-  // Every feed with its layers (records, built-ins, graph layers); a record
-  // whose layers are not listed yet still gets its row.
-  const feedRows = feedVisibilityRows(all, hiddenFeeds);
-  for (const feed of feeds) {
-    if (feedRows.some((row) => row.id === feed.id)) continue;
-    feedRows.push({
-      id: feed.id,
-      title: feed.title,
-      group: layoutGroup(feed),
-      source: feedTypeLabel(feed),
-      layers: layersByFeed.get(feed.id)?.length ?? 0,
-      shown: !hiddenFeeds.includes(feed.id),
-      logoUrl: feed.logo_url,
+  // Every feed with its layers (records, built-ins, graph layers); a record whose layers are not
+  // listed yet still gets its row. Deployment feeds this workspace may not use (e.g. set to "No
+  // workspace") are listed after them, so their access can be given back.
+  const { data: accessData, find: findAccess, names: accessNames } = permissions;
+  const feedEntries = useMemo(() => {
+    const rows = feedVisibilityRows(all, hiddenFeeds);
+    for (const feed of feeds) {
+      if (rows.some((row) => row.id === feed.id)) continue;
+      rows.push({
+        id: feed.id,
+        title: feed.title,
+        group: layoutGroup(feed),
+        source: feedTypeLabel(feed),
+        layers: layersByFeed.get(feed.id)?.length ?? 0,
+        shown: !hiddenFeeds.includes(feed.id),
+        logoUrl: feed.logo_url,
+      });
+    }
+    const unavailable = (accessData?.items ?? []).filter(
+      (item) => item.kind === 'layout' && item.owner === '' && !feeds.some((feed) => feed.id === item.item_id),
+    );
+    return mapsFeedEntries({
+      rows,
+      unavailable,
+      feedIds: new Set(feeds.map((feed) => feed.id)),
+      canEdit,
+      find: (itemId) => findAccess('layout', itemId),
+      names: accessNames,
     });
-  }
-  // Deployment feeds this workspace may not use (e.g. set to "No workspace"):
-  // listed so their access can be given back.
-  const unavailableFeeds = (permissions.data?.items ?? []).filter(
-    (item) => item.kind === 'layout' && item.owner === '' && !feeds.some((feed) => feed.id === item.item_id),
-  );
-  const feedFilter = { search: feedSearch, group: groupFilter, status: statusFilter };
-  const listedFeedRows = filterFeedRows(feedRows, feedFilter);
-  // Unavailable feeds count as disabled and belong to no group.
-  const listedUnavailable = filterFeedRows(
-    unavailableFeeds.map((item) => ({
-      item, id: item.item_id, title: item.title, group: '', source: 'API feed' as FeedSource, shown: false,
-    })),
-    feedFilter,
-  ).map(({ item }) => item);
-  const groupOptions = [...new Map(feedRows.map((row) => [row.group.toLowerCase(), row.group])).values()];
-  const feedTotal = feedRows.length + unavailableFeeds.length;
+  }, [all, hiddenFeeds, feeds, layersByFeed, accessData, findAccess, accessNames, canEdit]);
+  // A page at a time: the search and the column filters reach every feed, and a change of them
+  // goes back to the first page.
+  const feedTable = useSettingsTable({
+    rows: feedEntries,
+    columns: FEED_COLUMNS,
+    cellValues: feedCellValues,
+    searchTexts: feedSearchTexts,
+    sortValue: feedSortValue,
+    initialSort: 'group',
+  });
+  const listedFeeds = feedTable.shown.filter((entry) => entry.row);
   // Bulk actions apply to the listed feeds that would change.
-  const listedOff = listedFeedRows.filter((row) => !row.shown).map((row) => row.id);
-  const listedOn = listedFeedRows.filter((row) => row.shown).map((row) => row.id);
+  const listedOff = listedFeeds.filter((entry) => !entry.shown).map((entry) => entry.id);
+  const listedOn = listedFeeds.filter((entry) => entry.shown).map((entry) => entry.id);
   const bulkBusy = busyId === 'feed:bulk';
-  const feedListed = listedFeedRows.length + listedUnavailable.length;
-  // One list for the table, a page at a time: the search and the filters reach every feed, and a
-  // change of them goes back to the first page.
-  const listedEntries = [
-    ...listedFeedRows.map((row) => ({ row, unavailable: null })),
-    ...listedUnavailable.map((item) => ({ row: null, unavailable: item })),
-  ];
-  const paged = usePagedRows(listedEntries, JSON.stringify([feedSearch, groupFilter, statusFilter]));
+  const exportFeeds = (format: UsersExportFormat) => {
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTableExport(FEED_EXPORT_HEADERS, feedTable.shown.map(feedExportRow), format, `map_feeds_${date}`, 'Feeds');
+  };
 
   // ── One feed ──────────────────────────────────────────────────────────────
   if (selectedFeed) {
@@ -372,16 +381,19 @@ function MapsSettings() {
         badge={`${shownCount} shown`}
         description="Feeds are data sources; layers are what Maps lists and draws, each a view on one feed. Hidden layers disappear for every member of the workspace."
         actions={
-          catalogRestricted ? undefined : (
-            <>
-              <Button variant="secondary" onClick={() => go({ feed: NEW })}>
-                <Plus size={16} /> New feed
-              </Button>
-              <Button onClick={() => go({ layer: NEW })} disabled={ownFeeds.length === 0}>
-                <Plus size={16} /> New layer
-              </Button>
-            </>
-          )
+          <>
+            <UsersExportMenu onExport={exportFeeds} disabled={feedTable.shown.length === 0} />
+            {catalogRestricted ? null : (
+              <>
+                <Button variant="secondary" onClick={() => go({ feed: NEW })}>
+                  <Plus size={16} /> New feed
+                </Button>
+                <Button onClick={() => go({ layer: NEW })} disabled={ownFeeds.length === 0}>
+                  <Plus size={16} /> New layer
+                </Button>
+              </>
+            )}
+          </>
         }
       />
 
@@ -396,94 +408,69 @@ function MapsSettings() {
       >
         <SettingsTableToolbar
           className="mb-3"
-          search={feedSearch}
-          onSearchChange={setFeedSearch}
+          search={feedTable.search}
+          onSearchChange={feedTable.setSearch}
           searchPlaceholder="Search feeds…"
           filters={
+            canEdit && (
+              <>
+                <Button
+                  variant="secondary"
+                  disabled={bulkBusy || listedOff.length === 0}
+                  onClick={() => void setListedFeedsShown(listedOff, true)}
+                  title="Enable every listed feed that is disabled"
+                >
+                  {bulkBusy ? <Loader2 size={14} className="animate-spin" /> : null}
+                  Enable{listedOff.length ? ` (${listedOff.length})` : ''}
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={bulkBusy || listedOn.length === 0}
+                  onClick={() => void setListedFeedsShown(listedOn, false)}
+                  title="Disable every listed feed that is enabled"
+                >
+                  Disable{listedOn.length ? ` (${listedOn.length})` : ''}
+                </Button>
+              </>
+            )
+          }
+          meta={
             <>
-              <SettingsFilterSelect
-                label="Group"
-                value={groupFilter}
-                onChange={setGroupFilter}
-                options={[
-                  { value: 'all', label: 'All groups' },
-                  ...groupOptions.map((group) => ({ value: group, label: group })),
-                ]}
-              />
-              <SettingsFilterSelect
-                label="Status"
-                value={statusFilter}
-                onChange={(value) => setStatusFilter(value as FeedStatusFilter)}
-                options={[
-                  { value: 'all', label: 'All statuses' },
-                  { value: 'enabled', label: 'Enabled' },
-                  { value: 'disabled', label: 'Disabled' },
-                ]}
-              />
-              {canEdit && (
-                <>
-                  <Button
-                    variant="secondary"
-                    disabled={bulkBusy || listedOff.length === 0}
-                    onClick={() => void setListedFeedsShown(listedOff, true)}
-                    title="Enable every listed feed that is disabled"
-                  >
-                    {bulkBusy ? <Loader2 size={14} className="animate-spin" /> : null}
-                    Enable{listedOff.length ? ` (${listedOff.length})` : ''}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    disabled={bulkBusy || listedOn.length === 0}
-                    onClick={() => void setListedFeedsShown(listedOn, false)}
-                    title="Disable every listed feed that is enabled"
-                  >
-                    Disable{listedOn.length ? ` (${listedOn.length})` : ''}
-                  </Button>
-                </>
-              )}
+              {countLabel(feedTable.shown.length, feedEntries.length, 'feed')}
+              <SettingsTableClear table={feedTable} />
             </>
           }
-          meta={countLabel(feedListed, feedTotal, 'feed')}
         />
-        <div className="overflow-x-hidden border border-border bg-card">
-          <table className={cn(settingsTable.table, 'table-fixed')}>
-            <thead>
-              <tr className={settingsTable.headRow}>
-                <th className={settingsTable.th}>Name</th>
-                <th className={cn(settingsTable.th, 'w-44')}>Group</th>
-                <th className={cn(settingsTable.th, 'w-20')}>Layers</th>
-                <th className={cn(settingsTable.th, 'w-44')}>Access</th>
-                <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
-                <th className={cn(settingsTable.th, 'w-24')} aria-label="Actions" />
-              </tr>
-            </thead>
+        <div className="org-settings-users-table-wrap">
+          <table className="org-settings-users-table table-fixed">
+            <SettingsTableHead table={feedTable} trailing={<th className="w-24" aria-label="Actions" />} />
             <tbody>
-              {loading && !feedRows.length && (
-                <tr><td colSpan={6} className={cn(settingsTable.td, 'text-muted-foreground')}><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
+              {loading && !feedEntries.length && (
+                <tr><td colSpan={FEED_COLUMNS.length + 1} className="text-muted-foreground"><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
               )}
-              {!loading && feedTotal === 0 && (
-                <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">No feeds yet</td></tr>
+              {!loading && feedEntries.length === 0 && (
+                <tr><td colSpan={FEED_COLUMNS.length + 1} className="org-settings-users-no-match">No feeds yet</td></tr>
               )}
-              {!loading && feedTotal > 0 && feedListed === 0 && (
-                <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">No feeds match these filters</td></tr>
+              {!loading && feedEntries.length > 0 && feedTable.shown.length === 0 && (
+                <SettingsTableNoMatch colSpan={FEED_COLUMNS.length + 1} noun="feeds" />
               )}
-              {paged.pageRows.map(({ row, unavailable: item }) => {
+              {feedTable.paged.pageRows.map(({ row, unavailable: item }) => {
                 if (item) {
                   return (
-                    <tr key={`unavailable:${item.item_id}`} data-feed={item.item_id} className={settingsTable.row}>
-                      <td className={cn(settingsTable.td, 'max-w-0')}>
+                    <tr key={`unavailable:${item.item_id}`} data-feed={item.item_id}>
+                      <td className="max-w-0">
                         <div className="truncate font-medium text-muted-foreground" title={item.title}>{item.title}</div>
                         <div className="truncate text-xs text-muted-foreground">
                           <span className="font-mono">{item.item_id}</span> · seeded · not available in this workspace
                         </div>
                       </td>
-                      <td className={cn(settingsTable.td, 'text-muted-foreground')}>—</td>
-                      <td className={cn(settingsTable.td, 'text-muted-foreground')}>—</td>
-                      <td className={cn(settingsTable.td, 'max-w-0 text-xs')}>
+                      <td className="text-muted-foreground">—</td>
+                      <td className="text-muted-foreground">—</td>
+                      <td className="max-w-0 text-xs">
                         <MapsAccessCell workspaceId={workspaceId} kind="layout" itemId={item.item_id} permissions={permissions} />
                       </td>
-                      <td className={cn(settingsTable.td, 'text-muted-foreground')}>—</td>
-                      <td className={settingsTable.td} />
+                      <td className="text-muted-foreground">—</td>
+                      <td />
                     </tr>
                   );
                 }
@@ -497,9 +484,9 @@ function MapsSettings() {
                     key={row.id}
                     data-feed={row.id}
                     onClick={feed ? () => go({ feed: feed.id }) : undefined}
-                    className={cn(settingsTable.row, feed && 'cursor-pointer')}
+                    className={cn(feed && 'cursor-pointer')}
                   >
-                    <td className={cn(settingsTable.td, 'max-w-0')}>
+                    <td className="max-w-0">
                       <div className={cn('flex min-w-0 items-center gap-2', !row.shown && 'text-muted-foreground')}>
                         {logo ? (
                           // eslint-disable-next-line @next/next/no-img-element -- feed logo (API or https)
@@ -513,9 +500,9 @@ function MapsSettings() {
                         {feed?.system ? ' · seeded' : ''}{feed?.shared_from ? ' · shared' : ''}
                       </div>
                     </td>
-                    <td className={cn(settingsTable.td, 'max-w-0 truncate text-muted-foreground')} title={row.group}>{row.group}</td>
-                    <td className={cn(settingsTable.td, 'text-muted-foreground')}>{row.layers}</td>
-                    <td className={cn(settingsTable.td, 'max-w-0 text-xs')} onClick={(e) => e.stopPropagation()}>
+                    <td className="max-w-0 truncate text-muted-foreground" title={row.group}>{row.group}</td>
+                    <td className="text-muted-foreground">{row.layers}</td>
+                    <td className="max-w-0 text-xs" onClick={(e) => e.stopPropagation()}>
                       {feed && canEdit ? (
                         <MapsAccessCell workspaceId={workspaceId} kind="layout" itemId={feed.id} permissions={permissions} />
                       ) : (
@@ -524,7 +511,7 @@ function MapsSettings() {
                         </span>
                       )}
                     </td>
-                    <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <span className="inline-flex items-center gap-2">
                         <Checkbox
                           checked={row.shown}
@@ -535,7 +522,7 @@ function MapsSettings() {
                         {busy && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
                       </span>
                     </td>
-                    <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                    <td onClick={(e) => e.stopPropagation()}>
                       {feed ? (
                         <span className="inline-flex items-center gap-1">
                           <Button variant="ghost" size="icon" onClick={() => go({ feed: feed.id })} aria-label={`Edit ${feed.title}`} title={canEdit ? 'Edit' : 'View'}>
@@ -560,7 +547,7 @@ function MapsSettings() {
             </tbody>
           </table>
         </div>
-        <TablePager total={feedListed} paged={paged} />
+        <TablePager total={feedTable.shown.length} paged={feedTable.paged} />
       </SettingsSection>
 
       <MapsSettingsBasemapsSection workspaceId={workspaceId} canEdit={canEdit} permissions={permissions} />
@@ -610,7 +597,15 @@ function FeedPage({
   const { types } = useFeedTypes(workspaceId, feed);
   const [adding, setAdding] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
-  const sortedLayers = [...layers].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+  const layerRows = useMemo(() => mapsLayerEntries(layers, hidden), [layers, hidden]);
+  const layerTable = useSettingsTable({
+    rows: layerRows,
+    columns: LAYER_COLUMNS,
+    cellValues: layerCellValues,
+    searchTexts: layerSearchTexts,
+    sortValue: layerSortValue,
+    initialSort: 'order',
+  });
 
   // Feature types no layer of this feed lists yet (a layer with no types already shows them all).
   const covered = new Set(layers.flatMap((layer) => layer.class_labels));
@@ -702,25 +697,34 @@ function FeedPage({
             </Button>
           ) : undefined}
         >
-          <div className="overflow-x-hidden border border-border bg-card">
-            <table className={cn(settingsTable.table, 'table-fixed')}>
-              <thead>
-                <tr className={settingsTable.headRow}>
-                  <th className={settingsTable.th}>Layer</th>
-                  <th className={settingsTable.th}>Feature types</th>
-                  <th className={cn(settingsTable.th, 'w-16')}>Order</th>
-                  <th className={cn(settingsTable.th, 'w-16')}>Color</th>
-                  <th className={cn(settingsTable.th, 'w-20')}>Shown</th>
-                  {canEdit && <th className={cn(settingsTable.th, 'w-24')} aria-label="Actions" />}
-                </tr>
-              </thead>
+          <SettingsTableToolbar
+            className="mb-3"
+            search={layerTable.search}
+            onSearchChange={layerTable.setSearch}
+            searchPlaceholder="Search layers…"
+            meta={
+              <>
+                {countLabel(layerTable.shown.length, layerRows.length, 'layer')}
+                <SettingsTableClear table={layerTable} />
+              </>
+            }
+          />
+          <div className="org-settings-users-table-wrap">
+            <table className="org-settings-users-table table-fixed">
+              <SettingsTableHead
+                table={layerTable}
+                trailing={canEdit ? <th className="w-24" aria-label="Actions" /> : undefined}
+              />
               <tbody>
-                {sortedLayers.map((layer) => {
+                {layerRows.length > 0 && layerTable.shown.length === 0 && (
+                  <SettingsTableNoMatch colSpan={LAYER_COLUMNS.length + (canEdit ? 1 : 0)} noun="layers" />
+                )}
+                {layerTable.paged.pageRows.map((layer) => {
                   const Icon = mapsIconMap[layer.icon] ?? null;
                   const block = layerDeleteBlock(layer, layers.length);
                   return (
-                    <tr key={layer.id} onClick={() => onEditLayer(layer.id)} className={cn(settingsTable.row, 'cursor-pointer')}>
-                      <td className={cn(settingsTable.td, 'max-w-0')}>
+                    <tr key={layer.id} data-layer={layer.id} onClick={() => onEditLayer(layer.id)} className="cursor-pointer">
+                      <td className="max-w-0">
                         <span className="inline-flex min-w-0 items-center gap-2">
                           <span className="flex h-6 w-6 shrink-0 items-center justify-center text-white" style={{ background: layer.color }}>
                             {Icon ? <Icon size={14} aria-hidden /> : null}
@@ -731,11 +735,11 @@ function FeedPage({
                           </span>
                         </span>
                       </td>
-                      <td className={cn(settingsTable.td, 'max-w-0 truncate text-muted-foreground')} title={layer.class_labels.join(', ')}>
-                        {layer.class_labels.length ? layer.class_labels.join(', ') : 'Every feature'}
+                      <td className="max-w-0 truncate text-muted-foreground" title={layer.class_labels.join(', ')}>
+                        {layer.class_labels.length ? layer.class_labels.join(', ') : EVERY_FEATURE}
                       </td>
-                      <td className={cn(settingsTable.td, 'text-muted-foreground')}>{layer.order}</td>
-                      <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                      <td className="text-muted-foreground">{layer.order}</td>
+                      <td onClick={(e) => e.stopPropagation()}>
                         {canEdit && !shared ? (
                           <LayerColorInput
                             color={layer.color}
@@ -747,10 +751,10 @@ function FeedPage({
                           <span className="inline-block h-4 w-4 border border-border" style={{ background: layer.color }} aria-label={layer.color} />
                         )}
                       </td>
-                      <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                      <td onClick={(e) => e.stopPropagation()}>
                         <span className="inline-flex items-center gap-2">
                           <Checkbox
-                            checked={!hidden.includes(layer.id)}
+                            checked={layer.shown}
                             disabled={!canEdit || busyId === layer.id}
                             onCheckedChange={() => onToggleShown(layer)}
                             aria-label={`${layer.title} shown`}
@@ -759,7 +763,7 @@ function FeedPage({
                         </span>
                       </td>
                       {canEdit && (
-                        <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
+                        <td onClick={(e) => e.stopPropagation()}>
                           <span className="inline-flex items-center gap-1">
                             <Button variant="ghost" size="icon" onClick={() => onEditLayer(layer.id)} aria-label={`Edit ${layer.title}`} title="Edit">
                               <Pencil size={14} />
@@ -783,6 +787,7 @@ function FeedPage({
               </tbody>
             </table>
           </div>
+          <TablePager total={layerTable.shown.length} paged={layerTable.paged} />
 
           {canEdit && !shared && hasFeatureTypes(feed) && uncovered.length > 0 ? (
             <div className="mt-4 space-y-2">

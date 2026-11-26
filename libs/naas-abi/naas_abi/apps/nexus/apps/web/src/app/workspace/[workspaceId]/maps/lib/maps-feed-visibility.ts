@@ -59,27 +59,3 @@ export function feedVisibilityRows(
   }
   return rows;
 }
-
-export type FeedStatusFilter = 'all' | 'enabled' | 'disabled';
-
-export interface FeedRowFilter {
-  search: string;
-  /** A group label, or 'all'. */
-  group: string;
-  status: FeedStatusFilter;
-}
-
-/** Rows matching the search (name, id, group, source) and the group / status filters. */
-export function filterFeedRows<T extends Pick<FeedVisibilityRow, 'id' | 'title' | 'group' | 'source' | 'shown'>>(
-  rows: readonly T[],
-  filter: FeedRowFilter,
-): T[] {
-  const query = filter.search.trim().toLowerCase();
-  const group = filter.group === 'all' ? null : filter.group.trim().toLowerCase();
-  return rows.filter(
-    (row) =>
-      (!query || [row.title, row.id, row.group, row.source].some((text) => text.toLowerCase().includes(query)))
-      && (!group || row.group.trim().toLowerCase() === group)
-      && (filter.status === 'all' || row.shown === (filter.status === 'enabled')),
-  );
-}

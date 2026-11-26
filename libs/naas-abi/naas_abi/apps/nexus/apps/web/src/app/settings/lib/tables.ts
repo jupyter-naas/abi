@@ -78,6 +78,9 @@ export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   // Access of the workspace (Platform Settings' own is /settings/access).
   'policies',
   'groups',
+  // Features and Files of the workspace (new, but `getWorkspacePath(null, ...)` yields them too).
+  'features',
+  'files',
 ];
 
 /**

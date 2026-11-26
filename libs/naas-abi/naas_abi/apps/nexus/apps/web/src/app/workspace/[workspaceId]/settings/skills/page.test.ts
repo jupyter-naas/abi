@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { checkPagedTable } from '@/lib/testing/paged-table';
 
 const SKILLS = vi.hoisted(() =>
   Array.from({ length: 45 }, (_, i) => {
@@ -16,7 +15,7 @@ const SKILLS = vi.hoisted(() =>
       description: i === 36 ? 'Writes about the zebra herd' : `The skill number ${n}`,
       prompt: 'Do it',
       scope: 'workspace',
-      // The last four are disabled: "Enabled" keeps 41.
+      // The last four are disabled: the Enabled column filtered on Enabled keeps 41.
       enabled: i < 41,
       lastUsedAt: null,
       createdAt: '2026-11-01T00:00:00Z',
@@ -45,6 +44,7 @@ vi.mock('@/stores/auth', async (importOriginal) => ({
 }));
 
 import SkillsSettingsPage from './page';
+import { pickColumnFilter as filterColumn } from '@/lib/testing/column-filter';
 
 let mounted: Mounted | null = null;
 afterEach(async () => {
@@ -53,14 +53,54 @@ afterEach(async () => {
 });
 
 describe('Workspace settings › Skills', () => {
-  it('shows 20 skills a page, searches and filters all of them, back to the first page', async () => {
+  it('shows 20 skills a page, searches all of them, a column filter goes back to the first page', async () => {
     mounted = await mount(SkillsSettingsPage, {});
-    await checkPagedTable(mounted, {
-      row: 'data-skill',
-      total: 45,
-      search: 'input[placeholder="Search skills..."]',
-      far: { id: 'skill-37', query: 'zebra' },
-      filter: { select: 'select[aria-label="Status"]', value: 'enabled' },
-    });
+    const m = mounted;
+    const q = (selector: string) => m.host.querySelector(selector);
+    const rows = () => [...m.host.querySelectorAll('[data-skill]')].map((r) => r.getAttribute('data-skill'));
+    const shown = () => q('[data-field="rows-shown"]')?.textContent ?? null;
+
+    expect(rows()).toHaveLength(20);
+    expect(shown()).toBe('Rows 1–20 of 45');
+    expect(rows()).not.toContain('skill-37');
+    await m.select(q('[data-field="page-size"]'), '50');
+    expect(rows()).toHaveLength(45);
+    await m.select(q('[data-field="page-size"]'), '20');
+    await m.click(q('[data-action="next-page"]'));
+    expect(shown()).toBe('Rows 21–40 of 45');
+
+    // The search reaches every skill, not only the page shown.
+    await m.type(q('input[placeholder="Search skills..."]'), 'zebra');
+    expect(rows()).toEqual(['skill-37']);
+    expect(m.host.textContent).toContain('1 of 45 skills');
+
+    // The Enabled column filters on the status, and goes back to the first page.
+    await m.type(q('input[placeholder="Search skills..."]'), '');
+    await m.click(q('[data-action="next-page"]'));
+    expect(shown()).toMatch(/^Rows 21–/);
+    await filterColumn(m, 'enabled', 'Enabled');
+    expect(shown()).toBe('Rows 1–20 of 41');
+    expect(m.host.textContent).toContain('41 of 45 skills · 41 enabled');
+
+    await m.click(q('[data-action="clear-filters"]'));
+    expect(shown()).toBe('Rows 1–20 of 45');
+  });
+
+  it('filters the disabled skills from the Enabled column, then Visibility and the search narrow them', async () => {
+    mounted = await mount(SkillsSettingsPage, {});
+    await filterColumn(mounted, 'enabled', 'Disabled');
+    expect([...mounted.host.querySelectorAll('[data-skill]')].map((r) => r.getAttribute('data-skill'))).toEqual([
+      'skill-42',
+      'skill-43',
+      'skill-44',
+      'skill-45',
+    ]);
+    await filterColumn(mounted, 'visibility', 'Workspace');
+    expect(mounted.host.querySelectorAll('[data-skill]')).toHaveLength(4);
+    // The search narrows the filtered rows: the zebra skill is enabled.
+    await mounted.type(mounted.host.querySelector('input[placeholder="Search skills..."]'), 'zebra');
+    expect(mounted.host.querySelectorAll('[data-skill]')).toHaveLength(0);
+    expect(mounted.host.textContent).toContain('No skills match the current search and filters');
+    expect(mounted.host.querySelector('[data-action="export"]')).not.toBeNull();
   });
 });

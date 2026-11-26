@@ -3,37 +3,46 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Workflow } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import {
   SettingsEmpty,
-  SettingsFilterSelect,
   SettingsLoading,
   SettingsNotice,
   SettingsPageHeader,
   SettingsTableToolbar,
   countLabel,
-  settingsTable,
 } from '@/components/settings/settings-ui';
-import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 import {
+  SettingsTableClear,
+  SettingsTableHead,
+  SettingsTableNoMatch,
+  useSettingsTable,
+} from '@/components/settings/users-table/settings-table';
+import { TablePager } from '@/components/settings/users-table/table-pager';
+import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
+import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
+import {
+  WORKFLOW_COLUMNS,
+  WORKFLOW_EXPORT_HEADERS,
   fetchWorkflowSettings,
-  filterWorkflows,
+  sortedWorkflows,
+  workflowCellValues,
+  workflowExportRow,
   workflowKey,
+  workflowSearchTexts,
   type WorkflowSetting,
 } from './workflows-model';
 
 /**
  * Workspace settings › Workflows: the workflows and pipelines of the workspace's modules,
- * read-only. Who may run each is decided by policies alone, on Roles & permissions: there is
- * no workspace on/off switch.
+ * read-only, laid out as Settings › Users (a search, columns that sort and filter, pages, an
+ * export). Who may run each is decided by policies alone, on Roles & permissions: there is no
+ * workspace on/off switch.
  */
 export default function WorkflowsSettingsPage() {
   const workspaceId = useParams()?.workspaceId as string | undefined;
   const [items, setItems] = useState<WorkflowSetting[] | null>(null);
   const [error, setError] = useState('');
-  const [query, setQuery] = useState('');
-  const [type, setType] = useState('all');
 
   const load = useCallback(async () => {
     if (!workspaceId) return;
@@ -51,11 +60,27 @@ export default function WorkflowsSettingsPage() {
     void load();
   }, [load]);
 
-  const all = useMemo(() => items ?? [], [items]);
-  const shown = useMemo(() => filterWorkflows(all, { query, type }), [all, query, type]);
-  // 20 a page: the search and the filter reach every item, and a change of them goes back to
-  // the first page.
-  const paged = usePagedRows(shown, JSON.stringify([query, type]));
+  // By module then name: rows that tie on the sorted column keep that order.
+  const all = useMemo(() => sortedWorkflows(items ?? []), [items]);
+  const table = useSettingsTable({
+    rows: all,
+    columns: WORKFLOW_COLUMNS,
+    cellValues: workflowCellValues,
+    searchTexts: workflowSearchTexts,
+    initialSort: 'module',
+  });
+  const shown = table.shown;
+
+  const exportShown = (format: UsersExportFormat) => {
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTableExport(
+      WORKFLOW_EXPORT_HEADERS,
+      shown.map(workflowExportRow),
+      format,
+      `workflows_${date}`,
+      'Workflows'
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -63,6 +88,7 @@ export default function WorkflowsSettingsPage() {
         title="Workflows"
         badge={items ? countLabel(all.length, all.length, 'item') : undefined}
         description="The workflows and pipelines of this workspace's modules. Who runs each is decided by policies, on Roles & permissions."
+        actions={<UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />}
       />
 
       {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
@@ -78,62 +104,42 @@ export default function WorkflowsSettingsPage() {
       ) : (
         <div className="space-y-4">
           <SettingsTableToolbar
-            search={query}
-            onSearchChange={setQuery}
+            search={table.search}
+            onSearchChange={table.setSearch}
             searchPlaceholder="Search workflows..."
-            filters={
-              <SettingsFilterSelect
-                label="Type"
-                value={type}
-                onChange={setType}
-                options={[
-                  { value: 'all', label: 'All types' },
-                  { value: 'workflow', label: 'Workflows' },
-                  { value: 'pipeline', label: 'Pipelines' },
-                ]}
-              />
+            meta={
+              <>
+                {countLabel(shown.length, all.length, 'item')}
+                <SettingsTableClear table={table} />
+              </>
             }
-            meta={countLabel(shown.length, all.length, 'item')}
           />
 
-          <div className={settingsTable.wrapper}>
-            <table className={settingsTable.table}>
-              <thead>
-                <tr className={settingsTable.headRow}>
-                  <th className={settingsTable.th}>Name</th>
-                  <th className={settingsTable.th}>Type</th>
-                  <th className={settingsTable.th}>Module</th>
-                </tr>
-              </thead>
+          <div className="org-settings-users-table-wrap">
+            <table className="org-settings-users-table">
+              <SettingsTableHead table={table} />
               <tbody>
-                {shown.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="p-8 text-center text-muted-foreground">
-                      No workflows match the current search and filters
+                {shown.length === 0 && <SettingsTableNoMatch colSpan={WORKFLOW_COLUMNS.length} noun="workflows" />}
+                {table.paged.pageRows.map((item) => (
+                  <tr key={workflowKey(item)} data-workflow={workflowKey(item)}>
+                    <td className="align-top">
+                      <p className="font-medium">{item.display_name}</p>
+                      {item.description ? (
+                        <p className="line-clamp-2 text-xs text-muted-foreground" title={item.description}>
+                          {item.description}
+                        </p>
+                      ) : null}
                     </td>
+                    <td>
+                      <Badge variant={item.type === 'pipeline' ? 'warning' : 'primary'}>{item.type}</Badge>
+                    </td>
+                    <td className="truncate text-muted-foreground">{item.module_id}</td>
                   </tr>
-                ) : (
-                  paged.pageRows.map((item) => (
-                    <tr key={workflowKey(item)} data-workflow={workflowKey(item)} className={settingsTable.row}>
-                      <td className={cn(settingsTable.td, 'align-top')}>
-                        <p className="font-medium">{item.display_name}</p>
-                        {item.description ? (
-                          <p className="line-clamp-2 text-xs text-muted-foreground" title={item.description}>
-                            {item.description}
-                          </p>
-                        ) : null}
-                      </td>
-                      <td className={settingsTable.td}>
-                        <Badge variant={item.type === 'pipeline' ? 'warning' : 'primary'}>{item.type}</Badge>
-                      </td>
-                      <td className={cn(settingsTable.td, 'truncate text-muted-foreground')}>{item.module_id}</td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
-          <TablePager total={shown.length} paged={paged} />
+          <TablePager total={shown.length} paged={table.paged} />
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 /** Checks of a settings table paged by `usePagedRows` and `TablePager` (component tests). */
 import { expect } from 'vitest';
+import { pickColumnFilter } from './column-filter';
 import type { Mounted } from './mount';
 
 export interface PagedTableCase {
@@ -11,8 +12,9 @@ export interface PagedTableCase {
   search: string;
   /** A row beyond the first page, and a search that lists it. */
   far: { id: string; query: string };
-  /** A filter that keeps more than a page of rows: its select and the value to pick. */
-  filter: { select: string; value: string };
+  /** A filter that keeps more than a page of rows: its select, or its column (a funnel of
+   *  `SettingsTableHead`), and the value to pick. */
+  filter: { select: string; value: string } | { column: string; value: string };
 }
 
 /**
@@ -43,6 +45,7 @@ export async function checkPagedTable(mounted: Mounted, c: PagedTableCase): Prom
   await mounted.type(q(c.search), '');
   await mounted.click(q('[data-action="next-page"]'));
   expect(shown()).toMatch(/^Rows 21–/);
-  await mounted.select(q(c.filter.select), c.filter.value);
+  if ('select' in c.filter) await mounted.select(q(c.filter.select), c.filter.value);
+  else await pickColumnFilter(mounted, c.filter.column, c.filter.value);
   expect(shown()).toMatch(/^Rows 1–20 of /);
 }
