@@ -24,6 +24,7 @@ import { UsersExportMenu } from '@/components/settings/users-table/users-table-a
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import { reloadWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { PolicyPicker } from '@/components/settings/policy-picker';
+import { isOrgTarget } from '@/lib/access-model/target';
 import { ownerHref } from '@/components/access/policies/policy-owners';
 import Link from 'next/link';
 import {
@@ -162,7 +163,7 @@ export function WorkspaceModules({
       const name = editsOffer(next) ? 'the offer' : (next.policy?.name ?? 'the policy');
       setNotice(`${label} ${on ? 'added to' : 'removed from'} ${name}.`);
       // The nav and the pages under Features follow what is offered.
-      if (editsOffer(next)) void reloadWorkspaceResources(workspaceId);
+      if (editsOffer(next) && !isOrgTarget(workspaceId)) void reloadWorkspaceResources(workspaceId);
     } catch (e) {
       setError(message(e, 'Could not save the offer.'));
     } finally {
@@ -206,7 +207,9 @@ export function WorkspaceModules({
               each module, whole or item by item, within the workspace&apos;s offer{access ? ` (${access.name})` : ''}.
             </>
           ) : (
-            "What this workspace offers of each module: its agents, apps, workflows and pipelines, whole (what the module adds later too) or item by item. The pages under Features then show what is offered; each person's level decides what they do with it."
+            isOrgTarget(workspaceId)
+              ? 'What the workspaces of this organization may offer of each module: its agents, apps, workflows and pipelines, whole (what the module adds later too) or item by item. A workspace never offers what is not offered here.'
+              : "What this workspace offers of each module: its agents, apps, workflows and pipelines, whole (what the module adds later too) or item by item. The pages under Features then show what is offered; each person's level decides what they do with it."
           )
         }
         actions={

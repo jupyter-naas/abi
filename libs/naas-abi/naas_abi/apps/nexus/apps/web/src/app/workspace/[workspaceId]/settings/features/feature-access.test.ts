@@ -90,10 +90,10 @@ describe('FeatureAccess', () => {
   it('shows each feature, the Nexus Files one included: its description, its access, enabled, a link to its page', async () => {
     const m = await render(fakeApi());
 
+    // Graph, which the organization does not offer, is not shown in the workspace.
     expect([...m.host.querySelectorAll('tr[data-feature]')].map((tr) => tr.getAttribute('data-feature'))).toEqual([
       'chat',
       'files',
-      'graph',
       'maps',
       'marketplace',
       'search',
@@ -112,7 +112,7 @@ describe('FeatureAccess', () => {
     expect(m.host.querySelector('[data-effect]')).toBeNull();
     expect(at(m, 'agents', 'a')).toBeNull();
     expect(at(m, 'files', '[data-action="configure"]')?.getAttribute('href')).toBe('/workspace/ws1/settings/files');
-    expect(at(m, 'graph', '[data-action="configure"]')?.getAttribute('href')).toBe('/workspace/ws1/settings/graphs');
+    expect(at(m, 'maps', '[data-action="configure"]')?.getAttribute('href')).toBe('/workspace/ws1/settings/maps');
     // What Access is used for, said above the table.
     expect(m.host.querySelector('[data-access-legend]')?.textContent).toContain('how far people go');
     expect(m.host.textContent).toContain('admins included');
@@ -121,14 +121,23 @@ describe('FeatureAccess', () => {
     expect(saveButton(m).disabled).toBe(true);
   });
 
-  it('makes a hand-edited row read-only with a link, and a feature not offered Disabled-only', async () => {
-    const m = await render(fakeApi());
+  it('makes a hand-edited row read-only with a link, and a feature still allowed but no longer offered above Disabled-only', async () => {
+    const api = fakeApi();
+    api.read.mockResolvedValue(
+      state([
+        ...BEFORE.features.filter((r) => r.key !== 'graph'),
+        row({ key: 'graph', label: 'Graph', choice: 'everyone', offered: false }),
+      ]),
+    );
+    const m = await render(api);
 
     expect(enabled(m, 'search')?.disabled).toBe(true);
     expect(at(m, 'search', '.workspace-features-note')?.textContent).toContain('read-only here');
     expect(at(m, 'search', '.workspace-features-note a')?.getAttribute('href')).toContain('pol_search');
 
-    expect(enabled(m, 'graph')?.disabled).toBe(true);
+    // Still allowed here, not offered above: shown, and it can only be taken back.
+    expect(enabled(m, 'graph')?.checked).toBe(true);
+    expect(enabled(m, 'graph')?.disabled).toBe(false);
     expect(at(m, 'graph', '.workspace-features-note')?.textContent).toContain('Not offered in this workspace');
     expect(at(m, 'graph', '.workspace-features-note a')?.textContent).toBe('Widen Alpha access');
   });
@@ -169,16 +178,16 @@ describe('FeatureAccess', () => {
     const m = await render(fakeApi());
     const keys = () => [...m.host.querySelectorAll('tr[data-feature]')].map((tr) => tr.getAttribute('data-feature'));
 
-    expect(m.host.textContent).toContain('2 offered · 4 not offered');
-    expect(m.host.textContent).toContain('6 features');
+    expect(m.host.textContent).toContain('2 offered · 3 not offered');
+    expect(m.host.textContent).toContain('5 features');
     await m.click(m.host.querySelector('[data-sort="enabled"]'));
-    expect(keys()).toEqual(['files', 'graph', 'maps', 'marketplace', 'chat', 'search']);
+    expect(keys()).toEqual(['files', 'maps', 'marketplace', 'chat', 'search']);
 
-    await m.type(m.host.querySelector('input[type="search"], input') as HTMLInputElement, 'not offered');
-    expect(keys()).toEqual(['graph']);
-    expect(m.host.textContent).toContain('1 of 6 features');
+    await m.type(m.host.querySelector('input[type="search"], input') as HTMLInputElement, 'feeds');
+    expect(keys()).toEqual(['maps']);
+    expect(m.host.textContent).toContain('1 of 5 features');
     await m.click(m.host.querySelector('[data-action="clear-filters"]'));
-    expect(keys()).toHaveLength(6);
+    expect(keys()).toHaveLength(5);
   });
 
   it('discards the drafts', async () => {
@@ -232,13 +241,13 @@ describe('FeatureAccess', () => {
 
   it('caps how far everyone goes with a feature (Access), saved with the rest', async () => {
     const graphLevel = {
-      key: 'feature:graph',
+      key: 'feature:maps',
       kind: 'feature' as const,
-      name: 'graph',
-      label: 'Graph',
+      name: 'maps',
+      label: 'Maps',
       level: 'write' as const,
       choices: ['none', 'read', 'write'] as ('none' | 'read' | 'write')[],
-      actions: { read: ['nexus:GetView'], write: ['nexus:CreateView'] },
+      actions: { read: ['nexus:ListLayers', 'nexus:UseFeature'], write: ['nexus:CreateView'] },
     };
     const levelsState = {
       workspace_id: 'ws1',
@@ -262,20 +271,31 @@ describe('FeatureAccess', () => {
       levelsApi: levelsApi as never,
     });
     await mounted.flush();
-    const level = (value: string) => at(mounted!, 'graph', `[data-access-level] [data-level="${value}"]`);
+    const level = (value: string) => at(mounted!, 'maps', `[data-access-level] [data-level="${value}"]`);
     expect(level('write')?.getAttribute('aria-checked')).toBe('true');
-    // On the offer, None is the feature's Nobody: not offered twice.
-    expect(level('none')).toBeNull();
-    expect(at(mounted, 'graph', '[data-level-actions]')?.textContent).toContain('nexus:CreateView');
+    // None denies the feature outright (its UseFeature too).
+    expect(level('none')?.getAttribute('title')).toContain('Denied');
+    expect(at(mounted, 'maps', '[data-level-actions]')?.textContent).toContain('nexus:CreateView');
     expect(at(mounted, 'chat', '[data-field="access"]')?.textContent).toBe('—');
 
     await mounted.click(level('read'));
     expect(mounted.host.textContent).toContain('1 unsaved change');
     await mounted.click(saveButton(mounted));
     await mounted.flush();
-    expect(levelsApi.save).toHaveBeenCalledWith('ws1', 'feature', { 'feature:graph': 'read' }, null);
+    expect(levelsApi.save).toHaveBeenCalledWith('ws1', 'feature', { 'feature:maps': 'read' }, null);
     expect(api.save).not.toHaveBeenCalled();
     expect(level('read')?.getAttribute('aria-checked')).toBe('true');
     expect(mounted.host.textContent).toContain('No unsaved change');
+  });
+
+  it('on an organization (org:<id>), edits "<O> access": every feature listed, no link to a workspace page', async () => {
+    const api = fakeApi();
+    mounted = await mount(FeatureAccess, { workspaceId: 'org:acme', api: api as unknown as FeatureAccessApi });
+    await mounted.flush();
+    expect(api.read).toHaveBeenCalledWith('org:acme', null);
+    // Where features are taken out: even one not offered is listed.
+    expect(mounted.host.querySelector('tr[data-feature="graph"]')).not.toBeNull();
+    expect(mounted.host.querySelector('[data-action="configure"]')).toBeNull();
+    expect(mounted.host.textContent).toContain('workspaces of this organization');
   });
 });

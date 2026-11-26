@@ -169,7 +169,7 @@ describe('who sees what in Settings', () => {
     const organization = await seenBy(root, seen.opens.Organization);
     expect(organization.column).toEqual({
       Organization: ['General', 'Branding', 'Workspaces', 'Users'],
-      Access: ['Groups', 'Policies'],
+      Access: ['Groups', 'Policies', 'Features', 'Services', 'Modules'],
     });
   });
 
@@ -206,7 +206,7 @@ describe('who sees what in Settings', () => {
     expect(organization.level).toBe('Organization');
     expect(organization.column).toEqual({
       Organization: ['General', 'Branding', 'Workspaces', 'Users'],
-      Access: ['Policies'],
+      Access: ['Policies', 'Features', 'Services', 'Modules'],
     });
   });
 

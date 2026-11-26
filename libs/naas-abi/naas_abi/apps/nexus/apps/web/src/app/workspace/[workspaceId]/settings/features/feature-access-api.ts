@@ -3,6 +3,7 @@
  * workspace offers each feature. The workspace offer editor (Access › "<W> access") calls it too.
  */
 import { authFetch } from '@/stores/auth';
+import { targetApiPath } from '@/lib/access-model/target';
 import type { FeatureAccessState, FeatureChange } from './feature-access-model';
 
 type Fetcher = (url: string, options?: RequestInit) => Promise<Response>;
@@ -35,7 +36,7 @@ export const policyQuery = (policyId?: string | null) => (policyId ? `?policy=${
 
 export function createFeatureAccessApi(fetcher: Fetcher = authFetch) {
   const path = (workspaceId: string, policyId?: string | null) =>
-    `/api/workspaces/${encodeURIComponent(workspaceId)}/feature-access${policyQuery(policyId)}`;
+    `${targetApiPath(workspaceId)}/feature-access${policyQuery(policyId)}`;
   return {
     read: async (workspaceId: string, policyId?: string | null): Promise<FeatureAccessState> => {
       const response = await fetcher(path(workspaceId, policyId));

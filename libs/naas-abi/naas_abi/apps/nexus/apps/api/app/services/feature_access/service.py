@@ -111,6 +111,12 @@ OntologyListing = tuple[list[dict[str, Any]], set[str]]
 OntologyCatalog = Callable[[Any, str], Awaitable[OntologyListing | None]]
 
 
+def is_container(target: str) -> bool:
+    """Whether a page's target names a container (an organization's) rather than a
+    workspace by its id."""
+    return target.startswith("abi:")
+
+
 def feature_label(key: str) -> str:
     return key[:1].upper() + key[1:]
 
@@ -480,6 +486,14 @@ class FeatureAccessService:
     # -- reading --------------------------------------------------------------------
 
     async def _where(self, workspace_id: str) -> tuple[str, Any]:
+        """The container and its defaults (its access policy). ``workspace_id`` is a
+        workspace's id, or an organization's container (``abi:...``, ``org_container``):
+        Organization › Access edits "<O> access" as a workspace's pages edit "<W> access"."""
+        if is_container(workspace_id):
+            record = await self._defaults_of(workspace_id)
+            if record is None:
+                raise IAMNotFoundError("Organization not found")
+            return workspace_id, record
         container = await self._container_of(workspace_id)
         if container is None:
             raise IAMNotFoundError("Workspace not found")
@@ -998,7 +1012,7 @@ class FeatureAccessService:
         """The deployment's ontology files and those the caller may assign; None where
         it lists none, the failure's words where the listing failed (the rest of the
         offer is still read)."""
-        if self._ontology_catalog is None:
+        if self._ontology_catalog is None or is_container(workspace_id):
             return None
         try:
             return await self._ontology_catalog(user, workspace_id)

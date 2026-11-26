@@ -6,6 +6,7 @@ import { AlertCircle } from 'lucide-react';
 import { ownerHref } from '@/components/access/policies/policy-owners';
 import { AccessLevelChoice } from '@/components/settings/access-level-choice';
 import { PolicyPicker } from '@/components/settings/policy-picker';
+import { isOrgTarget } from '@/lib/access-model/target';
 import {
   SettingsEmpty,
   SettingsLoading,
@@ -130,7 +131,9 @@ export function CoreServices({
         title="Services"
         badge={state ? (cap ? `${capped} capped · ${rows.length - capped} open` : `${granted} granted · ${rows.length - granted} none`) : undefined}
         description={
-          cap ? (
+          cap && isOrgTarget(workspaceId) ? (
+            'How far people go with each core service of the engine (its graphs, files, vectors, datasets, documents, secrets…) in every workspace of this organization, admins included: a cap above which nothing is done there. The Nexus features are Access › Features.'
+          ) : cap ? (
             'How far everyone in this workspace goes with each core service of the engine (its graphs, files, vectors, datasets, documents, secrets…), admins included: a cap above which nothing is done here. Each person’s level still applies below it. The Nexus features are Access › Features.'
           ) : (
             <>

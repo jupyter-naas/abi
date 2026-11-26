@@ -52,6 +52,9 @@ describe('the levels of Settings', () => {
     expect(organization?.groups[1].links.map((link) => [link.label, link.href])).toEqual([
       ['Groups', '/organizations/acme/settings/groups'],
       ['Policies', '/organizations/acme/settings/policies'],
+      ['Features', '/organizations/acme/settings/features'],
+      ['Services', '/organizations/acme/settings/core-services'],
+      ['Modules', '/organizations/acme/settings/modules'],
     ]);
   });
 

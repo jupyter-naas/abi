@@ -744,3 +744,32 @@ async def test_another_policy_grants_a_level_to_its_holders(nexus, acme, service
     with as_service_account("api"):
         access_doc = nexus.iam.get_policy(acme.access_policy_id).document
     assert not [s for s in access_doc.statements if (s.sid or "").startswith("AccessLevel")]
+
+
+# -- Organization › Access: the same reads and writes on "<O> access" ---------------------
+
+
+@pytest.mark.asyncio
+async def test_the_organization_pages_edit_its_offer_and_reach_its_workspaces(nexus, acme, service):
+    acme_org = org_container("acme")
+    state = await service.read("root", acme_org)
+    assert state["access_policy"]["name"] == state["policy"]["name"]
+    assert state["policies"][0]["id"] == state["access_policy"]["id"]
+    rows = _rows(state)
+    assert rows["chat"]["choice"] == "everyone" and rows["chat"]["offered"]
+
+    # The platform admin takes chat out of "<O> access": Alpha may not offer it any more.
+    saved = await service.save("root", acme_org, [FeatureChange("chat", "nobody")])
+    assert saved["errors"] == {} and _rows(saved)["chat"]["choice"] == "nobody"
+    assert _rows(await service.read("olivia", "alpha"))["chat"]["offered"] is False
+
+    # A cap in "<O> access" reaches the people of its workspaces (its Denies are their bound's).
+    view = nexus_resource("view", container=ALPHA, id="v1")
+    assert _may(nexus, "carol", "nexus:CreateView", view)
+    capped = await service.save_levels("root", acme_org, "feature", {"feature:graph": "read"})
+    assert capped["mode"] == "cap"
+    assert not _may(nexus, "carol", "nexus:CreateView", view)
+
+    offer = await service.read_offer("root", acme_org)
+    assert offer["policy"]["id"] == state["access_policy"]["id"]
+    assert offer["offered"]["agents"] == [{"module": "acme.sales", "name": "*"}]

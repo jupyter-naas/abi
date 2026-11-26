@@ -14,6 +14,7 @@
  * Its ontology files (`ontologies`) are switched here (`PUT /offer/ontologies`) as in Settings ›
  * Ontologies: an organization's admins add one, a workspace admin may take one back.
  */
+import { targetApiPath } from './target';
 import { authFetch } from '@/stores/auth';
 
 export type OfferKind = 'agents' | 'apps' | 'workflows' | 'pipelines';
@@ -223,7 +224,8 @@ async function failure(response: Response, fallback: string): Promise<OfferError
 }
 
 export function createOfferApi(fetcher: Fetcher = authFetch) {
-  const path = (workspaceId: string) => `/api/workspaces/${encodeURIComponent(workspaceId)}/offer`;
+  // A workspace's id, or `org:<id>` for an organization's offer (Organization › Access).
+  const path = (workspaceId: string) => `${targetApiPath(workspaceId)}/offer`;
   // `?policy=<id>`: another policy of the workspace, edited as its offer is (Access › Modules).
   const of = (policyId?: string | null) => (policyId ? `?policy=${encodeURIComponent(policyId)}` : '');
   return {

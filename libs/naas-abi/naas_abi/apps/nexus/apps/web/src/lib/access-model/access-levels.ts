@@ -6,6 +6,7 @@
  * what it grants its holders (`mode: 'grant'`, Allows up to it).
  */
 import { authFetch } from '@/stores/auth';
+import { targetApiPath } from './target';
 
 type Fetcher = (url: string, options?: RequestInit) => Promise<Response>;
 
@@ -73,7 +74,7 @@ async function failure(response: Response, fallback: string): Promise<AccessLeve
 /** The hint of a level, as the policy edited reads it. */
 export function levelHint(level: AccessLevel, mode: 'cap' | 'grant'): string {
   if (mode === 'cap') {
-    if (level === 'none') return 'Nobody in the workspace uses it, admins included.';
+    if (level === 'none') return 'Denied: nobody under this policy uses it, admins included, whatever another policy grants.';
     if (level === 'admin') return 'No cap: each person’s level decides.';
     return `Nobody in the workspace goes beyond ${LEVEL_LABELS[level]}, admins included; each person’s level still applies below.`;
   }
@@ -82,7 +83,7 @@ export function levelHint(level: AccessLevel, mode: 'cap' | 'grant'): string {
 
 export function createAccessLevelsApi(fetcher: Fetcher = authFetch) {
   const path = (workspaceId: string, kind: LevelKind, policyId?: string | null) =>
-    `/api/workspaces/${encodeURIComponent(workspaceId)}/access-levels?kind=${kind}${
+    `${targetApiPath(workspaceId)}/access-levels?kind=${kind}${
       policyId ? `&policy=${encodeURIComponent(policyId)}` : ''
     }`;
   return {

@@ -30,6 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.services.feature_access.service import (
     OfferChange,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.port import IamUnavailableError
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
 from naas_abi_core.services.iam.IAMPorts import (
@@ -311,3 +312,92 @@ async def save_workspace_offer(
     organization's offer: nothing changes). Answers the offer after."""
     changes = [OfferChange(c.kind, c.module, c.name, c.offered) for c in body.changes]
     return await _call(service.save_offer(user, workspace_id, changes, policy_id))
+
+
+# -- Organization › Access: the same pages on "<O> access" ---------------------------------
+
+org_router = APIRouter()
+
+READ_ORG = guard(
+    "ListOrganizationCatalog",
+    org="org_id",
+    denied="Only organization admins can view the organization's access",
+)
+
+
+def _org(org_id: str) -> str:
+    return org_container(org_id)
+
+
+@org_router.get("/{org_id}/feature-access", dependencies=[READ_ORG])
+async def read_org_feature_access(
+    org_id: str,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
+) -> dict[str, Any]:
+    """Each enabled feature in the policy edited: "<O> access" (what every workspace of the
+    organization may offer) by default, or another policy the organization owns."""
+    return await _call(service.read(user, _org(org_id), policy_id))
+
+
+@org_router.put("/{org_id}/feature-access", dependencies=[declares(action) for action in WRITES])
+async def save_org_feature_access(
+    org_id: str,
+    body: SaveBody,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
+) -> dict[str, Any]:
+    changes = [
+        FeatureChange(c.feature, c.choice, tuple(dict.fromkeys(c.principals))) for c in body.changes
+    ]
+    return await _call(service.save(user, _org(org_id), changes, policy_id))
+
+
+@org_router.get("/{org_id}/offer", dependencies=[READ_ORG])
+async def read_org_offer(
+    org_id: str,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
+) -> dict[str, Any]:
+    """The agents, apps, workflows and pipelines the policy edited allows, by module."""
+    return await _call(service.read_offer(user, _org(org_id), policy_id))
+
+
+@org_router.put("/{org_id}/offer", dependencies=[declares(action) for action in WRITES])
+async def save_org_offer(
+    org_id: str,
+    body: OfferBody,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
+) -> dict[str, Any]:
+    changes = [OfferChange(c.kind, c.module, c.name, c.offered) for c in body.changes]
+    return await _call(service.save_offer(user, _org(org_id), changes, policy_id))
+
+
+@org_router.get("/{org_id}/access-levels", dependencies=[READ_ORG])
+async def read_org_access_levels(
+    org_id: str,
+    kind: Literal["feature", "service"] = Query(default="feature"),
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
+) -> dict[str, Any]:
+    """Access levels in the policy edited: in "<O> access" a cap for every workspace of the
+    organization (its Denies reach them all), in another policy what it grants."""
+    return await _call(service.read_levels(user, _org(org_id), kind, policy_id))
+
+
+@org_router.put("/{org_id}/access-levels", dependencies=[declares(action) for action in WRITES])
+async def save_org_access_levels(
+    org_id: str,
+    body: LevelsBody,
+    kind: Literal["feature", "service"] = Query(default="feature"),
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
+) -> dict[str, Any]:
+    return await _call(service.save_levels(user, _org(org_id), kind, body.changes, policy_id))

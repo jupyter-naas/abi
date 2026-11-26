@@ -51,3 +51,20 @@ def test_rewriting_keeps_the_other_statements():
     doc = levels.with_levels({**DOC, "statements": [other]}, "cap", {"feature:graph": "read"})
     doc = levels.with_levels(doc, "cap", {"feature:graph": "write"})
     assert doc["statements"] == [other]
+
+
+def test_none_denies_the_feature_itself_even_one_with_no_action_of_its_own():
+    slides = levels.group("feature:slides")
+    assert slides is not None and slides.choices("cap") == ["none", "read"]
+    doc = levels.with_levels(DOC, "cap", {"feature:slides": "none", "feature:graph": "read"})
+    denied = {
+        a
+        for s in doc["statements"]
+        for a in s["actions"]
+        if "${scope}/nexus:feature/slides" in s["resources"]
+    }
+    assert denied == {"nexus:UseFeature"}
+    read = levels.levels_of(doc, "cap")
+    # Each feature's UseFeature is told apart by the feature it names.
+    assert read["feature:slides"] == "none" and read["feature:graph"] == "read"
+    assert read["feature:documents"] == "read"

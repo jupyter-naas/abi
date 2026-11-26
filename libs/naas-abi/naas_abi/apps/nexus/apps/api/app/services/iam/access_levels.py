@@ -121,10 +121,21 @@ def _every(type_name: str) -> str:
     return scoped_resource(type_name, "-").rsplit("/", 1)[0] + "/*"
 
 
+USE_FEATURE = "nexus:UseFeature"
+
+
 def _feature_groups() -> list[LevelGroup]:
+    """Every feature: its gate (``UseFeature`` on the feature, at the read level, so ``none``
+    denies the feature itself), and the ``nexus:`` actions the catalog ties to it."""
+    from typing import get_args
+
+    from naas_abi.apps.nexus.apps.api.app.core.config import FeatureKey
     from naas_abi.apps.nexus.apps.api.app.services.feature_access.service import feature_label
 
-    found: dict[str, list[LevelAction]] = {}
+    found: dict[str, list[LevelAction]] = {
+        key: [LevelAction(USE_FEATURE, "list", f"${{scope}}/nexus:feature/{key}")]
+        for key in get_args(FeatureKey)
+    }
     for a in NEXUS_ACTIONS:
         if a.feature is None:
             continue
@@ -182,8 +193,10 @@ def group(key: str) -> LevelGroup | None:
     return next((g for g in groups() if g.key == key), None)
 
 
-def _group_of_action() -> dict[str, LevelGroup]:
-    return {a.action: g for g in groups() for a in g.actions}
+def _groups_of_action() -> dict[tuple[str, str], LevelGroup]:
+    """(action, the pattern naming its resources) -> its group: ``UseFeature`` is every
+    feature's, told apart by the feature it names."""
+    return {(a.action, a.resource): g for g in groups() for a in g.actions}
 
 
 def _section(sid: Any) -> str | None:
@@ -221,14 +234,15 @@ def levels_of(document: Any, mode: Mode) -> dict[str, Level]:
     sid = SID_OF_MODE[mode]
     effect = "Deny" if mode == "cap" else "Allow"
     named: dict[str, set[str]] = {}
-    of = _group_of_action()
+    of = _groups_of_action()
     for s in _statements(document):
         if _section(s.get("sid")) != sid or str(s.get("effect")) != effect:
             continue
         for action in s.get("actions") or ():
-            g = of.get(action)
-            if g is not None:
-                named.setdefault(g.key, set()).add(action)
+            for resource in s.get("resources") or ():
+                g = of.get((action, resource))
+                if g is not None:
+                    named.setdefault(g.key, set()).add(action)
     out: dict[str, Level] = {}
     for g in groups():
         choices = g.choices(mode)

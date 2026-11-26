@@ -35,11 +35,22 @@ describe('org settings nav', () => {
     expect(slugs('owner', BOTH)).not.toContain('roles');
     expect(slugs('owner', BOTH)).not.toContain('access');
     const access = orgSettingsNavForRole('owner', { access: BOTH }).filter((item) => item.group === 'Access');
-    expect(access.map((item) => item.label)).toEqual(['Groups', 'Policies']);
+    // Its offer's pages follow, for its owners and admins.
+    expect(access.map((item) => item.label)).toEqual(['Groups', 'Policies', 'Features', 'Services', 'Modules']);
   });
 
   it('shows branding to admins and hides domains, servers, services, and billing', () => {
-    expect(slugs('owner', BOTH)).toEqual(['general', 'branding', 'workspaces', 'users', 'groups', 'policies']);
+    expect(slugs('owner', BOTH)).toEqual([
+      'general',
+      'branding',
+      'workspaces',
+      'users',
+      'groups',
+      'policies',
+      'features',
+      'core-services',
+      'modules',
+    ]);
     expect(slugs('admin')).not.toContain('secrets');
   });
 });
@@ -79,7 +90,18 @@ describe('org settings nav › Analytics', () => {
   it('lists Analytics after Members, before the Access pages', () => {
     expect(
       orgSettingsNavForRole('owner', { access: BOTH, readsAnalytics: true }).map((item) => item.slug)
-    ).toEqual(['general', 'branding', 'workspaces', 'users', 'analytics', 'groups', 'policies']);
+    ).toEqual([
+      'general',
+      'branding',
+      'workspaces',
+      'users',
+      'analytics',
+      'groups',
+      'policies',
+      'features',
+      'core-services',
+      'modules',
+    ]);
   });
 });
 
@@ -143,11 +165,8 @@ describe('orgSettingsRedirect', () => {
     expect(orgSettingsRedirect('/organizations/org-1/settings/users')).toBeNull();
   });
 
-  it('sends Modules & features, removed with the sets, to Access › Policies', () => {
-    expect(orgSettingsRedirect('/organizations/org-1/settings/modules')).toBe('/organizations/org-1/settings/policies');
-    expect(orgSettingsRedirect('/organizations/org-1/settings/modules', '?workspace=ws-1')).toBe(
-      '/organizations/org-1/settings/policies?workspace=ws-1'
-    );
+  it('leaves Modules, a page again (Access › Modules), where it is', () => {
+    expect(orgSettingsRedirect('/organizations/org-1/settings/modules')).toBeNull();
     expect(orgSettingsRedirect('/organizations/org-1/settings/constructor')).toBeNull();
   });
 });

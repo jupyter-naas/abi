@@ -24,6 +24,7 @@ import { UsersExportMenu } from '@/components/settings/users-table/users-table-a
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { PolicyPicker } from '@/components/settings/policy-picker';
+import { isOrgTarget } from '@/lib/access-model/target';
 import { AccessLevelChoice } from '@/components/settings/access-level-choice';
 import {
   LEVEL_LABELS,
@@ -121,10 +122,17 @@ export function FeatureAccess({
   const levelRow = (key: string) => levels?.rows.find((r) => r.name === key) ?? null;
   const levelOf = (key: string): AccessLevel | null => accessDrafts[key] ?? levelRow(key)?.level ?? null;
 
-  // By name first: rows that tie on the sorted column stay A to Z.
+  // Organization › Access: "<O> access", the ceiling of every workspace of the organization.
+  const org = isOrgTarget(workspaceId);
+  // By name first: rows that tie on the sorted column stay A to Z. A feature the ceiling above
+  // does not offer (or denies) is not shown, unless the policy edited still allows it; on
+  // "<O> access" itself every feature is, it is where they are taken out.
   const rows = useMemo(
-    () => sortedRows(state?.features ?? []),
-    [state]
+    () =>
+      sortedRows(state?.features ?? []).filter(
+        (row) => row.offered || row.choice === 'everyone' || (org && editsOffer(state))
+      ),
+    [state, org]
   );
   const offer = editsOffer(state);
   const columns = FEATURE_COLUMNS;
@@ -159,7 +167,7 @@ export function FeatureAccess({
         setRowErrors(refused);
         setDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => refused[key])));
         // The nav's pages under Features follow what is offered.
-        if (editsOffer(next)) void useWorkspaceStore.getState().fetchWorkspaces();
+        if (editsOffer(next) && !org) void useWorkspaceStore.getState().fetchWorkspaces();
       }
       if (accessChanges.length > 0) {
         const wanted = Object.fromEntries(accessChanges.map(([key, level]) => [`feature:${key}`, level]));
@@ -220,6 +228,18 @@ export function FeatureAccess({
               within the workspace&apos;s offer{access ? ` (${access.name})` : ''}. The files given from outside the
               workspace are in <Link href={`/workspace/${workspaceId}/settings/files`}>Files</Link>.
             </>
+          ) : org ? (
+          <>
+            Whether the workspaces of this organization may offer each feature (Enabled), and how far people go with
+            it there (Access): a ceiling for every one of them, admins included
+            {offerHref && access ? (
+              <>
+                {' '}
+                (<Link href={offerHref}>{access.name}</Link>)
+              </>
+            ) : null}
+            . A workspace never offers what is not enabled here.
+          </>
           ) : (
           <>
             Whether this workspace offers each feature (Enabled), and how far people go with it (Access). Each
@@ -295,7 +315,9 @@ export function FeatureAccess({
             <strong>Access</strong>: how far people go with an enabled feature. Read lets them see it, Write also
             create and change, Admin also configure it.{' '}
             {offer
-              ? 'Here it is a cap for everyone in the workspace, admins included; each person’s level still applies below it.'
+              ? org
+                ? 'Here it is a cap for every workspace of the organization, admins included.'
+                : 'Here it is a cap for everyone in the workspace, admins included; each person’s level still applies below it.'
               : 'Here it is what this policy grants whoever holds it, within the workspace’s offer.'}{' '}
             Unfold Actions to see what each level allows.
           </p>
@@ -325,7 +347,6 @@ export function FeatureAccess({
                               value={value}
                               mode={levels.mode}
                               disabled={!levels.editable || saving}
-                              hideNone={levels.mode === 'cap'}
                               onChange={(next) => setAccessDrafts((current) => ({ ...current, [row.key]: next }))}
                             />
                           ) : (
@@ -372,7 +393,7 @@ export function FeatureAccess({
                       </td>
                       <td className="whitespace-nowrap text-right">
                         {(() => {
-                          const href = featurePage(workspaceId, row.key);
+                          const href = org ? null : featurePage(workspaceId, row.key);
                           return href ? (
                             <Link href={href} className="text-xs text-primary hover:underline" data-action="configure">
                               Configure {row.label} →
