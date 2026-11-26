@@ -49,6 +49,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
 )
 from naas_abi_core.services.iam.IAMService import (
+    LEGACY_NEXUS_ISSUER,
     attachment_resource,
     group_resource,
     key_resource,
@@ -159,6 +160,15 @@ CAPABILITY_LEVELS: dict[str, str] = {"workflow_runners": "organization", "models
 # groups follows them (``platform_files.follow``, #1590). Given the principal id.
 MembershipFollower = Callable[[str], Awaitable[None]]
 
+# After a group's members changed here: what Nexus derives from who belongs to a
+# container (a workspace's shared graphs, ``MEMBERSHIPS.changed``) follows, wherever the
+# group gives a place (``runtime.follow_group``). Given the group id.
+GroupFollower = Callable[[str], Awaitable[None]]
+
+# Nexus account ids -> each account's (name, email): a group names the people IAM knows by
+# their account and holds no name for (the access move made them from their accounts).
+AccountNames = Callable[[Collection[str]], Awaitable[Mapping[str, tuple[str | None, str | None]]]]
+
 
 async def _module_types() -> Mapping[str, Collection[str]]:
     """What every module exposes, from Nexus's module listing (``modules/scopes.py``),
@@ -180,6 +190,8 @@ class IamAdminService:
         managed_from: ManagedFrom | None = None,
         org_access_of: OrgAccessOf | None = None,
         follow_member: MembershipFollower | None = None,
+        account_names: AccountNames | None = None,
+        follow_group: GroupFollower | None = None,
     ) -> None:
         self._gateway = gateway
         self._org_access_of = org_access_of
@@ -188,6 +200,39 @@ class IamAdminService:
         self._modules = modules
         self._managed_from = managed_from
         self._follow_member = follow_member
+        self._account_names = account_names
+        self._follow_group = follow_group
+
+    async def _named(self, group: dict[str, Any]) -> dict[str, Any]:
+        """A group's members IAM holds no name or email for, named by their Nexus accounts.
+        Shown only: a failed read leaves their ids (logged)."""
+        unnamed = [
+            m
+            for m in group.get("members") or []
+            if m.get("user_id") and not (m.get("display_name") or m.get("email"))
+        ]
+        if self._account_names is None or not unnamed:
+            return group
+        try:
+            names = await self._account_names({m["user_id"] for m in unnamed})
+        except Exception:  # noqa: BLE001 - names only, never a failed answer
+            logger.warning("The group members' accounts could not be read", exc_info=True)
+            return group
+        for member in unnamed:
+            name, email = names.get(member["user_id"], (None, None))
+            member["display_name"] = name or member.get("display_name")
+            member["email"] = email or member.get("email")
+        return group
+
+    async def _group_followed(self, group_id: str) -> None:
+        """Let what follows who belongs to the group's containers catch up; a failure is
+        logged, the change made stands (the next change there puts it back in step)."""
+        if self._follow_group is None:
+            return
+        try:
+            await self._follow_group(group_id)
+        except Exception:  # noqa: BLE001 - the membership change stands
+            logger.warning(f"Could not follow the members of {group_id}", exc_info=True)
 
     async def _followed(self, member_id: str) -> None:
         """Let what follows a person's groups catch up; a failure is logged, the
@@ -579,10 +624,13 @@ class IamAdminService:
         detail = f"revision {expected_revision}"
         if parent is not None:
             detail += f", parent {parent}" if parent else ", no parent"
-        return await self._change(user, "update_policy", policy_id, update, detail=detail)
+        found = await self._change(user, "update_policy", policy_id, update, detail=detail)
+        _forget_offers()
+        return found
 
     async def delete_policy(self, user: Any, policy_id: str) -> None:
         await self._change(user, "delete_policy", policy_id, lambda s: s.delete_policy(policy_id))
+        _forget_offers()
 
     # -- attachments ------------------------------------------------------------------
 
@@ -933,11 +981,21 @@ class IamAdminService:
 
     def _group_view(self, session: IIAMService, group_id: str) -> dict[str, Any]:
         group = session.get_group(group_id)
+        # When each joined (IAM schema 8); None for a membership older than its date.
+        joined = session.list_group_member_dates(group_id)
         members = []
         for member_id in session.list_group_members(group_id):
             record = self._gateway.principal(member_id)
             if record is not None:
-                members.append(views.principal_view(record))
+                # A person Nexus knows: their account, which names them (``_named``).
+                nexus = record.issuer == LEGACY_NEXUS_ISSUER and record.subject
+                members.append(
+                    {
+                        **views.principal_view(record),
+                        "user_id": record.subject if nexus else None,
+                        "joined_at": views.iso(joined.get(member_id)),
+                    }
+                )
         mappings = [
             {"provider": m.provider, "claim_value": m.claim_value}
             for m in session.list_idp_group_mappings(group_id)
@@ -945,25 +1003,39 @@ class IamAdminService:
         return {**views.principal_view(group), "members": members, "idp_mappings": mappings}
 
     async def get_group(self, user: Any, group_id: str) -> dict[str, Any]:
-        return await self._read(user, lambda s: self._group_view(s, group_id))
+        return await self._named(await self._read(user, lambda s: self._group_view(s, group_id)))
 
-    async def create_group(self, user: Any, name: str, scope: str | None = None) -> dict[str, Any]:
-        """A group owned by ``scope`` (a container's name; the platform without one)."""
+    async def create_group(
+        self, user: Any, name: str, scope: str | None = None, description: str | None = None
+    ) -> dict[str, Any]:
+        """A group owned by ``scope`` (a container's name; the platform without one), with
+        what it is for."""
         owner = scope
         return await self._change(
             user,
             "create_group",
             name,
-            lambda s: views.principal_view(s.create_group(name, scope=owner)),
+            lambda s: views.principal_view(
+                s.create_group(name, scope=owner, description=description)
+            ),
             detail=owner or "platform group",
         )
 
-    async def rename_group(self, user: Any, group_id: str, name: str) -> dict[str, Any]:
+    async def rename_group(
+        self, user: Any, group_id: str, name: str | None, description: str | None = None
+    ) -> dict[str, Any]:
+        """Its name, its description, or both (an empty description: none)."""
+
         def rename(session: IIAMService) -> dict[str, Any]:
-            session.update_group(group_id, name=name)
+            session.update_group(group_id, name=name, description=description)
             return self._group_view(session, group_id)
 
-        return await self._change(user, "update_group", group_id, rename, detail=name)
+        detail = "; ".join(
+            part for part in (name, "description" if description is not None else None) if part
+        )
+        return await self._named(
+            await self._change(user, "update_group", group_id, rename, detail=detail)
+        )
 
     async def delete_group(self, user: Any, group_id: str) -> None:
         await self._change(user, "delete_group", group_id, lambda s: s.delete_group(group_id))
@@ -975,7 +1047,8 @@ class IamAdminService:
 
         view = await self._change(user, "add_group_member", f"{group_id}/{member_id}", add)
         await self._followed(member_id)
-        return view
+        await self._group_followed(group_id)
+        return await self._named(view)
 
     async def remove_member(self, user: Any, group_id: str, member_id: str) -> dict[str, Any]:
         def remove(session: IIAMService) -> dict[str, Any]:
@@ -985,7 +1058,8 @@ class IamAdminService:
 
         view = await self._change(user, "remove_group_member", f"{group_id}/{member_id}", remove)
         await self._followed(member_id)
-        return view
+        await self._group_followed(group_id)
+        return await self._named(view)
 
     async def map_idp_group(
         self, user: Any, group_id: str, provider: str, claim_value: str
@@ -994,8 +1068,10 @@ class IamAdminService:
             session.map_idp_group(provider, claim_value, group_id)
             return self._group_view(session, group_id)
 
-        return await self._change(
-            user, "map_idp_group", group_id, map_, detail=f"{provider}: {claim_value}"
+        return await self._named(
+            await self._change(
+                user, "map_idp_group", group_id, map_, detail=f"{provider}: {claim_value}"
+            )
         )
 
     async def unmap_idp_group(
@@ -1006,8 +1082,10 @@ class IamAdminService:
                 raise IAMNotFoundError("That IdP group is not mapped to this group")
             return self._group_view(session, group_id)
 
-        return await self._change(
-            user, "unmap_idp_group", group_id, unmap, detail=f"{provider}: {claim_value}"
+        return await self._named(
+            await self._change(
+                user, "unmap_idp_group", group_id, unmap, detail=f"{provider}: {claim_value}"
+            )
         )
 
     # -- service accounts and keys ----------------------------------------------------
@@ -1292,3 +1370,11 @@ def _actor_id(user: Any) -> str:
 
 
 __all__ = ["ACCESS_ACTIONS", "IamAdminService"]
+
+
+def _forget_offers() -> None:
+    """A policy changed here may be a workspace's offer ("<W> access", edited in Advanced or
+    Code): what its lists and its features show follows at once."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+    AUTHZ.forget_offers()

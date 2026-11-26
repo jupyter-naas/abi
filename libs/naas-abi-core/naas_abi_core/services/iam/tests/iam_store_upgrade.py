@@ -47,6 +47,11 @@ NO_MEMBERSHIPS = (
     "ALTER TABLE {schema}iam_principals DROP COLUMN level_group",
 )
 DOWNGRADE_TO_6 = (*NO_MEMBERSHIPS, "UPDATE {schema}iam_state SET schema_version = 6")
+# Version 8 kept no group description.
+DOWNGRADE_TO_8 = (
+    "ALTER TABLE {schema}iam_principals DROP COLUMN description",
+    "UPDATE {schema}iam_state SET schema_version = 8",
+)
 NO_CONTAINERS = (
     *NO_MEMBERSHIPS,
     "DROP TABLE {schema}iam_containers",
@@ -148,7 +153,7 @@ def check_upgrade(
     again = open_store()
     try:
         assert again.get_principal(bound.id).owner_scope == "abi:org-1:-"
-        assert SCHEMA_VERSION == 7
+        assert SCHEMA_VERSION == 9
         assert again.legacy_scope_sets() == []
     finally:
         again.close()
@@ -353,7 +358,7 @@ def check_upgrade_from_5(
     try:
         assert again.list_placements()[1] == Placement("document", "nexus-ws-1", WS)
         assert set(again.rewrite_names(_Rewriter()).values()) == {0}
-        assert SCHEMA_VERSION == 7
+        assert SCHEMA_VERSION == 9
     finally:
         again.close()
 
@@ -380,5 +385,29 @@ def check_upgrade_from_6(
     try:
         assert again.get_principal(team.id).membership_of == WS
         assert again.get_principal(team.id).level_group is True
+    finally:
+        again.close()
+
+
+def check_upgrade_from_8(
+    open_store: Callable[[], IAMStoreSQL], execute: Callable[[str], None]
+) -> None:
+    """A store of version 8 kept no group description: every group has none, and
+    one is stored once upgraded."""
+    store = open_store()
+    team = store.create_principal(group("team"))
+    store.close()
+    for statement in DOWNGRADE_TO_8:
+        execute(statement)
+    upgraded = open_store()
+    try:
+        kept = upgraded.get_principal(team.id)
+        assert kept.description is None
+        upgraded.update_principal(replace(kept, description="The team."))
+    finally:
+        upgraded.close()
+    again = open_store()
+    try:
+        assert again.get_principal(team.id).description == "The team."
     finally:
         again.close()

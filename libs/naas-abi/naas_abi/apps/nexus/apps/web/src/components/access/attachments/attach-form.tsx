@@ -9,7 +9,7 @@ import './attachments.css';
 
 export { isServiceAccountPolicy };
 
-export type PrincipalChoice = { id: string; label: string; kind?: PrincipalKind };
+export type PrincipalChoice = { id: string; label: string; kind?: PrincipalKind; email?: string | null };
 
 /** A user's built-in role is a membership (People & roles' role column, Members), never a bare
  *  attachment; a group or a service account takes one. What comes with a role (its platform

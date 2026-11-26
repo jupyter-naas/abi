@@ -27,7 +27,7 @@ const labels = (input: SettingsLevelsInput, id: string) =>
 
 const all: SettingsLevelsInput = {
   ...member,
-  workspace: { id: 'ws-1', groups: SETTINGS_GROUPS },
+  workspace: { id: 'ws-1', name: 'Support', groups: SETTINGS_GROUPS },
   organization: { id: 'acme', name: 'Acme', items: orgSettingsNavForRole('admin', { access: { actions: { 'iam:ListPolicies': true, 'iam:ListGroups': true } } }), current: true },
   platform: visiblePlatformSettingsGroups({ 'nexus:ReadSystem': true, 'nexus:ListUsers': true }),
 };
@@ -81,25 +81,25 @@ describe('the levels of Settings', () => {
     expect(titles(input)).toEqual(['Account']);
   });
 
-  it('names the organization when the caller opens several, and links the others', () => {
+  it('links the other organizations when the caller opens several, the tab staying unnamed', () => {
     const input: SettingsLevelsInput = {
       ...member,
       organization: { id: 'acme', name: 'Acme', items: orgSettingsNavForRole('admin', { access: null }), current: true },
       otherOrganizations: [{ id: 'beta', name: 'Beta' }],
     };
     const organization = settingsLevels(input).find((level) => level.id === 'organization');
-    expect(organization?.label).toBe('Organization · Acme');
+    expect(organization?.label).toBe('Organization');
     expect(organization?.groups.at(-1)).toMatchObject({
       label: 'Other organizations',
       links: [{ label: 'Beta', href: '/organizations/beta/settings' }],
     });
   });
 
-  it('names the organization when it is not the current workspace\'s', () => {
+  it('calls the tab Organization whichever organization it opens', () => {
     const items = orgSettingsNavForRole('admin', { access: null });
     const elsewhere = { ...member, organization: { id: 'acme', name: 'Acme', items, current: false } };
     const here = { ...member, organization: { id: 'acme', name: 'Acme', items, current: true } };
-    expect(titles(elsewhere)).toEqual(['Organization · Acme', 'Account']);
+    expect(titles(elsewhere)).toEqual(['Organization', 'Account']);
     expect(titles(here)).toEqual(['Organization', 'Account']);
   });
 
@@ -150,6 +150,8 @@ describe('the tabs of Settings', () => {
       ['Workspace', '/workspace/ws-1/settings/general', false],
       ['Account', '/account/profile', false],
     ]);
+    // The organization and the workspace are named in their tabs.
+    expect(tabs.map((tab) => tab.name ?? null)).toEqual([null, 'Acme', 'Support', null]);
   });
 
   it('open a level where the caller left it, while that is still one of its pages', () => {

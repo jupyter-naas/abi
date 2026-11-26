@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MemberCandidate } from '@/lib/people';
-import { KEEP_LEVEL, addPeopleListing, levelChoices, moveActive, optionText, pickedAccess } from './add-people-model';
+import { addPeopleListing, moveActive, optionText } from './add-people-model';
 
 const person = (over: Partial<MemberCandidate>): MemberCandidate => ({
   user_id: 'usr_flo',
@@ -69,31 +69,5 @@ describe('the keyboard', () => {
 
   it('has nothing to move to in an empty list', () => {
     expect(moveActive(0, 'ArrowDown', 0)).toBe(-1);
-  });
-});
-
-describe('what a pick gives', () => {
-  it('offers to keep their level, or Member, or Viewer; never a role or owner', () => {
-    expect(levelChoices()).toEqual([
-      { value: KEEP_LEVEL, label: 'Keep their level (Member if they have none)' },
-      { value: 'member', label: 'Member' },
-      { value: 'viewer', label: 'Viewer' },
-    ]);
-  });
-
-  it('sends the level picked, the admin toggle and the groups', () => {
-    expect(pickedAccess(KEEP_LEVEL, false, [])).toEqual({ ok: true, access: { level: null, admin: false, capabilities: [] } });
-    expect(pickedAccess('viewer', false, ['grp_pilot'])).toEqual({
-      ok: true,
-      access: { level: 'viewer', admin: false, capabilities: ['grp_pilot'] },
-    });
-    expect(pickedAccess('member', true, [])).toEqual({ ok: true, access: { level: 'member', admin: true, capabilities: [] } });
-  });
-
-  it('refuses a Viewer who administers the workspace', () => {
-    expect(pickedAccess('viewer', true, [])).toEqual({
-      ok: false,
-      error: 'A workspace admin is a Member: pick Member, or untick admin.',
-    });
   });
 });

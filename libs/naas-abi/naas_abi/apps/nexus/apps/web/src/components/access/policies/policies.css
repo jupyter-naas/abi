@@ -36,6 +36,14 @@
   gap: var(--space-2);
 }
 
+/* The page's actions ("Discard changes", "+ Attach"), at the right of its title. */
+.access-policy-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
 .access-policy-editor {
   padding: var(--space-4);
   border: 1px solid var(--border-hex);
@@ -384,6 +392,48 @@
   list-style: none;
 }
 
+/* Subpolicies, with how many: the first ones, more on demand (Load more). */
+.access-policy-subs-block {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.access-policy-subs-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--foreground-hex);
+}
+
+.access-policy-count {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--color-primary);
+}
+
+.access-policy-more {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border: 1px solid var(--border-hex);
+  background-color: var(--background-hex);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--muted-foreground-hex);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.access-policy-more:hover {
+  background-color: var(--muted-bg-hex);
+  color: var(--foreground-hex);
+}
+
 /* Where a policy is attached, at every level */
 
 .access-policy-attachments {
@@ -408,4 +458,49 @@
   border: 1px solid var(--border-hex);
   border-radius: var(--org-border-radius, 0px);
   background-color: var(--card-hex);
+}
+
+/* A policy's description: as tall as its text, one line when one is enough. */
+.access-policy-textarea {
+  resize: none;
+  overflow: hidden;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+/* Name and Description: their titles on one line, their fields from the top. */
+.access-policy-row-top {
+  align-items: flex-start;
+}
+
+/* A policy's page in sections (Info, Held by, Configuration), as a group's: no card around them. */
+.access-policy-editor.access-policy-editor-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+/* Its description spans the row, as tall as its text. */
+.access-policy-description-field {
+  grid-column: 1 / -1;
+}
+
+.access-policy-description {
+  resize: vertical;
+  overflow: hidden;
+}
+
+/* The tabs, the editor and what IAM says of it, one under the other. */
+.access-policy-config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* In Info, the sub-policies sit under the fields, apart from them. */
+.access-policy-editor-sections .access-policy-subs-block {
+  margin-top: var(--space-4);
 }

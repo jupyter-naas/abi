@@ -84,7 +84,11 @@ def _group(iam: Any, name: str, container: str) -> str:
     for group in _pages(iam.list_groups, scope=container):
         if group.owner_scope == container and group.name == name and group.status != "deleted":
             return str(group.id)
-    return str(iam.create_group(name, scope=container).id)
+    from naas_abi.apps.nexus.apps.api.app.services.iam.group_descriptions import described
+
+    return str(
+        iam.create_group(name, scope=container, description=described(name, owner=container)).id
+    )
 
 
 def _runners_policy(iam: Any, container: str, parent: str | None) -> str:

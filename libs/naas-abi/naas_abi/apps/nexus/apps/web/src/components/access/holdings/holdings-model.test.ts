@@ -9,6 +9,8 @@ const names = { [ORG]: 'Acme', [WS]: 'Sales', 'abi:nexus:organization/demo-org':
 describe('levelLabel', () => {
   it('names a level as the Owner column names containers', () => {
     expect(levelLabel('abi:', names)).toBe('Platform');
+    // A level's policies, held wherever the person belongs: said in words, not as the raw scope.
+    expect(levelLabel('${my workspaces}', names)).toBe('Each workspace they belong to');
     expect(levelLabel(ORG, names)).toBe('Organization Acme');
     expect(levelLabel(WS, names)).toBe('Workspace Sales (Acme)');
     expect(levelLabel(`${WS}/dev_people:project/p1`, names)).toBe('Project p1 (Sales, Acme)');

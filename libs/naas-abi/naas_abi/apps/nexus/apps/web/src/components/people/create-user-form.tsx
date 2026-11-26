@@ -27,12 +27,20 @@ import {
   initialOrganizationId,
   organizationReadOnly,
   selectedOrganization,
-  workspaceGrants,
   type CreateUserDraft,
   type CreateUserRequest,
   type OrganizationProp,
   type WorkspaceChoice,
 } from './create-user-form-model';
+import { RoleEditor } from './role-editor';
+import {
+  createMemberRolesApi,
+  defaultRole,
+  roleProblem,
+  type MemberRolesApi,
+  type RoleOptions,
+  type RoleSelection,
+} from '@/lib/member-roles';
 import '@/app/account/profile/profile.css';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 import '@/app/organizations/[orgId]/settings/users/users.css';
@@ -40,15 +48,6 @@ import '@/app/organizations/[orgId]/settings/users/users.css';
 const BIO_MAX_LENGTH = 2000;
 const AVATAR_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
-
-async function fetchOrganizationWorkspaces(organizationId: string): Promise<WorkspaceChoice[] | 'forbidden'> {
-  const { authFetch } = await import('@/stores/auth');
-  const res = await authFetch(`/api/organizations/${encodeURIComponent(organizationId)}/workspaces`);
-  if (res.status === 403) return 'forbidden';
-  if (!res.ok) return [];
-  const data = (await res.json()) as { id: string; name: string }[];
-  return Array.isArray(data) ? data.map((w) => ({ id: w.id, name: w.name })) : [];
-}
 
 async function uploadOrganizationAvatar(organizationId: string, userId: string, file: File): Promise<void> {
   const { useOrganizationStore } = await import('@/stores/organization');
@@ -75,9 +74,10 @@ export type CreateUserFormProps = {
   onForbidden?: () => void;
   /** Tests pass fakes. */
   api?: Pick<PeopleApi, 'createInWorkspace' | 'createInOrganization'>;
-  loadWorkspaces?: (organizationId: string) => Promise<WorkspaceChoice[] | 'forbidden'>;
   uploadAvatar?: (organizationId: string, userId: string, file: File) => Promise<void>;
   loadCapabilities?: (at: CapabilityGroupsAt) => Promise<CapabilityGroup[]>;
+  /** The organization route's Role (tests pass a fake). */
+  rolesApi?: Pick<MemberRolesApi, 'options' | 'set'>;
 };
 
 function emptyDraft(prefill?: { email?: string; name?: string }): CreateUserDraft {
@@ -109,17 +109,18 @@ export function CreateUserForm({
   back,
   onCreated,
   onCancel,
-  onForbidden,
   api,
-  loadWorkspaces = fetchOrganizationWorkspaces,
   uploadAvatar = uploadOrganizationAvatar,
   loadCapabilities,
+  rolesApi,
 }: CreateUserFormProps) {
   const client = useMemo(() => api ?? createPeopleApi(), [api]);
+  const roles = useMemo(() => rolesApi ?? createMemberRolesApi(), [rolesApi]);
+  const [roleOptions, setRoleOptions] = useState<RoleOptions>({ groups: [], policies: [] });
+  const [role, setRole] = useState<RoleSelection>({ groups: [], policies: [] });
   const providers = useInviteProviders(true);
   const [draft, setDraft] = useState<CreateUserDraft>(() => emptyDraft(prefill));
   const [organizationId, setOrganizationId] = useState<string | null>(() => initialOrganizationId(organization));
-  const [workspaces, setWorkspaces] = useState<WorkspaceChoice[]>([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [creating, setCreating] = useState(false);
@@ -147,35 +148,26 @@ export function CreateUserForm({
     return () => URL.revokeObjectURL(url);
   }, [avatarFile]);
 
-  // The page's callbacks, read when the list answers: the list is read again only when the
-  // organization changes, not each time the page renders new callbacks.
-  const loaders = useRef({ loadWorkspaces, onForbidden });
-  loaders.current = { loadWorkspaces, onForbidden };
-
+  // The organization's Role: its people group and Members to start with (read again when the
+  // organization picked changes).
   useEffect(() => {
-    setWorkspaces([]);
+    setRoleOptions({ groups: [], policies: [] });
+    setRole({ groups: [], policies: [] });
     if (!organizationRoute || !organizationId) return;
-    let cancelled = false;
-    loaders.current
-      .loadWorkspaces(organizationId)
+    let live = true;
+    roles
+      .options({ kind: 'organization', id: organizationId })
       .then((found) => {
-        if (cancelled) return;
-        if (found === 'forbidden') loaders.current.onForbidden?.();
-        else setWorkspaces(found);
+        if (!live) return;
+        setRoleOptions(found);
+        setRole(defaultRole(found));
       })
-      .catch(() => {
-        // The workspace list is optional here; they are assigned later from the Users table.
-      });
+      .catch((e: unknown) => live && setError(e instanceof Error ? e.message : 'Could not load the roles'));
     return () => {
-      cancelled = true;
+      live = false;
     };
-  }, [organizationRoute, organizationId]);
+  }, [roles, organizationRoute, organizationId]);
 
-  const sortedWorkspaces = useMemo(
-    () => workspaces.filter((w) => w.id !== attachedWorkspace?.id).sort((a, b) => a.name.localeCompare(b.name)),
-    [workspaces, attachedWorkspace?.id]
-  );
-  const grants = workspaceGrants(draft, attachedWorkspace);
   const emailValid = looksLikeEmail(draft.email);
   const showAvatar = organizationRoute;
 
@@ -187,19 +179,6 @@ export function CreateUserForm({
       const value = field === 'bio' ? event.target.value.slice(0, BIO_MAX_LENGTH) : event.target.value;
       setDraft((current) => ({ ...current, profile: { ...current.profile, [field]: value } }));
     };
-
-  const toggleWorkspace = (id: string) =>
-    setDraft((current) => ({
-      ...current,
-      workspaces: current.workspaces.some((w) => w.id === id)
-        ? current.workspaces.filter((w) => w.id !== id)
-        : [...current.workspaces, { id, admin: false }],
-    }));
-  const setWorkspaceAdmin = (id: string, admin: boolean) =>
-    setDraft((current) => ({
-      ...current,
-      workspaces: current.workspaces.map((w) => (w.id === id ? { ...w, admin } : w)),
-    }));
 
   const pickAvatar = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -218,8 +197,27 @@ export function CreateUserForm({
   };
 
   const handleCreate = async () => {
+    // From the organization, the Role says their level and whether they are an org admin; the
+    // rest of it (workspaces, groups, policies) is made once they are created.
+    let asked = draft;
+    if (organizationRoute) {
+      const problem = roleProblem(roleOptions, role);
+      if (problem) {
+        setError(problem);
+        return;
+      }
+      const chosen = roleOptions.groups.filter((g) => role.groups.includes(g.id));
+      const level = chosen.find((g) => g.kind === 'level')?.level ?? 'member';
+      asked = {
+        ...draft,
+        level,
+        orgAdmin: chosen.some((g) => g.kind === 'admins'),
+        workspaces: [],
+        capabilities: [],
+      };
+    }
     const built = createUserRequest(
-      { ...draft, provider: providers.providerToSend() },
+      { ...asked, provider: providers.providerToSend() },
       { organization, organizationId, attachedWorkspace, organizationRoute }
     );
     if (!built.ok) {
@@ -235,6 +233,17 @@ export function CreateUserForm({
         request.route === 'workspace'
           ? await client.createInWorkspace(request.workspaceId, request.body)
           : await client.createInOrganization(request.organizationId, request.body);
+      if (request.route === 'organization') {
+        try {
+          await roles.set({ kind: 'organization', id: request.organizationId }, created.user.id, role);
+        } catch (err) {
+          throw new Error(
+            `User created, but their Role is not all made: ${
+              err instanceof Error ? err.message : 'unknown error'
+            }. Finish it from their page.`
+          );
+        }
+      }
       // The org picture needs someone of the organization's directory.
       if (avatarFile && request.route === 'organization' && created.member) {
         try {
@@ -252,6 +261,7 @@ export function CreateUserForm({
         setNotice(message);
         setDraft(emptyDraft());
         setAvatarFile(null);
+        setRole(defaultRole(roleOptions));
       }
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : 'Failed to create the user');
@@ -413,6 +423,7 @@ export function CreateUserForm({
               </select>
             )}
           </div>
+          {!organizationRoute && (
           <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="create-user-level">
               Level
@@ -434,16 +445,6 @@ export function CreateUserForm({
               {LEVEL_EVERYWHERE_NOTE}
             </p>
           </div>
-          {organizationRoute && (
-            <div className="account-profile-field" data-field="org-admin">
-              <span className="account-profile-field-label">Organization</span>
-              <Checkbox
-                label="Org admin: reaches every workspace of the organization"
-                checked={draft.orgAdmin}
-                onCheckedChange={(on) => setDraft((current) => ({ ...current, orgAdmin: on }))}
-                disabled={creating}
-              />
-            </div>
           )}
           {attachedWorkspace && (
             <div className="account-profile-field" data-field="workspace-admin">
@@ -510,59 +511,26 @@ export function CreateUserForm({
             className="account-profile-field-textarea"
           />
         </div>
-        <CapabilityGroupPicker
-          at={capabilitiesAt}
-          value={draft.capabilities}
-          onChange={(capabilities) => setDraft((current) => ({ ...current, capabilities }))}
-          disabled={creating}
-          {...(loadCapabilities ? { load: loadCapabilities } : {})}
-        />
+        {organizationRoute ? (
+          <div className="account-profile-field" data-field="role">
+            <span className="account-profile-field-label">Role</span>
+            <RoleEditor options={roleOptions} value={role} onChange={setRole} disabled={creating} />
+            <p className="org-settings-footnote">
+              Members and the organization&apos;s people to start with. Add its admins group, a workspace&apos;s
+              groups to place them there, or a policy.
+            </p>
+          </div>
+        ) : (
+          <CapabilityGroupPicker
+            at={capabilitiesAt}
+            value={draft.capabilities}
+            onChange={(capabilities) => setDraft((current) => ({ ...current, capabilities }))}
+            disabled={creating}
+            {...(loadCapabilities ? { load: loadCapabilities } : {})}
+          />
+        )}
       </AccountSectionCard>
 
-      {organizationRoute && (
-        <section className="org-member-detail-section">
-          <header className="org-member-detail-section-header">
-            <h3>
-              Workspaces <span className="org-member-detail-count">{grants.length}</span>
-            </h3>
-            <p>
-              The workspaces they work in, at their level, and those they administer. Org admins reach every
-              workspace of the organization anyway; someone in no workspace is one of the organization&apos;s
-              people.
-            </p>
-          </header>
-          <div className="org-settings-users-table-wrap org-create-user-workspaces">
-            {sortedWorkspaces.length === 0 ? (
-              <p className="org-settings-users-no-match">No workspace in this organization.</p>
-            ) : (
-              <ul>
-                {sortedWorkspaces.map((workspace) => {
-                  const picked = draft.workspaces.find((w) => w.id === workspace.id);
-                  return (
-                    <li key={workspace.id} data-workspace={workspace.id}>
-                      <label>
-                        <Checkbox checked={!!picked} onCheckedChange={() => toggleWorkspace(workspace.id)} />
-                        <span>{workspace.name}</span>
-                      </label>
-                      {picked && (
-                        <span data-field="workspace-admin">
-                          <Checkbox
-                            label="Admin"
-                            aria-label={`Admin of ${workspace.name}`}
-                            checked={picked.admin}
-                            onCheckedChange={(on) => setWorkspaceAdmin(workspace.id, on)}
-                            disabled={creating}
-                          />
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

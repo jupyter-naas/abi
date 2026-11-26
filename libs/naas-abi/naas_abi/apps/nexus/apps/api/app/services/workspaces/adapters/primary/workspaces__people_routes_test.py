@@ -211,6 +211,27 @@ async def test_adding_a_candidate_puts_them_in_the_workspace_only(api) -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_candidate_is_added_without_an_invitation_when_asked(api, monkeypatch) -> None:
+    """Invite user's "Add to workspace": in, and no mail (so no invitation limit)."""
+    counted: list[str] = []
+
+    async def count(*_args, **_kwargs) -> None:
+        counted.append("limit")
+
+    monkeypatch.setattr(workspaces_module, "check_invitation_mail_quota", count)
+    async with api.as_("wsadmin") as http:
+        added = await http.post(
+            "/api/workspaces/ws-1/members",
+            json={"user_id": "flora", "level": "viewer", "notify": False},
+        )
+    assert added.status_code == 201, added.text
+    assert added.json()["sign_in_email_sent"] is False
+    assert await role("flora", WS1) == "viewer"
+    (asked,) = api.people.named("add_existing")
+    assert asked["notify"] is False and counted == []
+
+
+@pytest.mark.asyncio
 async def test_an_add_says_whether_the_person_was_told(api) -> None:
     """The notice is the service's to send: the answer says what happened."""
     api.people.sent = False
@@ -232,6 +253,26 @@ async def test_a_workspace_only_person_is_never_given_an_org_role(api) -> None:
     assert await role("flo", ORG) is None
     row = next(m for m in directory if m["user_id"] == "flo")
     assert (row["role"], row["source"], row["status"]) == (None, "workspace", "active")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("base", ["/api/workspaces/ws-1/members", "/api/organizations/org-1/members"])
+async def test_the_people_come_alone_and_their_roles_a_page_at_a_time(api, base) -> None:
+    """Users reads its people first (``roles=false``), then their Role a page at a time
+    (``GET …/members/roles``), as the full list gives it."""
+    async with api.as_("admin") as http:
+        full = (await http.get(base)).json()
+        index = (await http.get(f"{base}?roles=false")).json()
+        principals = [row["principal_id"] for row in index if row["principal_id"]]
+        query = "&".join(f"principal={p}" for p in principals)
+        roles = await http.get(f"{base}/roles?{query}")
+    assert [row["user_id"] for row in index] == [row["user_id"] for row in full]
+    assert all(row["roles"] == [] for row in index)
+    assert roles.status_code == 200, roles.text
+    assert any(row["roles"] for row in full)
+    for row in full:
+        if row["principal_id"]:
+            assert roles.json().get(row["principal_id"], []) == row["roles"], row["user_id"]
 
 
 @pytest.mark.asyncio

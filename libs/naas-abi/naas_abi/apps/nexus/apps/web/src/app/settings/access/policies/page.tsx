@@ -1,7 +1,4 @@
-'use client';
-
-import { PlatformAccess } from '../platform-access';
-
-export default function PlatformAccessPage() {
-  return <PlatformAccess section="policies" />;
+/** The policies list: shown by the layout, which keeps it mounted when a policy opens. */
+export default function PlatformPoliciesPage() {
+  return null;
 }

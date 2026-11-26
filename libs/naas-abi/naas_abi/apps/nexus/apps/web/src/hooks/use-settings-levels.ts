@@ -120,7 +120,7 @@ export function useSettingsLevels({ organization }: { organization?: PageOrganiz
         : []);
     return settingsLevels({
       account: accountSettingsNavVisible,
-      workspace: workspace && workspaceGroups ? { id: workspace.id, groups: workspaceGroups } : null,
+      workspace: workspace && workspaceGroups ? { id: workspace.id, name: workspace.name, groups: workspaceGroups } : null,
       organization: activeId
         ? { id: activeId, name: listed?.name ?? activeId, items: organizationItems, current: activeId === workspaceOrgId }
         : null,

@@ -155,6 +155,16 @@ def apply_access_settings(iam: Any) -> None:
         platform_files.ensure_configured(iam)
     except Exception:  # noqa: BLE001 - kept in step at each membership change otherwise
         logger.exception("Platform Files could not be put in step with the workspaces")
+    # What each group of the access model is for, given to those made before (schema 9).
+    from naas_abi.apps.nexus.apps.api.app.services.iam.group_descriptions import (
+        describe_groups,
+    )
+
+    try:
+        if done := describe_groups(iam):
+            logger.info(f"Described {done} groups of the access model")
+    except Exception:  # noqa: BLE001 - shown without one until the next start
+        logger.exception("The access model's groups could not be described")
 
 
 async def register_catalog() -> None:

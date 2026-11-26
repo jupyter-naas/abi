@@ -89,7 +89,7 @@ from sqlalchemy.exc import IntegrityError
 # ``workspace``) waits for the rewrite of the names (``rewrite_names``).
 # 7: membership and level groups: ``iam_principals.membership_of`` (indexed) and
 # ``iam_principals.level_group``.
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 9
 
 # The platform before container paths, as schemas 2 to 5 stored it.
 _OLD_PLATFORM = "abi:-:-"
@@ -121,6 +121,8 @@ principals = Table(
     Column("membership_of", Text, nullable=True),
     # Groups: a level group (``PrincipalRecord.level_group``).
     Column("level_group", Boolean, nullable=False, default=False),
+    # Groups: what the group is for (schema 9); NULL: none.
+    Column("description", Text, nullable=True),
     UniqueConstraint("issuer", "subject", name="iam_principals_user_identity"),
     Index("iam_principals_membership", "membership_of"),
 )
@@ -155,6 +157,8 @@ group_members = Table(
         ForeignKey("iam_principals.id", ondelete="CASCADE"),
         primary_key=True,
     ),
+    # When the member joined (schema 8); NULL for a membership made before it.
+    Column("added_at", DateTime(timezone=True), nullable=True),
 )
 
 group_mappings = Table(
@@ -375,6 +379,7 @@ def _principal(row: Row) -> PrincipalRecord:
         owner_scope=row.owner_scope,
         membership_of=row.membership_of,
         level_group=bool(row.level_group),
+        description=row.description,
     )
 
 
@@ -392,6 +397,7 @@ def _principal_values(record: PrincipalRecord) -> dict[str, Any]:
         "owner_id": record.owner_id,
         "membership_of": record.membership_of,
         "level_group": record.level_group,
+        "description": record.description,
     }
 
 
@@ -604,6 +610,10 @@ class IAMStoreSQL(IAMStore):
             self._migrate_containers(conn)
         if version < 7:
             self._migrate_memberships(conn)
+        if version < 8:
+            self._migrate_member_dates(conn)
+        if version < 9:
+            self._migrate_group_descriptions(conn)
         if version < SCHEMA_VERSION:
             conn.execute(update(state).values(schema_version=SCHEMA_VERSION))
 
@@ -794,6 +804,45 @@ class IAMStoreSQL(IAMStore):
                 f"ON {name} (membership_of)"
             )
         )
+
+    def _migrate_member_dates(self, conn: Connection) -> None:
+        """8: when each member joined a group (``added_at``); NULL for the memberships
+        made before (their date is not known)."""
+        name = (
+            f'"{self._schema}".{group_members.name}'
+            if self._schema
+            else group_members.name
+        )
+        if conn.dialect.name == "postgresql":
+            conn.execute(
+                text(
+                    f"ALTER TABLE {name} ADD COLUMN IF NOT EXISTS added_at TIMESTAMPTZ"
+                )
+            )
+            return
+        columns = {
+            c["name"]
+            for c in inspect(conn).get_columns(group_members.name, schema=self._schema)
+        }
+        if "added_at" not in columns:
+            conn.execute(text(f"ALTER TABLE {name} ADD COLUMN added_at TIMESTAMP"))
+
+    def _migrate_group_descriptions(self, conn: Connection) -> None:
+        """9: what a group is for (``description``); NULL for every group before."""
+        name = (
+            f'"{self._schema}".{principals.name}' if self._schema else principals.name
+        )
+        if conn.dialect.name == "postgresql":
+            conn.execute(
+                text(f"ALTER TABLE {name} ADD COLUMN IF NOT EXISTS description TEXT")
+            )
+            return
+        columns = {
+            c["name"]
+            for c in inspect(conn).get_columns(principals.name, schema=self._schema)
+        }
+        if "description" not in columns:
+            conn.execute(text(f"ALTER TABLE {name} ADD COLUMN description TEXT"))
 
     def _warn_old_platform_names(self, conn: Connection) -> None:
         """Schema 2 names the platform's policies and groups
@@ -1055,7 +1104,9 @@ class IAMStoreSQL(IAMStore):
         with self._change() as conn:
             self._require(conn, group_id, member_id)
             conn.execute(
-                insert(group_members).values(group_id=group_id, member_id=member_id)
+                insert(group_members).values(
+                    group_id=group_id, member_id=member_id, added_at=_now()
+                )
             )
 
     def remove_group_member(self, group_id: str, member_id: str) -> bool:
@@ -1075,6 +1126,15 @@ class IAMStoreSQL(IAMStore):
                     .order_by(group_members.c.member_id)
                 )
             )
+
+    def group_member_dates(self, group_id: str) -> dict[str, datetime | None]:
+        with self._read() as conn:
+            rows = conn.execute(
+                select(group_members.c.member_id, group_members.c.added_at).where(
+                    group_members.c.group_id == group_id
+                )
+            ).all()
+        return {row.member_id: _aware(row.added_at) for row in rows}
 
     def groups_of(self, member_id: str) -> list[str]:
         with self._read() as conn:

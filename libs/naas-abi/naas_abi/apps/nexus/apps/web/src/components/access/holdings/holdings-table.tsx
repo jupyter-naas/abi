@@ -39,6 +39,8 @@ type Props = {
   /** For a person's roles: changed as on Members. Without it, a role row is read-only. */
   roles?: RoleRules;
   empty: string;
+  /** Shown only: nothing detached nor changed here (a group owned at another level). */
+  readOnly?: boolean;
 };
 
 /**
@@ -46,7 +48,7 @@ type Props = {
  * the viewer may manage something there), the level, whether it is direct or through a group,
  * and the detach or the role change, where IAM says the viewer may.
  */
-export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGroup, roles, empty }: Props) {
+export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGroup, roles, empty, readOnly = false }: Props) {
   const [confirming, setConfirming] = useState<string | null>(null);
   if (rows.length === 0) return <p className="access-holding-empty">{empty}</p>;
 
@@ -59,7 +61,7 @@ export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGr
         <thead>
           <tr>
             <th>Role or policy</th>
-            <th>Level</th>
+            <th title="Where it applies">Scope</th>
             <th>Through</th>
             <th aria-label="Actions" />
           </tr>
@@ -77,6 +79,7 @@ export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGr
             const at = actionsAt(a.scope);
             const memberId = roles && target ? roles.memberAt(target) : null;
             const changeable =
+              !readOnly &&
               !!roles &&
               !!target &&
               !!role &&
@@ -84,7 +87,7 @@ export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGr
               choices.length > 0 &&
               !!at['iam:AttachPolicy'] &&
               roleChangeable({ role, inherited: false, userId: memberId, selfId: roles.selfId });
-            const detachable = !role && !companion && !via && !!at['iam:DetachPolicy'];
+            const detachable = !readOnly && !role && !companion && !via && !!at['iam:DetachPolicy'];
             return (
               <tr key={`${via?.id ?? ''}/${a.id}`} className="access-table-row" data-holding={a.policy_id} data-level={a.scope ?? ''} data-via={via?.id ?? ''}>
                 <td>

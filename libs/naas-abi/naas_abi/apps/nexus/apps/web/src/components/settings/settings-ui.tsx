@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Loader2, Search, X } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowLeft, Loader2, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SettingsReloadButton } from '@/components/settings/settings-reload';
 
@@ -289,4 +290,26 @@ export function SettingsTableToolbar({
 export function countLabel(shown: number, total: number, noun: string, plural = `${noun}s`): string {
   const word = total === 1 ? noun : plural;
   return shown === total ? `${total} ${word}` : `${shown} of ${total} ${word}`;
+}
+
+/**
+ * Back to the list a page was opened from, beside its title (a person's page under Users):
+ * a link to `href`, or a button calling `onClick`.
+ */
+export function SettingsBackButton({ label, href, onClick }: { label: string; href?: string; onClick?: () => void }) {
+  const className =
+    'mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground';
+  const icon = <ArrowLeft size={14} />;
+  if (href) {
+    return (
+      <Link href={href} className={className} aria-label={`Back to ${label}`} title={`Back to ${label}`} data-action="back">
+        {icon}
+      </Link>
+    );
+  }
+  return (
+    <button type="button" className={className} onClick={onClick} aria-label={`Back to ${label}`} title={`Back to ${label}`} data-action="back">
+      {icon}
+    </button>
+  );
 }

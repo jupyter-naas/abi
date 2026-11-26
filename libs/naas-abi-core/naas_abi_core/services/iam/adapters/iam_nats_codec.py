@@ -219,6 +219,7 @@ def principal_to_pb(record: PrincipalRecord) -> pb.Principal:
         owner_scope=record.owner_scope,
         membership_of=record.membership_of,
         level_group=record.level_group,
+        description=record.description,
     )
     return _stamped(message, created_at=record.created_at, updated_at=record.updated_at)
 
@@ -241,6 +242,7 @@ def principal_from_pb(message: pb.Principal) -> PrincipalRecord:
         owner_scope=message.owner_scope or PLATFORM_SCOPE,
         membership_of=_optional(message, "membership_of"),
         level_group=message.level_group,
+        description=_optional(message, "description"),
     )
 
 

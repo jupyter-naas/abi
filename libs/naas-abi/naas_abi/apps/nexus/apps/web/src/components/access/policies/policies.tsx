@@ -1,12 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ArrowLeft, CornerDownRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { AttachmentView, PolicyView } from '@/lib/iam-admin/types';
 import type { AccessViewProps } from '../access-props';
 import {
   AccessHeaderAction,
+  AccessHeaderSlotContext,
+  useAccessInstance,
   ListHead,
   ListSearch,
   NameCell,
@@ -21,11 +23,13 @@ import { PLATFORM, ownerOf, parseScope } from '../access-scope';
 import { listedOnPolicies } from '../builtins';
 import { WorkspaceOfferEditor } from '../offer/offer-editor';
 import { roleOfPolicy } from '../roles/role-change';
-import { levelPolicyOf } from '@/lib/access-model/levels';
+import { levelPolicyOf, workspaceGroupName } from '@/lib/access-model/levels';
 import { PolicyAttachments } from './policy-attachments';
 import { PolicyEditor } from './policy-editor';
+import { InstanceHeader } from '../instance-header';
 import { ownerHref, usePolicyOwners } from './policy-owners';
 import { policyTree } from './policy-tree';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 import './policies.css';
 
 /** A policy whose page is open: being created, read, or known only by what is attached
@@ -97,7 +101,9 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
   const holdsOnly = !lists && can('iam:ListAttachments');
   const [policies, setPolicies] = useState<PolicyView[] | null>(lists ? null : []);
   const [held, setHeld] = useState<Held[] | null>(holdsOnly ? null : []);
+  // A page of them shows at once; the others follow in the background (`next`: more to come).
   const [next, setNext] = useState<string | null>(null);
+  const reading = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -114,18 +120,33 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
     nonce,
   );
 
+  // The focus a Back click leaves: the address still names it a moment, the list shows already.
+  const [leaving, setLeaving] = useState<string | null>(null);
   const select = (next: Selection) => {
+    setLeaving(next === null ? focus : null);
     setSelection(next);
     onFocus?.(next === null ? null : next.kind === 'new' ? NEW_POLICY : next.kind === 'policy' ? next.policy.id : next.id);
   };
 
   const load = useCallback(async () => {
+    const mine = ++reading.current;
     try {
       if (lists) {
-        const page = await api.listPolicies(undefined, listedAt);
+        let page = await api.listPolicies(undefined, listedAt);
         // The automatic platform access and the service accounts' are not listed here.
-        setPolicies(page.items.filter(listedOnPolicies));
+        let found = page.items.filter(listedOnPolicies);
+        if (reading.current !== mine) return;
+        setPolicies(found);
         setNext(page.next_after);
+        setError(null);
+        // The other pages follow, so that the search and the filters reach every policy.
+        while (page.next_after) {
+          page = await api.listPolicies(page.next_after, listedAt);
+          if (reading.current !== mine) return;
+          found = [...found, ...page.items.filter(listedOnPolicies)];
+          setPolicies(found);
+          setNext(page.next_after);
+        }
       } else if (holdsOnly) {
         const found = await api.listAttachments(scope.value ? { scope: scope.value } : {});
         setHeld(heldPolicies(found.items.filter((a) => a.scope === scope.value)).filter(listedOnPolicies));
@@ -139,17 +160,6 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
   useEffect(() => {
     void load();
   }, [load, nonce]);
-
-  const more = async () => {
-    if (!next) return;
-    try {
-      const page = await api.listPolicies(next, listedAt);
-      setPolicies((current) => [...(current ?? []), ...page.items.filter(listedOnPolicies)]);
-      setNext(page.next_after);
-    } catch (e) {
-      setError(message(e));
-    }
-  };
 
   const remove = async (policy: PolicyView) => {
     try {
@@ -184,18 +194,60 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
     }
   };
 
-  // The address names a policy to open (or a new one): once, when the list is read.
-  const [opened, setOpened] = useState(false);
+  // The page follows its address (the list and a policy's page are one view, kept mounted): a
+  // policy listed opens as listed, at once; another is read by its id, without waiting for the
+  // list. A new one waits for IAM to let the caller create here: Create policy changes the
+  // address, and the page knows its rights a moment later. No policy named: the list.
+  const mayCreate = can('iam:CreatePolicy');
+  const shown =
+    selection === null ? null : selection.kind === 'new' ? NEW_POLICY : selection.kind === 'policy' ? selection.policy.id : selection.id;
+  const resolving = useRef<string | null>(null);
+  // The address left the policy (a back link, the browser's Back): the list again. A view whose
+  // address never names one (a test, a page shown alone) keeps what a click opened.
+  const lastFocus = useRef(focus);
   useEffect(() => {
-    if (!focus || opened || policies === null || held === null) return;
-    setOpened(true);
+    const left = lastFocus.current !== null && focus === null;
+    lastFocus.current = focus;
+    if (left) {
+      resolving.current = null;
+      setSelection(null);
+      setLeaving(null);
+    }
+  }, [focus]);
+  useEffect(() => {
+    if (!focus || focus === shown) return;
     if (focus === NEW_POLICY) {
-      if (can('iam:CreatePolicy')) setSelection({ kind: 'new' });
+      if (mayCreate) setSelection({ kind: 'new' });
       return;
     }
-    resolve(focus).then(setSelection, (e: unknown) => setError(message(e)));
+    const listed = policies?.find((p) => p.id === focus);
+    if (listed) {
+      resolving.current = null;
+      setSelection({ kind: 'policy', policy: listed });
+      return;
+    }
+    if (resolving.current === focus) return;
+    resolving.current = focus;
+    if (lists && policies === null) {
+      // The list is still read: the policy by its id at once; if it cannot be read so, the list
+      // decides when it comes (listed, or read again and else shown by its holders).
+      api.getPolicy(focus).then(
+        (policy) => resolving.current === focus && setSelection((current) => current ?? { kind: 'policy', policy }),
+        () => {
+          if (resolving.current === focus) resolving.current = null;
+        }
+      );
+      return;
+    }
+    resolve(focus).then(
+      (found) => resolving.current === focus && setSelection(found),
+      (e: unknown) => setError(message(e))
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus, opened, policies, held]);
+  }, [focus, shown, policies, mayCreate]);
+
+  // A policy's page shown, or about to be (its address names it): the level hides the list's header.
+  useAccessInstance(selection !== null || (!!focus && focus !== leaving));
 
   const ownerLabel = (policy: PolicyView) => owners[policy.owner_scope ?? PLATFORM]?.label ?? '';
   const columns: ListColumn<PolicyView>[] = [
@@ -222,9 +274,18 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
   ];
   const heldList = useListControls(held, { searchText: (h) => [h.name, h.id], columns: heldColumns });
   useAccessBadge(lists ? policies?.length ?? null : holdsOnly ? held?.length ?? null : null, 'policy', 'policies', !!next);
-
-  if (error && (policies === null || held === null)) return <p className="access-policy-error" role="alert">{error}</p>;
-  if (policies === null || held === null) return <p className="access-empty">Loading…</p>;
+  // Searched, filtered or sorted, a flat list of what matches; else the tree. A page of it.
+  const rows = useMemo(
+    () =>
+      policies === null
+        ? []
+        : list.filtered || list.sortKey
+          ? list.visible.map((policy) => ({ policy, depth: 0 }))
+          : policyTree(policies),
+    [policies, list.filtered, list.sortKey, list.visible]
+  );
+  const paged = usePagedRows(rows, list.pageKey);
+  const heldPaged = usePagedRows(heldList.visible, heldList.pageKey);
 
   // What the caller may do with a policy: IAM's answer at its owner (this level's is ``can``).
   const ownerOfPolicy = (policy: PolicyView) => owners[policy.owner_scope ?? PLATFORM];
@@ -240,22 +301,18 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
 
   if (selection) {
     return (
-      <div className="access-policy-page" data-policy-page={selection.kind === 'new' ? NEW_POLICY : selection.kind === 'policy' ? selection.policy.id : selection.id}>
+      <div className="access-policy-page access-instance-page" data-policy-page={selection.kind === 'new' ? NEW_POLICY : selection.kind === 'policy' ? selection.policy.id : selection.id}>
         <button type="button" className="access-policy-back" onClick={() => select(null)}>
           <ArrowLeft size={14} /> Policies
         </button>
         {error && <p className="access-policy-error" role="alert">{error}</p>}
         {selection.kind === 'held' ? (
-          <section className="access-policy-editor" aria-label={`Policy ${selection.name}`}>
-            <header className="access-policy-editor-header">
-              <h3 className="access-policy-title">{selection.name}</h3>
-              <code className="access-policy-id">{selection.id}</code>
-            </header>
+          <HeldPolicySection name={selection.name} id={selection.id}>
             <p className="access-policy-muted" data-policy-unread="">
               {selection.note ?? 'You may list who holds this policy here, not read what it allows.'}
             </p>
             <PolicyAttachments api={api} policyId={selection.id} here={here} can={can} open={open} nonce={nonce} scope={scope} directory={directory} />
-          </section>
+          </HeldPolicySection>
         ) : (
           <>
           {selection.kind === 'policy' && levelPolicyOf(selection.policy) && (
@@ -268,24 +325,14 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
               </p>
             </section>
           )}
-          {selection.kind === 'policy' && offerWorkspaceOf(selection.policy) && (
-            <WorkspaceOfferEditor
-              workspaceId={offerWorkspaceOf(selection.policy)!}
-              scope={selection.policy.owner_scope ?? here}
-              policyId={selection.policy.id}
-              workspaceName={selection.policy.name.replace(/ access$/, '')}
-              api={api}
-              nonce={nonce}
-            />
-          )}
           <PolicyEditor
             key={selection.kind === 'new' ? NEW_POLICY : `${selection.policy.id}@${selection.policy.revision}`}
             api={api}
             policy={selection.kind === 'policy' ? selection.policy : null}
             scope={scope}
             directory={directory}
-            roles={policies.filter((p) => roleOfPolicy(p.id))}
-            parents={policies}
+            roles={(policies ?? []).filter((p) => roleOfPolicy(p.id))}
+            parents={policies ?? []}
             readOnly={selection.kind === 'policy' && !mayUpdate(selection.policy)}
             owner={selection.kind === 'policy' ? ownerOfPolicy(selection.policy) ?? null : null}
             ownerLink={selection.kind === 'policy' ? linkTo(selection.policy) : null}
@@ -293,11 +340,31 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
               select({ kind: 'policy', policy: saved });
               void load();
             }}
-            onCancel={() => select(null)}
             onOpen={(id) => void openPolicy(id)}
             can={can}
             open={open}
             nonce={nonce}
+            offerOf={
+              selection.kind === 'policy' && offerWorkspaceOf(selection.policy)
+                ? workspaceGroupName(selection.policy.name.replace(/ access$/, ''))
+                : null
+            }
+            configuration={
+              // A workspace's offer ("<W> access"): its switches are the policy's Configuration.
+              selection.kind === 'policy' && offerWorkspaceOf(selection.policy)
+                ? (changed) => (
+                    <WorkspaceOfferEditor
+                      workspaceId={offerWorkspaceOf(selection.policy)!}
+                      scope={selection.policy.owner_scope ?? here}
+                      policyId={selection.policy.id}
+                      workspaceName={selection.policy.name.replace(/ access$/, '')}
+                      api={api}
+                      nonce={nonce}
+                      onChanged={changed}
+                    />
+                  )
+                : undefined
+            }
           />
           </>
         )}
@@ -305,11 +372,10 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
     );
   }
 
-  // Searched, filtered or sorted, a flat list of what matches; else the tree.
-  const rows =
-    list.filtered || list.sortKey
-      ? list.visible.map((policy) => ({ policy, depth: 0 }))
-      : policyTree(policies);
+
+  // The list waits for its first page; a policy's page (above) does not.
+  if (error && (policies === null || held === null)) return <p className="access-policy-error" role="alert">{error}</p>;
+  if (policies === null || held === null) return <p className="access-empty">Loading…</p>;
 
   const nameCell = (policy: PolicyView, depth: number) => (
     <span className="access-policy-tree" style={{ paddingLeft: `${depth * 1.25}rem` }}>
@@ -401,13 +467,19 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
           onClear={controls.clear}
         />
       )}
+      {lists && next && (
+        <p className="org-settings-users-filter-meta" data-field="policies-loading">
+          Loading policies: {policies.length} so far; a search or filter sees those read.
+        </p>
+      )}
 
       {lists ? (
+        <>
         <div className="org-settings-users-table-wrap">
           <table className="org-settings-users-table" aria-label="Policies">
             <ListHead columns={columns} controls={list} />
             <tbody>
-              {rows.map(({ policy, depth }) => (
+              {paged.pageRows.map(({ policy, depth }) => (
                 <tr
                   key={policy.id}
                   data-policy={policy.id}
@@ -481,12 +553,15 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
             </tbody>
           </table>
         </div>
+        <TablePager total={rows.length} paged={paged} />
+        </>
       ) : holdsOnly ? (
+        <>
         <div className="org-settings-users-table-wrap">
           <table className="org-settings-users-table" aria-label="Policies held here">
             <ListHead columns={heldColumns} controls={heldList} actions={false} />
             <tbody>
-              {heldList.visible.map((h) => (
+              {heldPaged.pageRows.map((h) => (
                 <tr
                   key={h.id}
                   data-policy={h.id}
@@ -510,14 +585,25 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
             </tbody>
           </table>
         </div>
+        <TablePager total={heldList.visible.length} paged={heldPaged} />
+        </>
       ) : (
         <p className="access-policy-muted">You may create policies here, not list them.</p>
       )}
-      {next && (
-        <button type="button" className="org-settings-users-secondary-button" onClick={() => void more()}>
-          Load more
-        </button>
-      )}
     </div>
+  );
+}
+
+/** A policy the caller may list the holders of, not read: its title, its actions ("+ Attach") at
+ *  its right, as on an editable policy's page. */
+function HeldPolicySection({ name, id, children }: { name: string; id: string; children: ReactNode }) {
+  const [actions, setActions] = useState<HTMLElement | null>(null);
+  return (
+    <AccessHeaderSlotContext.Provider value={actions}>
+      <section className="access-policy-editor" aria-label={`Policy ${name}`}>
+        <InstanceHeader name={name} id={id} actionsRef={setActions} />
+        {children}
+      </section>
+    </AccessHeaderSlotContext.Provider>
   );
 }

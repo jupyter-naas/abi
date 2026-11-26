@@ -21,8 +21,9 @@ export type SettingsLink = { href: string; label: string; icon: LucideIcon };
 /** `label` null: the level's first group, named by its tab. */
 export type SettingsLinkGroup = { label: string | null; links: SettingsLink[] };
 
-/** `index`: the level's own URL, where a phone lists its pages. */
-export type SettingsLevel = { id: SettingsLevelId; label: string; index: string; groups: SettingsLinkGroup[] };
+/** `index`: the level's own URL, where a phone lists its pages. `name`: the organization or
+ *  workspace it is, named in its tab. */
+export type SettingsLevel = { id: SettingsLevelId; label: string; name?: string; index: string; groups: SettingsLinkGroup[] };
 
 /** `current`: the current workspace's organization. Any other is named in its tab, so
  *  "Organization" never stands for one the workspace is not in. */
@@ -31,7 +32,7 @@ export type SettingsOrganization = { id: string; name: string; items: OrgSetting
 export type SettingsLevelsInput = {
   account: AccountSettingsNavItem[];
   /** The current workspace and its groups the caller may open; null without one. */
-  workspace: { id: string; groups: SettingsNavGroup[] } | null;
+  workspace: { id: string; name?: string; groups: SettingsNavGroup[] } | null;
   /** The organization of the page (or of the current workspace), and the other ones the caller opens. */
   organization: SettingsOrganization | null;
   otherOrganizations: { id: string; name: string }[];
@@ -77,7 +78,8 @@ export function settingsLevels(input: SettingsLevelsInput): SettingsLevel[] {
     if (others.length > 0) groups.push({ label: 'Other organizations', links: others });
     levels.push({
       id: 'organization',
-      label: others.length > 0 || !organization.current ? `Organization · ${organization.name}` : 'Organization',
+      label: 'Organization',
+      name: organization.name || undefined,
       index: orgSettingsIndexPath(organization.id),
       groups,
     });
@@ -91,6 +93,7 @@ export function settingsLevels(input: SettingsLevelsInput): SettingsLevel[] {
     levels.push({
       id: 'workspace',
       label: 'Workspace',
+      name: workspace.name || undefined,
       index: `/workspace/${workspace.id}/settings`,
       groups: workspaceGroups.map((group, index) => ({
         label: index === 0 ? null : group.label,
@@ -128,7 +131,7 @@ export function currentSettingsLevel(levels: SettingsLevel[], pathname: string):
   return levels.find((level) => level.id === id) ?? (levels.length === 1 ? levels[0] : null);
 }
 
-export type SettingsTab = { id: SettingsLevelId; label: string; href: string; active: boolean };
+export type SettingsTab = { id: SettingsLevelId; label: string; name?: string; href: string; active: boolean };
 
 /**
  * One tab per level, none when there is only one. A tab opens its level where the caller
@@ -151,6 +154,6 @@ export function settingsTabs(
       const last = lastVisited(level.id);
       href = last && activeSettingsHref([level], last) ? last : (level.groups[0]?.links[0]?.href ?? level.index);
     }
-    return { id: level.id, label: level.label, href, active };
+    return { id: level.id, label: level.label, ...(level.name ? { name: level.name } : {}), href, active };
   });
 }

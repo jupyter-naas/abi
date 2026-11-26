@@ -211,13 +211,18 @@ export type PrincipalView = {
   membership_of?: string | null;
   /** Groups: a level group ("Viewers", "Members"). */
   level_group?: boolean;
+  /** Groups: what it is for; null: none. */
+  description?: string | null;
   created_at: string | null;
 };
 
 export type IdpMapping = { provider: string; claim_value: string };
 
+/** A group's member: who it is, and when they joined it (null before IAM kept the date). */
+export type GroupMemberView = PrincipalView & { user_id?: string | null; joined_at?: string | null };
+
 export type GroupView = PrincipalView & {
-  members: PrincipalView[];
+  members: GroupMemberView[];
   idp_mappings: IdpMapping[];
 };
 

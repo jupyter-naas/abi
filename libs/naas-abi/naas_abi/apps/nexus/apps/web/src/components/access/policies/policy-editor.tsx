@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
 import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { PolicyRef, PolicySource, PolicyStatement, PolicyView, Publisher } from '@/lib/iam-admin/types';
 import { PLATFORM, PLATFORM_ACCESS_SCOPE, ownerOf, type AccessScope } from '../access-scope';
@@ -28,13 +28,17 @@ import {
 } from './policy-editor-model';
 import type { AccessDirectory } from '../access-directory';
 import type { AccessNavigation } from '../access-props';
+import { AccessHeaderAction, AccessHeaderSlotContext } from '../access-list';
+import { InstanceHeader } from '../instance-header';
+import { SettingsSection } from '@/components/settings/settings-ui';
 import { PolicyAttachments } from './policy-attachments';
 import { ownedBy, ownerLabel, type PolicyOwner } from './policy-owners';
 import { PolicyText } from './policy-text';
 import { StatementEditor } from './statement-editor';
 import { usePolicyValidation, VALIDATION_DELAY_MS } from './use-policy-validation';
 
-type Mode = 'builder' | 'visual' | 'text';
+// `configuration`: the policy's own settings (a workspace's offer), when its page gives some.
+type Mode = 'configuration' | 'builder' | 'visual' | 'text';
 
 type SaveError = { message: string; errors: string[]; conflict: boolean; refused: string[] };
 
@@ -77,7 +81,6 @@ export function PolicyEditor({
   parents = [],
   readOnly = false,
   onSaved,
-  onCancel,
   onOpen,
   owner: ownerInfo = null,
   ownerLink = null,
@@ -85,6 +88,8 @@ export function PolicyEditor({
   can,
   open,
   nonce = 0,
+  configuration,
+  offerOf = null,
 }: {
   api: IamAdminApi;
   policy: PolicyView | null;
@@ -97,7 +102,6 @@ export function PolicyEditor({
   parents?: PolicyView[];
   readOnly?: boolean;
   onSaved: (policy: PolicyView) => void;
-  onCancel: () => void;
   /** Opens another policy (a parent or a sub-policy) by its id. */
   onOpen?: (id: string) => void;
   /** Who owns the policy, as the list names it. */
@@ -112,12 +116,20 @@ export function PolicyEditor({
   open?: AccessNavigation;
   /** Bumped by the page's refresh button. */
   nonce?: number;
+  /** The policy's own settings (a workspace's offer: its switches), its first tab, open first.
+   *  They save themselves; `changed` reads the document again. */
+  configuration?: (changed: () => void) => ReactNode;
+  /** A workspace's offer: the workspace group it bounds, its Held by shown read-only. */
+  offerOf?: string | null;
 }) {
   const [name, setName] = useState(policy?.name ?? '');
   const [description, setDescription] = useState(policy?.description ?? '');
   const [version, setVersion] = useState(policy?.document.version ?? POLICY_VERSION);
+  // Its actions ("Discard changes", "+ Attach") sit at the right of its title: the page is shown
+  // alone, with no header of the list above it.
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const [statements, setStatements] = useState<EditorStatement[]>(policy ? fromDocument(policy.document) : []);
-  const [mode, setMode] = useState<Mode>('visual');
+  const [mode, setMode] = useState<Mode>(configuration ? 'configuration' : 'visual');
   // Until the user picks a view, the editor opens in the builder once it can show the policy.
   const [picked, setPicked] = useState(false);
   const [format, setFormat] = useState<TextFormat>('json');
@@ -126,9 +138,28 @@ export function PolicyEditor({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<SaveError | null>(null);
   const [revision, setRevision] = useState(policy?.revision ?? 0);
+  // What was read (or last read again): an edit is told from it, and Discard goes back to it.
+  const [base, setBase] = useState(() => baseOf(policy));
+  // The text as the Code view opened it: an edit there is one too.
+  const [textOpened, setTextOpened] = useState('');
+  // The description grows with its text, so that all of it shows.
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const fit = () => {
+      const area = descriptionRef.current;
+      if (!area) return;
+      area.style.height = 'auto';
+      area.style.height = `${area.scrollHeight + area.offsetHeight - area.clientHeight}px`;
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [description]);
   // The parent stays as it is on save (the update leaves it out); a reload shows the newer one.
   const [parent, setParent] = useState(() => parentOf(policy));
   const [subPolicies, setSubPolicies] = useState<PolicyRef[]>(policy?.sub_policies ?? []);
+  // How many sub-policies show: the first ones, more on demand (Load more).
+  const [subsShown, setSubsShown] = useState(SUBS_SHOWN);
   // A new policy's parent, chosen here.
   const [newParent, setNewParent] = useState('');
   const [starting, setStarting] = useState('');
@@ -214,7 +245,12 @@ export function PolicyEditor({
       return;
     }
     const split = intoBuilder(doc.statements, builder, choices);
-    if (!picked && mode !== 'text' && (policy ? split.rest.length === 0 : statements.length === 0 || split.rest.length === 0)) {
+    if (
+      !picked &&
+      mode !== 'text' &&
+      mode !== 'configuration' &&
+      (policy ? split.rest.length === 0 : statements.length === 0 || split.rest.length === 0)
+    ) {
       setMode('builder');
     }
     // Only the arrival decides it, not later edits.
@@ -256,6 +292,7 @@ export function PolicyEditor({
 
   const showText = () => {
     setText(toText(doc, format));
+    setTextOpened(toText(doc, format));
     setSwitchError(null);
     setPicked(true);
     setMode('text');
@@ -337,15 +374,28 @@ export function PolicyEditor({
       setVersion(fresh.document.version);
       setStatements(fromDocument(fresh.document));
       setRevision(fresh.revision);
+      setBase(baseOf(fresh));
+      setText('');
+      setTextOpened('');
       setParent(parentOf(fresh));
       setSubPolicies(fresh.sub_policies ?? []);
       if (builder) intoBuilder(fresh.document.statements, builder);
-      setMode(builder ? 'builder' : 'visual');
+      // The configuration reads the document again after each of its saves: it stays open.
+      if (mode !== 'configuration') setMode(builder ? 'builder' : 'visual');
       setSaveError(null);
     } catch (error) {
       setSaveError({ message: message(error), errors: [], conflict: false, refused: [] });
     }
   };
+
+  // An existing policy changed here and not saved yet: Discard reads it again.
+  const dirty =
+    !!policy &&
+    !readOnly &&
+    (name !== base.name ||
+      description !== base.description ||
+      JSON.stringify(doc) !== base.doc ||
+      (mode === 'text' && text !== textOpened));
 
   const errors = verdict && !verdict.valid ? verdict.errors : [];
   const refused = Object.fromEntries((saveError?.refused ?? []).map((key) => [key, saveError!.message]));
@@ -363,16 +413,36 @@ export function PolicyEditor({
   );
 
   return (
-    <section className="access-policy-editor" aria-label={policy ? `Policy ${policy.name}` : 'New policy'}>
-      <header className="access-policy-editor-header">
-        <h3 className="access-policy-title">{policy ? policy.name : 'New policy'}</h3>
-        {policy && <code className="access-policy-id">{policy.id}</code>}
-        {readOnly && (
-          <span className="access-policy-badge">
-            {policy?.managed ? 'Managed: IAM writes this policy' : 'Read only'}
-          </span>
-        )}
-      </header>
+    <AccessHeaderSlotContext.Provider value={actionsSlot}>
+    <section className="access-policy-editor access-policy-editor-sections" aria-label={policy ? `Policy ${policy.name}` : 'New policy'}>
+      {/* Its name, its id, what it is; its actions at the right ("Discard changes", "+ Attach"). */}
+      <InstanceHeader
+        name={policy ? policy.name : 'New policy'}
+        id={policy ? policy.id : null}
+        badge={
+          readOnly ? (
+            <span className="platform-users-badge access-policy-badge">
+              {policy?.managed ? 'Managed: IAM writes this policy' : 'Read only'}
+            </span>
+          ) : undefined
+        }
+        meta={
+          parent ? (
+            <span className="access-policy-parent-line" aria-label="Parent policy">
+              Sub-policy of{' '}
+              {onOpen ? (
+                <button type="button" className="access-policy-link" onClick={() => onOpen(parent.id)} title={parent.id}>
+                  {parent.name ?? parent.id}
+                </button>
+              ) : (
+                <strong title={parent.id}>{parent.name ?? parent.id}</strong>
+              )}
+              : it never grants more than its parent does.
+            </span>
+          ) : undefined
+        }
+        actionsRef={setActionsSlot}
+      />
       {elsewhere && (
         <p className="access-policy-owner" aria-label="Policy owner" data-policy-owner-note="">
           {ownedBy(ownerInfo?.label ?? ownerLabel(where))}.{' '}
@@ -391,115 +461,125 @@ export function PolicyEditor({
           )}
         </p>
       )}
-      {parent && (
-        <p className="access-policy-parent" aria-label="Parent policy">
-          Sub-policy of{' '}
-          {onOpen ? (
-            <button type="button" className="access-policy-link" onClick={() => onOpen(parent.id)}>
-              {parent.name ?? parent.id}
-            </button>
-          ) : (
-            <strong>{parent.name ?? parent.id}</strong>
+      {/* Info (no title of its own: the page's is above): its name and description, then what
+          it derives from and what derives from it. */}
+      <SettingsSection>
+        <div className="account-profile-form-grid">
+          <div className="account-profile-field">
+            <label className="account-profile-field-label" htmlFor="policy-name">
+              Name
+            </label>
+            <input
+              id="policy-name"
+              type="text"
+              className={`account-profile-field-input${readOnly ? ' account-profile-field-input-readonly' : ''}`}
+              aria-label="Policy name"
+              value={name}
+              readOnly={readOnly}
+              aria-readonly={readOnly || undefined}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+          {!policy && !readOnly && candidates.length > 0 && (
+            <div className="account-profile-field">
+              <label className="account-profile-field-label" htmlFor="policy-parent">
+                Sub-policy of
+              </label>
+              <select
+                id="policy-parent"
+                className="account-profile-field-input"
+                aria-label="Sub-policy of"
+                value={newParent}
+                onChange={(event) => {
+                  setNewParent(event.target.value);
+                  setSaveError(null);
+                }}
+              >
+                <option value="">No parent</option>
+                {candidates.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
-          {parent.name && <code className="access-policy-id">{parent.id}</code>}: it never grants more than its
-          parent does.
-        </p>
-      )}
-      {subPolicies.length > 0 && (
-        <div className="access-policy-parent" aria-label="Sub-policies">
-          <span>Sub-policies, each within this one:</span>
-          <ul className="access-policy-subs">
-            {subPolicies.map((sub) => (
-              <li key={sub.id}>
-                {onOpen ? (
-                  <button type="button" className="access-policy-link" onClick={() => onOpen(sub.id)}>
-                    {sub.name ?? sub.id}
-                  </button>
-                ) : (
-                  <span>{sub.name ?? sub.id}</span>
-                )}
-              </li>
-            ))}
-          </ul>
+          {!policy && !readOnly && roles.length > 0 && (
+            <div className="account-profile-field">
+              <label className="account-profile-field-label" htmlFor="policy-start">
+                Start from
+              </label>
+              <select
+                id="policy-start"
+                className="account-profile-field-input"
+                aria-label="Start from a built-in role"
+                value={starting}
+                onChange={(event) => startFrom(event.target.value)}
+              >
+                <option value="">Nothing</option>
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    The {ROLE_LABELS[roleOfPolicy(role.id)!] ?? role.name} role
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="account-profile-field access-policy-description-field">
+            <label className="account-profile-field-label" htmlFor="policy-description">
+              Description
+            </label>
+            {/* Every line shown, one when one is enough. */}
+            <textarea
+              id="policy-description"
+              ref={descriptionRef}
+              className={`account-profile-field-input access-policy-description${readOnly ? ' account-profile-field-input-readonly' : ''}`}
+              aria-label="Policy description"
+              rows={1}
+              value={description}
+              readOnly={readOnly}
+              aria-readonly={readOnly || undefined}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </div>
         </div>
-      )}
-
-      {policy && can && (
-        <PolicyAttachments
-          api={api}
-          policyId={policy.id}
-          here={ownerOf(scope)}
-          can={can}
-          open={open}
-          nonce={nonce}
-          scope={scope}
-          directory={directory}
-        />
-      )}
-
-      <div className="access-policy-row">
-        <label className="access-policy-field access-policy-field-grow">
-          <span>Name</span>
-          <input
-            type="text"
-            className="access-policy-input"
-            aria-label="Policy name"
-            value={name}
-            disabled={readOnly}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <label className="access-policy-field access-policy-field-grow">
-          <span>Description</span>
-          <input
-            type="text"
-            className="access-policy-input"
-            aria-label="Policy description"
-            value={description}
-            disabled={readOnly}
-            onChange={(event) => setDescription(event.target.value)}
-          />
-        </label>
-        {!policy && !readOnly && candidates.length > 0 && (
-          <label className="access-policy-field">
-            <span>Sub-policy of</span>
-            <select
-              className="access-policy-input"
-              aria-label="Sub-policy of"
-              value={newParent}
-              onChange={(event) => {
-                setNewParent(event.target.value);
-                setSaveError(null);
-              }}
-            >
-              <option value="">No parent</option>
-              {candidates.map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>
-                  {candidate.name}
-                </option>
+        {subPolicies.length > 0 && (
+          <div className="access-policy-parent access-policy-subs-block" aria-label="Sub-policies">
+            <span className="access-policy-subs-title" title="Each never grants more than this one">
+              Subpolicies
+              <span className="access-policy-count" data-field="subs-count">
+                {subPolicies.length}
+              </span>
+            </span>
+            <ul className="access-policy-subs">
+              {subPolicies.slice(0, subsShown).map((sub) => (
+                <li key={sub.id}>
+                  {onOpen ? (
+                    <button type="button" className="access-policy-link" onClick={() => onOpen(sub.id)}>
+                      {sub.name ?? sub.id}
+                    </button>
+                  ) : (
+                    <span>{sub.name ?? sub.id}</span>
+                  )}
+                </li>
               ))}
-            </select>
-          </label>
+              {subPolicies.length > subsShown && (
+                <li>
+                  <button
+                    type="button"
+                    className="access-policy-more"
+                    data-action="more-subs"
+                    onClick={() => setSubsShown((n) => n + SUBS_SHOWN)}
+                  >
+                    Load more
+                  </button>
+                </li>
+              )}
+            </ul>
+          </div>
         )}
-        {!policy && !readOnly && roles.length > 0 && (
-          <label className="access-policy-field">
-            <span>Start from</span>
-            <select
-              className="access-policy-input"
-              aria-label="Start from a built-in role"
-              value={starting}
-              onChange={(event) => startFrom(event.target.value)}
-            >
-              <option value="">Nothing</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  The {ROLE_LABELS[roleOfPolicy(role.id)!] ?? role.name} role
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-      </div>
+      </SettingsSection>
+
       {newParent && !policy && (
         <p className={parentRefused ? 'access-policy-error' : 'access-policy-muted'} role={parentRefused ? 'alert' : 'status'} data-parent-verdict="">
           {parentRefused
@@ -510,110 +590,187 @@ export function PolicyEditor({
         </p>
       )}
 
-      <div className="access-policy-modes" role="tablist" aria-label="Editor view">
-        {builder && tab('builder', 'Builder', () => void showForm('builder'))}
-        {tab('visual', builder ? 'Statements' : 'Visual', () => void showForm('visual'))}
-        {tab('text', 'YAML / JSON', showText)}
-      </div>
-
-      {mode === 'builder' && !builder ? (
-        // While what may be granted is read again (a new parent): nothing to edit yet.
-        <p className="access-policy-muted" role="status" data-builder-loading="">
-          Loading what you may grant…
-        </p>
-      ) : mode === 'builder' && builder ? (
-        <PolicyBuilder
-          api={api}
-          scope={where}
-          validateAt={owner}
-          publishers={builder}
-          choices={choices}
-          onChange={change}
-          kept={kept.length}
-          refused={refused}
-          delayMs={validationDelayMs}
-        />
-      ) : mode === 'visual' ? (
-        <StatementEditor
-          statements={statements}
-          onChange={setStatements}
-          api={api}
-          scope={where}
-          publishers={publishers}
-          readOnly={readOnly}
-        />
-      ) : (
-        <PolicyText text={text} onChange={setText} format={format} onFormat={changeFormat} readOnly={readOnly} />
-      )}
-
-      {switchError && (
-        <p className="access-policy-notice" role="status">
-          {switchError}
-        </p>
-      )}
-      {!readOnly && grantable.state === 'failed' && !parentRefused && (
-        <p className="access-policy-notice" role="status" data-grantable-failure="">
-          No builder or suggestions: {grantable.message}{' '}
-          <button type="button" className="access-policy-button" onClick={() => setAttempt((n) => n + 1)}>
-            Retry
+      {dirty && (
+        <AccessHeaderAction>
+          {/* Left of "+ Attach" in the page header (whichever was shown first). */}
+          <button
+            type="button"
+            className="org-settings-users-secondary-button"
+            style={{ order: 1 }}
+            data-action="discard"
+            disabled={saving}
+            onClick={() => void reload()}
+          >
+            <RotateCcw size={16} />
+            Discard changes
           </button>
-        </p>
+        </AccessHeaderAction>
       )}
 
-      {!readOnly && (
-        <div className="access-policy-validation" aria-live="polite">
-          {errors.length > 0 && (
-            <ul className="access-policy-errors" role="alert" aria-label="Validation errors">
-              {errors.map((error) => (
-                <li key={error}>
-                  <AlertCircle size={14} /> {error}
-                </li>
-              ))}
-            </ul>
-          )}
-          {validation.failure && <p className="access-policy-error">{validation.failure}</p>}
-          {/* Valid is not granted: once a save was refused, the refusal alone speaks. */}
-          {verdict?.valid && !validation.pending && !saveError && (
-            <p className="access-policy-ok">
-              <CheckCircle2 size={14} /> Valid policy.
-            </p>
-          )}
-          {validation.pending && <p className="access-policy-muted">Checking with IAM…</p>}
-        </div>
-      )}
-
-      {saveError && (
-        <div className="access-policy-error" role="alert" data-save-error="">
-          <p>{saveError.message}</p>
-          {saveError.errors.length > 0 && (
-            <ul>
-              {saveError.errors.map((error) => (
-                <li key={error}>{error}</li>
-              ))}
-            </ul>
-          )}
-          {saveError.conflict && (
-            <p>
-              Someone else changed this policy since you opened it.{' '}
-              <button type="button" className="access-policy-button" onClick={() => void reload()}>
-                Reload their version
-              </button>
-            </p>
-          )}
-        </div>
-      )}
-
-      <footer className="access-policy-actions">
-        {!readOnly && (
-          <button type="button" className="access-policy-button access-policy-button-primary" disabled={!canSave} onClick={() => void save()}>
+      {/* Saved from the page's top (the configuration saves each switch itself). */}
+      {!readOnly && mode !== 'configuration' && (
+        <AccessHeaderAction>
+          <button
+            type="button"
+            className="org-settings-primary-button"
+            style={{ order: 2 }}
+            data-action="save-policy"
+            disabled={!canSave}
+            onClick={() => void save()}
+          >
             {saving ? 'Saving…' : policy ? 'Save changes' : 'Create policy'}
           </button>
+        </AccessHeaderAction>
+      )}
+
+      <SettingsSection
+        title="Configuration"
+        // What IAM says of the document, at the section's top right (its errors stay below).
+        actions={
+          mode !== 'configuration' && !readOnly ? (
+            validation.pending ? (
+              <span className="access-policy-muted" data-policy-validity="pending">
+                Checking with IAM…
+              </span>
+            ) : verdict?.valid && !saveError ? (
+              // Valid is not granted: once a save was refused, the refusal alone speaks.
+              <span className="access-policy-ok" data-policy-validity="valid">
+                <CheckCircle2 size={14} /> Valid policy.
+              </span>
+            ) : undefined
+          ) : undefined
+        }
+        description={
+          configuration
+            ? 'What the workspace offers, switched here; Advanced, Builder and Code show its document.'
+            : 'What it allows and denies: its statements, as a form, built from a listing, or as code.'
+        }
+      >
+        <div className="access-policy-config">
+        <div className="access-policy-modes" role="tablist" aria-label="Editor view">
+          {configuration &&
+            tab('configuration', 'Configuration', () => {
+              setPicked(true);
+              setMode('configuration');
+            })}
+          {tab('visual', 'Advanced', () => void showForm('visual'))}
+          {builder && tab('builder', 'Builder', () => void showForm('builder'))}
+          {tab('text', 'Code', showText)}
+        </div>
+  
+        {mode === 'configuration' && configuration ? (
+          configuration(() => void reload())
+        ) : mode === 'builder' && !builder ? (
+          // While what may be granted is read again (a new parent): nothing to edit yet.
+          <p className="access-policy-muted" role="status" data-builder-loading="">
+            Loading what you may grant…
+          </p>
+        ) : mode === 'builder' && builder ? (
+          <PolicyBuilder
+            api={api}
+            scope={where}
+            validateAt={owner}
+            publishers={builder}
+            choices={choices}
+            onChange={change}
+            kept={kept.length}
+            refused={refused}
+            delayMs={validationDelayMs}
+          />
+        ) : mode === 'visual' ? (
+          <StatementEditor
+            statements={statements}
+            onChange={setStatements}
+            api={api}
+            scope={where}
+            publishers={publishers}
+            readOnly={readOnly}
+          />
+        ) : (
+          <PolicyText text={text} onChange={setText} format={format} onFormat={changeFormat} readOnly={readOnly} />
         )}
-        <button type="button" className="access-policy-button" onClick={onCancel}>
-          {readOnly ? 'Close' : 'Cancel'}
-        </button>
-      </footer>
+  
+        {mode !== 'configuration' && switchError && (
+          <p className="access-policy-notice" role="status">
+            {switchError}
+          </p>
+        )}
+        {mode !== 'configuration' && !readOnly && grantable.state === 'failed' && !parentRefused && (
+          <p className="access-policy-notice" role="status" data-grantable-failure="">
+            No builder or suggestions: {grantable.message}{' '}
+            <button type="button" className="access-policy-button" onClick={() => setAttempt((n) => n + 1)}>
+              Retry
+            </button>
+          </p>
+        )}
+  
+        {mode !== 'configuration' && !readOnly && (
+          <div className="access-policy-validation" aria-live="polite">
+            {errors.length > 0 && (
+              <ul className="access-policy-errors" role="alert" aria-label="Validation errors">
+                {errors.map((error) => (
+                  <li key={error}>
+                    <AlertCircle size={14} /> {error}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {validation.failure && <p className="access-policy-error">{validation.failure}</p>}
+          </div>
+        )}
+  
+        {saveError && (
+          <div className="access-policy-error" role="alert" data-save-error="">
+            <p>{saveError.message}</p>
+            {saveError.errors.length > 0 && (
+              <ul>
+                {saveError.errors.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            )}
+            {saveError.conflict && (
+              <p>
+                Someone else changed this policy since you opened it.{' '}
+                <button type="button" className="access-policy-button" onClick={() => void reload()}>
+                  Reload their version
+                </button>
+              </p>
+            )}
+          </div>
+        )}
+        </div>
+      </SettingsSection>
+
+      {/* Who holds it, after what it allows. */}
+      {policy && can && (
+        <PolicyAttachments
+          api={api}
+          policyId={policy.id}
+          here={ownerOf(scope)}
+          can={can}
+          open={open}
+          nonce={nonce}
+          scope={scope}
+          directory={directory}
+          boundOf={offerOf}
+        />
+      )}
     </section>
+    </AccessHeaderSlotContext.Provider>
   );
 }
 
+/** How many sub-policies a policy's page names at first, and each Load more adds. */
+const SUBS_SHOWN = 5;
+
+/** What an existing policy is as read: its name, description and document (as the editor
+ *  writes it), so that an edit is told from it. */
+function baseOf(policy: PolicyView | null): { name: string; description: string; doc: string } {
+  if (!policy) return { name: '', description: '', doc: '' };
+  return {
+    name: policy.name,
+    description: policy.description,
+    doc: JSON.stringify(toDocument(fromDocument(policy.document), policy.document.version)),
+  };
+}

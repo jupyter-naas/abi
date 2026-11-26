@@ -330,6 +330,8 @@ class Report:
     kept_policies: list[str] = field(default_factory=list)
     kept_attachments: list[str] = field(default_factory=list)
     org_roles_removed: list[str] = field(default_factory=list)  # "<user> at <org>"
+    # "<user> left <group>: <why>": an admins group another role of theirs already gives.
+    redundant: list[str] = field(default_factory=list)
     org_only: list[str] = field(default_factory=list)  # "<user> in <org>"
     empty_workspaces: list[str] = field(default_factory=list)
     no_admin: list[str] = field(default_factory=list)
@@ -387,6 +389,7 @@ class Report:
                 )
         for title, items in (
             ("Org Member roles removed", self.org_roles_removed),
+            ("Left: another role of theirs already gives it", self.redundant),
             ("Org-only people", self.org_only),
             ("Workspaces with an empty workspace group", self.empty_workspaces),
             ("Workspaces with no admin", self.no_admin),
@@ -617,6 +620,9 @@ class PersonPlan:
     leaves: list[str] = field(default_factory=list)
     detach: list[tuple[str, str | None]] = field(default_factory=list)  # (policy, scope)
     kept: list[str] = field(default_factory=list)
+    # Admins groups another role of theirs already gives (``_drop_redundant``), and the
+    # level an organization's admin needs not (``_plan_member``): (group, why).
+    redundant: list[tuple[str, str]] = field(default_factory=list)
 
     def containers(self, inputs: Inputs) -> set[str]:
         """Where their decisions are compared: every container they held a role in
@@ -784,6 +790,8 @@ def plan_people(
                 plan.roles.setdefault(container, plan.level_before or "viewer")
         plan.workflow_runner = any(g in mine for g in runners.values())
         if plan.platform_admin:
+            # Compared at the workspaces of the organizations they administered too.
+            plan.org_admin_of = {o for o, role in org_roles.items() if role in ADMIN_ROLES}
             _plan_platform_admin(plan, attachments, levels, mine)
         else:
             _plan_member(
@@ -799,7 +807,65 @@ def plan_people(
                 policy_names,
             )
         plans[principal_id] = plan
+    _drop_redundant(plans, by_group, reading.groups)
     return plans
+
+
+PLATFORM_ADMIN_COVERS = "a platform admin: builtin.platform_admin covers every container"
+
+
+def _drop_redundant(
+    plans: Mapping[str, PersonPlan],
+    by_group: Mapping[str, tuple[str, str]],
+    groups: Mapping[str, set[str]],
+) -> None:
+    """No admins group another role of theirs already gives: a platform admin's
+    ``builtin.platform_admin`` covers every container, so they hold no organization's
+    admins group (unless the organization would be left with no other admin) and no
+    workspace's; an organization's admin reaches each of its workspaces, so they hold
+    none of its workspaces' admins groups. Their workspace groups stay: they bound what
+    their people see in each workspace. Dropped from ``joins``, or added to ``leaves``,
+    and said (``redundant``)."""
+    after = {
+        principal: (set(groups.get(principal, set())) | set(plan.joins)) - set(plan.leaves)
+        for principal, plan in plans.items()
+    }
+    admins_of: dict[str, set[str]] = {}  # container -> who is in its admins group
+    for principal, held in after.items():
+        for group in held:
+            where = by_group.get(group)
+            if where is not None and where[1] == "admins":
+                admins_of.setdefault(where[0], set()).add(principal)
+    platform_admins = {p for p, plan in plans.items() if plan.platform_admin}
+    for principal, plan in plans.items():
+        orgs = {
+            org_of(container)
+            for container, who in admins_of.items()
+            if is_org_container(container) and principal in who
+        }
+        for group in sorted(after[principal]):
+            where = by_group.get(group)
+            if where is None or where[1] != "admins":
+                continue
+            container = where[0]
+            if plan.platform_admin:
+                if is_org_container(container) and not (
+                    admins_of.get(container, set()) - platform_admins
+                ):
+                    continue  # the organization keeps an admin
+                why = PLATFORM_ADMIN_COVERS
+            elif not is_org_container(container) and org_of(container) in orgs:
+                why = (
+                    f"an admin of its organization ({org_of(container)}): their role reaches "
+                    "every workspace of it"
+                )
+            else:
+                continue
+            if group in plan.joins:
+                plan.joins.remove(group)
+            else:
+                plan.leaves.append(group)
+            plan.redundant.append((group, why))
 
 
 def _plan_platform_admin(
@@ -842,6 +908,8 @@ def _plan_member(
             continue
         plan.org_people_of.add(org)
         level = _higher(level, LEVEL_OF_ROLE[role])
+    if plan.org_admin_of and not _works_outside(plan):
+        level = None  # their organizations' admins groups reach every workspace of them
     plan.level = level
     wanted: list[str] = []
     for org in sorted(plan.org_people_of):
@@ -858,6 +926,11 @@ def _plan_member(
         other = levels.group_of(VIEWER if level == MEMBER else MEMBER)
         if other in mine:
             plan.leaves.append(other)
+    else:
+        for group in levels.level_groups:
+            if group in mine:
+                plan.leaves.append(group)
+                plan.redundant.append((group, _no_level_needed(plan.org_admin_of)))
     if plan.org_admin_of or plan.admin_of:
         wanted.append(levels.workspace_admins)
     plan.joins = [g for g in dict.fromkeys(wanted) if g not in mine]
@@ -873,6 +946,24 @@ def _plan_member(
         ):
             name = names.get(str(attachment.policy_id), str(attachment.policy_id))
             plan.kept.append(f"{name} ({attachment.policy_id}) at {attachment.scope or 'no scope'}")
+
+
+def _works_outside(plan: PersonPlan) -> bool:
+    """Whether a person works where the admins groups of the organizations they
+    administer do not reach: a workspace of another organization (or of none), or among
+    the people of another organization. Only there does a level give them anything."""
+    orgs = plan.org_admin_of
+    return any(org_of(c) not in orgs for c in plan.workspaces | plan.admin_of) or bool(
+        plan.org_people_of - orgs
+    )
+
+
+def _no_level_needed(orgs: set[str]) -> str:
+    """Why an organization's admin left their level (``redundant``)."""
+    return (
+        f"an admin of its organizations ({', '.join(sorted(orgs))}): their admins group "
+        "reaches every workspace of them"
+    )
 
 
 def _is_graph_grant(policy_id: str, names: Mapping[str, str]) -> bool:
@@ -935,8 +1026,16 @@ def convert_record(
         if named is not None and named.membership_of not in (None, container):
             raise AccessModelStop(f"{named.id} is a membership group of another container")
         if named is None:
+            from naas_abi.apps.nexus.apps.api.app.services.iam.group_descriptions import (
+                described,
+            )
+
+            name = membership_name(container, label)
             named = iam.create_group(
-                membership_name(container, label), scope=container, membership_of=container
+                name,
+                scope=container,
+                membership_of=container,
+                description=described(name, owner=container, membership_of=container),
             )
         elif named.membership_of != container:
             iam.mark_group(named.id, membership_of=container, level=bool(named.level_group))
@@ -1095,7 +1194,7 @@ def apply(iam: Any, inputs: Inputs, levels: Levels, *, dry_run: bool) -> Outcome
         names = {
             g: str(getattr(_group(iam, g), "name", g))
             for p in plans.values()
-            for g in [*p.joins, *p.leaves]
+            for g in [*p.joins, *p.leaves, *(r for r, _why in p.redundant)]
         }
         # Memberships first (a person's first tie to an organization is its
         # membership group), then the admins groups, then the level.
@@ -1107,6 +1206,10 @@ def apply(iam: Any, inputs: Inputs, levels: Levels, *, dry_run: bool) -> Outcome
                     )
             for group_id in plan.leaves:
                 iam.remove_group_member(group_id, plan.principal_id)
+            for group_id, why in plan.redundant:
+                report.redundant.append(
+                    f"{plan.user_id} left {names.get(group_id, group_id)}: {why}"
+                )
             for org in sorted(plan.org_roles_removed):
                 report.org_roles_removed.append(
                     f"{plan.user_id} at {inputs.org_label(org)} ({org})"
@@ -1161,7 +1264,11 @@ def _default_admin(iam: Any, inputs: Inputs, outcome: Outcome, levels: Levels) -
         plan.admin_of.add(container)
         plan.default_admin_of.add(container)
         report.default_admin_added.append(container)
-    if levels.members not in mine and not plan.platform_admin:
+    if (
+        levels.members not in mine
+        and not plan.platform_admin
+        and (not plan.org_admin_of or _works_outside(plan))
+    ):
         if levels.viewers in mine:
             iam.remove_group_member(levels.viewers, principal_id)
         _join(iam, levels.members, principal_id)
@@ -1191,6 +1298,13 @@ def _sync_graph_grants(iam: Any, inputs: Inputs, outcome: Outcome) -> list[str]:
             continue
         people = set(iam.list_group_members(str(record.members_group_id)))
         admins = set(iam.list_group_members(str(record.admins_group_id)))
+        # Its organization's admins are its admins too (they hold no "<W> admins").
+        org = org_of(container)
+        org_record = outcome.records.get(org_container(org)) if org is not None else None
+        if org_record is not None and org_record.admins_group_id:
+            admins |= {
+                p for p in iam.list_group_members(str(org_record.admins_group_id)) if is_user(p)
+            }
         for kind, holders in ((READ, people | admins), (WRITE, admins)):
             policy_id = by_name.get(policy_name(workspace, kind))
             if policy_id is None:

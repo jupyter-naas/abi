@@ -1,18 +1,8 @@
-// Add people (Workspace settings › Members): the pure part of the search box. What the
-// listbox offers for a text, which option the keyboard moves to, and what a pick gives: the
-// person joins the workspace, at a level (in all their workspaces), admin of it or not, and in
-// the capability groups picked (#1589).
+// Add people (Workspace settings › Users): the pure part of the search box. What the listbox
+// offers for a text, and which option the keyboard moves to. A pick adds the person to the
+// workspace at once (their level kept); their roles are changed on their page.
 
-import {
-  LEVEL_LABELS,
-  LEVELS,
-  candidateLabel,
-  candidateQuery,
-  levelConflict,
-  looksLikeEmail,
-  type Level,
-  type MemberCandidate,
-} from '@/lib/people';
+import { candidateLabel, candidateQuery, looksLikeEmail, type MemberCandidate } from '@/lib/people';
 
 export type AddPeopleOption =
   | { kind: 'candidate'; key: string; candidate: MemberCandidate }
@@ -78,28 +68,4 @@ export function moveActive(active: number, key: string, count: number): number {
     default:
       return Math.min(active, count - 1);
   }
-}
-
-/** "Keep their level": an existing person keeps theirs (someone with none becomes a Member). */
-export const KEEP_LEVEL = '';
-export type LevelChoice = Level | typeof KEEP_LEVEL;
-
-/** The level field of a pick: keep theirs, or one of the levels. */
-export function levelChoices(): { value: LevelChoice; label: string }[] {
-  return [
-    { value: KEEP_LEVEL, label: 'Keep their level (Member if they have none)' },
-    ...LEVELS.map((level) => ({ value: level, label: LEVEL_LABELS[level] })),
-  ];
-}
-
-/** What a pick sends, or why it cannot: a workspace admin is a Member. */
-export function pickedAccess(
-  choice: LevelChoice,
-  admin: boolean,
-  capabilities: readonly string[]
-): { ok: true; access: { level: Level | null; admin: boolean; capabilities: string[] } } | { ok: false; error: string } {
-  const level = choice === KEEP_LEVEL ? null : choice;
-  const conflict = levelConflict(level, admin);
-  if (conflict) return { ok: false, error: conflict };
-  return { ok: true, access: { level, admin, capabilities: [...capabilities] } };
 }

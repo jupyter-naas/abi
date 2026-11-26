@@ -6,6 +6,8 @@ import { WorkspaceLayout } from '@/components/shell/workspace-layout';
 import { ShellTitleProvider } from '@/components/shell/shell-title';
 import { TopNavProvider } from '@/components/shell/topnav-content';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspacesReady } from '@/hooks/use-workspaces-ready';
+import { PlatformLoader } from '@/components/shell/platform-loader';
 import { clearAuthFlagCookie } from '@/lib/auth-session';
 import { discardDeferredStorage } from '@/lib/deferred-storage';
 import { hasSession, selectSession, useAuthStore } from '@/stores/auth';
@@ -140,10 +142,8 @@ export default function WorkspaceShellLayout({
 
   // Narrow selectors: this shell must not re-render on every streamed chat chunk.
   const workspaceCount = useWorkspaceStore((s) => s.workspaces.length);
-  const fetchWorkspaces = useWorkspaceStore((s) => s.fetchWorkspaces);
   const token = useAuthStore(selectSession);
   const [authReady, setAuthReady] = useState(false);
-  const [membershipChecked, setMembershipChecked] = useState(false);
 
   // Wait for the auth store to rehydrate from localStorage, then silently
   // validate / refresh the session. This layout sits above [workspaceId], so
@@ -188,25 +188,18 @@ export default function WorkspaceShellLayout({
     }
   }, [authReady, token, router, pathname]);
 
-  useEffect(() => {
-    if (!authReady || !token) return;
-    let cancelled = false;
-    void fetchWorkspaces().finally(() => {
-      if (!cancelled) setMembershipChecked(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [authReady, token, fetchWorkspaces]);
+  // The workspaces, read until the API answers them (it may still be starting): until then a
+  // loader, never a shell without the client's workspaces and colors.
+  const { ready: workspacesReady, retrying } = useWorkspacesReady(authReady && !!token);
 
   useEffect(() => {
-    if (!membershipChecked || !token) return;
+    if (!workspacesReady || !token) return;
     if (workspaceCount === 0) {
       router.replace('/no-workspace');
     }
-  }, [membershipChecked, token, workspaceCount, router]);
+  }, [workspacesReady, token, workspaceCount, router]);
 
-  const showShell = authReady && !!token;
+  const showShell = authReady && !!token && workspacesReady;
 
   return (
     <WorkspaceErrorBoundary>
@@ -218,9 +211,7 @@ export default function WorkspaceShellLayout({
           its data fetches twice per load, the first time before auth was even
           ready. Render the spinner alone while the session is being checked. */}
       {!showShell ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#0a0a1a' }}>
-          <div style={{ color: '#666', fontSize: 14 }}>Loading...</div>
-        </div>
+        <PlatformLoader retrying={retrying} />
       ) : (
         <ShellTitleProvider>
           <TopNavProvider>

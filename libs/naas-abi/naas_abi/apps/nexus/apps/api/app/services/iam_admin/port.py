@@ -46,9 +46,9 @@ class IamGateway(ABC):
     @abstractmethod
     def belongs(self, principal_id: str, scope: str) -> bool:
         """Whether the principal is already related to the top container of
-        ``scope`` (an attachment of its own within it: a membership, an accepted
-        invitation), or is not a user. True for a principal IAM does not know:
-        IAM answers for it."""
+        ``scope`` (a membership group of a container within it, or an attachment
+        of its own there: an accepted invitation), or is not a user. True for a
+        principal IAM does not know: IAM answers for it."""
 
     @abstractmethod
     def capability(

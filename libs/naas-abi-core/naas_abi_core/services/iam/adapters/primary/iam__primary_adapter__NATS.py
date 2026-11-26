@@ -273,6 +273,7 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             scope=_opt(req, "scope"),
             membership_of=_opt(req, "membership_of"),
             level=req.level,
+            description=_opt(req, "description"),
         )
         return pb.CreateGroupResponse(group=codec.principal_to_pb(record))
 
@@ -314,7 +315,9 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
         )
 
     def _call_update_group(self, req: pb.UpdateGroupRequest) -> pb.UpdateGroupResponse:
-        record = self._iam.update_group(req.group_id, name=req.name)
+        record = self._iam.update_group(
+            req.group_id, name=_opt(req, "name"), description=_opt(req, "description")
+        )
         return pb.UpdateGroupResponse(group=codec.principal_to_pb(record))
 
     def _call_delete_group(self, req: pb.DeleteGroupRequest) -> pb.DeleteGroupResponse:

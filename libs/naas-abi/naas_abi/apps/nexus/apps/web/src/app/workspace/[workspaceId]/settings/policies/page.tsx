@@ -1,7 +1,4 @@
-'use client';
-
-import { WorkspaceAccess } from '../workspace-access';
-
+/** The policies list: shown by the layout, which keeps it mounted when a policy opens. */
 export default function WorkspacePoliciesPage() {
-  return <WorkspaceAccess section="policies" />;
+  return null;
 }

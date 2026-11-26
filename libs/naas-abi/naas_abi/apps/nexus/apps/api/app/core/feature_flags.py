@@ -50,6 +50,15 @@ def offered_features(feature_flags_config: FeatureFlagsConfig) -> list[str]:
     return enabled_feature_catalog(feature_flags_config)
 
 
+def offer_choices(feature_flags_config: FeatureFlagsConfig) -> list[str]:
+    """The features an offer switches (General › Features, a policy's Configuration): the
+    deployment's enabled ones but the pinned, which whoever administers the workspace keeps
+    whatever the offer says (``user_features.ALWAYS_SHOWN``)."""
+    return [
+        key for key in enabled_feature_catalog(feature_flags_config) if key not in PINNED_FEATURES
+    ]
+
+
 def feature_enabled(feature_flags_config: FeatureFlagsConfig, key: str) -> bool:
     """Whether ``key`` exists in this deployment (``enabled_features``)."""
     return key in _resolve_enabled_catalog(feature_flags_config.enabled_features)

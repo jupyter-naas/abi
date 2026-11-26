@@ -41,12 +41,18 @@ export function PlatformAccess({ section }: { section: AccessSection }) {
   const [badge, setBadge] = useState<string | null>(null);
   const navigate = useCallback((href: string) => router.push(href), [router]);
   const opensPeople = holds(USERS_ITEM.needs, actions);
+  // A policy's or a group's page is the page alone: no header of the list (its back link leads to it).
+  const focus = pageFocus(pathname, platformAccessPath(section));
+  // What the view shows (a row opens its page before the address follows), else the address.
+  const [instance, setInstance] = useState<boolean | null>(null);
+  const alone = instance ?? !!focus;
   const hrefs = useMemo<AccessHrefs>(
     () => ({ page: platformAccessPath, person: opensPeople ? platformPersonPath : null }),
     [opensPeople],
   );
   return (
     <div className="access-settings-page">
+      {!alone && (
       <OrgSettingsPageHeader
         title={accessSection(section).label}
         badge={badge ?? undefined}
@@ -67,12 +73,14 @@ export function PlatformAccess({ section }: { section: AccessSection }) {
           </>
         }
       />
+      )}
       <AccessPage
         headerSlot={headerSlot}
         onBadge={setBadge}
+        onInstance={setInstance}
         section={section}
         scopes={SCOPES}
-        focus={pageFocus(pathname, platformAccessPath(section))}
+        focus={focus}
         hrefs={hrefs}
         navigate={navigate}
         nonce={nonce}

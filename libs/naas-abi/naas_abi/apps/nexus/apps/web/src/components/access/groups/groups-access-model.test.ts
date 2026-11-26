@@ -65,45 +65,10 @@ describe('Groups first: the model’s groups, then the custom ones', () => {
     ]);
   });
 
-  it('shows the generic level policies read-only, with what each grants', async () => {
-    await open(api([]));
-    const levels = document.querySelector('[data-access-levels]');
-    expect([...levels!.querySelectorAll('[data-level]')].map((l) => l.getAttribute('data-level'))).toEqual([
-      'viewer',
-      'member',
-      'admin',
-    ]);
-    expect(levels?.querySelector('[data-level="viewer"]')?.textContent).toContain('No model');
-    expect(levels?.querySelector('button')).toBeNull();
-  });
-});
-
-describe('capability groups', () => {
-  it('creates Workflow runners on demand where the caller may', async () => {
-    const client = api([runners()]);
-    await open(client);
-    const row = document.querySelector('[data-capability="workflow_runners"]');
-    expect(row?.textContent).toContain('not made yet');
-    await mounted!.click(row?.querySelector('[data-action="create-capability"]') ?? null);
-    await mounted!.flush();
-    expect(client.ensureCapability).toHaveBeenCalledWith('workflow_runners', ORG);
-  });
-
-  it('opens one already made, and offers no create to whoever may not', async () => {
-    const client = api([runners({ group_id: 'grp_runners', can_create: false })]);
-    await open(client);
-    const row = document.querySelector('[data-capability="workflow_runners"]');
-    expect(row?.querySelector('[data-action="create-capability"]')).toBeNull();
-    await mounted!.click(row?.querySelector('button') ?? null);
-    await mounted!.flush();
-    expect(document.querySelector('[data-capability]')).toBeNull(); // the group's page is open
-  });
-
-  it('leaves the section out when the caller may not list them', async () => {
-    const client = api([]);
-    client.capabilities = vi.fn(() => Promise.reject(new Error('403')));
-    await open(client);
+  it('lists the groups alone: no panel of the levels nor of the capability groups', async () => {
+    await open(api([runners()]));
+    expect(document.querySelector('[data-access-levels]')).toBeNull();
     expect(document.querySelector('[data-capabilities]')).toBeNull();
-    expect(document.querySelector('[data-access-levels]')).not.toBeNull();
+    expect(document.querySelector('[data-action="create-capability"]')).toBeNull();
   });
 });

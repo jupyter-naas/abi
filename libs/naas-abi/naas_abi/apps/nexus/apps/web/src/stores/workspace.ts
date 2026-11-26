@@ -414,6 +414,10 @@ interface WorkspaceState {
   applyWorkspaceTheme: (workspaceId: string, updates: Partial<WorkspaceTheme>) => void;
   getCurrentWorkspace: () => Workspace | null;
   fetchWorkspaces: () => Promise<void>;
+  /** Whether the API answered the workspaces once since the page loaded (never persisted):
+   *  until then the app waits (`useWorkspacesReady`), rather than showing no client workspace,
+   *  no colors, or "no workspace" while the API starts. */
+  workspacesReady: boolean;
 
   // Branch actions
   createBranch: (name: string, description?: string, baseBranchId?: string) => WorkspaceBranch;
@@ -1283,6 +1287,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   // GIT-BASED WORKSPACE SYSTEM
   // ============================================
   workspaces: [],
+  workspacesReady: false,
   currentWorkspaceId: null,
   recentWorkspaceIds: [],
   recentCommits: [],
@@ -1480,7 +1485,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         featureFlags: ws.feature_flags,
       }));
 
-      set({ workspaces });
+      set({ workspaces, workspacesReady: true });
       
       // If no current workspace or current one not in list, select first
       const { currentWorkspaceId } = get();

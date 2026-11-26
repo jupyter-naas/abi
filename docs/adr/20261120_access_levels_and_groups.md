@@ -40,6 +40,7 @@ Administrators reason about people in two axes: **where** someone works (a works
    - **Owner is no longer assigned.** The last Org Admin of an organization cannot be removed.
    - **A workspace is created with a workspace admin,** who defaults to the creator.
    - **A Workspace Admin is a Member** with "<W> admins" for each workspace they administer.
+   - **An Org Admin holds no level** (decided 2026-11-24): "<O> admins" reaches every workspace of O, so a level would give them nothing there. They hold one only when they also work where it does not reach (a workspace of another organization, or of none). The access move gives none otherwise, and takes out one a move of before left (said among the redundant groups).
    - **A person's level is one choice.** It can be changed by org admins, platform admins and the admins of any of the person's workspaces. It applies in all their workspaces and is audited. This is the one place where IAM allows a writer to change access beyond what they hold, and only for the generic level policies.
    - **People with no workspace** are in "<O> people", a membership group of the organization that holds Viewer access at its own level.
 

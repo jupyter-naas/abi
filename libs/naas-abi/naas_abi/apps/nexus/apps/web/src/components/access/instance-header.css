@@ -1,0 +1,83 @@
+/* The top of an instance's page: identity at the left, actions at the right. */
+.access-instance-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.access-instance-identity {
+  min-width: 0;
+  gap: var(--space-4);
+}
+
+.access-instance-image {
+  width: 64px;
+  height: 64px;
+}
+
+.access-instance-name {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.access-instance-ids {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  overflow-wrap: anywhere;
+}
+
+.access-instance-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.access-instance-actions,
+.access-instance-actions-slot {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Its name, and beside it what it is (a badge, its text padded inside). */
+.access-instance-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.access-instance-title .platform-users-badge {
+  margin-left: 0;
+  padding: 1px 6px;
+}
+
+/* An instance's page: its back link, its top, then its sections, close together. */
+.access-instance-page,
+.org-settings-users-main.access-instance-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* What cannot change on an instance's page (its owner, a name it may not rename…) looks like the
+   other fields, and says so under the pointer; no focus ring. Its text can still be selected. */
+.access-instance-page .account-profile-field-input-readonly {
+  cursor: not-allowed;
+}
+
+.access-instance-page .account-profile-field-input-readonly:focus {
+  box-shadow: none;
+}
+
+/* A group's description spans its Info row. */
+.access-group-description-field {
+  grid-column: 1 / -1;
+}
+
+.access-group-description {
+  resize: vertical;
+}

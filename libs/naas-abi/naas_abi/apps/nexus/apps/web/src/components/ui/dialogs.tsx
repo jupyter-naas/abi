@@ -26,7 +26,8 @@ export function ModalBackdrop({
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      // An Escape a field inside has used (a list it closed) leaves the modal open.
+      if (e.key === 'Escape' && !e.defaultPrevented) onClose();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);

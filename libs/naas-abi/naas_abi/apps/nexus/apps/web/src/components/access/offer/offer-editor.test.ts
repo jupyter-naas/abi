@@ -6,6 +6,7 @@ import { mount, type Mounted } from '@/lib/testing/mount';
 import type { FeatureAccessApi } from '@/app/workspace/[workspaceId]/settings/general/feature-access-api';
 import type { FeatureAccessState, FeatureRow } from '@/app/workspace/[workspaceId]/settings/general/feature-access-model';
 import { WS, fakeApi, publishedType, resourcePage } from '../access-fixtures';
+import { FeatureAccessError } from '@/app/workspace/[workspaceId]/settings/general/feature-access-api';
 import { WorkspaceOfferEditor } from './offer-editor';
 
 let mounted: Mounted | null = null;
@@ -122,29 +123,95 @@ describe('WorkspaceOfferEditor', () => {
     expect(document.querySelector('textarea')).toBeNull();
   });
 
-  it('lists a module’s items on demand and saves every toggle in one write', async () => {
+  it('shows the offer as soon as it is read, the features following', async () => {
     const parts = setup();
+    let answer: (state: FeatureAccessState) => void = () => undefined;
+    parts.featureApi.read = vi.fn(() => new Promise<FeatureAccessState>((resolve) => (answer = resolve)));
     await render(parts);
-    await mounted!.click(button('Agents of acme.people') ?? null);
+    expect(document.body.textContent).toContain('Everyone in Sales workspace reaches what is on here');
+    expect(document.querySelector('[data-offer-section="features"]')?.textContent).toContain('Loading the features');
+    answer(FEATURES);
     await mounted!.flush();
+    expect(switchOf('[data-offer-feature="chat"]')?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('tells a refusal from a failure: a failure is said as one, with Retry', async () => {
+    const parts = setup();
+    parts.featureApi.read = vi.fn().mockRejectedValueOnce(new FeatureAccessError('Service Unavailable', 503)).mockResolvedValue(FEATURES);
+    await render(parts);
+    const features = () => document.querySelector('[data-offer-section="features"]')?.textContent ?? '';
+    expect(features()).not.toContain('You may not read');
+    expect(features()).toContain('could not be read');
+    await mounted!.click(button('Retry'));
+    await mounted!.flush();
+    expect(switchOf('[data-offer-feature="chat"]')?.getAttribute('aria-checked')).toBe('true');
+
+    await mounted!.unmount();
+    const refused = setup();
+    refused.featureApi.read = vi.fn().mockRejectedValue(new FeatureAccessError('Forbidden', 403));
+    await render(refused);
+    expect(features()).toContain('You may not read the features of this workspace.');
+    expect(button('Retry')).toBeUndefined();
+  });
+
+  it('lists a module’s items on demand and saves each toggle at once', async () => {
+    const parts = setup();
+    const onChanged = vi.fn();
+    mounted = await mount(WorkspaceOfferEditor, {
+      workspaceId: 'ws-1',
+      scope: WS,
+      workspaceName: 'Sales',
+      api: parts.api,
+      offerApi: parts.offerApi as unknown as OfferApi,
+      featureApi: parts.featureApi as unknown as FeatureAccessApi,
+      onChanged,
+    });
+    await mounted.flush();
+    await mounted.click(button('Agents of acme.people') ?? null);
+    await mounted.flush();
     expect(parts.api.resources).toHaveBeenCalledWith({ scope: WS, service: 'module', type: 'agent', module: 'acme.people', limit: 200 });
     expect(switchOf('[data-offer-item="acme.people/Coach"]')?.getAttribute('aria-checked')).toBe('true');
 
-    await mounted!.click(switchOf('[data-offer-item="acme.people/Recruiter"]'));
-    await mounted!.click(switchOf('[data-offer-item="acme.people/Coach"]'));
-    await mounted!.click(switchOf('[data-offer-section="workflows"] [data-offer-module="acme.sales"]'));
-    await mounted!.click(switchOf('[data-offer-feature="maps"]'));
-    expect(document.body.textContent).toContain('4 unsaved changes');
-
-    await mounted!.click(button('Save offer') ?? null);
-    await mounted!.flush();
-    expect(parts.offerApi.save).toHaveBeenCalledTimes(1);
-    expect(parts.offerApi.save).toHaveBeenCalledWith('ws-1', [
+    await mounted.click(switchOf('[data-offer-item="acme.people/Recruiter"]'));
+    await mounted.flush();
+    expect(parts.offerApi.save).toHaveBeenLastCalledWith('ws-1', [
       { kind: 'agents', module: 'acme.people', name: 'Recruiter', offered: true },
-      { kind: 'agents', module: 'acme.people', name: 'Coach', offered: false },
+    ]);
+    expect(document.querySelector('[data-offer-notice]')?.textContent).toBe('Recruiter added to the offer.');
+
+    await mounted.click(switchOf('[data-offer-section="workflows"] [data-offer-module="acme.sales"]'));
+    await mounted.flush();
+    expect(parts.offerApi.save).toHaveBeenLastCalledWith('ws-1', [
       { kind: 'workflows', module: 'acme.sales', name: '*', offered: false },
     ]);
+
+    await mounted.click(switchOf('[data-offer-feature="maps"]'));
+    await mounted.flush();
     expect(parts.featureApi.save).toHaveBeenCalledWith('ws-1', [{ feature: 'maps', choice: 'everyone' }]);
+    expect(document.querySelector('[data-offer-notice]')?.textContent).toBe('Maps added to the offer.');
+    // Each save tells the page: "<W> access" has a new revision. No Save button is left.
+    expect(onChanged).toHaveBeenCalledTimes(3);
+    expect(button('Save offer')).toBeUndefined();
+  });
+
+  it('says a refusal of a feature at its row, and tells nothing changed', async () => {
+    const parts = setup();
+    parts.featureApi.save = vi.fn().mockResolvedValue({ ...FEATURES, errors: { maps: 'Not offered by the organization' } });
+    const onChanged = vi.fn();
+    mounted = await mount(WorkspaceOfferEditor, {
+      workspaceId: 'ws-1',
+      scope: WS,
+      api: parts.api,
+      offerApi: parts.offerApi as unknown as OfferApi,
+      featureApi: parts.featureApi as unknown as FeatureAccessApi,
+      onChanged,
+    });
+    await mounted.flush();
+    await mounted.click(switchOf('[data-offer-feature="maps"]'));
+    await mounted.flush();
+    expect(document.querySelector('[data-offer-feature="maps"]')?.textContent).toContain('Not offered by the organization');
+    expect(document.querySelector('[data-offer-notice]')).toBeNull();
+    expect(onChanged).not.toHaveBeenCalled();
   });
 
   it('an item is on with its whole module, and cannot be turned off alone', async () => {

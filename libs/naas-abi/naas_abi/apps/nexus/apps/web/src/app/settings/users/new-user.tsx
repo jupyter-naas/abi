@@ -1,11 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Mail, UserPlus } from 'lucide-react';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '@/app/organizations/[orgId]/settings/components/org-settings-section-card';
-import { Checkbox } from '@/components/ui/checkbox';
+import { RoleEditor } from '@/components/people/role-editor';
+import {
+  createMemberRolesApi,
+  defaultRole,
+  roleProblem,
+  type MemberRolesApi,
+  type RoleOptions,
+  type RoleSelection,
+} from '@/lib/member-roles';
 import { inviteUser, listProviders, type Fetcher } from './users-api';
 import { inviteSummary, PLATFORM_USERS_PATH, type InvitationProvider } from './users-model';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
@@ -17,18 +25,44 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /**
  * Platform Settings › Users › Create user: someone added to the platform. Their
  * account is made at the identity provider when it does not exist yet, and they sign
- * in with what it sends them. "Platform admin" makes them one; their organizations and
- * workspaces come from each organization's Users.
+ * in with what it sends them. Their Role at the platform: Members to start with, Platform admins
+ * or the platform's other groups and policies added; their organizations and workspaces come from
+ * each organization's Users.
  */
-export function NewUser({ fetcher }: { fetcher?: Fetcher }) {
+const PLATFORM = { kind: 'platform' } as const;
+
+export function NewUser({
+  fetcher,
+  rolesApi,
+}: {
+  fetcher?: Fetcher;
+  rolesApi?: Pick<MemberRolesApi, 'options' | 'set'>;
+}) {
+  const roles = useMemo(() => rolesApi ?? createMemberRolesApi(), [rolesApi]);
+  const [options, setOptions] = useState<RoleOptions>({ groups: [], policies: [] });
+  const [role, setRole] = useState<RoleSelection>({ groups: [], policies: [] });
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [providers, setProviders] = useState<InvitationProvider[]>([]);
   const [provider, setProvider] = useState('');
-  const [platformAdmin, setPlatformAdmin] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [said, setSaid] = useState<string[]>([]);
+
+  useEffect(() => {
+    let live = true;
+    roles
+      .options(PLATFORM)
+      .then((found) => {
+        if (!live) return;
+        setOptions(found);
+        setRole(defaultRole(found));
+      })
+      .catch(() => undefined); // the Role editor stays empty: they are made a Member
+    return () => {
+      live = false;
+    };
+  }, [roles]);
 
   useEffect(() => {
     let live = true;
@@ -43,7 +77,9 @@ export function NewUser({ fetcher }: { fetcher?: Fetcher }) {
   }, [fetcher]);
 
   const address = email.trim();
-  const ready = EMAIL.test(address) && !creating;
+  const problem = options.groups.length ? roleProblem(options, role, true) : null;
+  const platformAdmin = options.groups.some((g) => g.kind === 'admins' && role.groups.includes(g.id));
+  const ready = EMAIL.test(address) && !creating && !problem;
 
   const create = async () => {
     if (!ready) return;
@@ -59,15 +95,26 @@ export function NewUser({ fetcher }: { fetcher?: Fetcher }) {
       },
       fetcher
     );
-    setCreating(false);
     if (!answer.ok) {
+      setCreating(false);
       setError(answer.error);
       return;
     }
-    setSaid(inviteSummary(answer.data));
+    const lines = inviteSummary(answer.data);
+    // Their Role at the platform, made what was picked: an account only (an invitation has
+    // nobody in IAM yet).
+    if (answer.data.user.kind !== 'invitation' && options.groups.length) {
+      try {
+        await roles.set(PLATFORM, answer.data.user.id, role);
+      } catch (e) {
+        lines.push(`Their Role is not all made: ${e instanceof Error ? e.message : 'unknown error'}. Open their page to finish it.`);
+      }
+    }
+    setCreating(false);
+    setSaid(lines);
     setEmail('');
     setName('');
-    setPlatformAdmin(false);
+    setRole(defaultRole(options));
   };
 
   const managed = providers.find((p) => p.name === provider)?.managed_in_provider;
@@ -157,16 +204,11 @@ export function NewUser({ fetcher }: { fetcher?: Fetcher }) {
               <p className="org-settings-field-hint">Used for a new account; an existing account keeps its name</p>
             </div>
           </div>
-          <div className="org-settings-field">
-            <Checkbox
-              label="Platform admin"
-              data-field="invite-platform-admin"
-              checked={platformAdmin}
-              onCheckedChange={setPlatformAdmin}
-              disabled={creating}
-            />
+          <div className="org-settings-field" data-field="role">
+            <span className="org-settings-field-label">Role</span>
+            <RoleEditor options={options} value={role} onChange={setRole} disabled={creating} reachesOtherwise />
             <p className="org-settings-field-hint">
-              They manage the whole platform: every organization, workspace and user.
+              Platform admins manage the whole platform: every organization, workspace and user.
             </p>
           </div>
           {providers.length > 1 && (

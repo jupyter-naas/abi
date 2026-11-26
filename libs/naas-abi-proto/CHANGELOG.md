@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.6.0 (2026-11-25)
+
+### Features
+
+- **proto**: A group's description
+  ([`b4d8162`](https://github.com/jupyter-naas/abi/commit/b4d816218e470b806d6dd7ac052f66993f26adac))
+
+
 ## v0.5.0 (2026-11-23)
 
 ### Chores

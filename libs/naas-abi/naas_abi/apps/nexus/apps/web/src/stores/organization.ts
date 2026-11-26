@@ -3,6 +3,7 @@
  * Manages organization branding (public, pre-auth) and org membership (authed).
  */
 
+import { readRoleChips, type RoleChip } from '@/components/people/role-chips';
 import { create } from 'zustand';
 import { getApiUrl } from '@/lib/config';
 import { invalidateOrgBranding } from '@/lib/org-branding';
@@ -100,6 +101,8 @@ export interface OrganizationMember {
   source: 'organization' | 'workspace';
   /** Invited: created, has not signed in yet. */
   status: MemberStatus;
+  /** Their IAM id: their Role is read by it. */
+  principalId?: string | null;
   email?: string;
   name?: string;
   createdAt?: string;
@@ -110,6 +113,8 @@ export interface OrganizationMember {
   serviceLine?: string;
   country?: string;
   interest?: string;
+  /** Their Role at the organization (groups, then policies attached to them). */
+  roles: RoleChip[];
 }
 
 /** Sent with Create user: the account name (new accounts only) and the member profile. */
@@ -145,6 +150,8 @@ function mapMember(m: any): OrganizationMember {
     // An older row has no source: it holds an org role.
     source: m.source === 'workspace' ? 'workspace' : 'organization',
     status: memberStatus(m.status),
+    principalId: typeof m.principal_id === 'string' && m.principal_id ? m.principal_id : null,
+    roles: readRoleChips(m.roles),
     email: m.email,
     name: m.name,
     createdAt: m.created_at,
@@ -207,7 +214,8 @@ interface OrganizationState {
   setCurrentOrgSlug: (slug: string | null) => void;
   
   // Member actions
-  fetchMembers: (orgId: string) => Promise<OrganizationMember[]>;
+  /** `roles: false`: without each one's Role (Users reads it a page at a time). */
+  fetchMembers: (orgId: string, options?: { roles?: boolean }) => Promise<OrganizationMember[]>;
   // Adds the person as a member, or invites them when they have no account yet
   // (null: invited, see inviteToOrganization for what to tell the admin).
   inviteMember: (
@@ -452,11 +460,11 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
     set({ currentOrgSlug: slug });
   },
 
-  fetchMembers: async (orgId: string): Promise<OrganizationMember[]> => {
+  fetchMembers: async (orgId: string, { roles = true }: { roles?: boolean } = {}): Promise<OrganizationMember[]> => {
     set({ membersLoading: true });
 
     try {
-      const response = await authFetch(`/api/organizations/${orgId}/members`);
+      const response = await authFetch(`/api/organizations/${orgId}/members${roles ? '' : '?roles=false'}`);
       if (!response.ok) {
         console.error('Failed to fetch members:', response.status);
         set({ membersLoading: false });

@@ -60,8 +60,11 @@ describe('cells', () => {
     ).toEqual(['Acme', 'Zeta']);
   });
 
-  it('say platform admin, the IAM id or that there is none, and the day created', () => {
-    expect(cellValues(user({ is_superadmin: true }), 'superadmin')).toEqual(['Platform admin']);
+  it('say their Role, the IAM id or that there is none, and the day created', () => {
+    expect(cellValues(user({ roles: [{ kind: 'group', id: 'grp_pa', name: 'Platform admins' }] }), 'role')).toEqual([
+      'Platform admins',
+    ]);
+    expect(cellValues(user(), 'role')).toEqual(['No role']);
     expect(cellValues(user({ principal_id: null }), 'iam')).toEqual(['None yet']);
     expect(cellValues(user(), 'created')).toEqual([new Date('2026-10-01T09:30:00').toISOString().slice(0, 10)]);
   });
@@ -97,9 +100,13 @@ describe('export', () => {
     expect(EXPORT_HEADERS).toHaveLength(exportRow(user()).length);
     expect(
       exportRow(
-        user({ is_superadmin: true, deactivated: true, organizations: [{ id: 'o', name: 'Acme', role: 'owner' }] })
+        user({
+          deactivated: true,
+          organizations: [{ id: 'o', name: 'Acme', role: 'owner' }],
+          roles: [{ kind: 'group', id: 'grp_pa', name: 'Platform admins' }],
+        })
       )
-    ).toEqual(['Alice', 'alice@example.com', 'usr_a', 'Signed in', 'yes', 'yes', 'Acme (owner)', expect.any(String), 'builtin']);
+    ).toEqual(['Alice', 'alice@example.com', 'usr_a', 'Signed in', 'yes', 'Acme (owner)', 'Platform admins', expect.any(String), 'builtin']);
   });
 });
 

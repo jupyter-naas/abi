@@ -72,13 +72,7 @@
   background-color: var(--card-hex);
 }
 
-/* Above the groups: the levels and the capability groups (how access is given). */
-.access-model-panel {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-  gap: var(--space-4);
-}
-
+/* A block of the access model in plain words (Platform › Models › Sets). */
 .access-model-block {
   display: flex;
   flex-direction: column;

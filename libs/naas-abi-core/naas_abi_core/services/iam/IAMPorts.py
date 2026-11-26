@@ -212,6 +212,8 @@ class PrincipalRecord:
     # they hold less than its ``${my workspaces}`` policies give. Set by the
     # platform's grants only.
     level_group: bool = False
+    # Groups: what the group is for, in a sentence or two (schema 9). None: none.
+    description: str | None = None
 
     @property
     def active(self) -> bool:
@@ -693,6 +695,11 @@ class IAMStore(ABC):
 
     @abstractmethod
     def list_group_members(self, group_id: str) -> list[str]: ...
+
+    @abstractmethod
+    def group_member_dates(self, group_id: str) -> dict[str, datetime | None]:
+        """When each member of ``group_id`` joined it, by member id; None for a
+        membership made before the store kept the date."""
 
     @abstractmethod
     def memberships_of(self, member_id: str) -> list[Membership]:
@@ -1416,11 +1423,13 @@ class IIAMService(ABC):
         scope: str | None = None,
         membership_of: str | None = None,
         level: bool = False,
+        description: str | None = None,
     ) -> PrincipalRecord:
         """A group owned by ``scope``: a registered container, else the
         platform. ``membership_of``: a membership group of that registered
         container, at or below its owner; ``level``: a level group (the
-        platform's grants only), as ``mark_group``."""
+        platform's grants only), as ``mark_group``; ``description``: what it is
+        for."""
 
     @abstractmethod
     def mark_group(
@@ -1452,9 +1461,12 @@ class IIAMService(ABC):
         attachments."""
 
     @abstractmethod
-    def update_group(self, group_id: str, *, name: str) -> PrincipalRecord:
-        """Rename a group (``iam:UpdateGroup``): its id, owner, members and
-        attachments stay."""
+    def update_group(
+        self, group_id: str, *, name: str | None = None, description: str | None = None
+    ) -> PrincipalRecord:
+        """Rename a group or change its description (``iam:UpdateGroup``), what is
+        given (an empty description: none): its id, owner, members and attachments
+        stay."""
 
     @abstractmethod
     def delete_group(self, group_id: str) -> PrincipalRecord: ...
@@ -1467,6 +1479,11 @@ class IIAMService(ABC):
 
     @abstractmethod
     def list_group_members(self, group_id: str) -> list[str]: ...
+
+    @abstractmethod
+    def list_group_member_dates(self, group_id: str) -> dict[str, datetime | None]:
+        """When each member of ``group_id`` joined it (``iam:GetGroup``, as its
+        members are read); None for a membership made before the date was kept."""
 
     @abstractmethod
     def list_principal_groups(self, principal_id: str) -> list[PrincipalRecord]:

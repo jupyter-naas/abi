@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { PlatformAccess } from './platform-access';
+import { PlatformOrganizations } from './platform-organizations';
 
 const ACCESS = {
   user_id: 'usr_alice',
   principal_id: 'prn_alice',
   level: 'member',
   platform_admin: false,
-  organizations: [{ id: 'acme', name: 'Acme', org_admin: true }],
-  workspaces: [
-    { id: 'ws-sales', name: 'Sales', organization_id: 'acme', admin: true },
-    { id: 'ws-audit', name: 'Audit', organization_id: 'acme', admin: false },
+  organizations: [
+    { id: 'zeta', name: 'Zeta', org_admin: false },
+    { id: 'acme', name: 'Acme', org_admin: true },
   ],
-  capabilities: [{ id: 'grp_runners', name: 'Workflow runners', owner_scope: 'abi:nexus:organization/acme' }],
+  workspaces: [{ id: 'ws-sales', name: 'Sales', organization_id: 'acme', admin: true }],
+  capabilities: [],
 };
 
 function fetcherFor(answers: Record<string, { status: number; body: unknown }>) {
@@ -32,37 +32,33 @@ afterEach(async () => {
   mounted = null;
 });
 
-const value = (field: string) => mounted!.host.querySelector(`[data-field="${field}"] dd`)?.textContent;
-
-describe('PlatformAccess', () => {
-  it('reads their access by their IAM id in one request, never the directory', async () => {
+describe('Platform › Users › a person › Organizations', () => {
+  it('lists their organizations by their IAM id in one request, each opening their page there', async () => {
     const { fetcher, urls } = fetcherFor({
       '/api/admin/users/prn_alice/access': { status: 200, body: ACCESS },
     });
-    mounted = await mount(PlatformAccess, { personId: 'prn_alice', fetcher });
+    mounted = await mount(PlatformOrganizations, { personId: 'prn_alice', fetcher });
     await mounted.flush();
     await mounted.flush();
     expect(urls).toEqual(['/api/admin/users/prn_alice/access']);
-    expect(mounted.host.querySelector('h3')?.textContent).toBe('Platform access (automatic)');
-    expect(value('platform-admin')).toBe('No');
-    expect(value('level')).toBe('Member');
-    expect(value('organizations')).toBe('Acme (admin)');
-    expect(value('workspaces')).toBe('Sales (admin), Audit');
-    expect(value('capabilities')).toBe('Workflow runners');
+    const rows = [...mounted.host.querySelectorAll('[data-organization]')];
+    expect(rows.map((r) => r.getAttribute('data-organization'))).toEqual(['acme', 'zeta']);
+    expect(rows[0].textContent).toContain('Administers it');
+    expect(rows[1].textContent).toContain('Member');
+    expect(rows[0].querySelector('a')?.getAttribute('href')).toBe('/organizations/acme/settings/users/usr_alice');
   });
 
   it('says when there is no account, and why the API refused', async () => {
     const none = fetcherFor({});
-    mounted = await mount(PlatformAccess, { personId: 'prn_dana', fetcher: none.fetcher });
+    mounted = await mount(PlatformOrganizations, { personId: 'prn_dana', fetcher: none.fetcher });
     await mounted.flush();
     expect(mounted.host.querySelector('[role="alert"]')?.textContent).toBe('They have no account yet.');
-    expect(none.urls).toEqual(['/api/admin/users/prn_dana/access']);
     await mounted.unmount();
 
     const refused = fetcherFor({
       '/api/admin/users/usr_alice/access': { status: 403, body: { detail: 'Not allowed' } },
     });
-    mounted = await mount(PlatformAccess, { personId: 'usr_alice', fetcher: refused.fetcher });
+    mounted = await mount(PlatformOrganizations, { personId: 'usr_alice', fetcher: refused.fetcher });
     await mounted.flush();
     await mounted.flush();
     expect(mounted.host.querySelector('[role="alert"]')?.textContent).toContain('Not allowed');

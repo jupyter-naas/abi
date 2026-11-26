@@ -13,10 +13,11 @@ Provider = Callable[[], FeatureAccessService]
 
 
 def _features() -> list[str]:
-    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import enabled_feature_catalog
+    """What an offer switches: Settings is never one (``offer_choices``)."""
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import offer_choices
     from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
 
-    return enabled_feature_catalog(live_settings().feature_flags)
+    return offer_choices(live_settings().feature_flags)
 
 
 def _default() -> FeatureAccessService:

@@ -210,6 +210,7 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         scope: str | None = None,
         membership_of: str | None = None,
         level: bool = False,
+        description: str | None = None,
     ) -> PrincipalRecord:
         return codec.principal_from_pb(
             self._request(
@@ -218,6 +219,7 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
                 scope=scope,
                 membership_of=membership_of,
                 level=level,
+                description=description,
             ).group
         )
 
@@ -255,9 +257,13 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             response.next_after if response.HasField("next_after") else None,
         )
 
-    def update_group(self, group_id: str, *, name: str) -> PrincipalRecord:
+    def update_group(
+        self, group_id: str, *, name: str | None = None, description: str | None = None
+    ) -> PrincipalRecord:
         return codec.principal_from_pb(
-            self._request("update_group", group_id=group_id, name=name).group
+            self._request(
+                "update_group", group_id=group_id, name=name, description=description
+            ).group
         )
 
     def delete_group(self, group_id: str) -> PrincipalRecord:
@@ -275,6 +281,11 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
 
     def list_group_members(self, group_id: str) -> list[str]:
         return list(self._request("list_group_members", group_id=group_id).member_ids)
+
+    def list_group_member_dates(self, group_id: str) -> dict[str, datetime | None]:
+        raise NotImplementedError(
+            "The dates of a group's members are read in the engine"
+        )
 
     def list_principal_groups(self, principal_id: str) -> list[PrincipalRecord]:
         response = self._request("list_principal_groups", principal_id=principal_id)

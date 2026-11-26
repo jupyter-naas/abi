@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import { SearchBox } from '@/components/settings/search-box';
@@ -33,6 +33,20 @@ export function AccessHeaderAction({ children }: { children: ReactNode }) {
 /** The header slot a level's page header carries before its Refresh button. */
 export function AccessHeaderSlot({ onSlot }: { onSlot: (slot: HTMLElement | null) => void }) {
   return <span ref={onSlot} className="access-header-slot" style={{ display: 'contents' }} />;
+}
+
+/** Where a list page tells its level whether it shows an instance's page (a policy's, a group's)
+ *  rather than its list: the level's header is the list's, and goes with it. */
+export const AccessInstanceContext = createContext<((open: boolean) => void) | null>(null);
+
+/** Tells the level, before the screen is painted, whether an instance's page is shown: a click
+ *  on a row opens it at once, before the address follows, and the list's header never shows
+ *  above it. */
+export function useAccessInstance(open: boolean) {
+  const report = useContext(AccessInstanceContext);
+  useLayoutEffect(() => {
+    report?.(open);
+  }, [report, open]);
 }
 
 /** Where a list page tells its level's header how many it lists (the badge by the title). */
@@ -137,6 +151,9 @@ export function useListControls<T>(
     toggleSort,
     clear,
     filtered: search.trim() !== '' || filtering,
+    /** What the rows shown are made of: a table paged over them goes back to its first page
+     *  when it changes (`usePagedRows`). */
+    pageKey: JSON.stringify([search, filters, sortKey, sortDir]),
   };
 }
 

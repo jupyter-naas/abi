@@ -1,29 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorkspacesReady } from '@/hooks/use-workspaces-ready';
+import { PlatformLoader } from '@/components/shell/platform-loader';
 
 export default function Home() {
   const router = useRouter();
   const { user } = useAuthStore();
-  const { workspaces, currentWorkspaceId, fetchWorkspaces } = useWorkspaceStore();
-  const [checked, setChecked] = useState(false);
+  const { workspaces, currentWorkspaceId } = useWorkspaceStore();
+  // Where to go is decided once the API answered the workspaces: a platform still starting
+  // keeps this loader (retrying), never sends someone to "no workspace".
+  const { ready: checked, retrying } = useWorkspacesReady(!!user);
 
   useEffect(() => {
-    if (!user) {
-      router.replace('/auth/login');
-      return;
-    }
-    let cancelled = false;
-    void fetchWorkspaces().finally(() => {
-      if (!cancelled) setChecked(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [router, user, fetchWorkspaces]);
+    if (!user) router.replace('/auth/login');
+  }, [router, user]);
 
   useEffect(() => {
     if (!user || !checked) return;
@@ -35,12 +29,5 @@ export default function Home() {
     }
   }, [router, user, currentWorkspaceId, workspaces, checked]);
 
-  return (
-    <div className="flex h-screen items-center justify-center">
-      <div className="text-center">
-        <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    </div>
-  );
+  return <PlatformLoader retrying={retrying} />;
 }

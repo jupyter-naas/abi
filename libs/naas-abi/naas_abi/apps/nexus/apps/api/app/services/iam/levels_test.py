@@ -7,6 +7,8 @@ made as Nexus makes them (``container_defaults``), and every membership given th
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import widen_offer
@@ -26,7 +28,12 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MembershipDenied,
     Seat,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_below, org_container
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    PLATFORM,
+    org_below,
+    org_container,
+    workspace_container,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import Offer
 from naas_abi.apps.nexus.apps.api.app.services.people.adapters.secondary.engine import (
@@ -157,6 +164,33 @@ async def test_the_lists_of_a_workspace_show_what_it_offers_and_nothing_beyond(w
             world.iam, world.record.access_policy_id, Offer.of(workflows=[("people", "wf2")])
         )
     assert await listed("oadmin") == [wf, wf2, a, "built in the workspace"]
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_shows_the_features_it_offers_to_everyone(world):
+    """What a workspace shows of its features (``user_feature_flags``) is within its offer,
+    for everyone: a platform admin and an organization's admin too, whom IAM lets use
+    more. Settings stays shown to whoever may administer it, to offer a feature again. A
+    change of the offer shows at once."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.user_features import user_feature_flags
+
+    await _team(world)
+    keys = ["chat", "files", "settings"]
+
+    async def shown(user: str) -> dict[str, bool]:
+        flags = await user_feature_flags(user, [("org-1", "ws-1")], keys)
+        assert flags is not None
+        return {key: flags["ws-1"][key] for key in keys}
+
+    W = world.W
+    assert _can(world, "root", "nexus:UseFeature", f"{W}/nexus:feature/files")  # IAM allows
+    assert await shown("root") == {"chat": True, "files": False, "settings": True}
+    assert (await shown("oadmin"))["files"] is False
+    assert (await shown("member"))["chat"] is True
+    with as_service_account("api"):
+        widen_offer(world.iam, world.record.access_policy_id, Offer.of(features=["files"]))
+    world.authz.forget_offers()  # as an offer's change does
+    assert (await shown("root"))["files"] is True
 
 
 def test_a_deployment_sets_the_features_of_each_level():
@@ -325,6 +359,212 @@ async def test_the_member_lists_show_workspace_and_level(world):
     assert directory["member"].workspace_ids == ("ws-1",)
     assert directory["member"].level == "member"
     assert directory["oadmin"].role == "admin" and directory["oadmin"].org_wide
+
+
+@pytest.mark.asyncio
+async def test_the_member_list_of_one_scope_reads_that_scope_alone(world, monkeypatch):
+    """One workspace's members are read from its people, not from every person's
+    memberships across the deployment, and are what the full pass finds there: at
+    each workspace, at the organization and below it."""
+    await _team(world)
+    other = workspace_container("org-1", "ws-2")
+    for n in range(3):
+        world.user(f"other{n}")
+        await MEMBERSHIPS.grant(f"other{n}", "member" if n else "admin", other)
+    with as_service_account("api"):
+        full = MEMBERSHIPS.members_by_scope(world.iam)
+    read: list[str] = []
+    real = world.iam.list_memberships
+    monkeypatch.setattr(world.iam, "list_memberships", lambda p: read.append(p) or real(p))
+    for scope in (world.W, other, ORG, org_below("org-1")):
+        listed = await MEMBERSHIPS.members(scope)
+        assert [(m.user_id, m.role, m.level) for m in listed] == [
+            (m.user_id, m.role, m.level) for m in full.get(scope, [])
+        ], scope
+    assert {m.user_id for m in await MEMBERSHIPS.members(world.W)} == {"viewer", "member", "wadmin"}
+    assert not read
+
+
+@pytest.mark.asyncio
+async def test_a_role_is_the_groups_and_policies_that_bear_on_the_workspace(world):
+    """Workspace settings › Users › Role: each person's groups owned by the platform, the
+    workspace's organization or the workspace itself, and the policies attached to them
+    there (or everywhere); never another workspace's."""
+    await _team(world)
+    await MEMBERSHIPS.grant("member", "member", workspace_container("org-1", "ws-2"))
+    with as_service_account("api"):
+        reports = world.iam.create_policy(
+            "Alpha reports",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Allow",
+                        "actions": ["nexus:UseFeature"],
+                        "resources": ["${scope}/nexus:feature/chat"],
+                    }
+                ],
+            },
+        )
+        world.iam.attach_policy(reports.id, world.principal("member"), world.W)
+        elsewhere = world.iam.create_policy(
+            "Beta reports",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Allow",
+                        "actions": ["nexus:UseFeature"],
+                        "resources": ["${scope}/nexus:feature/chat"],
+                    }
+                ],
+            },
+        )
+        world.iam.attach_policy(
+            elsewhere.id, world.principal("member"), workspace_container("org-1", "ws-2")
+        )
+        # Kept in step with their groups, never given by hand: not a role.
+        shared = world.iam.create_policy(
+            "workspace.ws-2.graphs.read",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Allow",
+                        "actions": ["triple_store:Query"],
+                        "resources": ["abi:triple_store:graph/shared"],
+                    }
+                ],
+            },
+        )
+        world.iam.attach_policy(shared.id, world.principal("member"))
+        world.iam.attach_policy(reports.id, world.principal("member"), ORG)
+        copy = world.iam.create_policy(
+            "Alpha reports",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Allow",
+                        "actions": ["nexus:UseFeature"],
+                        "resources": ["${scope}/nexus:feature/chat"],
+                    }
+                ],
+            },
+        )
+        world.iam.attach_policy(copy.id, world.principal("member"), ORG)
+    people = {p: world.principal(p) for p in ("member", "viewer", "wadmin", "oadmin")}
+    roles = await MEMBERSHIPS.roles_at(world.W, list(people.values()))
+    names = {p: [r.name for r in roles[people[p]]] for p in people}
+    # The workspace's group first, then what counts: an admin's group (the organization's
+    # before the workspace's), else their level; then policies. Never what is automatic
+    # ("<O> people", Workspace admins), nor the level of an admin.
+    assert names["member"] == ["Alpha workspace", "Members", "Alpha reports"]
+    assert names["viewer"] == ["Alpha workspace", "Viewers"]
+    assert names["wadmin"] == ["Alpha workspace", "Alpha admins"]
+    assert names["oadmin"] == ["Alpha workspace", "Acme admins"]
+    implied = {p: [r.name for r in roles[people[p]] if r.implied] for p in people}
+    assert implied["member"] == [] and implied["oadmin"] == ["Alpha workspace"]
+    kinds = {r.name: r.kind for r in roles[people["member"]]}
+    assert kinds == {"Alpha reports": "policy", "Alpha workspace": "group", "Members": "group"}
+
+
+@pytest.mark.asyncio
+async def test_the_role_groups_of_an_organization_and_of_the_platform(world):
+    """An organization's Role is made of its people and admins groups (and its workspaces'
+    groups, to place someone in them); the platform's of its admins group; the levels at
+    each. A workspace's Role leaves its organization's to Organization › Users."""
+    await _team(world)
+    org = await MEMBERSHIPS.role_groups(ORG)
+    ws = await MEMBERSHIPS.role_groups(world.W)
+    platform = await MEMBERSHIPS.role_groups(PLATFORM)
+    assert org.own and org.admins and {org.own, org.admins}.isdisjoint({ws.own, ws.admins})
+    assert {org.own, org.admins} <= ws.elsewhere
+    assert platform.own is None and platform.admins and platform.members == org.members
+    member = world.principal("member")
+    at_org, _ = await MEMBERSHIPS.held_at(ORG, member)
+    at_platform, _ = await MEMBERSHIPS.held_at(PLATFORM, member)
+    assert ws.own in at_org and org.members in at_org
+    assert ws.own not in at_platform and org.members in at_platform
+
+
+@pytest.mark.asyncio
+async def test_a_member_joined_when_they_entered_the_workspace_s_groups(world):
+    """Users › Joined: the earliest a person entered the workspace's own or admins group."""
+    before = datetime.now(UTC) - timedelta(seconds=1)
+    await _team(world)
+    since = {m.user_id: m.since for m in await MEMBERSHIPS.members(world.W)}
+    assert set(since) == {"viewer", "member", "wadmin"}
+    assert all(at is not None and at >= before for at in since.values()), since
+
+
+@pytest.mark.asyncio
+async def test_an_organization_s_admins_read_and_write_its_workspaces_shared_graphs(world):
+    """An organization's admins are admins of each of its workspaces, with no "<W>
+    admins": its shared graphs' grants follow them too."""
+    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
+        GraphGrants,
+    )
+
+    await _team(world)
+    readers, writers = await GraphGrants._holders(world.W)
+    oadmin, member = world.principal("oadmin"), world.principal("member")
+    assert oadmin in readers and oadmin in writers
+    assert member in readers and member not in writers
+
+
+@pytest.mark.asyncio
+async def test_a_role_at_the_organization_and_at_the_platform(world):
+    """Organization › Users and Platform › Users › Role: the organization's people first
+    and its admins for an org admin (no level); at the platform, Platform admins for a
+    platform admin (no level), else their level."""
+    await _team(world)
+    people = {p: world.principal(p) for p in ("member", "oadmin", "root")}
+    with as_service_account("api"):  # as the access move leaves a platform admin
+        world.iam.add_group_member(LEVELS.get(world.iam).platform_admins, people["root"])
+    at_org = await MEMBERSHIPS.roles_at(ORG, list(people.values()))
+    names = {p: [r.name for r in at_org[people[p]]] for p in people}
+    assert names["oadmin"] == ["Acme people", "Acme admins"]
+    assert names["member"][:1] == ["Acme people"] and "Members" in names["member"]
+    assert "Alpha workspace" not in names["member"]  # the Workspaces column says it
+    at_platform = await MEMBERSHIPS.roles_at(PLATFORM, list(people.values()))
+    names = {p: [r.name for r in at_platform[people[p]]] for p in people}
+    assert names["root"][:1] == ["Platform admins"] and "Members" not in names["root"]
+    assert names["member"] == ["Members"]
+
+
+@pytest.mark.asyncio
+async def test_a_persons_page_names_their_groups_and_policies(world):
+    """Users › a person lists their Role by name: groups and policies, an unknown id
+    left out."""
+    await _team(world)
+    levels = LEVELS.get(world.iam)
+    names = await MEMBERSHIPS.names_of([levels.members, "grp_gone"], ["builtin.member", "pol_gone"])
+    assert names[levels.members] == "Members"
+    assert names["builtin.member"]
+    assert "grp_gone" not in names and "pol_gone" not in names
+
+
+@pytest.mark.asyncio
+async def test_a_persons_page_shows_what_their_role_shows(world):
+    """Users › a person lists the groups their Role shows (Users › Role), each one a
+    change here leaves alone said why: the workspace's own group an organization's admin
+    reaches through its admins group, the organization's admins group (managed in
+    Organization › Users)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam_admin.roles import held_roles
+
+    await _team(world)
+    groups = await MEMBERSHIPS.role_groups(world.W)
+    oadmin = await held_roles(world.W, world.principal("oadmin"), groups)
+    shown = {s.name: s.managed for s in oadmin.shown}
+    assert list(shown) == ["Alpha workspace", "Acme admins"]
+    assert shown == {"Alpha workspace": "admins", "Acme admins": "organization"}
+    assert not {s.id for s in oadmin.shown} & set(oadmin.groups)
+    wadmin = await held_roles(world.W, world.principal("wadmin"), groups)
+    assert [(s.name, s.managed) for s in wadmin.shown] == [
+        ("Alpha workspace", None),
+        ("Alpha admins", None),
+    ]
 
 
 @pytest.mark.asyncio

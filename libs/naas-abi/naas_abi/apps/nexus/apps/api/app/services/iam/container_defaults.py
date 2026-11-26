@@ -467,6 +467,13 @@ def _membership_group(iam: Any, container: str, group_id: str | None) -> str | N
     return group_id
 
 
+def _described(name: str, container: str, membership_of: str | None) -> str | None:
+    """Its sentence (``group_descriptions``), read where it is made (no import cycle)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.group_descriptions import described
+
+    return described(name, owner=container, membership_of=membership_of)
+
+
 def group_attachments(
     container: str, record: DefaultsRecord, levels: Levels, *, access: bool
 ) -> list[tuple[str, str, str | None]]:
@@ -531,9 +538,13 @@ def _ensure(
         ):
             group_id = groups.get(name)
             if group_id is None:
+                membership_of = container if marked else None
                 group_id = str(
                     iam.create_group(
-                        name, scope=container, membership_of=container if marked else None
+                        name,
+                        scope=container,
+                        membership_of=membership_of,
+                        description=_described(name, container, membership_of),
                     ).id
                 )
                 made.append(("group", group_id))

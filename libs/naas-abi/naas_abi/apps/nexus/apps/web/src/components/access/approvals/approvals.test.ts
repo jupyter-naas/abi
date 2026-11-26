@@ -56,6 +56,12 @@ describe('ApprovalsView', () => {
     mounted = await mount(ApprovalsView, { api, can: allowAll });
     await mounted.flush();
     await mounted.click(buttonNamed('Approve'));
+    // Asked first: the module gets what it asks for at once.
+    expect(api.approveManifest).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('The module gets what it asks for');
+    const approve = [...document.body.querySelectorAll('button')].filter((b) => b.textContent === 'Approve').at(-1);
+    await mounted.click(approve!);
+    await mounted.flush();
     expect(api.approveManifest).toHaveBeenCalledWith('sa_mod', 'a'.repeat(64));
   });
 

@@ -306,7 +306,7 @@ describe('who sees what in Settings', () => {
     expect(organization.column).toEqual({ Organization: ['Policies'] });
   });
 
-  it('the admin of another organization than the workspace\'s: that one, named in its tab, no Access without IAM rights', async () => {
+  it('the admin of another organization than the workspace\'s: that one in its tab, no Access without IAM rights', async () => {
     const nina: Person = {
       id: 'nina',
       workspaceRole: 'member',
@@ -317,10 +317,10 @@ describe('who sees what in Settings', () => {
       grants: { 'organization:beta': [] },
     };
     const seen = await seenBy(nina);
-    expect(seen.tabs).toEqual(['Organization · Beta', 'Account']);
-    const organization = await seenBy(nina, seen.opens['Organization · Beta']);
-    expect(organization.level).toBe('Organization · Beta');
-    expect(organization.column['Organization · Beta']).toContain('Users');
+    expect(seen.tabs).toEqual(['Organization', 'Account']);
+    const organization = await seenBy(nina, seen.opens.Organization);
+    expect(organization.level).toBe('Organization');
+    expect(organization.column.Organization).toContain('Users');
     expect(Object.values(organization.column).flat()).not.toContain('Policies');
   });
 
