@@ -402,3 +402,45 @@ async def test_search_sources_are_offered_in_the_workspaces_access_policy(
     state = await service.save_search_sources("olivia", "alpha", {"web.wikipedia": False})
     assert state["offered"]["search_sources"] == ["chat"]
     assert not _uses_source(nexus, "dave", "web.wikipedia")
+
+
+def _uses_model(nexus: NexusIam, user: str, model: str) -> bool:
+    with use_call_context(NexusIam.context(user)):
+        resource = nexus_resource("model", container=ALPHA, id=model)
+        return nexus.iam.authorize("nexus:UseModel", resource).allowed
+
+
+@pytest.mark.asyncio
+async def test_the_models_a_workspace_uses_are_its_offers(nexus, acme, service, audit):
+    """The Models section: the models W uses (``*``: every one) and its default model,
+    written into "<W> access" as the caller, within the organization's offer. A list
+    needs its default; the other sections are kept."""
+    with use_call_context(NexusIam.context("root")):
+        org = nexus.iam.get_policy(_access(nexus, acme).parent_id)
+        nexus.iam.update_policy(
+            org.id,
+            expected_revision=org.revision,
+            document=with_offer(
+                org.document, offer_of(org.document).merged(Offer.of(models=["*"]))
+            ),
+        )
+    state = await service.set_models("olivia", "alpha", ["qwen-3.8"], "qwen-3.8")
+    assert state["models"] == {
+        "offered": ["qwen-3.8"],
+        "default": "qwen-3.8",
+        "every": False,
+        "available": [],
+    }
+    assert audit.phases("workspace-offer.models") == ["requested", "succeeded"]
+    assert _uses_model(nexus, "dave", "qwen-3.8")
+    assert not _uses_model(nexus, "dave", "gpt-x")
+    assert offer_of(_access(nexus, acme).document).features == {"chat", "files"}
+    with pytest.raises(ValueError, match="default"):
+        await service.set_models("olivia", "alpha", ["qwen-3.8", "gpt-x"], None)
+    state = await service.set_models("olivia", "alpha", ["*"], None)
+    assert {k: state["models"][k] for k in ("offered", "default", "every")} == {
+        "offered": ["*"],
+        "default": None,
+        "every": True,
+    }
+    assert _uses_model(nexus, "dave", "gpt-x")

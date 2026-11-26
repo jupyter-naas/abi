@@ -801,3 +801,57 @@ async def test_a_viewer_reads_my_files_unless_the_deployment_says_not(world):
     assert not any(
         s["effect"] == "Deny" for s in level_document(MEMBER_ACCESS).to_dict()["statements"]
     )
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_offers_its_models_and_the_chatting_levels_use_them_there(world):
+    """``UseModel`` is granted by the levels that chat (``${scope}/nexus:model/*``) and
+    bounded by W's offer (``OfferModels``): ``*`` every model, else the ones it names.
+    A Viewer does not chat: no model."""
+    from dataclasses import replace
+
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
+        offer_of,
+        with_offer,
+    )
+
+    await _team(world)
+    W = world.W
+
+    def model(name: str) -> str:
+        return f"{W}/nexus:model/{name}"
+
+    rows = {"member": True, "wadmin": True, "viewer": False, "stranger": False}
+    # The fixture's offer names no model: none is used in W through the level.
+    assert not _can(world, "member", "nexus:UseModel", model("qwen-3.8"))
+    with as_service_account("api"):
+        # W's offer is bounded by its organization's (its parent): it names every model.
+        org_access = world.iam.get_policy(world.record.access_policy_id).parent_id
+        widen_offer(world.iam, org_access, Offer.of(models=["*"]))
+        policy = world.iam.get_policy(world.record.access_policy_id)
+        world.iam.update_policy(
+            policy.id,
+            expected_revision=policy.revision,
+            document=with_offer(
+                policy.document,
+                replace(offer_of(policy.document), models=frozenset({"*"})),
+            ),
+        )
+    for person, wanted in rows.items():
+        assert _can(world, person, "nexus:UseModel", model("gpt-x")) == wanted, person
+    with as_service_account("api"):
+        policy = world.iam.get_policy(world.record.access_policy_id)
+        world.iam.update_policy(
+            policy.id,
+            expected_revision=policy.revision,
+            document=with_offer(
+                policy.document,
+                replace(
+                    offer_of(policy.document),
+                    models=frozenset({"qwen-3.8"}),
+                    default_model="qwen-3.8",
+                ),
+            ),
+        )
+    assert _can(world, "member", "nexus:UseModel", model("qwen-3.8"))
+    assert not _can(world, "member", "nexus:UseModel", model("gpt-x"))

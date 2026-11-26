@@ -168,6 +168,30 @@ async def save_workspace_search_sources(
     return await _call(service.save_search_sources(user, workspace_id, body.changes))
 
 
+class ModelsBody(BaseModel):
+    """The chat models the workspace uses (``*``: every one) and its default model."""
+
+    models: list[str] = Field(min_length=1, max_length=200)
+    default: str | None = None
+
+
+@router.put(
+    "/{workspace_id}/offer/models",
+    dependencies=[declares(action) for action in WRITES],
+)
+async def save_workspace_models(
+    workspace_id: str,
+    body: ModelsBody,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+) -> dict[str, Any]:
+    """The chat models the workspace uses and its default model, in one write of "<W>
+    access" as the caller (403 for a model the caller does not hold, 422 for one beyond
+    the organization's offer or a list with no default among it). Answers the offer
+    after."""
+    return await _call(service.set_models(user, workspace_id, body.models, body.default))
+
+
 class FilesBody(BaseModel):
     """What the workspace gives its people outside it; a section left out is kept."""
 

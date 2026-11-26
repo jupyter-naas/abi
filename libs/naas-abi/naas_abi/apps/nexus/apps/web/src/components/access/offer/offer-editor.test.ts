@@ -386,3 +386,56 @@ describe('WorkspaceOfferEditor: graphs', () => {
     expect(document.querySelector('[data-offer-section="graphs"]')).toBeNull();
   });
 });
+
+describe('WorkspaceOfferEditor: models', () => {
+  const withModels = (offered: string[], defaultModel: string | null, available = ['gpt-x', 'qwen-3.8']): OfferState => ({
+    ...OFFER,
+    models: { offered, default: defaultModel, every: offered.includes('*'), available },
+  });
+
+  it('shows every model as one switch, and limits the workspace to one model as its default', async () => {
+    const parts = setup(withModels(['*'], null));
+    const saveModels = vi.fn().mockResolvedValue(withModels(['gpt-x'], 'gpt-x'));
+    Object.assign(parts.offerApi, { saveModels });
+    await render(parts);
+    const section = document.querySelector('[data-offer-section="models"]');
+    expect(section?.textContent).toContain('Models');
+    expect(switchOf('[data-offer-models-every]')?.getAttribute('aria-checked')).toBe('true');
+    expect(document.querySelector('[data-offer-model="gpt-x"]')).toBeNull();
+    await mounted!.click(switchOf('[data-offer-models-every]'));
+    await mounted!.flush();
+    expect(saveModels).toHaveBeenCalledWith('ws-1', ['gpt-x'], 'gpt-x');
+    expect(switchOf('[data-offer-model="gpt-x"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(switchOf('[data-offer-model="qwen-3.8"]')?.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('adds and removes a model, keeps a default among them, and goes back to every model', async () => {
+    const parts = setup(withModels(['gpt-x', 'qwen-3.8'], 'qwen-3.8'));
+    const saveModels = vi.fn().mockResolvedValue(withModels(['gpt-x'], 'gpt-x'));
+    Object.assign(parts.offerApi, { saveModels });
+    await render(parts);
+    const select = document.querySelector('[data-offer-models-default] select') as HTMLSelectElement;
+    expect(select.value).toBe('qwen-3.8');
+    expect([...select.options].map((o) => o.value)).toEqual(['gpt-x', 'qwen-3.8']);
+    // Removing the default makes another offered model the default.
+    await mounted!.click(switchOf('[data-offer-model="qwen-3.8"]'));
+    await mounted!.flush();
+    expect(saveModels).toHaveBeenLastCalledWith('ws-1', ['gpt-x'], 'gpt-x');
+    // The last model cannot be removed: the switch to every model does it.
+    expect(switchOf('[data-offer-model="gpt-x"]')?.disabled).toBe(true);
+    saveModels.mockResolvedValue(withModels(['*'], null));
+    await mounted!.click(switchOf('[data-offer-models-every]'));
+    await mounted!.flush();
+    expect(saveModels).toHaveBeenLastCalledWith('ws-1', ['*'], null);
+  });
+
+  it('is read-only where IAM does not let the caller change the offer, and absent where the API says nothing', async () => {
+    await render(setup({ ...withModels(['qwen-3.8'], 'qwen-3.8'), editable: false }));
+    expect(switchOf('[data-offer-models-every]')?.disabled).toBe(true);
+    expect(switchOf('[data-offer-model="qwen-3.8"]')?.disabled).toBe(true);
+    await mounted!.unmount();
+    mounted = null;
+    await render(setup(OFFER));
+    expect(document.querySelector('[data-offer-section="models"]')).toBeNull();
+  });
+});

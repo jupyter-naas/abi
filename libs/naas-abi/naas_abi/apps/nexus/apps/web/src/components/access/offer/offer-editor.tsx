@@ -8,8 +8,10 @@ import {
   createOfferApi,
   graphsSettingsHref,
   graphsSummaryLines,
+  modelsAfter,
   type FileMode,
   type FileRow,
+  type ModelsPart,
   type OfferApi,
   type OfferKind,
   type OfferState,
@@ -288,6 +290,80 @@ export function WorkspaceOfferEditor({
       return true;
     }, `${row.label}: ${FILE_MODE_LABELS[mode]}.`);
 
+  const changeModels = (
+    part: ModelsPart,
+    change: Parameters<typeof modelsAfter>[1],
+    done: string,
+  ) =>
+    void saveNow(async () => {
+      const next = modelsAfter(part, change);
+      setOffer(await offerApi.saveModels(workspaceId, next.models, next.default));
+      return true;
+    }, done);
+
+  const modelsSection = (part: ModelsPart) => {
+    const choices = [...new Set([...part.available, ...(part.every ? [] : part.offered)])].sort();
+    return (
+      <div className="access-offer-section" data-offer-section="models">
+        <h4 className="access-offer-heading">Models</h4>
+        <p className="access-policy-muted">
+          The chat models used here, within each person’s model set. An agent built on another model runs on the
+          default; one with a provider of its own on another model is refused.
+        </p>
+        <ul className="access-offer-list">
+          <li className="access-offer-row" data-offer-models-every="">
+            <OfferSwitch
+              label="Every model"
+              on={part.every}
+              disabled={!editable || saving || (part.every && choices.length === 0)}
+              onChange={(on) =>
+                changeModels(part, { every: on }, on ? 'Every model is used here.' : 'Limited to some models.')
+              }
+            />
+            <span className="access-offer-name">Every model</span>
+          </li>
+          {!part.every &&
+            choices.map((model) => {
+              const on = part.offered.includes(model);
+              const last = on && part.offered.length === 1;
+              return (
+                <li key={model} className="access-offer-row" data-offer-model={model}>
+                  <OfferSwitch
+                    label={`Use ${model}`}
+                    on={on}
+                    disabled={!editable || saving || last}
+                    onChange={(next) =>
+                      changeModels(part, { model, on: next }, `${model} ${next ? 'added to' : 'removed from'} the models.`)
+                    }
+                  />
+                  <span className="access-offer-name">{model}</span>
+                  {last && <span className="access-offer-note">The last model: use every model instead</span>}
+                </li>
+              );
+            })}
+        </ul>
+        {!part.every && (
+          <label className="access-offer-row" data-offer-models-default="">
+            <span className="access-offer-name">Default model</span>
+            <select
+              className="access-offer-select"
+              aria-label="Default model"
+              value={part.default ?? ''}
+              disabled={!editable || saving}
+              onChange={(e) => changeModels(part, { default: e.target.value }, `${e.target.value} is the default model.`)}
+            >
+              {part.offered.map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+    );
+  };
+
   const featureRow = (row: FeatureRow, label = row.label) => {
     const on = row.choice === 'everyone';
     const disabled = !row.editable || saving || (!row.offered && !on);
@@ -408,6 +484,8 @@ export function WorkspaceOfferEditor({
           </a>
         </div>
       )}
+
+      {offer.models && modelsSection(offer.models)}
 
       <div className="access-offer-section" data-offer-section="search-sources">
         <h4 className="access-offer-heading">Search sources</h4>

@@ -183,8 +183,8 @@ GRAPH_GRANT_PREFIX = "workspace."
 GRAPH_GRANT_INFIX = ".graphs."
 
 # The actions a workspace's offer names item by item beside its features (search
-# sources, ontology files), which the level policies grant by type.
-OFFER_SECTION_ACTIONS = frozenset({"nexus:UseSearchSource", "nexus:UseOntology"})
+# sources, ontology files, chat models), which the level policies grant by type.
+OFFER_SECTION_ACTIONS = frozenset({"nexus:UseSearchSource", "nexus:UseOntology", "nexus:UseModel"})
 
 # Why a decision changed: (label, intended). Intended: the narrowings and widenings
 # the ADR lists; the others are what the model is, named so none is silent.

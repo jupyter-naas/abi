@@ -7,6 +7,8 @@
  * (Organization, Platform and System Files, `PUT /offer/files`), within each person's level. Its
  * Graphs part (the graphs it is given to read or write, every graph of its organization, what it
  * closes of its own) is Settings › Graphs' (`/resource-access/graphs`): the offer shows its summary.
+ * Its Models part names the chat models it uses (`*`: every model its people's model sets allow) and
+ * the default an agent on a model it does not offer switches to (`PUT /offer/models`).
  */
 import { authFetch } from '@/stores/auth';
 
@@ -41,7 +43,40 @@ export type OfferState = {
   my_files?: MyFiles;
   /** The Graphs part, as Settings › Graphs edits it: shown here, not changed. */
   graphs?: GraphsSummary;
+  /** The Models part: the chat models it uses and its default. */
+  models?: ModelsPart;
 };
+
+/** The model naming every model (the people's model sets decide which). */
+export const EVERY_MODEL = '*';
+
+/** The chat models a workspace uses, its default, and those the caller may pick from. */
+export type ModelsPart = {
+  /** `['*']` for every model, else the canonical ids it uses. */
+  offered: string[];
+  /** What an agent on a model it does not offer switches to; required for a list. */
+  default: string | null;
+  every: boolean;
+  /** The chat models the caller may list. */
+  available: string[];
+};
+
+/** The setting after a change: every model, or a list that keeps a default among it. */
+export function modelsAfter(
+  part: ModelsPart,
+  change: { every: true } | { every: false } | { model: string; on: boolean } | { default: string },
+): { models: string[]; default: string | null } {
+  if ('every' in change && change.every) return { models: [EVERY_MODEL], default: null };
+  const current = part.every ? [] : part.offered;
+  if ('every' in change) {
+    const first = part.default ?? part.available[0] ?? null;
+    return first ? { models: [first], default: first } : { models: [EVERY_MODEL], default: null };
+  }
+  if ('default' in change) return { models: current, default: change.default };
+  const models = change.on ? [...new Set([...current, change.model])].sort() : current.filter((m) => m !== change.model);
+  const kept = part.default && models.includes(part.default) ? part.default : (models[0] ?? null);
+  return { models, default: kept };
+}
 
 /** What the offer gives of the graphs outside the workspace, and closes of its own. */
 export type GraphsSummary = {
@@ -149,6 +184,16 @@ export function createOfferApi(fetcher: Fetcher = authFetch) {
         body: JSON.stringify({ changes }),
       });
       if (!response.ok) throw await failure(response, `Could not save the search sources (HTTP ${response.status}).`);
+      return (await response.json()) as OfferState;
+    },
+    /** The chat models the workspace uses (`['*']`: every one) and its default model. */
+    saveModels: async (workspaceId: string, models: string[], defaultModel: string | null): Promise<OfferState> => {
+      const response = await fetcher(`${path(workspaceId)}/models`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ models, default: defaultModel }),
+      });
+      if (!response.ok) throw await failure(response, `Could not save the models (HTTP ${response.status}).`);
       return (await response.json()) as OfferState;
     },
     /** Give (or stop giving) files outside the workspace, in one write of "<W> access". */

@@ -325,10 +325,15 @@ def new_workspace_offer(slug: str | None, catalog_seed: dict[str, Any] | None) -
     seeded = seeded_offer(slug, catalog_seed, features=features)
     if seeded is None:
         from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
+            EVERY_MODEL,
             default_search_sources,
         )
 
-        return Offer(features=frozenset(features), search_sources=default_search_sources())
+        return Offer(
+            features=frozenset(features),
+            search_sources=default_search_sources(),
+            models=frozenset({EVERY_MODEL}),
+        )
     offer, unresolved = seeded
     if unresolved:
         logger.warning(

@@ -122,3 +122,42 @@ def test_the_files_given_are_read_with_the_offer_and_saved_as_the_caller(client)
         403,
         404,
     )
+
+
+def test_the_models_are_read_with_the_offer_and_saved_as_the_caller(client, nexus, acme):  # noqa: F811
+    """Olivia limits Acme's workspace to one model, its default; a list with no default
+    is 422; Dave (a member) may not change the offer."""
+    from naas_abi.apps.nexus.apps.api.app.services.feature_access.service_test import _access
+    from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
+        Offer,
+        offer_of,
+        with_offer,
+    )
+    from naas_abi_core.engine.call_context import use_call_context
+
+    with use_call_context(NexusIam.context("root")):
+        org = nexus.iam.get_policy(_access(nexus, acme).parent_id)
+        nexus.iam.update_policy(
+            org.id,
+            expected_revision=org.revision,
+            document=with_offer(
+                org.document, offer_of(org.document).merged(Offer.of(models=["*"]))
+            ),
+        )
+    path = "/api/workspaces/alpha/offer/models"
+    saved = client.put(
+        path, json={"models": ["qwen-3.8"], "default": "qwen-3.8"}, headers={"x-user": "olivia"}
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["models"]["offered"] == ["qwen-3.8"]
+    state = client.get("/api/workspaces/alpha/offer", headers={"x-user": "olivia"}).json()
+    assert state["models"]["default"] == "qwen-3.8"
+    assert (
+        client.put(path, json={"models": ["qwen-3.8"]}, headers={"x-user": "olivia"}).status_code
+        == 422
+    )
+    assert client.put(path, json={"models": ["*"]}, headers={"x-user": "dave"}).status_code in (
+        403,
+        404,
+    )

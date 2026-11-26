@@ -19,6 +19,8 @@ The document is written in sections, one statement each, by ``sid``:
 | ``OfferFeatures`` | ``nexus:UseFeature`` | ``${scope}/nexus:feature/<key>`` |
 | ``OfferSearchSources`` | ``nexus:UseSearchSource`` | ``${scope}/nexus:search_source/<id>`` |
 | ``OfferOntologies`` | ``nexus:UseOntology`` | ``${scope}/nexus:ontology_file/<ref>`` |
+| ``OfferModels`` | ``nexus:UseModel`` | ``${scope}/nexus:model/<canonical id>``, or ``*``: every model |
+| ``OfferDefaultModel`` | ``nexus:UseModel`` | the one model an agent whose model is not offered switches to |
 
 A section naming more than ``policy.MAX_PATTERNS`` items (IAM's limit for one
 statement) is written in parts: ``OfferAgents``, ``OfferAgents2``, ``OfferAgents3``...
@@ -93,19 +95,28 @@ USE_SEARCH_SOURCE = "nexus:UseSearchSource"
 SEARCH_SOURCES_SID = "OfferSearchSources"
 USE_ONTOLOGY = "nexus:UseOntology"
 ONTOLOGIES_SID = "OfferOntologies"
+USE_MODEL = "nexus:UseModel"
+MODELS_SID = "OfferModels"
+DEFAULT_MODEL_SID = "OfferDefaultModel"
+# The models section naming every model (the person's model set decides which).
+EVERY_MODEL = "*"
 # The sections naming Nexus ids in the workspace (``${scope}/nexus:<type>/<id>``), by
 # the ``Offer`` field they fill: its sid, its action, the resource type.
 ID_SECTIONS: dict[str, tuple[str, str, str]] = {
     "features": (FEATURES_SID, USE_FEATURE, "feature"),
     "search_sources": (SEARCH_SOURCES_SID, USE_SEARCH_SOURCE, "search_source"),
     "ontologies": (ONTOLOGIES_SID, USE_ONTOLOGY, "ontology_file"),
+    "models": (MODELS_SID, USE_MODEL, "model"),
 }
+# The id sections that may name every id of their type (``*``).
+_WILDCARD_TYPES = frozenset({"model"})
 OFFER_SIDS = frozenset(
     {
         *(sid for sid, _ in SECTIONS.values()),
         *(sid for sid, _a, _t in ID_SECTIONS.values()),
         *given_files.SIDS.values(),
         *given_graphs.SIDS,
+        DEFAULT_MODEL_SID,
     }
 )
 # The given sections' ``Offer`` fields (``given_files``).
@@ -187,6 +198,10 @@ class Offer:
     search_sources: frozenset[str] = field(default_factory=frozenset)
     # The ontology files it offers, by ref (``module:file.ttl``, as its seed names them).
     ontologies: frozenset[str] = field(default_factory=frozenset)
+    # The chat models it uses, by canonical id (``EVERY_MODEL``: every one), and the one
+    # an agent whose model it does not offer switches to (``workspace_models``).
+    models: frozenset[str] = field(default_factory=frozenset)
+    default_model: str | None = None
     # The files it gives outside it (``given_files``): a mode each, None when off.
     org_files: OrgFiles | None = None
     platform_files: Mode | None = None
@@ -213,6 +228,8 @@ class Offer:
         features: Iterable[str] = (),
         search_sources: Iterable[str] = (),
         ontologies: Iterable[str] = (),
+        models: Iterable[str] = (),
+        default_model: str | None = None,
         org_files: OrgFiles | None = None,
         platform_files: Mode | None = None,
         system_files: Mode | None = None,
@@ -233,6 +250,8 @@ class Offer:
             features=frozenset(features),
             search_sources=frozenset(search_sources),
             ontologies=frozenset(ontologies),
+            models=frozenset(models),
+            default_model=default_model,
             org_files=org_files,
             platform_files=platform_files,
             system_files=system_files,
@@ -247,7 +266,8 @@ class Offer:
         return getattr(self, kind)
 
     def ids(self, field_name: str) -> frozenset[str]:
-        """The ids of an id section (``ID_SECTIONS``: features, search sources, ontologies)."""
+        """The ids of an id section (``ID_SECTIONS``: features, search sources, ontologies,
+        models)."""
         return getattr(self, field_name)
 
     def is_empty(self) -> bool:
@@ -256,14 +276,17 @@ class Offer:
             or any(self.ids(f) for f in ID_SECTIONS)
             or any(getattr(self, f) for f in GIVEN_FIELDS)
             or any(getattr(self, f) for f in GRAPH_FIELDS)
+            or self.default_model is not None
         )
 
     def merged(self, other: Offer) -> Offer:
         """Both offers; a given section in the wider of its two modes; the graphs both
-        name, and what either closes (merging never opens what one closes)."""
+        name, and what either closes (merging never opens what one closes); this
+        offer's default model, else the other's."""
         return Offer(
             **{kind: self.items(kind) | other.items(kind) for kind in SECTIONS},
             **{f: self.ids(f) | other.ids(f) for f in ID_SECTIONS},
+            default_model=self.default_model or other.default_model,
             org_files=_wider_org(self.org_files, other.org_files),
             platform_files=given_files.wider(self.platform_files, other.platform_files),
             system_files=given_files.wider(self.system_files, other.system_files),
@@ -273,10 +296,13 @@ class Offer:
 
     def without(self, other: Offer) -> Offer:
         """This offer less ``other``'s; a given section goes when ``other`` gives it as
-        wide."""
+        wide; the default model goes when ``other`` names the same."""
         return Offer(
             **{kind: self.items(kind) - other.items(kind) for kind in SECTIONS},
             **{f: self.ids(f) - other.ids(f) for f in ID_SECTIONS},
+            default_model=(
+                None if self.default_model == other.default_model else self.default_model
+            ),
             org_files=_org_without(self.org_files, other.org_files),
             platform_files=_mode_without(self.platform_files, other.platform_files),
             system_files=_mode_without(self.system_files, other.system_files),
@@ -311,8 +337,22 @@ def _item_of(kind: str, pattern: str) -> Item | None:
     return unquote(module), (WHOLE_MODULE if name == "*" else unquote(name))
 
 
+def _id_prefix(type_name: str) -> str:
+    return scoped_resource(type_name, "-").rsplit("/", 1)[0] + "/"
+
+
+def id_resource(type_name: str, id: str) -> str:
+    """``${scope}/nexus:<type>/<id>``; ``<type>/*`` for every id of a type that may name
+    them all (the models)."""
+    if id == "*" and type_name in _WILDCARD_TYPES:
+        return _id_prefix(type_name) + "*"
+    return scoped_resource(type_name, id)
+
+
 def _id_of(type_name: str, pattern: str) -> str | None:
-    prefix = scoped_resource(type_name, "-").rsplit("/", 1)[0] + "/"
+    prefix = _id_prefix(type_name)
+    if type_name in _WILDCARD_TYPES and pattern == prefix + "*":
+        return "*"
     if not pattern.startswith(prefix) or "*" in pattern:
         return None
     return unquote(pattern[len(prefix) :])
@@ -332,7 +372,16 @@ def offer_statements(offer: Offer) -> list[dict[str, Any]]:
         )
     for field_name, (sid, use, type_name) in ID_SECTIONS.items():
         statements += _parts(
-            sid, [use], [scoped_resource(type_name, k) for k in sorted(offer.ids(field_name))]
+            sid, [use], [id_resource(type_name, k) for k in sorted(offer.ids(field_name))]
+        )
+    if offer.default_model is not None:
+        statements.append(
+            {
+                "sid": DEFAULT_MODEL_SID,
+                "effect": "Allow",
+                "actions": [USE_MODEL],
+                "resources": [scoped_resource("model", offer.default_model)],
+            }
         )
     if offer.org_files is not None:
         statements += given_files.statements(
@@ -396,6 +445,7 @@ def offer_of(document: Any) -> Offer:
     given: dict[str, tuple[list[str], list[str]]] = {}
     graphs: dict[str, set[str]] = {f: set() for f in GRAPH_NAME_FIELDS}
     no_create = False
+    default_model: str | None = None
     for statement in _statements_of(document):
         sid, effect, actions, resources = _statement_parts(statement)
         section = offer_section(sid)
@@ -409,6 +459,10 @@ def offer_of(document: Any) -> Offer:
             continue
         if section in _GRAPH_SID_FIELD:
             graphs[_GRAPH_SID_FIELD[section]].update(resources)
+            continue
+        if section == DEFAULT_MODEL_SID:
+            named = [i for r in resources if (i := _id_of("model", r)) not in (None, "*")]
+            default_model = named[0] if named else None
             continue
         if section in given_files.FIELD_OF_SID:
             if sid == section:
@@ -431,6 +485,7 @@ def offer_of(document: Any) -> Offer:
         system_files=modes.get(given_files.SYSTEM_FILES),
         **{f: frozenset(v) for f, v in graphs.items()},
         graphs_no_create=no_create,
+        default_model=default_model,
     )
 
 
@@ -525,7 +580,12 @@ def with_features(offer: Offer, features: Iterable[str]) -> Offer:
 
 
 __all__ = [
+    "DEFAULT_MODEL_SID",
+    "EVERY_MODEL",
     "FEATURES_SID",
+    "MODELS_SID",
+    "USE_MODEL",
+    "id_resource",
     "GIVEN_FIELDS",
     "GRAPH_FIELDS",
     "GRAPH_NAME_FIELDS",
@@ -629,6 +689,7 @@ def seeded_offer(
             offer,
             search_sources=default_search_sources(),
             ontologies=frozenset(effective_seed_ontologies(slug, catalog_seed)),
+            models=frozenset({EVERY_MODEL}),
         ),
         unresolved,
     )
@@ -668,6 +729,8 @@ def instances_only(offer: Offer) -> Offer:
         features=frozenset(),
         search_sources=frozenset(),
         ontologies=frozenset(),
+        models=frozenset(),
+        default_model=None,
         org_files=None,
         platform_files=None,
         system_files=None,

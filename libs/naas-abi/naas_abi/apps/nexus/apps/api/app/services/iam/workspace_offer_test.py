@@ -491,3 +491,44 @@ def test_a_graph_configuration_becomes_the_graphs_sections_and_back():
         "include_owned": False,
         "allow_create": False,
     }
+
+
+def test_models_are_a_section_and_the_default_one_a_statement_of_its_own():
+    """``OfferModels`` names the chat models a workspace uses (``*``: every model the
+    person's model set allows); ``OfferDefaultModel`` the one an agent whose model is
+    not offered there switches to."""
+    offer = Offer.of(models=["qwen-3.8", "openai/gpt-x"], default_model="qwen-3.8")
+    document = offer_document(offer)
+    assert [s["sid"] for s in document["statements"]] == ["OfferModels", "OfferDefaultModel"]
+    models, default = document["statements"]
+    assert models["actions"] == default["actions"] == ["nexus:UseModel"]
+    assert models["resources"] == [
+        "${scope}/nexus:model/openai%2Fgpt-x",
+        "${scope}/nexus:model/qwen-3.8",
+    ]
+    assert default["resources"] == ["${scope}/nexus:model/qwen-3.8"]
+    assert offer_of(document) == offer
+    assert in_offer_form(document)
+
+    every = Offer.of(models=["*"])
+    every_document = offer_document(every)
+    assert every_document["statements"][0]["resources"] == ["${scope}/nexus:model/*"]
+    assert offer_of(every_document) == every
+    assert not Offer.of(default_model="qwen-3.8").is_empty()
+
+
+def test_merging_and_removing_models_keep_a_default_that_is_still_offered():
+    a = Offer.of(models=["qwen-3.8"], default_model="qwen-3.8")
+    b = Offer.of(models=["gpt-x"], default_model="gpt-x")
+    merged = a.merged(b)
+    assert merged.models == {"qwen-3.8", "gpt-x"} and merged.default_model == "qwen-3.8"
+    assert Offer.of().merged(b).default_model == "gpt-x"
+    less = merged.without(Offer.of(models=["qwen-3.8"], default_model="qwen-3.8"))
+    assert less.models == {"gpt-x"} and less.default_model is None
+    # The models are a setting: a re-seed adds instances only.
+    assert instances_only(a).models == frozenset() and instances_only(a).default_model is None
+
+
+def test_a_new_workspace_offers_every_model():
+    offer = container_defaults.new_workspace_offer(None, None)
+    assert offer.models == {"*"} and offer.default_model is None

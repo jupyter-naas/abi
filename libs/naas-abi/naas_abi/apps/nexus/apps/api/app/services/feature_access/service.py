@@ -233,6 +233,44 @@ def _offer_json(offer: Offer) -> dict[str, Any]:
     }
 
 
+def models_json(offer: Offer, available: list[str] | None = None) -> dict[str, Any]:
+    """The Models section as the offer editor shows it: the models W uses (``*``: every
+    one), its default model, whether it uses every model, and the chat models the
+    caller may list (``available``: what the editor offers to pick)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import (
+        EVERY_MODEL,
+        models_of,
+    )
+
+    models = models_of(offer)
+    offered = sorted(models.offered) if models.offered is not None else [EVERY_MODEL]
+    return {
+        "offered": offered,
+        "default": models.default,
+        "every": not models.restricted,
+        "available": list(available or []),
+    }
+
+
+def listed_chat_models() -> list[str]:
+    """The chat models of the engine's registry the caller may list (``ListModels``, in
+    the caller's context); none without an engine."""
+    try:
+        from naas_abi import ABIModule
+        from naas_abi_core.models.Model import ChatModel
+
+        registry = ABIModule.get_instance().engine.services.model_registry
+        return sorted(
+            {
+                cid
+                for cid, model in registry.list_registered_models()
+                if isinstance(model, ChatModel)
+            }
+        )
+    except Exception:  # noqa: BLE001 - no engine (a test): nothing listed to pick from
+        return []
+
+
 def check_file_changes(changes: Mapping[str, str]) -> None:
     """Refuse (``ValueError``) no change, an unknown section or a mode it does not have."""
     if not changes:
@@ -643,6 +681,7 @@ class FeatureAccessService:
                 "my_files": my_files_json(),
                 # Settings › Graphs edits it: shown here, not changed.
                 "graphs": given_graphs.summary(offer),
+                "models": models_json(offer, listed_chat_models()),
             }
 
         return await run_in_threadpool(snapshot)
@@ -734,6 +773,31 @@ class FeatureAccessService:
             detail=",".join(f"{k}={v}" for k, v in sorted(changes.items())),
         )
         _log.info(f"Files given by {workspace_id}: {dict(sorted(changes.items()))}")
+        return await self.read_offer(user, workspace_id)
+
+    async def set_models(
+        self, user: Any, workspace_id: str, models: Sequence[str], default: str | None
+    ) -> dict[str, Any]:
+        """The chat models the workspace uses (``*``: every model its people's model
+        sets allow) and its default model, which a model it does not offer is switched
+        to (``iam/workspace_models``), in one write of "<W> access" as the caller: IAM
+        refuses a model beyond the organization's offer (422) or one the caller does not
+        hold (403). A list needs one of its models as the default (422). Answers the
+        offer after."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import validated
+
+        wanted, wanted_default = validated(models, default)
+        _container, record = await self._where(workspace_id)
+        await self._set_offer(
+            user,
+            workspace_id,
+            getattr(record, "access_policy_id", None),
+            "workspace-offer.models",
+            workspace_id,
+            lambda offer: replace(offer, models=wanted, default_model=wanted_default),
+            detail=f"models={','.join(sorted(wanted))},default={wanted_default or '-'}",
+        )
+        _log.info(f"Models of {workspace_id}: {sorted(wanted)}, default {wanted_default}")
         return await self.read_offer(user, workspace_id)
 
     async def set_ontologies(self, user: Any, workspace_id: str, refs: Sequence[str]) -> Offer:

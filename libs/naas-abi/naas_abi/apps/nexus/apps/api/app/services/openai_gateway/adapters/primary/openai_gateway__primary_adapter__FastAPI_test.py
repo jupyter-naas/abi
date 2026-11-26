@@ -40,14 +40,17 @@ def _client(monkeypatch: pytest.MonkeyPatch, user_id: str = "admin") -> TestClie
         user_context_preamble: str | None = None,
         allowed: frozenset[str] | None = None,
         processes: frozenset[tuple[str, str, str]] | None = None,
+        models: object = None,
     ) -> AsyncGenerator[str, None]:
         STREAMED.append(allowed)
         PROCESSES.append(processes)
+        MODELS.append(models)
         for piece in ["Hello", " world"]:
             yield piece
 
     STREAMED.clear()
     PROCESSES.clear()
+    MODELS.clear()
     # This engine has no module workflows (the class registry is process-wide).
     from naas_abi.apps.nexus.apps.api.app.services.agents import scopes as agent_scopes
 
@@ -66,6 +69,7 @@ def _client(monkeypatch: pytest.MonkeyPatch, user_id: str = "admin") -> TestClie
 
 
 PROCESSES: list = []
+MODELS: list = []
 STREAMED: list[frozenset[str] | None] = []
 
 
@@ -293,3 +297,35 @@ def test_the_gateway_needs_the_chat_feature(monkeypatch: pytest.MonkeyPatch) -> 
 
         assert client.get("/v1/models").status_code == 403
         assert client.post("/v1/chat/completions", json=_COMPLETION).status_code == 403
+
+
+def test_a_turn_runs_on_the_models_of_the_workspace_it_is_decided_in(
+    team: NexusIam, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The agent's turn is handed the models of the workspace the gateway decided it
+    in (``iam/workspace_models``), streamed or not."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import workspace_models
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import WorkspaceModels
+
+    only_qwen = WorkspaceModels(frozenset({"qwen-3.8"}), "qwen-3.8")
+    seen: list = []
+
+    async def models_of(workspace_id):
+        seen.append(workspace_id)
+        return only_qwen
+
+    _grant_every_agent(team)
+    client = _client(monkeypatch)
+    monkeypatch.setattr(workspace_models, "models_in_workspace", models_of)
+    for stream in (False, True):
+        resp = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "aia",
+                "stream": stream,
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+        )
+        assert resp.status_code == 200, resp.text
+    assert MODELS == [only_qwen, only_qwen]
+    assert seen and all(seen)
