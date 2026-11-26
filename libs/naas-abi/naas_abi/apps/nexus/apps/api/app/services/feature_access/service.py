@@ -45,7 +45,12 @@ from naas_abi.apps.nexus.apps.api.app.services.feature_access.port import (
     FeatureChange,
     FeaturePolicyStore,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam import given_files, given_graphs, given_maps
+from naas_abi.apps.nexus.apps.api.app.services.iam import (
+    access_levels,
+    given_files,
+    given_graphs,
+    given_maps,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.given_files import (
     LABELS,
@@ -1152,6 +1157,92 @@ class FeatureAccessService:
         session = self._gateway.bind(user)
         action = AdminAction(_actor_id(user), AUDIT_SERVICE, operation, resource_id, detail)
         return await run_audited(self._audit, action, lambda: run_in_threadpool(call, session))
+
+    # -- access levels: how far people go with a feature or a core service -------------
+
+    async def read_levels(
+        self,
+        user: Any,
+        workspace_id: str,
+        kind: access_levels.Kind,
+        policy_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Each Nexus feature's or core service's access level in the policy edited
+        (``policy_id``): in "<W> access" a cap for everyone in the workspace (admins
+        included), in another policy what it grants its holders."""
+        container, record = await self._where(workspace_id)
+        access_id = getattr(record, "access_policy_id", None)
+        session = self._gateway.bind(user)
+        features = set(self._features())
+
+        def snapshot() -> dict[str, Any]:
+            access = self._gateway.policy(access_id) if access_id else None
+            target = self._target(container, access_id, policy_id)
+            mode: access_levels.Mode = (
+                "cap" if target is None or target.id == access_id else "grant"
+            )
+            editable = (
+                target is not None
+                and session.authorize(
+                    "iam:UpdatePolicy", policy_resource(target.id, container)
+                ).allowed
+            )
+            reason = (
+                None
+                if editable
+                else "This workspace has no access policy yet."
+                if target is None
+                else f"IAM does not let you change {target.name}."
+            )
+            document = target.document if target is not None else {"statements": []}
+            # A feature not enabled on the deployment has no row.
+            keys = features if kind == "feature" else None
+            return {
+                "workspace_id": workspace_id,
+                "kind": kind,
+                "mode": mode,
+                "access_policy": _ref(access) if access is not None else None,
+                "policy": _ref(target) if target is not None else None,
+                "policies": self._choices(session, container, access),
+                "editable": editable,
+                "reason": reason,
+                "rows": access_levels.rows(document, mode, kind, keys),
+            }
+
+        return await run_in_threadpool(snapshot)
+
+    async def save_levels(
+        self,
+        user: Any,
+        workspace_id: str,
+        kind: access_levels.Kind,
+        changes: Mapping[str, str],
+        policy_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Set access levels (group key -> level) in one write of the policy edited, as
+        the caller: a cap in "<W> access", a grant in another policy. IAM decides (a grant
+        holds only what the caller holds: 403). Answers the levels after."""
+        container, record = await self._where(workspace_id)
+        access_id = getattr(record, "access_policy_id", None)
+        target = await run_in_threadpool(self._target, container, access_id, policy_id)
+        if target is None:
+            raise IAMNotFoundError("This workspace has no access policy yet")
+        mode: access_levels.Mode = "cap" if target.id == access_id else "grant"
+        access_levels.check_changes(changes, mode)
+
+        def write(session: IIAMService) -> None:
+            policy = session.get_policy(target.id)
+            levels = {**access_levels.levels_of(policy.document, mode), **changes}
+            session.update_policy(
+                policy.id,
+                expected_revision=policy.revision,
+                document=access_levels.with_levels(policy.document, mode, levels),
+            )
+
+        detail = ",".join(f"{key}={level}" for key, level in sorted(changes.items()))
+        await self._change(user, f"access-levels.{mode}", target.id, write, detail=detail)
+        AUTHZ.forget_offers()
+        return await self.read_levels(user, workspace_id, kind, policy_id)
 
     # -- for Access › Policies --------------------------------------------------------
 

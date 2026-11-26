@@ -145,10 +145,12 @@ export function otherPolicies(row: FeatureRow): { policy: OtherPolicy; text: str
 }
 
 /** The columns of the features table: each sorts and filters, as Settings › Users. */
-export type FeatureColumnId = 'feature' | 'offered' | 'policies';
+export type FeatureColumnId = 'feature' | 'offered' | 'access' | 'policies';
 export const FEATURE_COLUMNS: { id: FeatureColumnId; label: string }[] = [
   { id: 'feature', label: 'Feature' },
   { id: 'offered', label: 'Offered to' },
+  // How far people go with it (`access-levels`): the page fills its values.
+  { id: 'access', label: 'Access' },
   { id: 'policies', label: 'Other policies' },
 ];
 
@@ -165,6 +167,7 @@ export function featureColumns(offer: boolean): { id: FeatureColumnId; label: st
 export function featureCellValues(row: FeatureRow, column: FeatureColumnId, offer = true): string[] {
   if (column === 'feature') return [row.label];
   if (column === 'offered') return [offer ? CHOICE_LABELS[row.choice] : GRANT_LABELS[row.choice]];
+  if (column === 'access') return [];
   return row.also.length === 0 ? ['None'] : otherPolicies(row).map(({ policy }) => policy.name);
 }
 

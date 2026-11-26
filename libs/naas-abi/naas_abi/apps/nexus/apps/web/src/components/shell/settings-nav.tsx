@@ -17,6 +17,7 @@ import {
   Map,
   type LucideIcon,
   Package,
+  Database,
 } from 'lucide-react';
 import { opensSection, type AccessSection } from '@/components/access/access-sections';
 import type { AccessView } from '@/lib/iam-admin/types';
@@ -69,6 +70,8 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       // pages under Features then show what is offered.
       { href: '/settings/features', label: 'Features', icon: SlidersHorizontal },
       { href: '/settings/modules', label: 'Modules', icon: Package },
+      // How far people go with each core service of the engine (graphs, files, vectors...).
+      { href: '/settings/core-services', label: 'Services', icon: Database },
     ],
   },
   {

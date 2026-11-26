@@ -156,6 +156,53 @@ async def read_workspace_offer(
     return await _call(service.read_offer(user, workspace_id, policy_id))
 
 
+class LevelsBody(BaseModel):
+    # ``{group key: level}``: ``feature:graph``, ``service:triple_store``... (``access_levels``).
+    changes: dict[str, Literal["none", "read", "write", "admin"]] = Field(
+        min_length=1, max_length=100
+    )
+
+
+@router.get(
+    "/{workspace_id}/access-levels",
+    dependencies=[
+        guard(
+            "GetWorkspaceConfiguration",
+            denied="Only admins can view the workspace configuration",
+        )
+    ],
+)
+async def read_access_levels(
+    workspace_id: str,
+    kind: Literal["feature", "service"] = Query(default="feature"),
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
+) -> dict[str, Any]:
+    """How far people go with each Nexus feature (``kind=feature``) or core service
+    (``kind=service``) in the policy edited: a cap in "<W> access" (Denies), what another
+    policy grants (Allows)."""
+    return await _call(service.read_levels(user, workspace_id, kind, policy_id))
+
+
+@router.put(
+    "/{workspace_id}/access-levels",
+    dependencies=[declares(action) for action in WRITES],
+)
+async def save_access_levels(
+    workspace_id: str,
+    body: LevelsBody,
+    kind: Literal["feature", "service"] = Query(default="feature"),
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
+) -> dict[str, Any]:
+    """Set access levels in one write of the policy edited, as the caller (403 for a grant
+    the caller does not hold, 422 for a level a group does not have). Answers the levels
+    after."""
+    return await _call(service.save_levels(user, workspace_id, kind, body.changes, policy_id))
+
+
 class SearchSourcesBody(BaseModel):
     # ``{source id: offered}``: ``chat``, ``web.wikipedia``... (``search.sources``).
     changes: dict[str, bool] = Field(min_length=1, max_length=50)

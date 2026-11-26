@@ -81,6 +81,7 @@ export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   // Features and Files of the workspace (new, but `getWorkspacePath(null, ...)` yields them too).
   'features',
   'files',
+  'core-services',
 ];
 
 /**

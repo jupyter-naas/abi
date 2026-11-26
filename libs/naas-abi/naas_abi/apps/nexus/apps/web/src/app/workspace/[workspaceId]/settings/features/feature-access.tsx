@@ -24,6 +24,14 @@ import { UsersExportMenu } from '@/components/settings/users-table/users-table-a
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { PolicyPicker } from '@/components/settings/policy-picker';
+import { AccessLevelChoice } from '@/components/settings/access-level-choice';
+import {
+  LEVEL_LABELS,
+  createAccessLevelsApi,
+  type AccessLevel,
+  type AccessLevelsApi,
+  type LevelsState,
+} from '@/lib/access-model/access-levels';
 import { createFeatureAccessApi, type FeatureAccessApi } from './feature-access-api';
 import {
   FEATURE_COLUMNS,
@@ -47,6 +55,7 @@ import {
 } from './feature-access-model';
 
 const DEFAULT_API = createFeatureAccessApi();
+const DEFAULT_LEVELS_API = createAccessLevelsApi();
 
 function message(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -68,11 +77,14 @@ const FILES_FEATURE = 'files';
 export function FeatureAccess({
   workspaceId,
   api = DEFAULT_API,
+  levelsApi = DEFAULT_LEVELS_API,
   initialPolicy = null,
   onPolicyChange,
 }: {
   workspaceId: string;
   api?: FeatureAccessApi;
+  /** Each feature's access level (Read, Write, Admin): a cap in the offer, a grant elsewhere. */
+  levelsApi?: AccessLevelsApi;
   /** The policy edited first (`?policy=`); "<W> access" when null. */
   initialPolicy?: string | null;
   /** Told when another policy is picked (null: "<W> access"), e.g. to keep it in the URL. */
@@ -84,22 +96,32 @@ export function FeatureAccess({
   const [drafts, setDrafts] = useState<Record<string, FeatureDraft>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [levels, setLevels] = useState<LevelsState | null>(null);
+  const [accessDrafts, setAccessDrafts] = useState<Record<string, AccessLevel>>({});
 
   const load = useCallback(async () => {
+    // The levels follow, never holding the table back; without them it still shows who uses
+    // each feature.
+    void levelsApi.read(workspaceId, 'feature', policyId).then(setLevels, () => setLevels(null));
     try {
       setState(await api.read(workspaceId, policyId));
       setError('');
     } catch (e) {
       setError(message(e, 'Could not read who uses the features.'));
     }
-  }, [api, workspaceId, policyId]);
+  }, [api, levelsApi, workspaceId, policyId]);
 
   useEffect(() => {
     setState(null);
+    setLevels(null);
     setDrafts({});
+    setAccessDrafts({});
     setRowErrors({});
     void load();
   }, [load]);
+
+  const levelRow = (key: string) => levels?.rows.find((r) => r.name === key) ?? null;
+  const levelOf = (key: string): AccessLevel | null => accessDrafts[key] ?? levelRow(key)?.level ?? null;
 
   // By name first: rows that tie on the sorted column stay A to Z.
   const rows = useMemo(
@@ -111,7 +133,11 @@ export function FeatureAccess({
   const table = useSettingsTable({
     rows,
     columns,
-    cellValues: (row: FeatureRow, column: FeatureColumnId) => featureCellValues(row, column, offer),
+    cellValues: (row: FeatureRow, column: FeatureColumnId) => {
+      if (column !== 'access') return featureCellValues(row, column, offer);
+      const level = levelRow(row.key)?.level;
+      return level ? [LEVEL_LABELS[level]] : [];
+    },
     searchTexts: featureSearchTexts,
     initialSort: 'feature',
   });
@@ -119,6 +145,8 @@ export function FeatureAccess({
 
   const draftFor = (row: FeatureRow) => drafts[row.key] ?? draftOf(row);
   const changes = changesFrom(rows, drafts);
+  const accessChanges = Object.entries(accessDrafts).filter(([key, level]) => level !== levelRow(key)?.level);
+  const unsavedCount = changes.length + accessChanges.length;
 
   const choose = (row: FeatureRow, choice: FeatureChoice) =>
     setDrafts((current): Record<string, FeatureDraft> => ({ ...current, [row.key]: { choice } }));
@@ -126,14 +154,21 @@ export function FeatureAccess({
   const save = async () => {
     setSaving(true);
     try {
-      const next = await api.save(workspaceId, changes, policyId);
-      const refused = next.errors ?? {};
-      setState(next);
-      setRowErrors(refused);
-      setDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => refused[key])));
+      if (changes.length > 0) {
+        const next = await api.save(workspaceId, changes, policyId);
+        const refused = next.errors ?? {};
+        setState(next);
+        setRowErrors(refused);
+        setDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => refused[key])));
+        // The nav's pages under Features follow what is offered.
+        if (editsOffer(next)) void useWorkspaceStore.getState().fetchWorkspaces();
+      }
+      if (accessChanges.length > 0) {
+        const wanted = Object.fromEntries(accessChanges.map(([key, level]) => [`feature:${key}`, level]));
+        setLevels(await levelsApi.save(workspaceId, 'feature', wanted, policyId));
+        setAccessDrafts({});
+      }
       setError('');
-      // The nav's pages under Features follow what is offered.
-      if (editsOffer(next)) void useWorkspaceStore.getState().fetchWorkspaces();
     } catch (e) {
       setError(message(e, 'Could not save.'));
     } finally {
@@ -143,6 +178,7 @@ export function FeatureAccess({
 
   const discard = () => {
     setDrafts({});
+    setAccessDrafts({});
     setRowErrors({});
   };
 
@@ -159,12 +195,13 @@ export function FeatureAccess({
   const pick = (id: string) => {
     const next = access && id === access.id ? null : id;
     setDrafts({});
+    setAccessDrafts({});
     setRowErrors({});
     setPolicyId(next);
     onPolicyChange?.(next);
   };
   const unsaved =
-    changes.length === 0 ? 'No unsaved change' : `${changes.length} unsaved change${changes.length === 1 ? '' : 's'}`;
+    unsavedCount === 0 ? 'No unsaved change' : `${unsavedCount} unsaved change${unsavedCount === 1 ? '' : 's'}`;
 
   return (
     <div className="space-y-6">
@@ -205,19 +242,19 @@ export function FeatureAccess({
               policies={state?.policies}
               value={edited?.id ?? access?.id}
               onChange={pick}
-              disabled={saving || changes.length > 0}
+              disabled={saving || unsavedCount > 0}
             />
             <UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />
             <Button
               variant="secondary"
               data-action="discard"
-              disabled={saving || (changes.length === 0 && Object.keys(rowErrors).length === 0)}
+              disabled={saving || (unsavedCount === 0 && Object.keys(rowErrors).length === 0)}
               onClick={discard}
             >
               Discard
             </Button>
             <Button
-              disabled={saving || changes.length === 0}
+              disabled={saving || unsavedCount === 0}
               onClick={() => void save()}
               data-action="save"
             >
@@ -304,6 +341,24 @@ export function FeatureAccess({
                             {rowErrors[row.key]}
                           </p>
                         )}
+                      </td>
+                      <td data-field="access">
+                        {(() => {
+                          const level = levelRow(row.key);
+                          const value = levelOf(row.key);
+                          return level && levels && value ? (
+                            <AccessLevelChoice
+                              row={level}
+                              value={value}
+                              mode={levels.mode}
+                              disabled={!levels.editable || saving}
+                              hideNone={levels.mode === 'cap'}
+                              onChange={(next) => setAccessDrafts((current) => ({ ...current, [row.key]: next }))}
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          );
+                        })()}
                       </td>
                       <td data-field="policies">
                         {row.also.length === 0 ? (

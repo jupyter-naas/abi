@@ -670,3 +670,77 @@ async def test_a_policy_of_another_scope_is_not_edited_here(nexus, acme, service
         await service.save_offer(
             "olivia", "alpha", [OfferChange("agents", "acme.sales", "*", True)], elsewhere.id
         )
+
+
+# -- access levels: a cap in "<W> access", a grant in another policy ---------------------
+
+
+def _may(nexus: NexusIam, user: str, action: str, resource: str) -> bool:
+    with use_call_context(NexusIam.context(user)):
+        return nexus.iam.authorize(action, resource).allowed
+
+
+@pytest.mark.asyncio
+async def test_a_cap_in_the_offer_keeps_everyone_to_a_level(nexus, acme, service):
+    view = nexus_resource("view", container=ALPHA, id="v1")
+    assert _may(nexus, "carol", "nexus:CreateView", view)
+    state = await service.read_levels("olivia", "alpha", "feature")
+    assert state["mode"] == "cap" and state["editable"]
+    rows = {r["name"]: r for r in state["rows"]}
+    # Only the features the deployment enables; no cap: their highest level.
+    assert set(rows) <= set(FEATURES)
+    assert rows["chat"]["level"] == rows["chat"]["choices"][-1]
+
+    saved = await service.save_levels(
+        "olivia", "alpha", "service", {"service:triple_store": "read"}
+    )
+    assert {r["name"]: r["level"] for r in saved["rows"]}["triple_store"] == "read"
+    with as_service_account("api"):
+        document = nexus.iam.get_policy(acme.access_policy_id).document
+    caps = [s for s in document.statements if (s.sid or "").startswith("AccessLevelCap")]
+    assert caps and all(s.effect == "Deny" for s in caps)
+    # The offer's own sections are kept as they were.
+    assert offer_of(document).features == {"chat", "files"}
+
+    with pytest.raises(ValueError):
+        await service.save_levels(
+            "olivia", "alpha", "service", {"service:triple_store": "everything"}
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_cap_on_a_feature_denies_its_actions_above_the_level(nexus, acme, service):
+    from naas_abi.apps.nexus.apps.api.app.services.iam import access_levels
+
+    view = nexus_resource("view", container=ALPHA, id="v1")
+    assert _may(nexus, "carol", "nexus:CreateView", view)
+    with use_call_context(NexusIam.context("root")):
+        access = nexus.iam.get_policy(acme.access_policy_id)
+        nexus.iam.update_policy(
+            access.id,
+            expected_revision=access.revision,
+            document=access_levels.with_levels(access.document, "cap", {"feature:graph": "read"}),
+        )
+    # A Member still reads (below the cap), and no longer writes (above it).
+    assert _may(nexus, "carol", "nexus:GetView", view)
+    assert not _may(nexus, "carol", "nexus:CreateView", view)
+
+
+@pytest.mark.asyncio
+async def test_another_policy_grants_a_level_to_its_holders(nexus, acme, service):
+    grants = _grants(nexus)
+    state = await service.read_levels("root", "alpha", "service", grants.id)
+    assert state["mode"] == "grant"
+    assert {r["name"]: r["level"] for r in state["rows"]}["secret"] == "none"
+    saved = await service.save_levels(
+        "root", "alpha", "service", {"service:secret": "read"}, grants.id
+    )
+    assert {r["name"]: r["level"] for r in saved["rows"]}["secret"] == "read"
+    with as_service_account("api"):
+        document = nexus.iam.get_policy(grants.id).document
+    granted = [s for s in document.statements if (s.sid or "").startswith("AccessLevelGrant")]
+    assert granted and granted[0].effect == "Allow"
+    # "<W> access" holds no cap for it.
+    with as_service_account("api"):
+        access_doc = nexus.iam.get_policy(acme.access_policy_id).document
+    assert not [s for s in access_doc.statements if (s.sid or "").startswith("AccessLevel")]

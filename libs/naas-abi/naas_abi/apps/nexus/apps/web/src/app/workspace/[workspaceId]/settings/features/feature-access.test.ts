@@ -221,4 +221,53 @@ describe('FeatureAccess', () => {
     await mounted.select(mounted.host.querySelector('select[data-field="policy"]'), 'pol_access');
     expect(onPolicyChange).toHaveBeenLastCalledWith(null);
   });
+
+  it('caps how far everyone goes with a feature (Access), saved with the rest', async () => {
+    const graphLevel = {
+      key: 'feature:graph',
+      kind: 'feature' as const,
+      name: 'graph',
+      label: 'Graph',
+      level: 'write' as const,
+      choices: ['none', 'read', 'write'] as ('none' | 'read' | 'write')[],
+      actions: { read: ['nexus:GetView'], write: ['nexus:CreateView'] },
+    };
+    const levelsState = {
+      workspace_id: 'ws1',
+      kind: 'feature' as const,
+      mode: 'cap' as const,
+      access_policy: null,
+      policy: null,
+      policies: [],
+      editable: true,
+      reason: null,
+      rows: [graphLevel],
+    };
+    const levelsApi = {
+      read: vi.fn().mockResolvedValue(levelsState),
+      save: vi.fn().mockResolvedValue({ ...levelsState, rows: [{ ...graphLevel, level: 'read' }] }),
+    };
+    const api = fakeApi();
+    mounted = await mount(FeatureAccess, {
+      workspaceId: 'ws1',
+      api: api as unknown as FeatureAccessApi,
+      levelsApi: levelsApi as never,
+    });
+    await mounted.flush();
+    const level = (value: string) => at(mounted!, 'graph', `[data-access-level] [data-level="${value}"]`);
+    expect(level('write')?.getAttribute('aria-checked')).toBe('true');
+    // On the offer, None is the feature's Nobody: not offered twice.
+    expect(level('none')).toBeNull();
+    expect(at(mounted, 'graph', '[data-level-actions]')?.textContent).toContain('nexus:CreateView');
+    expect(at(mounted, 'chat', '[data-field="access"]')?.textContent).toBe('—');
+
+    await mounted.click(level('read'));
+    expect(mounted.host.textContent).toContain('1 unsaved change');
+    await mounted.click(saveButton(mounted));
+    await mounted.flush();
+    expect(levelsApi.save).toHaveBeenCalledWith('ws1', 'feature', { 'feature:graph': 'read' }, null);
+    expect(api.save).not.toHaveBeenCalled();
+    expect(level('read')?.getAttribute('aria-checked')).toBe('true');
+    expect(mounted.host.textContent).toContain('No unsaved change');
+  });
 });
