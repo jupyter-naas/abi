@@ -2097,7 +2097,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "7.5.1"
+version = "7.6.0"
 source = { virtual = "." }
 dependencies = [
     { name = "aiosqlite" },
@@ -2192,7 +2192,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "6.4.0"
+version = "6.4.1"
 source = { editable = "../naas-abi-core" }
 dependencies = [
     { name = "click" },
