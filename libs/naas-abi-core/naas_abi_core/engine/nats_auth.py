@@ -10,6 +10,9 @@ Claims, audiences and rotation: ``services/iam/AGENTS.md``, "Tokens".
 * No token lives longer than ten minutes: the issuer refuses to sign one and
   verifiers refuse to accept one (``exp - iat > 600``), with 30 seconds of
   clock skew.
+* A token carries its issue instant to the microsecond (``abi_iat_us``) next
+  to its whole-second ``iat``: IAM refuses a token issued at or before its
+  subject's or actor's revocation floor, and a floor is sub-second too.
 * A process that calls with tokens holds a :class:`TokenSource`: an in-process
   issuer (the serving engine), or a service key exchanged at
   ``abi.iam.v1.token`` (modules, scripts, client-role engines). Either renews
@@ -30,7 +33,7 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
@@ -133,6 +136,10 @@ class TokenClaims:
     so they stop after ``MAX_DELEGATION_SECONDS``. ``resource`` (``abi_res``):
     the target the exchange was for, for audit and for the routes that bind a
     token to one thing.
+    ``issued_at_us`` (``abi_iat_us``): the issue instant in whole microseconds
+    since the epoch, in ``iat``'s second, which IAM compares with revocation
+    floors (``issued_instant``). None in a token an engine signed before the
+    claim existed: its whole-second ``iat`` is the instant.
     """
 
     issuer: str
@@ -150,10 +157,19 @@ class TokenClaims:
     since: int | None = None
     resource: str | None = None
     actor_name: str | None = None
+    issued_at_us: int | None = None
 
     @property
     def lifetime(self) -> int:
         return self.expires_at - self.issued_at
+
+    @property
+    def issued_instant(self) -> float:
+        """When the token was issued, in seconds since the epoch: to the
+        microsecond (``abi_iat_us``), else the whole-second ``iat``."""
+        if self.issued_at_us is not None:
+            return self.issued_at_us / 1_000_000
+        return float(self.issued_at)
 
     def to_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -182,6 +198,8 @@ class TokenClaims:
             payload["abi_since"] = self.since
         if self.resource is not None:
             payload["abi_res"] = self.resource
+        if self.issued_at_us is not None:
+            payload["abi_iat_us"] = self.issued_at_us
         return payload
 
     @classmethod
@@ -239,13 +257,19 @@ class TokenClaims:
             audience = audience[0]
         if not isinstance(audience, str) or not audience:
             raise InvalidServiceTokenError("token must name exactly one audience")
+        issued_at = integer("iat")
+        issued_at_us = optional_integer("abi_iat_us")
+        if issued_at_us is not None and issued_at_us // 1_000_000 != issued_at:
+            raise InvalidServiceTokenError(
+                "token has an 'abi_iat_us' claim outside its 'iat' second"
+            )
         return cls(
             issuer=text("iss"),
             subject=text("sub"),
             audience=audience,
             kind=kind,
             token_id=text("jti"),
-            issued_at=integer("iat"),
+            issued_at=issued_at,
             expires_at=integer("exp"),
             name=optional_text("abi_name"),
             actor=actor,
@@ -255,6 +279,7 @@ class TokenClaims:
             since=optional_integer("abi_since"),
             resource=optional_text("abi_res"),
             actor_name=actor_name or None,
+            issued_at_us=issued_at_us,
         )
 
 
@@ -754,3 +779,20 @@ def parse_key(key: str) -> tuple[str, str, str]:
 
 def epoch(value: datetime) -> int:
     return int(value.timestamp())
+
+
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+_MICROSECOND = timedelta(microseconds=1)
+
+
+def epoch_us(value: datetime) -> int:
+    """``value`` (timezone-aware) in whole microseconds since the epoch, exact:
+    no float on the way, so an issue instant and a revocation floor compare
+    without rounding."""
+    return (value - _EPOCH) // _MICROSECOND
+
+
+def seconds_us(seconds: float) -> int:
+    """An instant in seconds (a ``CallContext.token_issued_at``) in whole
+    microseconds: a double holds them exactly enough until 2106."""
+    return round(seconds * 1_000_000)

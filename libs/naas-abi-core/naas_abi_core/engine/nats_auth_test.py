@@ -249,6 +249,44 @@ def test_claims_refuse_unknown_kinds_and_several_audiences(key):
         TokenClaims.from_payload({**payload, "aud": ["abi:nats", "abi:session"]})
 
 
+def test_the_issue_instant_round_trips_in_microseconds(key):
+    now = int(time.time())
+    original = claims(issued_at=now, issued_at_us=now * 1_000_000 + 123_456)
+    payload = original.to_payload()
+    assert payload["abi_iat_us"] == now * 1_000_000 + 123_456
+    assert TokenClaims.from_payload(payload) == original
+    verified = verifier_for(key).verify(sign_token(key, original))
+    assert verified.issued_at_us == now * 1_000_000 + 123_456
+    assert verified.issued_instant == pytest.approx(now + 0.123456, abs=1e-7)
+
+
+@pytest.mark.parametrize(
+    "instant",
+    [
+        lambda iat: (iat + 1) * 1_000_000,  # the next second
+        lambda iat: iat * 1_000_000 - 1,  # the second before
+        lambda iat: float(iat * 1_000_000 + 5),
+        lambda iat: str(iat * 1_000_000 + 5),
+        lambda iat: True,
+    ],
+    ids=["next-second", "second-before", "float", "string", "bool"],
+)
+def test_an_issue_instant_outside_iats_second_or_not_an_integer_is_refused(
+    key, instant
+):
+    payload = claims().to_payload()
+    with pytest.raises(InvalidServiceTokenError, match="abi_iat_us"):
+        TokenClaims.from_payload({**payload, "abi_iat_us": instant(payload["iat"])})
+
+
+def test_without_an_issue_instant_the_instant_is_iat():
+    payload = claims().to_payload()
+    assert "abi_iat_us" not in payload
+    parsed = TokenClaims.from_payload(payload)
+    assert parsed.issued_at_us is None
+    assert parsed.issued_instant == float(payload["iat"])
+
+
 def test_renewing_source_renews_at_half_life():
     now = [0.0]
     issued = []

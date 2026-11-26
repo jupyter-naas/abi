@@ -33,7 +33,7 @@ from naas_abi_core.engine.nats_auth import (
     IssuedToken,
     SigningKey,
     TokenClaims,
-    epoch,
+    epoch_us,
     new_token_id,
     sign_token,
 )
@@ -134,7 +134,8 @@ class TokenIssuer:
     # -- issuing ------------------------------------------------------------------
 
     def now(self) -> datetime:
-        """The issuer's clock: what ``iat`` and every cap on a token are read from."""
+        """The issuer's clock: what ``iat``, ``abi_iat_us``, revocation floors
+        and every cap on a token are read from."""
         return self._clock()
 
     def issue(
@@ -153,22 +154,21 @@ class TokenIssuer:
         session: str | None = None,
         since: int | None = None,
         resource: str | None = None,
-        min_issued_at: int | None = None,
     ) -> IssuedToken:
         """A signed token for ``subject``; callers decide who may have one.
 
         ``not_after``: the token never outlives this (epoch seconds), whatever
         its ttl: the end of a delegation that may only be renewed so long.
-        ``min_issued_at``: ``iat`` is at least this: a token made right after a
-        revocation must not share its second, or the revocation (which cuts off
-        every token issued at or before it) would refuse it too.
+
+        The clock is read once: ``abi_iat_us`` is that reading in microseconds,
+        and ``iat`` its second. A token made right after a revocation is past
+        its floor by the clock itself, so no ``iat`` is ever ahead of it.
         """
         ttl = min(ttl_seconds or self._ttl, self._ttl)
         now = self._clock()
         key = self._current_key(now)
-        issued_at = epoch(now)
-        if min_issued_at is not None:
-            issued_at = max(issued_at, min_issued_at)
+        issued_at_us = epoch_us(now)
+        issued_at = issued_at_us // 1_000_000
         expires_at = issued_at + ttl
         if not_after is not None:
             expires_at = min(expires_at, not_after)
@@ -188,6 +188,7 @@ class TokenIssuer:
             session=session,
             since=issued_at if since is None else since,
             resource=resource,
+            issued_at_us=issued_at_us,
         )
         return IssuedToken(
             sign_token(key, claims),

@@ -76,9 +76,10 @@ class CallContext:
     on_behalf_of: Principal | None = None  # the user, when acting for one
     audience: str | None = None
     token_id: str | None = None  # the token's jti, for audit
-    # When the token was issued (its iat): IAM refuses a token issued before
-    # its principal's tokens were revoked.
-    token_issued_at: int | None = None
+    # When the token was issued, in seconds to the microsecond (its
+    # abi_iat_us), else its whole-second iat: IAM refuses a token issued at or
+    # before its principal's revocation floor.
+    token_issued_at: float | None = None
     scope: tuple[Statement, ...] | None = None  # abi_scope narrowing
     # The container the call is made in (its name, ``abi:...``): where what it
     # creates is placed and its module scopes are named. A request input, not

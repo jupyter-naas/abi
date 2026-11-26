@@ -1842,10 +1842,10 @@ class IIAMService(ABC):
     def revoke_tokens(self, principal_id: str, *, include_keys: bool = False) -> None:
         """Cut off every token issued so far to or for ``principal_id``
         (delegated ones included), and end its links and coding keys.
-        ``include_keys``: its personal API keys too. Waits (at most a second)
-        when this principal's previous revocation pushed fresh tokens' ``iat``
-        into a second that has not begun, so they are cut off too: the floor is
-        never ahead of the clock."""
+        ``include_keys``: its personal API keys too. The floor is the clock as
+        this runs, to the microsecond: a token is cut off when its issue
+        instant (``abi_iat_us``, else ``iat``) is at or before it. Nothing
+        waits."""
 
     @abstractmethod
     def jwks(self) -> dict[str, Any]:
