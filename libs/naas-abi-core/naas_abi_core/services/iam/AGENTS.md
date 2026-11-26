@@ -2651,12 +2651,25 @@ Rejected:
   refused: it fails closed.
 - Concurrent revocations of one principal need no lock: the store keeps the later floor
   (`set_token_floor` only moves it forward), and it covers everything issued before either.
-- Another principal's floor never changes a token's instant, and no `iat` or stored floor is
-  ahead of the issuer's clock.
+- Another principal's floor never changes a token's instant. With one clock (the process that
+  revokes is the process that issues), no `iat` or stored floor is ahead of the issuer's clock.
+- With two clocks, the result fails closed. A floor is the clock of the process that revoked,
+  and an issue instant is the clock of the process that issues. When the issuer's clock is
+  behind the revoker's (skew between hosts, or a clock that steps back after a revocation),
+  each fresh token for that principal is refused until the issuer's clock passes the floor.
+  Under #849, `issue_after_floor` read the stored floor and prevented this. Clamping
+  `abi_iat_us` to the floor is rejected: it is a push again, and it opens the #872 hole again,
+  as wide as the skew. See "Known limits and open questions".
 - A token without the claim, signed by an engine before this change, keeps the whole-second
   comparison until it expires (ten minutes at most). Older verifiers ignore the claim: only the
   engine parses engine-token claims, and the SDK reads only `aud`, `sub` and `act` from an
-  unverified delegation.
+  unverified delegation. But an engine before this change still compares
+  `iat <= floor.timestamp()`, and the new issuer does not push `iat`. So during a mixed
+  deployment, an old engine refuses a new token issued in the second of a revocation, after
+  it: a token issued at S+0.5 after a floor at S+0.3 has `iat = S`. This fails closed, and it
+  stops when every engine runs this change.
+- During a mixed deployment, an old engine's pushed token can outlive a new revocation: see
+  "Known limits and open questions".
 - `CallContext.token_issued_at` widens from `int` to `float`: the instant in seconds, to the
   microsecond (`abi_iat_us`, else `iat`). There is no new field, so core works with any
   installed SDK and no `naas-abi-sdk` bound moves; the context never crosses NATS (the
@@ -2665,8 +2678,8 @@ Rejected:
 - The delegation cache (`engine/nats_credentials`) asks `revoked_since` with the instant too,
   so a delegation re-made in the second of its user's revocation is reused, not re-made on
   every call.
-- A clock that steps back can let a token outlive a revocation: see "Known limits and open
-  questions".
+- A clock that steps back can let a token outlive a revocation, and an issuer clock behind
+  the revoker's refuses fresh tokens for a while: see "Known limits and open questions".
 
 **Grant only what you hold; existing grants are not checked again.**
 *Decision.* IAM refuses creating or editing a policy, attaching one, adding a group member,
@@ -2900,10 +2913,27 @@ than at W (unscoped). Nexus makes a person's first membership itself, after auth
 - **Quotas.** `ABI_CLAIM_CHECKS` has no size limit beyond its seven-day age, and the overflow host's
   64 sessions and 1 GiB have no per-caller share: one module can fill either for everyone.
 - **Revocation reads the wall clock twice.** A floor and an issue instant are two readings
-  of the engine's wall clock. If that clock steps back between a token's issue and a
-  revocation, the token can outlive the revocation (for its ten minutes at most). A
-  monotonic issuer clock was rejected: after a step it would put instants ahead of the
-  clock (#872).
+  of a wall clock: the clock of the process that revoked, and the clock of the process that
+  issued. Both directions have a result:
+  - *Fails open.* If the clock steps back between a token's issue and a revocation, the
+    token can outlive the revocation (for its ten minutes at most).
+  - *Fails closed.* If the issuer's clock is behind the revoker's clock (skew between hosts,
+    or a clock that steps back after a revocation), every fresh token for that principal is
+    refused until the issuer's clock passes the floor. With skew between hosts, that is the
+    size of the skew after each revocation.
+
+  A monotonic issuer clock was rejected: after a step it would put instants ahead of the
+  clock. Clamping `abi_iat_us` to the floor was rejected too: it is a push, and it opens
+  the #872 hole again, as wide as the skew (#872).
+- **Rolling upgrade past #872: an old engine's pushed token can outlive a new revocation.**
+  Condition: engines from before #872 and after it share one IAM store. An old engine still
+  pushes `iat` to `int(floor) + 1`, with no `abi_iat_us`, and a new `revoke_tokens` does not
+  wait for that second. Example: bob is revoked at S+0.1; an old engine issues a token for
+  bob at S+0.3 with `iat = S+1`; a new engine revokes bob at S+0.6. The token is not refused
+  (`(S+1) * 1e6 > (S+0.6) * 1e6`) and lives its ten minutes. This is the same-principal hole
+  #849 closed. It stays open for the length of the mixed deployment plus ten minutes (the
+  last pushed token expires). In the other direction it fails closed: an old engine refuses
+  a new token issued in the second of a revocation (see the #872 decision).
 - **The `engine` broker login** may use every subject but `$SYS.>`: the API, Nexus and jobs run on it.
   It is not narrowed to the kernel subjects.
 - **Per-object sharing** of single conversations or files beyond personal resources is the
