@@ -248,7 +248,7 @@ export default function GeneralSettingsPage() {
     <div className="workspace-general space-y-6">
       <AccountPageHeader
         title="General"
-        subtitle="The workspace name, group, description, logo, desk wallpaper and colors, plus its modules and config preseeding. Its features and files have their own pages."
+        subtitle="The workspace name, group, description, logo, desk wallpaper and colors, and its config preseeding. What it offers is under Access (Features, Modules)."
         actions={
           canEdit ? (
             <button

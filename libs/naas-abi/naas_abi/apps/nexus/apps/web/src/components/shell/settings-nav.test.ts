@@ -53,6 +53,8 @@ describe('workspace settings nav', () => {
     expect(shown({ 'iam:Explain': true, 'nexus:ReadSystem': true })).not.toContain('Policies');
     const access = visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { access: IAM }).find((g) => g.label === 'Access');
     expect(access?.items.map((item) => [item.label, item.href])).toEqual([
+      ['Features', '/settings/features'],
+      ['Modules', '/settings/modules'],
       ['Groups', '/settings/groups'],
       ['Policies', '/settings/policies'],
     ]);
@@ -146,7 +148,7 @@ describe('workspace settings nav', () => {
   });
 
   it('has no Infrastructure: the map of the code is the platform\'s, in Platform › System', () => {
-    expect(visibleSettingsGroups(null).map((group) => group.label)).toEqual(['General', 'Features']);
+    expect(visibleSettingsGroups(null).map((group) => group.label)).toEqual(['General', 'Access', 'Features']);
     expect(settingsItemFor('/workspace/ws-1/settings/infrastructure/layers')).toBeUndefined();
   });
 

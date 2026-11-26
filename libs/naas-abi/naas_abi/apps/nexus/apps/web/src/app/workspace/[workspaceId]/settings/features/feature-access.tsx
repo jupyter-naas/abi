@@ -22,6 +22,7 @@ import {
 import { TablePager } from '@/components/settings/users-table/table-pager';
 import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
+import { useWorkspaceStore } from '@/stores/workspace';
 import { createFeatureAccessApi, type FeatureAccessApi } from './feature-access-api';
 import {
   FEATURE_COLUMNS,
@@ -112,6 +113,8 @@ export function FeatureAccess({ workspaceId, api = DEFAULT_API }: { workspaceId:
       setRowErrors(refused);
       setDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => refused[key])));
       setError('');
+      // The nav's pages under Features follow what is offered.
+      void useWorkspaceStore.getState().fetchWorkspaces();
     } catch (e) {
       setError(message(e, 'Could not save.'));
     } finally {

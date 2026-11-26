@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
 import { Input, Textarea } from '@/components/ui/input';
 import { useSettingsReloadGeneration } from '@/components/settings/settings-reload';
-import { WorkspaceOfferPart } from '@/components/settings/workspace-offer-part';
 import { usePageState } from '@/hooks/use-page-state';
 import {
   SettingsEmpty,
@@ -409,12 +408,6 @@ export default function AgentsPage() {
           <TablePager total={table.shown.length} paged={table.paged} />
         </div>
       )}
-      <WorkspaceOfferPart
-        workspaceId={workspaceId}
-        parts={['agents']}
-        description="The agents its people use here, by module: a module offered whole (its new agents too), or agent by agent. Their level decides what they do with them."
-        onChanged={() => void fetchAgents(workspaceId)}
-      />
       {confirmDialog}
     </div>
   );

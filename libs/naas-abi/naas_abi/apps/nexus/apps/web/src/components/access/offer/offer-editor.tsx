@@ -33,6 +33,7 @@ import {
   featureChanges,
   isOffered,
   itemName,
+  itemsWithOffered,
   modulesOf,
   offerChanges,
   wholeModule,
@@ -684,20 +685,4 @@ export function WorkspaceOfferEditor({
 
     </section>
   );
-}
-
-/** The listed items, and those offered by name that the listing missed (so they can be taken
- *  back), by label. */
-function itemsWithOffered(
-  listed: { name: string; label: string }[],
-  offered: { module: string; name: string }[],
-  module: string,
-): { name: string; label: string }[] {
-  const found = new Map(listed.map((i) => [i.name, i]));
-  for (const item of offered) {
-    if (item.module === module && item.name !== WHOLE_MODULE && !found.has(item.name)) {
-      found.set(item.name, { name: item.name, label: item.name });
-    }
-  }
-  return [...found.values()].sort((a, b) => a.label.localeCompare(b.label));
 }

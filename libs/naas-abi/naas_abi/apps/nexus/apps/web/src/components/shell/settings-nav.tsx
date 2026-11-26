@@ -16,6 +16,7 @@ import {
   Search,
   Map,
   type LucideIcon,
+  Package,
 } from 'lucide-react';
 import { opensSection, type AccessSection } from '@/components/access/access-sections';
 import type { AccessView } from '@/lib/iam-admin/types';
@@ -55,8 +56,6 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     label: 'General',
     items: [
       { href: '/settings/general', label: 'General', icon: Globe }, // the Organization's and Platform's icon
-      // Whether the workspace offers each feature (its offer's Features part).
-      { href: '/settings/features', label: 'Features', icon: SlidersHorizontal },
       { href: '/settings/users', label: 'Users', icon: Users },
       { href: '/settings/analytics', label: 'Analytics', icon: BarChart3, needs: 'analytics' },
     ],
@@ -64,6 +63,10 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
     label: 'Access',
     items: [
+      // The workspace's offer ("<W> access"): which features and which modules it offers; the
+      // pages under Features then show what is offered.
+      { href: '/settings/features', label: 'Features', icon: SlidersHorizontal },
+      { href: '/settings/modules', label: 'Modules', icon: Package },
       { href: '/settings/groups', label: 'Groups', icon: UsersRound, needs: 'groups' },
       { href: '/settings/policies', label: 'Policies', icon: KeyRound, needs: 'policies' },
     ],
