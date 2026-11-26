@@ -211,11 +211,15 @@ export function WorkspaceModules({
         }
         actions={
           <>
-            <PolicyPicker policies={offer?.policies} current={edited} value={edited?.id} onChange={pick} disabled={saving} />
             <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
           </>
         }
       />
+
+      {/* The policy edited, under the page's words, at its left. */}
+      <div className="-mt-3 flex justify-start" data-policy-picker="">
+        <PolicyPicker policies={offer?.policies} current={edited} value={edited?.id} onChange={pick} disabled={saving} />
+      </div>
 
       {error && (
         <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>

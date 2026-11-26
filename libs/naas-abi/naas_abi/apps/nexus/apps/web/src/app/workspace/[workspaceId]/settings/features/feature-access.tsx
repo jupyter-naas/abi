@@ -222,8 +222,8 @@ export function FeatureAccess({
             </>
           ) : (
           <>
-            Whether this workspace offers each feature: Everyone in it, or Nobody. Each person&apos;s level decides
-            what they may do with it, admins included. Part of what the workspace offers
+            Whether this workspace offers each feature (Enabled), and how far people go with it (Access). Each
+            person&apos;s level decides what they may do with it, admins included. Part of what the workspace offers
             {offerHref && access ? (
               <>
                 {' '}
@@ -237,13 +237,6 @@ export function FeatureAccess({
         }
         actions={
           <>
-            <PolicyPicker
-              policies={state?.policies}
-              current={edited ?? access}
-              value={edited?.id ?? access?.id}
-              onChange={pick}
-              disabled={saving || unsavedCount > 0}
-            />
             <UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />
             <Button
               variant="secondary"
@@ -263,6 +256,17 @@ export function FeatureAccess({
           </>
         }
       />
+
+      {/* The policy edited, under the page's words, at its left. */}
+      <div className="-mt-3 flex justify-start" data-policy-picker="">
+        <PolicyPicker
+          policies={state?.policies}
+          current={edited ?? access}
+          value={edited?.id ?? access?.id}
+          onChange={pick}
+          disabled={saving || unsavedCount > 0}
+        />
+      </div>
 
       {error && (
         <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
