@@ -861,6 +861,7 @@ resource_types:
     container: false            # true: a container, a step of the names it holds ("Containers")
     id_prefix: false            # true: children's ids extend this id (not a container)
     platform_companions: false  # true (a container type): a role attached at one brings the platform companions
+    no_membership_roles: false  # true (a container type): a built-in role attached at ${my workspaces} gives nothing at one
     parents: []                 # a container type: the containers it sits in ("<service>:<type>", "-" the platform); empty: any
     personal: false             # true: the id starts with the owner's principal id
     policy_only: false          # true: no built-in role holds it, a policy grants it
@@ -908,7 +909,13 @@ service's actions or types in its roles (`roles.py`):
   action on it marked `creates: true` (registering one) and may mark one `deletes: true`
   (deleting one). Any catalog, a module's included, declares containers.
   `platform_companions` on a container type: a role attached at one brings the platform
-  companions ("Built-in policies"; Nexus's `workspace`). `parents` on a container type:
+  companions ("Built-in policies"; Nexus's `workspace`). `no_membership_roles` on a
+  container type: a built-in role attached at `${my workspaces}` gives nothing at a
+  container of that type (`IAMService._membership_reach`: evaluation, `explain`, the held
+  checks and the listings alike); a customer policy there still applies, within the
+  container's bound (Nexus's `organization`: its people hold a view policy, its admins
+  their roles attached at it). On the wire, `ResourceType.no_membership_roles` (field 12).
+  `parents` on a container type:
   the containers it may sit in (`<service>:<type>`, `-` for the platform; empty: any):
   registering one elsewhere is refused, and "Grant only what you hold" counts its names
   there only (`grants.universe`), so a create action granted with `*` (Nexus's

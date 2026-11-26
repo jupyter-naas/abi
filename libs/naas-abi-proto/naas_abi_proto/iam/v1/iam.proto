@@ -162,6 +162,9 @@ message ResourceType {
   // A container type: the containers it may sit in, <service>:<type> each, "-"
   // for the platform; empty: any.
   repeated string parents = 11;
+  // A container type at which a built-in role attached at ${my workspaces} gives
+  // nothing (Nexus's organization).
+  bool no_membership_roles = 12;
 }
 
 message ActionSpec {

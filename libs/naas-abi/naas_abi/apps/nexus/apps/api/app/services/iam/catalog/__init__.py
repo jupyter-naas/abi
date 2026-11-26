@@ -71,7 +71,10 @@ SERVICE = "nexus"
 # 20: ``PutOrgFile`` and ``DeleteOrgFile`` are ``write``, not ``admin``: an organization's
 #     members write Organization Files, and a workspace's offer that gives them
 #     (``GivenOrgFiles``) lets its Members write them, its Viewers read them.
-VERSION = 20
+# 21: the organization is ``no_membership_roles``: a built-in role attached at
+#     ``${my workspaces}`` gives nothing at an organization ("<O> people" holds
+#     "Organization view"; its admins their roles attached at it).
+VERSION = 21
 
 _MODULES = (
     organizations,

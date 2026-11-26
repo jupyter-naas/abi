@@ -837,3 +837,89 @@ def test_a_containers_admins_group_at_my_workspaces_is_bounded_and_reaches_only_
     assert h.allowed(INSERT, graph("a"), bob)
     assert not h.allowed(INSERT, graph("b"), bob)
     assert not h.allowed(INSERT, graph("a", workspace="ws-2"), bob)
+
+
+# -- a container type the roles at ${my workspaces} do not reach ----------------------
+
+
+def _flagged_nexus():
+    """The harness's Nexus catalog with its organization marked
+    ``no_membership_roles``, as Nexus marks it."""
+    from dataclasses import replace
+
+    from naas_abi_core.services.iam.tests.iam_harness import NEXUS as HARNESS_NEXUS
+
+    return replace(
+        HARNESS_NEXUS,
+        version=HARNESS_NEXUS.version + 1,
+        resource_types=tuple(
+            replace(t, no_membership_roles=True) if t.name == "organization" else t
+            for t in HARNESS_NEXUS.resource_types
+        ),
+    )
+
+
+def _org_people(h: IAMHarness):
+    """ "<O> people": a membership group of the organisation, owned by it."""
+    return _membership_group(h, org(), "org-1 people")
+
+
+def test_a_role_at_my_workspaces_gives_nothing_at_a_container_its_type_keeps_out(h):
+    """A membership group of O, with O's type marked ``no_membership_roles``: the
+    built-in role its holder (or a level group of its members) holds at
+    ``${my workspaces}`` gives nothing at O. At W it still does."""
+    with as_service_account("engine"):
+        h.iam._register_catalog(_flagged_nexus())
+    _register_world(h)
+    bob = h.user("bob")
+    _ensure_belongs(h, bob.id)
+    people = _org_people(h)
+    with as_service_account("engine"):
+        h.iam.attach_policy(roles.VIEWER, people.id, MY_CONTAINERS_SCOPE)
+    _join(h, people.id, bob.id)
+    _join(h, _level_group(h, roles.MEMBER).id, bob.id)
+    at_org = graph("g", "org-1", "-")
+    assert not h.allowed("triple_store:Query", at_org, bob)
+    assert not h.allowed("triple_store:Insert", at_org, bob)
+    _join(h, _membership_group(h, W).id, bob.id)
+    assert h.allowed("triple_store:Insert", graph("g"), bob)
+    assert not h.allowed("triple_store:Query", at_org, bob)
+    explained = h.admin("explain", "triple_store:Query", at_org, principal_id=bob.id)
+    assert explained.statement is None
+
+
+def test_without_the_mark_the_role_applies_at_the_organisation(h):
+    """The same world with the organization unmarked: the role reaches O."""
+    _register_world(h)
+    bob = h.user("bob")
+    _ensure_belongs(h, bob.id)
+    people = _org_people(h)
+    _join(h, people.id, bob.id)
+    _join(h, _level_group(h, roles.VIEWER).id, bob.id)
+    assert h.allowed("triple_store:Query", graph("g", "org-1", "-"), bob)
+
+
+def test_a_policy_at_my_workspaces_still_applies_at_a_marked_container(h):
+    """Only the built-in roles are kept out: a customer policy at
+    ``${my workspaces}`` held by a membership group of O applies at O, within O's
+    bound."""
+    with as_service_account("engine"):
+        h.iam._register_catalog(_flagged_nexus())
+    _register_world(h)
+    bob = h.user("bob")
+    _ensure_belongs(h, bob.id)
+    people = _org_people(h)
+    with as_service_account("engine"):
+        view = h.iam.create_policy(
+            "Organization view",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    statement("Allow", ["nexus:UpdateOrganization"], ["${scope}"])
+                ],
+            },
+        )
+        h.iam.attach_policy(view.id, people.id, MY_CONTAINERS_SCOPE)
+    _join(h, people.id, bob.id)
+    assert h.allowed("nexus:UpdateOrganization", org(), bob)
+    assert not h.allowed("nexus:UpdateOrganization", org("org-2"), bob)

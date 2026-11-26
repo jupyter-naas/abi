@@ -22,7 +22,7 @@ NEXUS = ActionCatalog(
         ResourceType("workspace", container=True, platform_companions=True),
         ResourceType("feature", policy_only=True),
         ResourceType("conversation", id="path", personal=True),
-        ResourceType("organization", container=True),
+        ResourceType("organization", container=True, no_membership_roles=True),
         ResourceType("provider_model", placement="platform"),
     ),
     actions=(
@@ -239,6 +239,16 @@ def test_only_an_admin_action_is_owner_only():
             actions=(
                 ActionSpec("GetWorkspace", "read", ("workspace",), owner_only=True),
             ),
+        )
+
+
+def test_only_a_container_type_keeps_out_the_roles_at_my_workspaces():
+    with pytest.raises(CatalogError, match="only a container type keeps out"):
+        ActionCatalog(
+            service="acme",
+            version=1,
+            resource_types=(ResourceType("workspace", no_membership_roles=True),),
+            actions=(ActionSpec("GetWorkspace", "read", ("workspace",)),),
         )
 
 

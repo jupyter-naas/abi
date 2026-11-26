@@ -66,6 +66,7 @@ NARROWINGS = {
     "members_lose_workflows",
     "owners_lose_delete",
     "org_member_role",
+    "org_people_view",
     "model_sets",
     "module_actions",
     "shared_graphs",
