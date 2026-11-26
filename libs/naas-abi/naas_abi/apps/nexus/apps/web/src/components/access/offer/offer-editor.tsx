@@ -366,6 +366,7 @@ export function WorkspaceOfferEditor({
       </div>
     );
   };
+
   const toggleOntology = (row: OntologyRow, on: boolean) =>
     void saveNow(async () => {
       if (row.offered === on) return false;
@@ -512,6 +513,9 @@ export function WorkspaceOfferEditor({
           <a className="access-policy-link" href={mapsSettingsHref(workspaceId)}>
             Change them in Settings › Maps
           </a>
+        </div>
+      )}
+
       {offer.ontologies && (
         <div className="access-offer-section" data-offer-section="ontologies">
           <h4 className="access-offer-heading">Ontologies</h4>

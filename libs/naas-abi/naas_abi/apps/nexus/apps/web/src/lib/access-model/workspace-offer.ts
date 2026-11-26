@@ -51,6 +51,8 @@ export type OfferState = {
   models?: ModelsPart;
   /** The Maps part, as Settings › Maps edits it: shown here, not changed. */
   maps?: MapsSummary;
+  /** The ontology files it offers; null where the deployment has no ontology. */
+  ontologies?: OfferOntologies | null;
 };
 
 /** The model naming every model (the people's model sets decide which). */
@@ -83,9 +85,6 @@ export function modelsAfter(
   const kept = part.default && models.includes(part.default) ? part.default : (models[0] ?? null);
   return { models, default: kept };
 }
-  /** The ontology files it offers; null where the deployment has no ontology. */
-  ontologies?: OfferOntologies | null;
-};
 
 /** An ontology file of the deployment, as the offer names it; or a ref no file answers to. */
 export type OntologyRow = {
