@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v5.2.1 (2026-11-27)
+
+### Bug Fixes
+
+- **cli**: Give the generated abi service its public API_URL
+  ([`b3b3f33`](https://github.com/jupyter-naas/abi/commit/b3b3f33b6e321306c628fc8e5326d2260d87c6c4))
+
+
 ## v5.2.0 (2026-11-23)
 
 ### Features
