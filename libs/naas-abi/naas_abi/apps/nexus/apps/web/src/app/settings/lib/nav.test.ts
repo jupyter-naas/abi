@@ -63,10 +63,10 @@ describe('platformSettingsGroups', () => {
     ]);
     // Features, Services and Modules open an organization's, picked atop each page.
     expect(items('Access')).toEqual([
+      ['Policies', '/settings/access/policies'],
       ['Features', '/settings/access/features'],
       ['Core Services', '/settings/access/core-services'],
       ['Modules', '/settings/access/modules'],
-      ['Policies', '/settings/access/policies'],
       ['Service accounts', '/settings/access/service-accounts'],
       ['Module approvals', '/settings/access/approvals'],
       ['Simulator', '/settings/access/simulator'],

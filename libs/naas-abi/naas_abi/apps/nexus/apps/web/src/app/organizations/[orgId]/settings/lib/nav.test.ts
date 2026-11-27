@@ -36,7 +36,7 @@ describe('org settings nav', () => {
     expect(slugs('owner', BOTH)).not.toContain('access');
     const access = orgSettingsNavForRole('owner', { access: BOTH }).filter((item) => item.group === 'Access');
     // Its offer's pages follow, for its owners and admins.
-    expect(access.map((item) => item.label)).toEqual(['Features', 'Core Services', 'Modules', 'Policies']);
+    expect(access.map((item) => item.label)).toEqual(['Policies', 'Features', 'Core Services', 'Modules']);
   });
 
   it('shows branding to admins and hides domains, servers, services, and billing', () => {
@@ -46,10 +46,10 @@ describe('org settings nav', () => {
       'workspaces',
       'users',
       'groups',
+      'policies',
       'features',
       'core-services',
       'modules',
-      'policies',
     ]);
     expect(slugs('admin')).not.toContain('secrets');
   });
@@ -97,10 +97,10 @@ describe('org settings nav › Analytics', () => {
       'users',
       'groups',
       'analytics',
+      'policies',
       'features',
       'core-services',
       'modules',
-      'policies',
     ]);
   });
 });

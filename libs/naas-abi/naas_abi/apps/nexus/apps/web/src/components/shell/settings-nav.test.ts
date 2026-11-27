@@ -53,10 +53,10 @@ describe('workspace settings nav', () => {
     expect(shown({ 'iam:Explain': true, 'nexus:ReadSystem': true })).not.toContain('Policies');
     const access = visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { access: IAM }).find((g) => g.label === 'Access');
     expect(access?.items.map((item) => [item.label, item.href])).toEqual([
+      ['Policies', '/settings/policies'],
       ['Features', '/settings/features'],
       ['Core Services', '/settings/core-services'],
       ['Modules', '/settings/modules'],
-      ['Policies', '/settings/policies'],
     ]);
     // Groups sit with the people, under Users.
     const general = visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { access: IAM }).find((g) => g.label === 'General');

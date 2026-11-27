@@ -50,10 +50,10 @@ describe('the levels of Settings', () => {
     const organization = settingsLevels(all).find((level) => level.id === 'organization');
     expect(organization?.groups.map((group) => group.label)).toEqual([null, 'Access']);
     expect(organization?.groups[1].links.map((link) => [link.label, link.href])).toEqual([
+      ['Policies', '/organizations/acme/settings/policies'],
       ['Features', '/organizations/acme/settings/features'],
       ['Core Services', '/organizations/acme/settings/core-services'],
       ['Modules', '/organizations/acme/settings/modules'],
-      ['Policies', '/organizations/acme/settings/policies'],
     ]);
     // Groups sit with the people, right under Users.
     const own = organization?.groups[0].links.map((link) => link.label) ?? [];

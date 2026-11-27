@@ -215,6 +215,7 @@ export const ACCESS_ITEMS: PlatformSettingsNavItem[] = ACCESS_SECTIONS.map((sect
 
 /** Groups sits with the people, under Users, as in an organization's and a workspace's Settings. */
 export const GROUPS_ITEM = ACCESS_ITEMS.find((item) => item.id === 'access-groups') as PlatformSettingsNavItem;
+export const POLICIES_ITEM = ACCESS_ITEMS.find((item) => item.id === 'access-policies') as PlatformSettingsNavItem;
 
 /** An organization's Features, Services and Modules (its "<O> access"), picked atop each page:
  *  the platform has no offer of its own above the organizations. For the platform's admins. */
@@ -283,9 +284,10 @@ export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
   {
     label: 'Access',
     items: [
-      // Features, Services and Modules above Policies, as in an organization's and a workspace's.
+      // Policies first, as in an organization's and a workspace's: the pages below edit one of them.
+      POLICIES_ITEM,
       ...ORGANIZATION_OFFER_ITEMS,
-      ...ACCESS_ITEMS.filter((item) => item.id !== GROUPS_ITEM.id),
+      ...ACCESS_ITEMS.filter((item) => item.id !== GROUPS_ITEM.id && item.id !== POLICIES_ITEM.id),
       MODELS_ITEM,
     ],
   },

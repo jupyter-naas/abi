@@ -68,13 +68,14 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
     label: 'Access',
     items: [
+      // The policies first: the pages below edit one of them.
+      { href: '/settings/policies', label: 'Policies', icon: KeyRound, needs: 'policies' },
       // The workspace's offer ("<W> access"): which features and which modules it offers; the
       // pages under Features then show what is offered.
       { href: '/settings/features', label: 'Features', icon: SlidersHorizontal },
       // How far people go with each core service of the engine (graphs, files, vectors...).
       { href: '/settings/core-services', label: 'Core Services', icon: ServerCog },
       { href: '/settings/modules', label: 'Modules', icon: Package },
-      { href: '/settings/policies', label: 'Policies', icon: KeyRound, needs: 'policies' },
     ],
   },
   {
