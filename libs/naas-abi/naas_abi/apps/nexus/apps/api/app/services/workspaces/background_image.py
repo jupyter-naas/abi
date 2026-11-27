@@ -27,7 +27,8 @@ from naas_abi_core.utils import outbound
 MAX_BACKGROUND_IMAGE_BYTES = 10 * 1024 * 1024
 URL_FETCH_TIMEOUT_SECONDS = 15.0
 MAX_URL_REDIRECTS = 3
-MIN_ZOOM = 1.0
+# Below 1 the image is smaller than the desk (zoomed out), down to half.
+MIN_ZOOM = 0.5
 MAX_ZOOM = 4.0
 
 # Raster formats only: SVG can carry script and is served from the API origin.

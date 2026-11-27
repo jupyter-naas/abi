@@ -1489,7 +1489,7 @@ class BackgroundImageCommit(BaseModel):
     current: str | None = None
     x: float = Field(default=50.0, ge=0, le=100)
     y: float = Field(default=50.0, ge=0, le=100)
-    zoom: float = Field(default=MIN_ZOOM, ge=MIN_ZOOM, le=MAX_ZOOM)
+    zoom: float = Field(default=1.0, ge=MIN_ZOOM, le=MAX_ZOOM)
 
 
 _BACKGROUND_DENIED = "Only admins can change the background image"

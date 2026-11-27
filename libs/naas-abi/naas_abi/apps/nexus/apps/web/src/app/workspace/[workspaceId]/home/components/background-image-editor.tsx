@@ -18,6 +18,7 @@ import {
   parseBackgroundImageUrl,
   removeBackgroundImage,
   stageBackgroundImage,
+  wheelZoomStep,
   type BackgroundFraming,
 } from '@/lib/home-background';
 import { authFetch } from '@/stores/auth';
@@ -32,8 +33,8 @@ const KEY_PAN_PX = 16;
  * The desk wallpaper editor, shared by Home (Edit → Desktop wallpaper, in a
  * dialog) and Settings → Theme (inline). Opens on the current wallpaper when
  * there is one. A new image (local file or URL) is staged by the API in
- * `.home/tmp` and previewed from there. Drag to move, wheel or the controls to
- * zoom: the preview is the desk's own renderer, so the framing is what the desk
+ * `.home/tmp` and previewed from there. Drag to move, Ctrl + wheel or the controls
+ * to zoom (50% to 400%): the preview is the desk's own renderer, so the framing is what the desk
  * shows. Save stores the new draft (moved to `.home/background-img`, old files
  * cleaned up) or the current wallpaper's new framing; Cancel discards.
  */
@@ -229,14 +230,17 @@ export function BackgroundImageEditor({
     setFraming((prev) => clampFraming({ ...prev, zoom: Math.round((prev.zoom + delta) * 100) / 100 }));
   }, []);
 
-  // Wheel zooms the preview. Attached by hand: React's wheel listener is
-  // passive, so it cannot stop the page behind the modal from scrolling.
+  // Ctrl + wheel zooms the preview (and keeps the browser from zooming the page); a plain
+  // wheel scrolls the page. Attached by hand: React's wheel listener is passive, so it
+  // cannot stop the event.
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame || !previewUrl) return;
     const onWheel = (event: WheelEvent) => {
+      const step = wheelZoomStep(event, ZOOM_STEP / 2);
+      if (step === null) return;
       event.preventDefault();
-      zoomBy(event.deltaY < 0 ? ZOOM_STEP / 2 : -ZOOM_STEP / 2);
+      zoomBy(step);
     };
     frame.addEventListener('wheel', onWheel, { passive: false });
     return () => frame.removeEventListener('wheel', onWheel);
@@ -330,11 +334,11 @@ export function BackgroundImageEditor({
           )}
         </div>
 
-        {/* Preview: the desk renderer itself. Drag moves, wheel zooms. */}
+        {/* Preview: the desk renderer itself. Drag moves, Ctrl + wheel zooms. */}
         <div
           ref={frameRef}
           role="img"
-          aria-label={previewUrl ? 'Background image preview. Drag or use arrow keys to move, + and − to zoom.' : 'Background image preview'}
+          aria-label={previewUrl ? 'Background image preview. Drag or use arrow keys to move, Ctrl + scroll or + and − to zoom.' : 'Background image preview'}
           tabIndex={previewUrl ? 0 : -1}
           className={cn(
             'relative mt-4 aspect-video w-full touch-none select-none overflow-hidden border border-border bg-muted/40 outline-none',
@@ -394,7 +398,7 @@ export function BackgroundImageEditor({
 
         <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
           <Move size={12} className="mr-1" aria-hidden />
-          <span className="mr-auto">Drag to move · scroll to zoom</span>
+          <span className="mr-auto">Drag to move · Ctrl + scroll to zoom</span>
           <button type="button" className={iconButton} disabled={!canFrame || framing.zoom <= MIN_BACKGROUND_ZOOM} onClick={() => zoomBy(-ZOOM_STEP)} title="Zoom out" aria-label="Zoom out">
             <Minus size={14} />
           </button>

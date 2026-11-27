@@ -414,7 +414,7 @@ export default function GeneralSettingsPage() {
           <>
             <p className="mb-3 text-sm text-muted-foreground">
               The Home desk background. PNG, JPEG, GIF, WEBP or AVIF, up to 10 MB. Drag to move,
-              scroll to zoom, then save.
+              Ctrl + scroll to zoom (50% to 400%), then save.
             </p>
             <BackgroundImageEditor
               key={wallpaperEditorKey}
