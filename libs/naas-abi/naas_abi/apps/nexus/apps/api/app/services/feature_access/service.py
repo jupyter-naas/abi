@@ -86,6 +86,7 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources_service import run_audited
 from naas_abi_core.engine.call_context import current_call_context
+from naas_abi_core.services.iam import module_scopes
 from naas_abi_core.services.iam.IAMPorts import (
     GrantableCatalog,
     IAMConflictError,
@@ -138,23 +139,31 @@ def _expands_to(pattern: str, resource: str, scope: str) -> bool:
     return expanded is not None and matches(expanded, resource)
 
 
-def names_feature(statement: Statement, resource: str, scope: str) -> bool:
-    """Whether ``statement``, attached at ``scope``, names ``UseFeature`` on ``resource``."""
-    return any(matches(a, USE_FEATURE) for a in statement.actions) and any(
+def names_feature(
+    statement: Statement, resource: str, scope: str, action: str = USE_FEATURE
+) -> bool:
+    """Whether ``statement``, attached at ``scope``, names ``action`` (``UseFeature`` by
+    default) on ``resource``."""
+    return any(matches(a, action) for a in statement.actions) and any(
         _expands_to(pattern, resource, scope) for pattern in statement.resources
     )
 
 
-def offered(chain: Sequence[Policy], resource: str, scope: str) -> bool:
-    """Whether a sub-policy of ``chain[0]`` attached at ``scope`` may grant the feature:
-    an Allow of every policy of the chain names it and no Deny of theirs does."""
+def offered(chain: Sequence[Policy], resource: str, scope: str, action: str = USE_FEATURE) -> bool:
+    """Whether a sub-policy of ``chain[0]`` attached at ``scope`` may grant ``action`` on
+    ``resource`` (a feature by default): an Allow of every policy of the chain names it and
+    no Deny of theirs does."""
     if not chain:
         return False
     for policy in chain:
         statements = policy.document.statements
-        if not any(s.effect == "Allow" and names_feature(s, resource, scope) for s in statements):
+        if not any(
+            s.effect == "Allow" and names_feature(s, resource, scope, action) for s in statements
+        ):
             return False
-        if any(s.effect == "Deny" and names_feature(s, resource, scope) for s in statements):
+        if any(
+            s.effect == "Deny" and names_feature(s, resource, scope, action) for s in statements
+        ):
             return False
     return True
 
@@ -561,6 +570,39 @@ def ontology_rows(
     return sorted(rows, key=lambda row: (str(row["label"]).lower(), row["id"]))
 
 
+# The agent the platform offers whoever uses agents (Access › Features, Agents).
+ABI_AGENT = ("naas_abi", "Abi")
+
+
+def feature_agents(key: str) -> list[tuple[str, str]]:
+    """The Naas Abi agents a feature brings (``naas_abi.agents.feature.registry``): its office
+    agent (Files: the Files agent), and for Agents, Abi, the platform's agent."""
+    from naas_abi.agents.feature.registry import FEATURE_AGENTS
+
+    items = [("naas_abi", spec.name) for spec in FEATURE_AGENTS if key in spec.feature_keys]
+    return [*items, ABI_AGENT] if key == "agents" else items
+
+
+def with_feature(
+    offer: Offer,
+    key: str,
+    on: bool,
+    *,
+    agents: bool = True,
+    allowed: Callable[[tuple[str, str]], bool] = lambda _item: True,
+) -> Offer:
+    """``offer`` giving ``key`` (or not), and with it its Naas Abi agents (``feature_agents``):
+    a feature given offers those the policies above it allow (``allowed``: an agent they do
+    not offer is left out, the feature still given), one taken back takes them back. Not at
+    the platform, whose offer is features alone."""
+    features = offer.features | {key} if on else offer.features - {key}
+    if not agents:
+        return replace(offer, features=features)
+    brought = {item for item in feature_agents(key) if not on or allowed(item)}
+    kept = (offer.agents | brought) if on else (offer.agents - brought)
+    return replace(offer, features=features, agents=frozenset(kept))
+
+
 @dataclass(frozen=True)
 class _PlatformRecord:
     """The platform's defaults, as a container's: "Platform access", no groups."""
@@ -871,6 +913,21 @@ class FeatureAccessService:
         check_changes(changes, features)
         before = await self.read(user, workspace_id, policy_id)
         target_id = (before.get("policy") or {}).get("id")
+        # The policies above the one written: a feature's agents go in where they allow them.
+        target = await run_in_threadpool(self._gateway.policy, target_id) if target_id else None
+        above = (
+            await run_in_threadpool(self._chain, target.parent_id)
+            if target is not None and target.parent_id
+            else []
+        )
+
+        def agent_allowed(item: tuple[str, str]) -> bool:
+            resource = module_scopes.scope_resource(
+                module_scopes.AGENT, item[0], item[1], container=container
+            )
+            use_agent = f"{module_scopes.SERVICE}:{module_scopes.USE_ACTION[module_scopes.AGENT]}"
+            return not above or offered(above, resource, container, use_agent)
+
         rows = {row["key"]: row for row in before["features"]}
         errors: dict[str, str] = {}
         for change in changes:
@@ -888,9 +945,8 @@ class FeatureAccessService:
                     target_id,
                     f"feature-access.{change.choice}",
                     f"{workspace_id}/{change.feature}",
-                    lambda offer, key=change.feature, on=change.choice == "everyone": replace(
-                        offer,
-                        features=offer.features | {key} if on else offer.features - {key},
+                    lambda offer, key=change.feature, on=change.choice == "everyone": with_feature(
+                        offer, key, on, agents=container != PLATFORM, allowed=agent_allowed
                     ),
                 )
             except (PermissionDeniedError, IAMNotFoundError, IAMConflictError, ValueError) as exc:

@@ -166,6 +166,9 @@ describe('FeatureAccess', () => {
     // Other policies are edited from the Policy dropdown: no column of them.
     expect(m.host.querySelector('[data-effect]')).toBeNull();
     expect(at(m, 'agents', 'a')).toBeNull();
+    // A feature given brings its Naas Abi agent: said while Agents is not given (none here).
+    expect(at(m, 'search', '[data-agent-note]')?.textContent).toBe('Its Search agent comes with it, used once Agents is at least Read.');
+    expect(at(m, 'maps', '[data-agent-note]')).toBeNull();
     // A link to its page for a feature given; none for one at None (Files, Maps here).
     expect(at(m, 'chat', '[data-action="configure"]')?.getAttribute('href')).toBe('/workspace/ws1/settings/models');
     expect(at(m, 'files', '[data-action="configure"]')).toBeNull();

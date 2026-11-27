@@ -53,6 +53,8 @@ import {
   type FeatureColumnId,
 } from './feature-access-model';
 import { usePolicyHref } from '@/components/settings/use-policy-href';
+import { FEATURE_OFFICE_AGENTS } from '@/lib/feature-office-agents';
+import type { FeatureKey } from '@/lib/feature-access';
 
 const DEFAULT_API = createFeatureAccessApi();
 const DEFAULT_LEVELS_API = createAccessLevelsApi();
@@ -420,6 +422,18 @@ export function FeatureAccess({
                             ) : null}
                           </p>
                         ))}
+                        {/* Its Naas Abi agent comes with it, used once Agents is at least Read. */}
+                        {(() => {
+                          const agent = FEATURE_OFFICE_AGENTS[row.key as FeatureKey];
+                          if (!agent || row.key === 'agents' || org || shownOf(row) === 'none') return null;
+                          const agentsRow = rows.find((r) => r.key === 'agents');
+                          if (agentsRow && shownOf(agentsRow) !== 'none') return null;
+                          return (
+                            <p className="workspace-features-note" data-agent-note={row.key}>
+                              {`Its ${agent.name} agent comes with it, used once Agents is at least Read.`}
+                            </p>
+                          );
+                        })()}
                         {rowErrors[row.key] && (
                           <p className="workspace-features-error" role="alert">
                             {rowErrors[row.key]}

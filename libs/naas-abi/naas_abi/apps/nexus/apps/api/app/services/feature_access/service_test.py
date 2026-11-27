@@ -212,6 +212,29 @@ async def test_everyone_and_nobody_are_what_the_workspaces_access_policy_offers(
 
 
 @pytest.mark.asyncio
+async def test_a_feature_given_brings_its_naas_abi_agent_and_takes_it_back(nexus, acme, service):
+    """Access › Features: a feature given (Everyone) offers its Naas Abi agent with it (Files:
+    the Files agent), taken back with it (Nobody)."""
+    files_agent = ("naas_abi", "Files")
+    await service.save("olivia", "alpha", [FeatureChange("files", "nobody")])
+    # The organization does not offer it: the feature is given alone, without an error.
+    state = await service.save("olivia", "alpha", [FeatureChange("files", "everyone")])
+    assert state["errors"] == {}
+    offer = offer_of(_access(nexus, acme).document)
+    assert "files" in offer.features and files_agent not in offer.agents
+
+    # Offered by the organization (naas_abi whole): it comes and goes with the feature.
+    await service.save_offer(
+        "root", org_container("acme"), [OfferChange("agents", "naas_abi", "*", True)]
+    )
+    await service.save("olivia", "alpha", [FeatureChange("files", "nobody")])
+    assert files_agent not in offer_of(_access(nexus, acme).document).agents
+    state = await service.save("olivia", "alpha", [FeatureChange("files", "everyone")])
+    assert state["errors"] == {}
+    assert files_agent in offer_of(_access(nexus, acme).document).agents
+
+
+@pytest.mark.asyncio
 async def test_only_is_refused_per_feature(nexus, acme, service):
     state = await service.save(
         "olivia",
@@ -972,3 +995,24 @@ async def test_the_organization_pages_edit_its_offer_and_reach_its_workspaces(ne
     offer = await service.read_offer("root", acme_org)
     assert offer["policy"]["id"] == state["access_policy"]["id"]
     assert offer["offered"]["agents"] == [{"module": "acme.sales", "name": "*"}]
+
+
+def test_a_feature_brings_its_office_agent_and_agents_brings_abi():
+    from naas_abi.apps.nexus.apps.api.app.services.feature_access.service import (
+        ABI_AGENT,
+        feature_agents,
+        with_feature,
+    )
+
+    assert feature_agents("files") == [("naas_abi", "Files")]
+    assert ABI_AGENT in feature_agents("agents") and (
+        "naas_abi",
+        "Agent Catalog",
+    ) in feature_agents("agents")
+    assert feature_agents("chat") == []
+    given = with_feature(Offer(), "agents", True)
+    assert "agents" in given.features and ABI_AGENT in given.agents
+    taken = with_feature(given, "agents", False)
+    assert "agents" not in taken.features and ABI_AGENT not in taken.agents
+    # The platform's offer is features alone.
+    assert with_feature(Offer(), "files", True, agents=False).agents == frozenset()
