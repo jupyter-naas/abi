@@ -1,8 +1,9 @@
 'use client';
 
 import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
+import { policyOfSearch } from '@/components/settings/settings-policy';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { invalidateGraphExplorer } from '@/stores/graph-explorer';
@@ -68,12 +69,22 @@ type Snapshot = {
 };
 
 export function ResourceAccessPage({ kind }: { kind: Kind }) {
+  return (
+    <Suspense fallback={<SettingsLoading />}>
+      <ResourceAccessRoute kind={kind} />
+    </Suspense>
+  );
+}
+
+function ResourceAccessRoute({ kind }: { kind: Kind }) {
   const { workspaceId } = useParams<{ workspaceId: string }>();
+  const policy = policyOfSearch(useSearchParams());
   return (
     <ResourceAccessEditor
       key={`${workspaceId}:${kind}`}
       workspaceId={workspaceId}
       kind={kind}
+      policyPicked={!!policy}
     />
   );
 }
@@ -86,9 +97,13 @@ export function ResourceAccessPage({ kind }: { kind: Kind }) {
 export function ResourceAccessEditor({
   workspaceId,
   kind,
+  policyPicked = false,
 }: {
   workspaceId: string;
   kind: Kind;
+  /** Another policy than "<W> access" is picked in the Settings column: these assignments are
+   *  the workspace's own (no policy of it holds them), which the page says. */
+  policyPicked?: boolean;
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -250,6 +265,14 @@ export function ResourceAccessEditor({
         }
         actions={<UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />}
       />
+      {policyPicked && (
+        <SettingsNotice tone="info">
+          <span data-policy-note="">
+            {title} are given to the workspace as a whole: this page sets them for everyone in it, whatever policy
+            is picked in the column.
+          </span>
+        </SettingsNotice>
+      )}
       {error && (
         <SettingsNotice tone="error">
           <span role="alert">{error}</span>

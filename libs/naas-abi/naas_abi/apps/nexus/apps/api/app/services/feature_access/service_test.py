@@ -658,6 +658,29 @@ class TestDatasets:
         assert offer_of(_access(nexus, acme).document).datasets_closed == frozenset()
 
     @pytest.mark.asyncio
+    async def test_another_policy_of_the_workspace_closes_namespaces_for_its_holders(
+        self, nexus, acme, datasets
+    ):
+        """The Policy picker on another policy: the namespaces it closes are its own, within
+        what "<W> access" uses (a namespace the workspace closes stays closed there)."""
+        grants = _grants(nexus)
+        await datasets.set_datasets("olivia", "alpha", {"timesheets": False})
+        state = await datasets.read_datasets("olivia", "alpha", grants.id)
+        assert state["policy"]["id"] == grants.id and state["editable"]
+        assert state["access_policy"]["id"] == acme.access_policy_id
+        rows = _dataset_rows(state)
+        assert rows["timesheets"]["closed_above"] and not rows["timesheets"]["editable"]
+        assert rows["hr"]["offered"] and rows["hr"]["editable"]
+
+        state = await datasets.set_datasets("olivia", "alpha", {"hr": False}, grants.id)
+        assert not _dataset_rows(state)["hr"]["offered"]
+        with as_service_account("api"):
+            assert offer_of(nexus.iam.get_policy(grants.id).document).datasets_closed == {"hr"}
+        assert offer_of(_access(nexus, acme).document).datasets_closed == {"timesheets"}
+        with pytest.raises(ValueError, match="open it there first"):
+            await datasets.set_datasets("olivia", "alpha", {"timesheets": True}, grants.id)
+
+    @pytest.mark.asyncio
     async def test_what_the_organization_closes_no_workspace_reopens(self, nexus, acme, datasets):
         # "<O> access" is the platform's: its admin closes a namespace for every workspace.
         org = org_container("acme")
@@ -753,6 +776,40 @@ async def test_modules_read_and_save_another_policy_of_the_workspace(nexus, acme
 
 
 @pytest.mark.asyncio
+async def test_search_sources_models_and_files_save_another_policy_of_the_workspace(
+    nexus, acme, service
+):
+    """The settings column's Policy picker drives every page under Features: Search's
+    sources, Models and Files write the policy picked (``policy_id``) as Modules does,
+    "<W> access" left as it was."""
+    widened = Offer.of(search_sources=["chat"], models=["*"])
+    with use_call_context(NexusIam.context("root")):
+        for policy in (nexus.iam.get_policy(_access(nexus, acme).parent_id), _access(nexus, acme)):
+            nexus.iam.update_policy(
+                policy.id,
+                expected_revision=policy.revision,
+                document=with_offer(policy.document, offer_of(policy.document).merged(widened)),
+            )
+    before = offer_of(_access(nexus, acme).document)
+    grants = _grants(nexus)
+
+    state = await service.save_search_sources("olivia", "alpha", {"chat": True}, grants.id)
+    assert state["policy"]["id"] == grants.id
+    assert state["offered"]["search_sources"] == ["chat"]
+    state = await service.set_models("olivia", "alpha", ["qwen-3.8"], "qwen-3.8", grants.id)
+    assert state["policy"]["id"] == grants.id
+    assert state["models"]["offered"] == ["qwen-3.8"]
+    state = await service.set_files("olivia", "alpha", {"system_files": "off"}, grants.id)
+    assert state["policy"]["id"] == grants.id
+
+    with as_service_account("api"):
+        granted = offer_of(nexus.iam.get_policy(grants.id).document)
+    assert granted.search_sources == {"chat"}
+    assert granted.models == {"qwen-3.8"} and granted.default_model == "qwen-3.8"
+    assert offer_of(_access(nexus, acme).document) == before
+
+
+@pytest.mark.asyncio
 async def test_a_policy_of_another_scope_is_not_edited_here(nexus, acme, service):
     with use_call_context(NexusIam.context("root")):
         elsewhere = nexus.iam.create_policy(
@@ -764,6 +821,8 @@ async def test_a_policy_of_another_scope_is_not_edited_here(nexus, acme, service
         await service.save_offer(
             "olivia", "alpha", [OfferChange("agents", "acme.sales", "*", True)], elsewhere.id
         )
+    with pytest.raises(IAMNotFoundError):
+        await service.set_files("olivia", "alpha", {"system_files": "off"}, elsewhere.id)
 
 
 # -- access levels: a cap in "<W> access", a grant in another policy ---------------------

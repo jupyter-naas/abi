@@ -59,9 +59,10 @@ afterEach(async () => {
   mounted = null;
 });
 
-async function render(offerApi: Partial<OfferApi>, featureApi: Partial<FeatureAccessApi>) {
+async function render(offerApi: Partial<OfferApi>, featureApi: Partial<FeatureAccessApi>, policyId: string | null = null) {
   mounted = await mount(WorkspaceFiles, {
     workspaceId: 'ws1',
+    policyId,
     offerApi: offerApi as OfferApi,
     featureApi: featureApi as FeatureAccessApi,
   });
@@ -121,11 +122,24 @@ describe('WorkspaceFiles', () => {
 
     await m.click(saveButton(m));
     await m.flush();
-    expect(saveFeatures).toHaveBeenCalledWith('ws1', [{ feature: 'files', choice: 'nobody' }]);
-    expect(saveFiles).toHaveBeenCalledWith('ws1', { platform_files: 'write' });
+    expect(saveFeatures).toHaveBeenCalledWith('ws1', [{ feature: 'files', choice: 'nobody' }], null);
+    expect(saveFiles).toHaveBeenCalledWith('ws1', { platform_files: 'write' }, null);
     expect(choice(m, 'platform_files', 'write')?.getAttribute('aria-checked')).toBe('true');
     expect(bar(m)).toBeNull();
     expect(saveButton(m).disabled).toBe(true);
+  });
+
+  it('reads and saves the policy picked in the Settings column', async () => {
+    const read = vi.fn().mockResolvedValue(offer(FILES));
+    const readFeatures = vi.fn().mockResolvedValue(features([featureRow()]));
+    const saveFiles = vi.fn().mockResolvedValue(offer(FILES));
+    const m = await render({ read, saveFiles }, { read: readFeatures }, 'pol_g');
+    expect(read).toHaveBeenCalledWith('ws1', 'pol_g');
+    expect(readFeatures).toHaveBeenCalledWith('ws1', 'pol_g');
+    await m.click(choice(m, 'org_files', 'off'));
+    await m.click(saveButton(m));
+    await m.flush();
+    expect(saveFiles).toHaveBeenCalledWith('ws1', { org_files: 'off' }, 'pol_g');
   });
 
   it('discards the changes, back to what the workspace holds', async () => {

@@ -1,0 +1,5 @@
+/* Under the Features heading of a workspace's Settings column: the policy those pages set, picked
+   as the organization and the workspace are atop the column. */
+.settings-policy-picker {
+  padding: 0 var(--space-1) var(--space-2);
+}

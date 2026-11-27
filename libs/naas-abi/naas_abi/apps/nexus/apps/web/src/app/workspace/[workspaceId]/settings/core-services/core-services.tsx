@@ -58,6 +58,7 @@ export function CoreServices({
   initialPolicy = null,
   onPolicyChange,
   pickerPrefix,
+  policyPicker = true,
 }: {
   workspaceId: string;
   api?: AccessLevelsApi;
@@ -65,6 +66,9 @@ export function CoreServices({
   onPolicyChange?: (policyId: string | null) => void;
   /** Before the Policy dropdown, in its row: Platform settings' Organization picker. */
   pickerPrefix?: ReactNode;
+  /** The Policy dropdown in the page; a workspace's Settings pick the policy in their column
+   *  (`SettingsPolicyPicker`, `?policy=`) and leave it out. */
+  policyPicker?: boolean;
 }) {
   const [policyId, setPolicyId] = useState<string | null>(initialPolicy);
   const [state, setState] = useState<LevelsState | null>(null);
@@ -176,10 +180,12 @@ export function CoreServices({
       />
 
       {/* The policy edited, under the page's words, at its left. */}
-      <div className="-mt-3 flex flex-wrap items-center justify-start gap-4" data-policy-picker="">
-        {pickerPrefix}
-        <PolicyPicker policies={state?.policies} current={edited} value={edited?.id} onChange={pick} disabled={saving} />
-      </div>
+      {policyPicker ? (
+        <div className="-mt-3 flex flex-wrap items-center justify-start gap-4" data-policy-picker="">
+          {pickerPrefix}
+          <PolicyPicker policies={state?.policies} current={edited} value={edited?.id} onChange={pick} disabled={saving} />
+        </div>
+      ) : null}
 
       {error && (
         <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>

@@ -48,8 +48,11 @@ export function WorkspaceFiles({
   offerApi = DEFAULT_OFFER_API,
   featureApi = DEFAULT_FEATURE_API,
   description,
+  policyId = null,
 }: {
   workspaceId: string;
+  /** The policy picked in the Settings column (`?policy=`); "<W> access" when null. */
+  policyId?: string | null;
   offerApi?: OfferApi;
   featureApi?: FeatureAccessApi;
   /** The page's line under its title. */
@@ -64,8 +67,8 @@ export function WorkspaceFiles({
   const load = useCallback(async () => {
     try {
       const [nextOffer, nextFeatures] = await Promise.all([
-        offerApi.read(workspaceId),
-        featureApi.read(workspaceId).catch(() => null),
+        offerApi.read(workspaceId, policyId),
+        featureApi.read(workspaceId, policyId).catch(() => null),
       ]);
       setOffer(nextOffer);
       setFeatures(nextFeatures);
@@ -73,7 +76,7 @@ export function WorkspaceFiles({
     } catch (e) {
       setError(message(e, 'Could not read the files of this workspace.'));
     }
-  }, [offerApi, featureApi, workspaceId]);
+  }, [offerApi, featureApi, workspaceId, policyId]);
 
   useEffect(() => {
     setOffer(null);
@@ -91,7 +94,10 @@ export function WorkspaceFiles({
     if (workspaceFiles) record.workspace = workspaceFiles.choice === 'everyone' ? 'everyone' : 'nobody';
     return record;
   }, [offer, workspaceFiles]);
-  const draft = usePageDraft(workspaceId ? { scope: `workspace:${workspaceId}`, page: 'files' } : null, server);
+  const draft = usePageDraft(
+    workspaceId ? { scope: `workspace:${workspaceId}`, page: 'files', detail: policyId ?? undefined } : null,
+    server
+  );
   const values = draft.values ?? server ?? {};
   const changed = Object.keys(values).filter((key) => server && values[key] !== server[key]);
   const dirty = changed.length > 0;
@@ -108,16 +114,18 @@ export function WorkspaceFiles({
     setError('');
     try {
       if (changed.includes('workspace') && workspaceFiles) {
-        const next = await featureApi.save(workspaceId, [
-          { feature: FILES_FEATURE, choice: workspaceFilesOn ? 'everyone' : 'nobody' },
-        ]);
+        const next = await featureApi.save(
+          workspaceId,
+          [{ feature: FILES_FEATURE, choice: workspaceFilesOn ? 'everyone' : 'nobody' }],
+          policyId
+        );
         setFeatures(next);
         const refused = next.errors?.[FILES_FEATURE];
         if (refused) throw new Error(refused);
       }
       const modes = Object.fromEntries(changed.filter((key) => key !== 'workspace').map((key) => [key, values[key]]));
       if (Object.keys(modes).length > 0) {
-        setOffer(await offerApi.saveFiles(workspaceId, modes as Partial<Record<FileRow['key'], FileMode>>));
+        setOffer(await offerApi.saveFiles(workspaceId, modes as Partial<Record<FileRow['key'], FileMode>>, policyId));
       }
       draft.discard();
       setSaved(true);

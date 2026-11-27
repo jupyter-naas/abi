@@ -26,6 +26,8 @@ export type DatasetsState = {
   workspace_id: string;
   scope: string;
   access_policy: PolicyRef | null;
+  /** The policy read: "<W> access" by default, or another policy of the workspace. */
+  policy?: PolicyRef | null;
   ceiling: PolicyRef | null;
   editable: boolean;
   rows: DatasetRow[];

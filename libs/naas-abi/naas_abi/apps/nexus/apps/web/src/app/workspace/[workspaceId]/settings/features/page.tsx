@@ -2,11 +2,11 @@
 
 /**
  * Settings › Access › Features: which features a policy of the workspace allows, "<W> access" (its
- * offer) by default, laid out as Settings › Users. The policy edited is kept in the URL (`?policy=`).
+ * offer) by default, laid out as Settings › Users. The policy edited is picked in the Settings column and kept in the URL (`?policy=`).
  * Files are Settings › Files.
  */
 import { Suspense } from 'react';
-import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { SettingsLoading } from '@/components/settings/settings-ui';
 import { FeatureAccess } from './feature-access';
 // The choices and notes of a row.
@@ -16,15 +16,14 @@ import '@/app/organizations/[orgId]/settings/users/users.css';
 
 function Features() {
   const workspaceId = useParams().workspaceId as string;
-  const router = useRouter();
-  const pathname = usePathname();
   const policy = useSearchParams().get('policy');
   return (
     <FeatureAccess
-      key={workspaceId}
+      // The policy is picked in the Settings column (`?policy=`): another one opens the page afresh.
+      key={`${workspaceId}:${policy ?? ''}`}
       workspaceId={workspaceId}
+      policyPicker={false}
       initialPolicy={policy}
-      onPolicyChange={(next) => router.replace(next ? `${pathname}?policy=${encodeURIComponent(next)}` : pathname)}
     />
   );
 }

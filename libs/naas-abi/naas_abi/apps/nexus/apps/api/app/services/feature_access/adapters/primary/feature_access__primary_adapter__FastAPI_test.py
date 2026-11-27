@@ -127,6 +127,17 @@ def test_the_files_given_are_read_with_the_offer_and_saved_as_the_caller(client)
         403,
         404,
     )
+    # ``?policy=``: the policy picked in the settings column; one the workspace does not own: 404.
+    elsewhere = client.put(
+        f"{path}?policy=pol_unknown", json={"system_files": "off"}, headers={"x-user": "olivia"}
+    )
+    assert elsewhere.status_code == 404
+    assert (
+        client.get(
+            "/api/workspaces/alpha/offer/datasets?policy=pol_unknown", headers={"x-user": "olivia"}
+        ).status_code
+        == 404
+    )
 
 
 def test_the_models_are_read_with_the_offer_and_saved_as_the_caller(client, nexus, acme):  # noqa: F811

@@ -39,6 +39,9 @@ import { TopicApiError, topicsApi } from '@/lib/search-topics-api';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { isFeatureEnabled } from '@/lib/feature-access';
+import { SEARCH_SOURCE_IDS } from '@/lib/search-scopes';
+import { createOfferApi } from '@/lib/access-model/workspace-offer';
+import { policyOfSearch } from '@/components/settings/settings-policy';
 import { useSearchTopicsStore } from '@/stores/search-topics';
 import { useWorkspaceStore } from '@/stores/workspace';
 import {
@@ -57,7 +60,11 @@ export default function SearchSettingsPage() {
 function SearchSettings() {
   const workspaceId = useParams().workspaceId as string;
   const router = useRouter();
-  const selectedId = useSearchParams()?.get('topic');
+  const search = useSearchParams();
+  const selectedId = search?.get('topic');
+  // The policy picked in the Settings column (`?policy=`): the sources it grants are set here.
+  const policy = policyOfSearch(search);
+  const [policyDisabled, setPolicyDisabled] = useState<string[] | null>(null);
   const { topics, disabledScopes, setDisabledScopes, canEdit, loading, error, load, replace, remove } = useSearchTopicsStore();
   const workspace = useWorkspaceStore(state => state.getCurrentWorkspace());
   const [contract, setContract] = useState<Record<QueryRole, RoleContract> | null>(null);
@@ -67,6 +74,19 @@ function SearchSettings() {
 
   useEffect(() => { if (workspaceId) void load(workspaceId, true); }, [workspaceId, load]);
   useEffect(() => { topicsApi.contract().then(setContract).catch(() => setContract(null)); }, []);
+  useEffect(() => {
+    setPolicyDisabled(null);
+    if (!policy || !workspaceId) return;
+    let cancelled = false;
+    createOfferApi().read(workspaceId, policy).then(
+      (state) => {
+        const offered = new Set(state.offered?.search_sources ?? []);
+        if (!cancelled) setPolicyDisabled(SEARCH_SOURCE_IDS.filter((id) => !offered.has(id)));
+      },
+      () => { if (!cancelled) setPolicyDisabled([...SEARCH_SOURCE_IDS]); },
+    );
+    return () => { cancelled = true; };
+  }, [policy, workspaceId]);
 
   const graphs = useWorkspaceGraphs(workspaceId);
   const base = `/workspace/${encodeURIComponent(workspaceId)}/settings/search`;
@@ -81,7 +101,11 @@ function SearchSettings() {
   /** One row switched: a feature or web engine (one switch each for the whole workspace), or a topic. */
   const switchEntry = async (entry: SearchEntry, enabled: boolean) => {
     if (entry.kind === 'topic') replace(await topicsApi.save(workspaceId, { ...entry.topic, enabled }));
-    else setDisabledScopes((await topicsApi.setScopeEnabled(workspaceId, entry.id, enabled)).disabled_scopes);
+    else {
+      const after = (await topicsApi.setScopeEnabled(workspaceId, entry.id, enabled, policy)).disabled_scopes;
+      if (policy) setPolicyDisabled(after);
+      else setDisabledScopes(after);
+    }
   };
   // A table of switches: each change saved at once, and said.
   const toggle = async (entry: SearchEntry, enabled: boolean) => {
@@ -114,10 +138,10 @@ function SearchSettings() {
   const flags = workspace?.featureFlags;
   const entries = useMemo(
     () => searchEntries({
-      topics, drafts, disabledScopes,
+      topics, drafts, disabledScopes: policy ? (policyDisabled ?? [...SEARCH_SOURCE_IDS]) : disabledScopes,
       featureOn: scope => !scope.feature || isFeatureEnabled({ feature: scope.feature, role, workspaceFlags: flags }),
     }),
-    [topics, drafts, disabledScopes, role, flags],
+    [topics, drafts, disabledScopes, policy, policyDisabled, role, flags],
   );
   const table = useSettingsTable({
     rows: entries,

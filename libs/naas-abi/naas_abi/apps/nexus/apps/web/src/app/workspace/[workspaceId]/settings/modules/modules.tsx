@@ -100,6 +100,7 @@ export function WorkspaceModules({
   initialPolicy = null,
   onPolicyChange,
   pickerPrefix,
+  policyPicker = true,
   initialSearch = null,
 }: {
   workspaceId: string;
@@ -111,6 +112,9 @@ export function WorkspaceModules({
   onPolicyChange?: (policyId: string | null) => void;
   /** Before the Policy dropdown, in its row: Platform settings' Organization picker. */
   pickerPrefix?: ReactNode;
+  /** The Policy dropdown in the page; a workspace's Settings pick the policy in their column
+   *  (`SettingsPolicyPicker`, `?policy=`) and leave it out. */
+  policyPicker?: boolean;
   /** The search the table opens with (`?module=`: a page under Features linking to a module's row). */
   initialSearch?: string | null;
 }) {
@@ -274,10 +278,12 @@ export function WorkspaceModules({
       />
 
       {/* The policy edited, under the page's words, at its left. */}
-      <div className="-mt-3 flex flex-wrap items-center justify-start gap-4" data-policy-picker="">
-        {pickerPrefix}
-        <PolicyPicker policies={offer?.policies} current={edited} value={edited?.id} onChange={pick} disabled={saving} />
-      </div>
+      {policyPicker ? (
+        <div className="-mt-3 flex flex-wrap items-center justify-start gap-4" data-policy-picker="">
+          {pickerPrefix}
+          <PolicyPicker policies={offer?.policies} current={edited} value={edited?.id} onChange={pick} disabled={saving} />
+        </div>
+      ) : null}
 
       {error && (
         <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>

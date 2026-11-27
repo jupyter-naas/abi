@@ -244,9 +244,13 @@ export function createOfferApi(fetcher: Fetcher = authFetch) {
       if (!response.ok) throw await failure(response, `Could not save the offer (HTTP ${response.status}).`);
       return (await response.json()) as OfferState;
     },
-    /** Offer or stop offering sources of the search, in one write of "<W> access". */
-    saveSearchSources: async (workspaceId: string, changes: Record<string, boolean>): Promise<OfferState> => {
-      const response = await fetcher(`${path(workspaceId)}/search-sources`, {
+    /** Offer or stop offering sources of the search, in one write of "<W> access" (or `policyId`). */
+    saveSearchSources: async (
+      workspaceId: string,
+      changes: Record<string, boolean>,
+      policyId?: string | null,
+    ): Promise<OfferState> => {
+      const response = await fetcher(`${path(workspaceId)}/search-sources${of(policyId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ changes }),
@@ -254,9 +258,15 @@ export function createOfferApi(fetcher: Fetcher = authFetch) {
       if (!response.ok) throw await failure(response, `Could not save the search sources (HTTP ${response.status}).`);
       return (await response.json()) as OfferState;
     },
-    /** The chat models the workspace uses (`['*']`: every one) and its default model. */
-    saveModels: async (workspaceId: string, models: string[], defaultModel: string | null): Promise<OfferState> => {
-      const response = await fetcher(`${path(workspaceId)}/models`, {
+    /** The chat models the workspace uses (`['*']`: every one) and its default model (`policyId`:
+     *  another policy of the workspace, what it grants). */
+    saveModels: async (
+      workspaceId: string,
+      models: string[],
+      defaultModel: string | null,
+      policyId?: string | null,
+    ): Promise<OfferState> => {
+      const response = await fetcher(`${path(workspaceId)}/models${of(policyId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ models, default: defaultModel }),
@@ -264,9 +274,13 @@ export function createOfferApi(fetcher: Fetcher = authFetch) {
       if (!response.ok) throw await failure(response, `Could not save the models (HTTP ${response.status}).`);
       return (await response.json()) as OfferState;
     },
-    /** Give (or stop giving) files outside the workspace, in one write of "<W> access". */
-    saveFiles: async (workspaceId: string, changes: Partial<Record<FileKey, FileMode>>): Promise<OfferState> => {
-      const response = await fetcher(`${path(workspaceId)}/files`, {
+    /** Give (or stop giving) files outside the workspace, in one write of "<W> access" (or `policyId`). */
+    saveFiles: async (
+      workspaceId: string,
+      changes: Partial<Record<FileKey, FileMode>>,
+      policyId?: string | null,
+    ): Promise<OfferState> => {
+      const response = await fetcher(`${path(workspaceId)}/files${of(policyId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(changes),

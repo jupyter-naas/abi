@@ -54,7 +54,16 @@ const BULK_ACTIONS = onOffActions({ on: 'Offer', off: 'Take back' }, (on) =>
  * ("<O> access"); a namespace closed above stays read-only. A table of switches: each change is
  * saved at once, and said; the namespaces selected change together, asked first.
  */
-export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; api?: DatasetsOfferApi }) {
+export function DatasetsOffer({
+  target,
+  policyId = null,
+  api = DEFAULT_API,
+}: {
+  target: string;
+  /** The policy picked in the Settings column (`?policy=`); "<W> access" when null. */
+  policyId?: string | null;
+  api?: DatasetsOfferApi;
+}) {
   const [state, setState] = useState<DatasetsState | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -62,12 +71,12 @@ export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; a
 
   const load = useCallback(async () => {
     try {
-      setState(await api.read(target));
+      setState(await api.read(target, policyId));
       setError('');
     } catch (e) {
       setError(message(e, 'Could not read the datasets.'));
     }
-  }, [api, target]);
+  }, [api, target, policyId]);
 
   useEffect(() => {
     setState(null);
@@ -86,7 +95,8 @@ export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; a
     initialSort: 'namespace',
   });
   const shown = table.shown;
-  const access = state?.access_policy ?? null;
+  // The policy set here: the one picked in the column, else "<W> access".
+  const access = state?.policy ?? state?.access_policy ?? null;
   const accessHref = access ? ownerHref(access.owner_scope, access.id) : null;
   // The namespaces checked for a batch change (the rows shown: select all takes them).
   const selection = useRowSelection(useMemo(() => shown.map((row) => row.namespace), [shown]));
@@ -100,7 +110,7 @@ export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; a
     setSaving(true);
     setNotice('');
     try {
-      setState(await api.save(target, changes));
+      setState(await api.save(target, changes, policyId));
       setError('');
       setNotice(done);
     } catch (e) {

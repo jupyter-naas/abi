@@ -218,11 +218,12 @@ async def save_workspace_search_sources(
     body: SearchSourcesBody,
     user: User = Signed,
     service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
 ) -> dict[str, Any]:
-    """Offer or stop offering search sources, in one write of "<W> access" as the
-    caller (403 for a source the caller does not hold, 422 for one beyond the
-    organization's offer). Answers the offer after."""
-    return await _call(service.save_search_sources(user, workspace_id, body.changes))
+    """Offer or stop offering search sources, in one write of "<W> access" (or the
+    policy picked, ``?policy=``) as the caller (403 for a source the caller does not
+    hold, 422 for one beyond the organization's offer). Answers the offer after."""
+    return await _call(service.save_search_sources(user, workspace_id, body.changes, policy_id))
 
 
 class ModelsBody(BaseModel):
@@ -241,12 +242,13 @@ async def save_workspace_models(
     body: ModelsBody,
     user: User = Signed,
     service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
 ) -> dict[str, Any]:
     """The chat models the workspace uses and its default model, in one write of "<W>
     access" as the caller (403 for a model the caller does not hold, 422 for one beyond
     the organization's offer or a list with no default among it). Answers the offer
     after."""
-    return await _call(service.set_models(user, workspace_id, body.models, body.default))
+    return await _call(service.set_models(user, workspace_id, body.models, body.default, policy_id))
 
 
 class FilesBody(BaseModel):
@@ -266,13 +268,14 @@ async def save_workspace_files(
     body: FilesBody,
     user: User = Signed,
     service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
 ) -> dict[str, Any]:
     """Give (or stop giving) Organization, Platform or System Files, in one write of
     "<W> access" as the caller (403 for a section the caller does not hold and the
     change widens; 422 for Organization Files in a workspace of no organization).
     Answers the offer after."""
     changes = {k: v for k, v in body.model_dump().items() if v is not None}
-    return await _call(service.set_files(user, workspace_id, changes))
+    return await _call(service.set_files(user, workspace_id, changes, policy_id))
 
 
 class OntologiesBody(BaseModel):
@@ -314,10 +317,12 @@ async def read_workspace_datasets(
     workspace_id: str,
     user: User = Signed,
     service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
 ) -> dict[str, Any]:
     """The deployment's dataset namespaces and whether the workspace uses each (every one
-    unless "<W> access", or "<O> access" above it, closes it)."""
-    return await _call(service.read_datasets(user, workspace_id))
+    unless "<W> access", or "<O> access" above it, closes it); ``?policy=``: what another
+    policy of the workspace closes for its holders."""
+    return await _call(service.read_datasets(user, workspace_id, policy_id))
 
 
 @router.put(
@@ -329,11 +334,13 @@ async def save_workspace_datasets(
     body: DatasetsBody,
     user: User = Signed,
     service: FeatureAccessService = Service,
+    policy_id: str | None = PolicyParam,
 ) -> dict[str, Any]:
-    """Close or reopen dataset namespaces, in one write of "<W> access" as the caller (422
+    """Close or reopen dataset namespaces, in one write of "<W> access" (or the policy
+    picked, ``?policy=``) as the caller (422
     for a namespace the organization closes; 403 from IAM, for instance reopening a
     namespace, which lifts a Deny: the platform admin's). Answers the datasets after."""
-    return await _call(service.set_datasets(user, workspace_id, body.changes))
+    return await _call(service.set_datasets(user, workspace_id, body.changes, policy_id))
 
 
 @router.put(

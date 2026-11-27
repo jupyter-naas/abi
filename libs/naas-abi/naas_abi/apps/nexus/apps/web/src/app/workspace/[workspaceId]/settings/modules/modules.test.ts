@@ -180,6 +180,21 @@ describe('Settings › Access › Modules', () => {
     expect((mounted.host.querySelector('input[type="text"]') as HTMLInputElement).value).toBe('acme.sales');
   });
 
+  it("in a workspace's Settings, edits the policy picked in the column, with no dropdown of its own", async () => {
+    const parts = setup();
+    mounted = await mount(WorkspaceModules, {
+      workspaceId: 'ws-1',
+      api: parts.api,
+      offerApi: parts.offerApi as unknown as OfferApi,
+      initialPolicy: 'pol_grants',
+      policyPicker: false,
+    });
+    await mounted.flush();
+    expect(parts.offerApi.read).toHaveBeenCalledWith('ws-1', 'pol_grants');
+    expect(mounted.host.querySelector('[data-policy-picker]')).toBeNull();
+    expect(mounted.host.querySelector('select[data-field="policy"]')).toBeNull();
+  });
+
   it('is read-only when IAM does not let the caller change "<W> access"', async () => {
     const parts = setup();
     parts.offerApi.read.mockResolvedValue({ ...OFFER, editable: false });

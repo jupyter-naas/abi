@@ -17,10 +17,11 @@ const TOPICS = vi.hoisted(() =>
   }),
 );
 
+const NAV = vi.hoisted(() => ({ policy: null as string | null }));
 vi.mock('next/navigation', () => ({
   useParams: () => ({ workspaceId: 'ws-1' }),
   useRouter: () => ({ push: () => undefined }),
-  useSearchParams: () => ({ get: () => null }),
+  useSearchParams: () => ({ get: (key: string) => (key === 'policy' ? NAV.policy : null) }),
   usePathname: () => '/workspace/ws-1/settings/search',
 }));
 vi.mock('@/stores/search-topics', () => ({
@@ -103,6 +104,24 @@ describe('Workspace settings › Search', () => {
     // Features of a workspace that is not loaded are off: Disabled lists them.
     await filterColumn(mounted, 'enabled', 'Disabled');
     expect(rows()).toEqual(FEATURE_SCOPES.map((scope) => scope.id));
+  });
+
+  it('switches a source on the policy picked in the Settings column', async () => {
+    NAV.policy = 'pol_g';
+    try {
+      mounted = await mount(SearchSettingsPage, {});
+      await mounted.flush();
+      await filterColumn(mounted, 'group', 'Web');
+      const engine = WEB_ENGINES[0];
+      // The policy grants no source yet: the engine is off, and switching it writes the policy.
+      const box = mounted.host.querySelector(`[aria-label="${engine.label} enabled"]`) as HTMLInputElement;
+      expect(box.checked).toBe(false);
+      await mounted.click(box);
+      await mounted.flush();
+      expect(API.setScopeEnabled).toHaveBeenCalledWith('ws-1', `web.${engine.id}`, true, 'pol_g');
+    } finally {
+      NAV.policy = null;
+    }
   });
 
   it('disables the entries selected in one step, asked first; a feature not available here is not selected', async () => {

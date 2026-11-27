@@ -104,6 +104,12 @@ describe('Workspace settings › Ontologies (resource access)', () => {
     expect([...mounted.host.querySelectorAll('button')].map((b) => b.textContent)).not.toContain('Save changes');
   });
 
+  it("says it sets the workspace's own ontologies when another policy is picked in the column", async () => {
+    mounted = await mount(ResourceAccessEditor, { workspaceId: 'ws-1', kind: 'ontologies', policyPicked: true });
+    await mounted.flush();
+    expect(mounted.host.querySelector('[data-policy-note]')?.textContent).toContain('whatever policy is picked');
+  });
+
   it('enables the ontologies selected in one save, asked first', async () => {
     mounted = await mount(ResourceAccessEditor, { workspaceId: 'ws-1', kind: 'ontologies' });
     await mounted.flush();

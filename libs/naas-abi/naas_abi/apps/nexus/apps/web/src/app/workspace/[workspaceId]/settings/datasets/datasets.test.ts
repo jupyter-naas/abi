@@ -108,7 +108,7 @@ describe('DatasetsOffer', () => {
     const m = await render(api);
     await m.click(box(m, 'finance'));
     await m.flush();
-    expect(api.save).toHaveBeenCalledWith('ws1', { finance: false });
+    expect(api.save).toHaveBeenCalledWith('ws1', { finance: false }, null);
     expect(box(m, 'finance')?.checked).toBe(false);
     expect(notice(m)).toBe('finance: not offered.');
   });
@@ -124,7 +124,7 @@ describe('DatasetsOffer', () => {
     await m.click(confirmButton('Take back'));
     await m.flush();
     // hr is already not offered: one change only.
-    expect(api.save).toHaveBeenCalledWith('ws1', { finance: false });
+    expect(api.save).toHaveBeenCalledWith('ws1', { finance: false }, null);
     expect(notice(m)).toBe('1 namespace taken back.');
   });
 
@@ -145,11 +145,25 @@ describe('DatasetsOffer', () => {
     expect(m.host.textContent).toContain('This deployment lists no dataset.');
   });
 
+  it('reads and writes the policy picked in the Settings column, and names it', async () => {
+    const api = fakeApi();
+    const grants = { id: 'pol_g', name: 'Analysts grants', owner_scope: SCOPE };
+    api.read.mockResolvedValue({ ...BEFORE, policy: grants });
+    api.save.mockResolvedValue({ ...BEFORE, policy: grants });
+    mounted = await mount(DatasetsOffer, { target: 'ws1', policyId: 'pol_g', api: api as unknown as DatasetsOfferApi });
+    await mounted.flush();
+    expect(api.read).toHaveBeenCalledWith('ws1', 'pol_g');
+    expect(mounted.host.querySelector('a[href*="pol_g"]')?.textContent).toBe('Analysts grants');
+    await mounted.click(box(mounted, 'finance'));
+    await mounted.flush();
+    expect(api.save).toHaveBeenCalledWith('ws1', { finance: false }, 'pol_g');
+  });
+
   it('on an organization, edits "<O> access" for every workspace', async () => {
     const api = fakeApi();
     api.read.mockResolvedValue({ ...BEFORE, ceiling: null, access_policy: { id: 'pol_org', name: 'Acme access', owner_scope: 'abi:' } });
     const m = await render(api, 'org:acme');
-    expect(api.read).toHaveBeenCalledWith('org:acme');
+    expect(api.read).toHaveBeenCalledWith('org:acme', null);
     expect(m.host.textContent).toContain('workspaces of this organization');
   });
 });

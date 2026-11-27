@@ -3,11 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
 
 const READ = vi.hoisted(() => vi.fn());
+const NAV = vi.hoisted(() => ({ policy: null as string | null }));
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ workspaceId: 'ws-1' }),
   usePathname: () => '/workspace/ws-1/settings/models',
-  useSearchParams: () => ({ get: () => null }),
+  useSearchParams: () => ({ get: (key: string) => (key === 'policy' ? NAV.policy : null) }),
 }));
 vi.mock('next/link', async () => {
   const { createElement } = await import('react');
@@ -42,6 +43,17 @@ describe('Workspace settings › Models', () => {
     expect(mounted.host.textContent).toContain('2 models');
     expect(mounted.host.textContent).not.toContain('PLATFORM CATALOG');
     expect(mounted.host.querySelector('a[data-action="platform-models"]')?.getAttribute('href')).toBe('/settings/models');
+  });
+
+  it('reads the policy picked in the Settings column', async () => {
+    NAV.policy = 'pol_g';
+    READ.mockResolvedValue({ models: { offered: ['gpt-a'], default: 'gpt-a', every: false, available: [] } });
+    mounted = await mount(ModelsPage, {});
+    await mounted.flush();
+    NAV.policy = null;
+    expect(READ).toHaveBeenCalledWith('ws-1', 'pol_g');
+    expect(mounted.host.textContent).toContain('1 model');
+    expect(mounted.host.textContent).toContain('Granted by the policy picked');
   });
 
   it('says Every model when the workspace uses them all', async () => {

@@ -13,6 +13,7 @@ export function WorkspaceOfferPart({
   parts,
   description,
   onChanged,
+  policyId = null,
 }: {
   workspaceId: string;
   parts: readonly OfferPart[];
@@ -20,11 +21,19 @@ export function WorkspaceOfferPart({
   description?: string;
   /** Told after each change, e.g. to read the page's list again. */
   onChanged?: () => void;
+  /** The policy picked in the Settings column (`?policy=`); "<W> access" when null. */
+  policyId?: string | null;
 }) {
   return (
-    <SettingsSection title="Offered in this workspace" description={description}>
+    <SettingsSection title={policyId ? 'Granted by the policy picked' : 'Offered in this workspace'} description={description}>
       <div data-offer-part={parts.join(' ')}>
-        <WorkspaceOfferEditor workspaceId={workspaceId} parts={parts} bare onChanged={onChanged} />
+        <WorkspaceOfferEditor
+          workspaceId={workspaceId}
+          parts={parts}
+          bare
+          onChanged={onChanged}
+          editedPolicy={policyId}
+        />
       </div>
     </SettingsSection>
   );

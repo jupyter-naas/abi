@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { SettingsPageHeader } from '@/components/settings/settings-ui';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
+import { SettingsLoading, SettingsPageHeader } from '@/components/settings/settings-ui';
+import { policyOfSearch } from '@/components/settings/settings-policy';
 import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { WorkspaceOfferPart } from '@/components/settings/workspace-offer-part';
 import { PLATFORM_MODELS_PATH } from '@/app/settings/lib/nav';
@@ -21,21 +22,31 @@ function modelsBadge(part: ModelsPart | undefined): string | undefined {
 }
 
 /**
- * Settings › Models: the chat models this workspace's chats use, its part of the offer. The
- * platform's catalog of models is Platform › Models, linked from here.
+ * Settings › Models: the chat models this workspace's chats use, its part of the offer (or what
+ * the policy picked in the Settings column grants, `?policy=`). The platform's catalog of models
+ * is Platform › Models, linked from here.
  */
 export default function ModelsPage() {
+  return (
+    <Suspense fallback={<SettingsLoading label="Loading models…" />}>
+      <Models />
+    </Suspense>
+  );
+}
+
+function Models() {
   const workspaceId = useParams()?.workspaceId as string | undefined;
+  const policy = policyOfSearch(useSearchParams());
   const [part, setPart] = useState<ModelsPart | undefined>(undefined);
 
   const load = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      setPart((await OFFER_API.read(workspaceId)).models);
+      setPart((await OFFER_API.read(workspaceId, policy)).models);
     } catch {
       setPart(undefined);
     }
-  }, [workspaceId]);
+  }, [workspaceId, policy]);
 
   useEffect(() => {
     void load();
@@ -59,7 +70,13 @@ export default function ModelsPage() {
         }
       />
       {workspaceId && (
-        <WorkspaceOfferPart workspaceId={workspaceId} parts={['models']} onChanged={() => void load()} />
+        <WorkspaceOfferPart
+          key={policy ?? ''}
+          workspaceId={workspaceId}
+          parts={['models']}
+          policyId={policy}
+          onChanged={() => void load()}
+        />
       )}
     </div>
   );
