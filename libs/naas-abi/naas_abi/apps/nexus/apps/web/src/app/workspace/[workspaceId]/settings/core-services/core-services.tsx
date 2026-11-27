@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { ownerHref } from '@/components/access/policies/policy-owners';
 import { AccessLevelChoice } from '@/components/settings/access-level-choice';
@@ -57,11 +57,14 @@ export function CoreServices({
   api = DEFAULT_API,
   initialPolicy = null,
   onPolicyChange,
+  pickerPrefix,
 }: {
   workspaceId: string;
   api?: AccessLevelsApi;
   initialPolicy?: string | null;
   onPolicyChange?: (policyId: string | null) => void;
+  /** Before the Policy dropdown, in its row: Platform settings' Organization picker. */
+  pickerPrefix?: ReactNode;
 }) {
   const [policyId, setPolicyId] = useState<string | null>(initialPolicy);
   const [state, setState] = useState<LevelsState | null>(null);
@@ -150,7 +153,8 @@ export function CoreServices({
       />
 
       {/* The policy edited, under the page's words, at its left. */}
-      <div className="-mt-3 flex justify-start" data-policy-picker="">
+      <div className="-mt-3 flex flex-wrap items-center justify-start gap-4" data-policy-picker="">
+        {pickerPrefix}
         <PolicyPicker policies={state?.policies} current={edited} value={edited?.id} onChange={pick} disabled={saving} />
       </div>
 

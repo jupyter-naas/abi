@@ -7,8 +7,11 @@ import { OrganizationOffer } from '../organization-offer';
 export default function PlatformFeaturesPage() {
   return (
     <OrganizationOffer
-      render={({ target, initialPolicy, onPolicyChange }) => (
-        <FeatureAccess workspaceId={target} initialPolicy={initialPolicy} onPolicyChange={onPolicyChange} />
+      render={({ target, initialPolicy, onPolicyChange, pickerPrefix }) => (
+        <FeatureAccess workspaceId={target} initialPolicy={initialPolicy}
+          onPolicyChange={onPolicyChange}
+          pickerPrefix={pickerPrefix}
+        />
       )}
     />
   );

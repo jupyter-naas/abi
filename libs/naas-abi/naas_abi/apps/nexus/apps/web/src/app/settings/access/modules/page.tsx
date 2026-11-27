@@ -7,8 +7,11 @@ import { OrganizationOffer } from '../organization-offer';
 export default function PlatformModulesPage() {
   return (
     <OrganizationOffer
-      render={({ target, initialPolicy, onPolicyChange }) => (
-        <WorkspaceModules workspaceId={target} initialPolicy={initialPolicy} onPolicyChange={onPolicyChange} />
+      render={({ target, initialPolicy, onPolicyChange, pickerPrefix }) => (
+        <WorkspaceModules workspaceId={target} initialPolicy={initialPolicy}
+          onPolicyChange={onPolicyChange}
+          pickerPrefix={pickerPrefix}
+        />
       )}
     />
   );

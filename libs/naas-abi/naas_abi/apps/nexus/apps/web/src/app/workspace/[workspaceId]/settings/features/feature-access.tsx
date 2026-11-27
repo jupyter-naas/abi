@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { ownerHref } from '@/components/access/policies/policy-owners';
 import { Button } from '@/components/ui/button';
@@ -76,6 +76,7 @@ export function FeatureAccess({
   levelsApi = DEFAULT_LEVELS_API,
   initialPolicy = null,
   onPolicyChange,
+  pickerPrefix,
 }: {
   workspaceId: string;
   api?: FeatureAccessApi;
@@ -85,6 +86,8 @@ export function FeatureAccess({
   initialPolicy?: string | null;
   /** Told when another policy is picked (null: "<W> access"), e.g. to keep it in the URL. */
   onPolicyChange?: (policyId: string | null) => void;
+  /** Before the Policy dropdown, in its row: Platform settings' Organization picker. */
+  pickerPrefix?: ReactNode;
 }) {
   const [policyId, setPolicyId] = useState<string | null>(initialPolicy);
   const [state, setState] = useState<FeatureAccessState | null>(null);
@@ -276,7 +279,8 @@ export function FeatureAccess({
       />
 
       {/* The policy edited, under the page's words, at its left. */}
-      <div className="-mt-3 flex justify-start" data-policy-picker="">
+      <div className="-mt-3 flex flex-wrap items-center justify-start gap-4" data-policy-picker="">
+        {pickerPrefix}
         <PolicyPicker
           policies={state?.policies}
           current={edited ?? access}

@@ -6,6 +6,11 @@
  */
 export type PickablePolicy = { id: string; name: string };
 
+/** The picker's label and list, shared with the pickers that sit beside it (an organization's). */
+export const PICKER_LABEL_CLASS = 'flex items-center gap-2 text-sm';
+export const PICKER_SELECT_CLASS =
+  'h-9 max-w-[16rem] rounded-none border border-input bg-background px-3 text-sm text-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30';
+
 export function PolicyPicker({
   policies,
   current = null,
@@ -25,13 +30,13 @@ export function PolicyPicker({
   const listed = policies && policies.length > 0 ? policies : current ? [current] : [];
   if (listed.length === 0) return null;
   return (
-    <label className="flex items-center gap-2 text-sm">
+    <label className={PICKER_LABEL_CLASS}>
       <span className="text-muted-foreground">Policy</span>
       <select
         aria-label="Policy"
         title="The policy edited"
         data-field="policy"
-        className="h-9 max-w-[16rem] rounded-none border border-input bg-background px-3 text-sm text-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        className={PICKER_SELECT_CLASS}
         value={value ?? listed[0].id}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}

@@ -2,8 +2,8 @@
 
 /**
  * Platform settings › Access › Features, Services and Modules: an organization's own page (on its
- * "<O> access", `org:<id>`), the organization picked atop it (`?org=`, the first one the caller
- * opens by default). The platform has no offer of its own above the organizations: these pages
+ * "<O> access", `org:<id>`), the organization picked before its Policy dropdown, in the same row
+ * and style (`?org=`, the first one the caller opens by default). The platform has no offer of its own above the organizations: these pages
  * are the way to every organization's from Platform settings.
  */
 import { Suspense, type ReactNode } from 'react';
@@ -11,6 +11,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { SettingsEmpty, SettingsLoading } from '@/components/settings/settings-ui';
 import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { orgTarget } from '@/lib/access-model/target';
+import { PICKER_LABEL_CLASS, PICKER_SELECT_CLASS } from '@/components/settings/policy-picker';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 // The choices and notes of a row (Workspace › General's CSS) and the table of Users.
 import '@/app/workspace/[workspaceId]/settings/general/general.css';
@@ -20,6 +21,8 @@ export type OrganizationPage = (props: {
   target: string;
   initialPolicy: string | null;
   onPolicyChange: (policyId: string | null) => void;
+  /** The Organization picker, for the page to put before its Policy dropdown, in its row. */
+  pickerPrefix: ReactNode;
 }) => ReactNode;
 
 function Picked({ render }: { render: OrganizationPage }) {
@@ -37,30 +40,31 @@ function Picked({ render }: { render: OrganizationPage }) {
     if (nextPolicy) query.set('policy', nextPolicy);
     router.replace(`${pathname}?${query.toString()}`);
   };
+  const picker = (
+    <label className={PICKER_LABEL_CLASS} data-organization-picker="">
+      <span className="text-muted-foreground">Organization</span>
+      <select
+        className={PICKER_SELECT_CLASS}
+        value={orgId}
+        onChange={(event) => go(event.target.value, null)}
+        aria-label="Organization"
+      >
+        {orgs.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   return (
-    <div className="space-y-4">
-      <label className="flex max-w-sm flex-col gap-2" data-organization-picker="">
-        <span className="org-settings-field-label">Organization</span>
-        <select
-          className="org-settings-input"
-          value={orgId}
-          onChange={(event) => go(event.target.value, null)}
-          aria-label="Organization"
-        >
-          {orgs.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div key={orgId}>
-        {render({
-          target: orgTarget(orgId),
-          initialPolicy: policy,
-          onPolicyChange: (next) => go(orgId, next),
-        })}
-      </div>
+    <div key={orgId}>
+      {render({
+        target: orgTarget(orgId),
+        initialPolicy: policy,
+        onPolicyChange: (next) => go(orgId, next),
+        pickerPrefix: picker,
+      })}
     </div>
   );
 }

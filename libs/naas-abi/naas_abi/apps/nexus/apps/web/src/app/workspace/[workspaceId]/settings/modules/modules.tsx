@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { OfferSwitch } from '@/components/access/offer/offer-editor';
 import { draftKey, isOffered, itemName, itemsWithOffered, offerChanges } from '@/components/access/offer/offer-model';
@@ -75,6 +76,7 @@ export function WorkspaceModules({
   offerApi = DEFAULT_OFFER_API,
   initialPolicy = null,
   onPolicyChange,
+  pickerPrefix,
 }: {
   workspaceId: string;
   api?: IamAdminApi;
@@ -83,6 +85,8 @@ export function WorkspaceModules({
   initialPolicy?: string | null;
   /** Told when another policy is picked (null: "<W> access"). */
   onPolicyChange?: (policyId: string | null) => void;
+  /** Before the Policy dropdown, in its row: Platform settings' Organization picker. */
+  pickerPrefix?: ReactNode;
 }) {
   const [policyId, setPolicyId] = useState<string | null>(initialPolicy);
   const [offer, setOffer] = useState<OfferState | null>(null);
@@ -220,7 +224,8 @@ export function WorkspaceModules({
       />
 
       {/* The policy edited, under the page's words, at its left. */}
-      <div className="-mt-3 flex justify-start" data-policy-picker="">
+      <div className="-mt-3 flex flex-wrap items-center justify-start gap-4" data-policy-picker="">
+        {pickerPrefix}
         <PolicyPicker policies={offer?.policies} current={edited} value={edited?.id} onChange={pick} disabled={saving} />
       </div>
 
