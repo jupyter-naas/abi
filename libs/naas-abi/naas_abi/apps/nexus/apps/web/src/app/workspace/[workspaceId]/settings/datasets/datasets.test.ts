@@ -232,6 +232,30 @@ describe('Settings › Datasets, a namespace unfolds its datasets', () => {
   });
 });
 
+describe('Settings › Datasets, datasets selected', () => {
+  afterEach(async () => {
+    await unfoldMounted?.unmount();
+    unfoldMounted = null;
+  });
+
+  it('checks a dataset of an unfolded namespace, and takes it back in a batch change', async () => {
+    const save = vi.fn(async () => BEFORE);
+    const api = { read: vi.fn(async () => BEFORE), save } as unknown as DatasetsOfferApi;
+    unfoldMounted = await mount(DatasetsOffer, { target: 'ws1', api });
+    await unfoldMounted.flush();
+    // Folded: no dataset to check.
+    expect(unfoldMounted.host.querySelector('[data-select-row="finance/invoices"]')).toBeNull();
+    await unfoldMounted.click(unfoldMounted.host.querySelector('[data-namespace="finance"] button[data-action="datasets"]'));
+    await unfoldMounted.click(unfoldMounted.host.querySelector('[data-select-row="finance/invoices"]'));
+    expect(unfoldMounted.host.querySelector('[data-bulk-bar]')?.textContent).toContain('1 dataset selected');
+    await unfoldMounted.click(unfoldMounted.host.querySelector('[data-bulk-bar] [data-bulk-action="off"]'));
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('[data-bulk-confirm] button')].find((b) => b.textContent === 'Take back')!;
+    await unfoldMounted.click(confirm);
+    await unfoldMounted.flush();
+    expect(save).toHaveBeenCalledWith('ws1', { 'finance/invoices': false }, null);
+  });
+});
+
 describe('namespaceSummary', () => {
   it('says whole, how many of its datasets, or not offered', () => {
     const datasets = [entry('a'), entry('b', { offered: false }), entry('c')];

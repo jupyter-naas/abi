@@ -29,6 +29,7 @@ import {
   datasetCellValues,
   datasetExportRow,
   datasetSearchTexts,
+  bulkDatasetChanges,
   datasetKey,
   datasetSortValue,
   namespaceSummary,
@@ -102,7 +103,20 @@ export function DatasetsOffer({
   const access = state?.policy ?? state?.access_policy ?? null;
   const accessHref = access ? ownerHref(access.owner_scope, access.id) : null;
   // The namespaces checked for a batch change (the rows shown: select all takes them).
-  const selection = useRowSelection(useMemo(() => shown.map((row) => row.namespace), [shown]));
+  /** Whether a namespace shows its datasets: unfolded, or a search on. */
+  const isUnfolded = (row: DatasetRow) =>
+    (row.datasets ?? []).length > 0 && (!!open[row.namespace] || table.search.trim().length > 0);
+  // The rows checked for a batch change: the namespaces shown, and the datasets of those unfolded.
+  const selectable = useMemo(
+    () =>
+      shown.flatMap((row) => [
+        row.namespace,
+        ...(isUnfolded(row) ? (row.datasets ?? []).map((dataset) => datasetKey(row.namespace, dataset.name)) : []),
+      ]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [shown, open, table.search]
+  );
+  const selection = useRowSelection(selectable);
 
   /** One write of the offer for `changes`, then what it did said in `done`. */
   const save = async (changes: Record<string, boolean>, done: string) => {
@@ -131,12 +145,16 @@ export function DatasetsOffer({
 
   const applyBulk = async (id: string) => {
     const on = id === 'on';
-    const changes = bulkChanges(rows, selection.selected, on);
+    const changes = { ...bulkChanges(rows, selection.selected, on), ...bulkDatasetChanges(rows, selection.selected, on) };
     const count = Object.keys(changes).length;
     await save(changes, `${count} namespace${count === 1 ? '' : 's'} ${on ? 'offered' : 'taken back'}.`);
   };
   /** The selected namespaces a batch change does not fit: those that cannot change here. */
-  const skipped = () => rows.filter((row) => selection.selected.has(row.namespace) && !row.editable).length;
+  const skipped = () =>
+    rows.filter((row) => selection.selected.has(row.namespace) && !row.editable).length +
+    rows.flatMap((row) =>
+      (row.datasets ?? []).filter((dataset) => selection.selected.has(datasetKey(row.namespace, dataset.name)) && !dataset.editable)
+    ).length;
 
   const exportShown = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
@@ -199,7 +217,12 @@ export function DatasetsOffer({
           />
           <BulkBar
             selection={selection}
-            noun="namespace"
+            // Namespaces, datasets (`<namespace>/<name>`), or both: items.
+            noun={(() => {
+              const keys = [...selection.selected];
+              if (keys.every((key) => !key.includes('/'))) return 'namespace';
+              return keys.every((key) => key.includes('/')) ? 'dataset' : 'item';
+            })()}
             actions={BULK_ACTIONS}
             onApply={applyBulk}
             skippedFor={skipped}
@@ -213,8 +236,16 @@ export function DatasetsOffer({
                 leading={
                   <SelectAllCell
                     selection={selection}
-                    keys={shown.filter((row) => row.editable).map((row) => row.namespace)}
-                    noun="namespace"
+                    // The namespaces shown, and the datasets of those unfolded, that may change.
+                    keys={shown.flatMap((row) => [
+                      ...(row.editable ? [row.namespace] : []),
+                      ...(isUnfolded(row)
+                        ? (row.datasets ?? [])
+                            .filter((dataset) => dataset.editable)
+                            .map((dataset) => datasetKey(row.namespace, dataset.name))
+                        : []),
+                    ])}
+                    noun="item"
                     disabled={saving}
                   />
                 }
@@ -226,7 +257,7 @@ export function DatasetsOffer({
                   const note = rowNote(row);
                   const names = row.datasets ?? [];
                   // A search opens the namespaces it finds (their datasets match it too).
-                  const unfolded = names.length > 0 && (!!open[row.namespace] || table.search.trim().length > 0);
+                  const unfolded = isUnfolded(row);
                   return (
                     <Fragment key={row.namespace}>
                     <tr data-namespace={row.namespace} className="align-top">
@@ -274,7 +305,12 @@ export function DatasetsOffer({
                     {unfolded &&
                       names.map((dataset) => (
                         <tr key={dataset.name} data-namespace-dataset={`${row.namespace}.${dataset.name}`} className="align-top">
-                          <td />
+                          <SelectRowCell
+                            selection={selection}
+                            rowKey={datasetKey(row.namespace, dataset.name)}
+                            label={`${row.namespace}.${dataset.name}`}
+                            disabled={saving || !dataset.editable}
+                          />
                           <td className="access-offer-indent-1 text-sm text-foreground">{dataset.name}</td>
                           <td />
                           <td>

@@ -64,6 +64,19 @@ export function bulkChanges(rows: DatasetRow[], keys: Iterable<string>, on: bool
   );
 }
 
+/** What a batch change sends for the datasets checked (`{"hr/pay": on}`): each editable one of
+ *  `keys` not yet `on`. */
+export function bulkDatasetChanges(rows: DatasetRow[], keys: Iterable<string>, on: boolean): Record<string, boolean> {
+  const picked = new Set(keys);
+  return Object.fromEntries(
+    rows.flatMap((row) =>
+      (row.datasets ?? [])
+        .filter((dataset) => picked.has(datasetKey(row.namespace, dataset.name)) && dataset.editable && dataset.offered !== on)
+        .map((dataset) => [datasetKey(row.namespace, dataset.name), on] as const)
+    )
+  );
+}
+
 /** What a row says under its switch: why it cannot change, or that the deployment lost it. */
 export function rowNote(row: DatasetRow): string | null {
   if (row.reason) return row.reason;
