@@ -24,6 +24,17 @@
 
 <!-- version list -->
 
+## v6.4.2 (2026-11-27)
+
+### Bug Fixes
+
+- **api**: The landing page links the docs only when the API serves them
+  ([`24c2b09`](https://github.com/jupyter-naas/abi/commit/24c2b09d5b02a0ab2237fce12d06b7df82dd7400))
+
+- **idp**: Send sign-in codes from the deployment's own mailbox
+  ([`a636703`](https://github.com/jupyter-naas/abi/commit/a63670301009bfdd7d50c5f9b34b0f1327660654))
+
+
 ## v6.4.1 (2026-11-26)
 
 
