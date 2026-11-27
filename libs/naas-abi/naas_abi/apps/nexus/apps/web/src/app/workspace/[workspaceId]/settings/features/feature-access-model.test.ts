@@ -9,8 +9,11 @@ import {
   featureExportRow,
   featurePage,
   featureSearchTexts,
+  levelPlan,
   otherPolicies,
+  pickableLevels,
   rowNotes,
+  shownLevel,
   sortedRows,
   type FeatureAccessState,
   type FeatureRow,
@@ -85,6 +88,49 @@ describe('what a row may choose', () => {
   });
 });
 
+describe('one Access column: None takes the feature out, any other level puts it in', () => {
+  const ALL = ['none', 'read', 'write', 'admin'] as const;
+
+  it('shows None for a feature not offered (Nobody), whatever level is stored, and the level otherwise', () => {
+    expect(shownLevel('nobody', 'admin')).toBe('none');
+    expect(shownLevel('nobody', null)).toBe('none');
+    expect(shownLevel('everyone', 'write')).toBe('write');
+    expect(shownLevel('everyone', 'none')).toBe('none');
+    expect(shownLevel('everyone', null)).toBeNull();
+  });
+
+  it('lets an editable row offered here take every level it has', () => {
+    expect(pickableLevels(row({ key: 'chat', label: 'Chat' }), [...ALL])).toEqual([...ALL]);
+  });
+
+  it('lets a feature the ceiling does not offer only be taken out, and a read-only row nothing', () => {
+    expect(pickableLevels(row({ key: 'graph', label: 'Graph', offered: false }), [...ALL])).toEqual(['none']);
+    expect(pickableLevels(row({ key: 'chat', label: 'Chat', editable: false }), [...ALL])).toEqual([]);
+  });
+
+  it('saves the choice and the level a pick asks, each only when it changes', () => {
+    const rows = [
+      row({ key: 'chat', label: 'Chat', choice: 'everyone' }),
+      row({ key: 'maps', label: 'Maps' }),
+      row({ key: 'files', label: 'Files', choice: 'everyone' }),
+      row({ key: 'code', label: 'Code', choice: 'everyone' }),
+    ];
+    const saved = { chat: 'admin', maps: 'read', files: 'write', code: 'none' } as const;
+    expect(
+      levelPlan(rows, { chat: 'none', maps: 'read', files: 'read', code: 'write' }, (key) => saved[key as keyof typeof saved])
+    ).toEqual({
+      // Chat taken out (and capped at None); Maps put in (its level already Read); Files lowered;
+      // Code, offered but capped at None, opened to Write.
+      features: [
+        { feature: 'chat', choice: 'nobody' },
+        { feature: 'maps', choice: 'everyone' },
+      ],
+      levels: { 'feature:chat': 'none', 'feature:files': 'read', 'feature:code': 'write' },
+    });
+    expect(levelPlan(rows, {}, (key) => saved[key as keyof typeof saved])).toEqual({ features: [], levels: {} });
+  });
+});
+
 describe('what a row says beside its choice', () => {
   it('not offered: names the access policy, with a link to widen it when IAM lets the caller', () => {
     const graph = row({ key: 'graph', label: 'Graph', offered: false });
@@ -151,22 +197,24 @@ describe('the features table (as Settings › Users)', () => {
   const maps = row({ key: 'maps', label: 'Maps' });
   const graph = row({ key: 'graph', label: 'Graph', choice: 'everyone', offered: false });
 
-  it('filters a column on what a row holds: its description, Enabled or Disabled', () => {
-    expect(featureCellValues(chat, 'enabled')).toEqual(['Enabled']);
-    expect(featureCellValues(maps, 'enabled')).toEqual(['Disabled']);
+  it('filters a column on what a row holds: its description, its access (None when not offered)', () => {
+    expect(featureCellValues(chat, 'access', 'write')).toEqual(['Write']);
+    expect(featureCellValues(maps, 'access', 'admin')).toEqual(['None']);
+    expect(featureCellValues(chat, 'access', null)).toEqual([]);
     expect(featureCellValues(maps, 'description')).toEqual([featureDescription('maps')]);
     expect(featureDescription('maps')).not.toBe('');
   });
 
-  it('searches the name, the description, enabled and not offered', () => {
+  it('searches the name, the description and not offered', () => {
     expect(featureSearchTexts(maps).join(' ')).toContain('feeds');
     expect(featureSearchTexts(graph)).toContain('not offered');
-    expect(featureSearchTexts(chat)).toContain('enabled');
+    expect(featureSearchTexts(chat)).not.toContain('enabled');
   });
 
   it('exports a row as the table shows it, and opens each feature on its own page', () => {
-    expect(featureExportRow(maps)).toEqual(['Maps', 'maps', featureDescription('maps'), 'No', 'Yes']);
-    expect(featureExportRow(graph)[4]).toBe('No');
+    expect(featureExportRow(maps, 'admin')).toEqual(['Maps', 'maps', featureDescription('maps'), 'None', 'Yes']);
+    expect(featureExportRow(chat, 'write')[3]).toBe('Write');
+    expect(featureExportRow(graph, null)).toEqual(['Graph', 'graph', featureDescription('graph'), '', 'No']);
     expect(featurePage('ws1', 'agents')).toBe('/workspace/ws1/settings/agents');
     expect(featurePage('ws1', 'code')).toBeNull();
   });

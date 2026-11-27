@@ -4,8 +4,13 @@
  * (search, sort, filter, export, as Settings › Users). Pure: the view is `feature-access.tsx`. A feature is part of the workspace's offer, "<W> access" (S3, #1586):
  * Everyone puts it in, Nobody takes it out. Only… is gone: an exception for some people is a group
  * holding a policy. What may be changed is IAM's answer (`editable`, `reason`), never a role.
+ *
+ * The table has one Access column (None, Read, Write, Admin): None takes the feature out (Nobody)
+ * and caps it at None, any other level puts it in (Everyone) at that level (`levelPlan`). A
+ * feature taken out shows None whatever level is stored (`shownLevel`).
  */
 import { ownerHref } from '@/components/access/policies/policy-owners';
+import { LEVEL_LABELS, type AccessLevel } from '@/lib/access-model/access-levels';
 
 export type FeatureChoice = 'everyone' | 'nobody';
 export const FEATURE_CHOICES: { value: FeatureChoice; label: string; hint: string }[] = [
@@ -101,6 +106,39 @@ export function choicesOf(
   }));
 }
 
+/** The level a row shows: None for a feature taken out (Nobody), whatever level is stored, since
+ *  nobody uses it; otherwise its level (null while the levels are not read). */
+export function shownLevel(choice: FeatureChoice, level: AccessLevel | null): AccessLevel | null {
+  return choice === 'nobody' ? 'none' : level;
+}
+
+/** The levels a row may be set to: every one it has while it may be offered (`choicesOf`), only
+ *  None for a feature the ceiling does not offer, none for a read-only row. */
+export function pickableLevels(row: FeatureRow, levels: AccessLevel[], offer = true): AccessLevel[] {
+  const can = (value: FeatureChoice) => choicesOf(row, offer).find((c) => c.value === value)?.enabled ?? false;
+  return levels.filter((level) => can(level === 'none' ? 'nobody' : 'everyone'));
+}
+
+/** What a save sends for the levels picked (`drafts`, by feature): each feature whose choice the
+ *  pick changes (None → Nobody, any other level → Everyone), and each level that changes
+ *  (`saved`, the level stored), None included: taken out, a feature is capped at None too. */
+export function levelPlan(
+  rows: FeatureRow[],
+  drafts: Record<string, AccessLevel>,
+  saved: (key: string) => AccessLevel | null,
+): { features: FeatureChange[]; levels: Record<string, AccessLevel> } {
+  const features: FeatureChange[] = [];
+  const levels: Record<string, AccessLevel> = {};
+  for (const row of rows) {
+    const level = drafts[row.key];
+    if (!level) continue;
+    const choice: FeatureChoice = level === 'none' ? 'nobody' : 'everyone';
+    if (choice !== row.choice) features.push({ feature: row.key, choice });
+    if (level !== saved(row.key)) levels[`feature:${row.key}`] = level;
+  }
+  return { features, levels };
+}
+
 export type RowNote = { tone: 'info' | 'warning'; text: string; href?: string | null; link?: string };
 
 /** What a row says beside its choice: the ceiling, a policy changed by hand, why it is
@@ -189,46 +227,39 @@ export function featurePage(workspaceId: string, key: string): string | null {
 }
 
 /** The columns of the features table: each sorts and filters, as Settings › Users. */
-export type FeatureColumnId = 'feature' | 'description' | 'access' | 'enabled';
+export type FeatureColumnId = 'feature' | 'description' | 'access';
 export const FEATURE_COLUMNS: { id: FeatureColumnId; label: string }[] = [
   { id: 'feature', label: 'Feature' },
   { id: 'description', label: 'Description' },
   // How far people go with it (`access-levels`): the page fills its values.
   { id: 'access', label: 'Access' },
-  { id: 'enabled', label: 'Enabled' },
 ];
 
 /** What a column filter sees of a row (what it holds, not an unsaved draft: a row never leaves
- *  the table while it is being changed). */
-export function featureCellValues(row: FeatureRow, column: FeatureColumnId): string[] {
+ *  the table while it is being changed); `level` is its stored access level. */
+export function featureCellValues(row: FeatureRow, column: FeatureColumnId, level: AccessLevel | null = null): string[] {
   if (column === 'feature') return [row.label];
   if (column === 'description') return [featureDescription(row.key)];
-  if (column === 'access') return [];
-  return [row.choice === 'everyone' ? 'Enabled' : 'Disabled'];
+  const shown = shownLevel(row.choice, level);
+  return shown ? [LEVEL_LABELS[shown]] : [];
 }
 
-/** What the search bar reads of a row: its name, key and description, whether it is enabled,
- *  not offered here, or changed by hand on its policy's page. */
+/** What the search bar reads of a row: its name, key and description, whether it is not offered
+ *  here, or changed by hand on its policy's page. */
 export function featureSearchTexts(row: FeatureRow): string[] {
   return [
     row.label,
     row.key,
     featureDescription(row.key),
-    row.choice === 'everyone' ? 'enabled' : 'disabled',
     row.offered ? '' : 'not offered',
     row.hand_edited ? 'changed by hand' : '',
   ];
 }
 
-export const FEATURE_EXPORT_HEADERS = ['Feature', 'Key', 'Description', 'Enabled', 'Offered here'];
+export const FEATURE_EXPORT_HEADERS = ['Feature', 'Key', 'Description', 'Access', 'Offered here'];
 
-/** A row of the CSV / Excel export, as the table shows it saved. */
-export function featureExportRow(row: FeatureRow): string[] {
-  return [
-    row.label,
-    row.key,
-    featureDescription(row.key),
-    row.choice === 'everyone' ? 'Yes' : 'No',
-    row.offered ? 'Yes' : 'No',
-  ];
+/** A row of the CSV / Excel export, as the table shows it saved (`level`: its stored level). */
+export function featureExportRow(row: FeatureRow, level: AccessLevel | null): string[] {
+  const shown = shownLevel(row.choice, level);
+  return [row.label, row.key, featureDescription(row.key), shown ? LEVEL_LABELS[shown] : '', row.offered ? 'Yes' : 'No'];
 }

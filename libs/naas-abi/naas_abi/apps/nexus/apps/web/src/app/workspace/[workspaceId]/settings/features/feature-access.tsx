@@ -27,7 +27,6 @@ import { PolicyPicker } from '@/components/settings/policy-picker';
 import { isOrgTarget } from '@/lib/access-model/target';
 import { AccessLevelChoice } from '@/components/settings/access-level-choice';
 import {
-  LEVEL_LABELS,
   createAccessLevelsApi,
   type AccessLevel,
   type AccessLevelsApi,
@@ -37,18 +36,16 @@ import { createFeatureAccessApi, type FeatureAccessApi } from './feature-access-
 import {
   FEATURE_COLUMNS,
   FEATURE_EXPORT_HEADERS,
-  changesFrom,
-  choicesOf,
-  draftOf,
   editsOffer,
   featureCellValues,
   featureExportRow,
   featureSearchTexts,
+  levelPlan,
+  pickableLevels,
   rowNotes,
+  shownLevel,
   sortedRows,
   type FeatureAccessState,
-  type FeatureChoice,
-  type FeatureDraft,
   type FeatureRow,
   featurePage,
   featureDescription,
@@ -92,16 +89,26 @@ export function FeatureAccess({
   const [policyId, setPolicyId] = useState<string | null>(initialPolicy);
   const [state, setState] = useState<FeatureAccessState | null>(null);
   const [error, setError] = useState('');
-  const [drafts, setDrafts] = useState<Record<string, FeatureDraft>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [levels, setLevels] = useState<LevelsState | null>(null);
+  const [levelsFailed, setLevelsFailed] = useState(false);
+  // The level picked for each feature: None takes it out, any other level puts it in.
   const [accessDrafts, setAccessDrafts] = useState<Record<string, AccessLevel>>({});
 
   const load = useCallback(async () => {
-    // The levels follow, never holding the table back; without them it still shows who uses
-    // each feature.
-    void levelsApi.read(workspaceId, 'feature', policyId).then(setLevels, () => setLevels(null));
+    // The levels follow, never holding the table back; without them the table shows who uses
+    // each feature, read-only.
+    void levelsApi.read(workspaceId, 'feature', policyId).then(
+      (read) => {
+        setLevels(read);
+        setLevelsFailed(false);
+      },
+      () => {
+        setLevels(null);
+        setLevelsFailed(true);
+      }
+    );
     try {
       setState(await api.read(workspaceId, policyId));
       setError('');
@@ -113,14 +120,17 @@ export function FeatureAccess({
   useEffect(() => {
     setState(null);
     setLevels(null);
-    setDrafts({});
+    setLevelsFailed(false);
     setAccessDrafts({});
     setRowErrors({});
     void load();
   }, [load]);
 
   const levelRow = (key: string) => levels?.rows.find((r) => r.name === key) ?? null;
-  const levelOf = (key: string): AccessLevel | null => accessDrafts[key] ?? levelRow(key)?.level ?? null;
+  const savedLevel = (key: string): AccessLevel | null => levelRow(key)?.level ?? null;
+  /** What a row shows: the level picked, or None for a feature taken out, or its stored level. */
+  const shownOf = (row: FeatureRow): AccessLevel | null =>
+    accessDrafts[row.key] ?? shownLevel(row.choice, savedLevel(row.key));
 
   // Organization › Access: "<O> access", the ceiling of every workspace of the organization.
   const org = isOrgTarget(workspaceId);
@@ -139,41 +149,41 @@ export function FeatureAccess({
   const table = useSettingsTable({
     rows,
     columns,
-    cellValues: (row: FeatureRow, column: FeatureColumnId) => {
-      if (column !== 'access') return featureCellValues(row, column);
-      const level = levelRow(row.key)?.level;
-      return level ? [LEVEL_LABELS[level]] : [];
-    },
+    cellValues: (row: FeatureRow, column: FeatureColumnId) => featureCellValues(row, column, savedLevel(row.key)),
     searchTexts: featureSearchTexts,
     initialSort: 'feature',
   });
   const shown = table.shown;
 
-  const draftFor = (row: FeatureRow) => drafts[row.key] ?? draftOf(row);
-  const changes = changesFrom(rows, drafts);
-  const accessChanges = Object.entries(accessDrafts).filter(([key, level]) => level !== levelRow(key)?.level);
-  const unsavedCount = changes.length + accessChanges.length;
+  const plan = levelPlan(rows, accessDrafts, savedLevel);
+  const unsavedCount = Object.keys(accessDrafts).length;
 
-  const choose = (row: FeatureRow, choice: FeatureChoice) =>
-    setDrafts((current): Record<string, FeatureDraft> => ({ ...current, [row.key]: { choice } }));
+  // A pick back to what the row holds is no change.
+  const pickLevel = (row: FeatureRow, level: AccessLevel) =>
+    setAccessDrafts((current) => {
+      const { [row.key]: _dropped, ...rest } = current;
+      return level === shownLevel(row.choice, savedLevel(row.key)) ? rest : { ...rest, [row.key]: level };
+    });
 
   const save = async () => {
     setSaving(true);
     try {
-      if (changes.length > 0) {
-        const next = await api.save(workspaceId, changes, policyId);
-        const refused = next.errors ?? {};
+      // Whether each feature is in (None takes it out), then how far people go with it.
+      let refused: Record<string, string> = {};
+      if (plan.features.length > 0) {
+        const next = await api.save(workspaceId, plan.features, policyId);
+        refused = next.errors ?? {};
         setState(next);
         setRowErrors(refused);
-        setDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => refused[key])));
         // The nav's pages under Features follow what is offered.
         if (editsOffer(next) && !org) void useWorkspaceStore.getState().fetchWorkspaces();
       }
-      if (accessChanges.length > 0) {
-        const wanted = Object.fromEntries(accessChanges.map(([key, level]) => [`feature:${key}`, level]));
-        setLevels(await levelsApi.save(workspaceId, 'feature', wanted, policyId));
-        setAccessDrafts({});
-      }
+      const wanted = Object.fromEntries(
+        Object.entries(plan.levels).filter(([key]) => !refused[key.slice('feature:'.length)])
+      );
+      if (Object.keys(wanted).length > 0) setLevels(await levelsApi.save(workspaceId, 'feature', wanted, policyId));
+      // A refused row keeps its pick, beside why.
+      setAccessDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => refused[key])));
       setError('');
     } catch (e) {
       setError(message(e, 'Could not save.'));
@@ -183,14 +193,19 @@ export function FeatureAccess({
   };
 
   const discard = () => {
-    setDrafts({});
     setAccessDrafts({});
     setRowErrors({});
   };
 
   const exportShown = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
-    downloadTableExport(FEATURE_EXPORT_HEADERS, shown.map(featureExportRow), format, `features_${date}`, 'Features');
+    downloadTableExport(
+      FEATURE_EXPORT_HEADERS,
+      shown.map((row) => featureExportRow(row, savedLevel(row.key))),
+      format,
+      `features_${date}`,
+      'Features'
+    );
   };
 
   const access = state?.access_policy ?? null;
@@ -200,7 +215,6 @@ export function FeatureAccess({
   const offeredCount = rows.filter((row) => row.choice === 'everyone').length;
   const pick = (id: string) => {
     const next = access && id === access.id ? null : id;
-    setDrafts({});
     setAccessDrafts({});
     setRowErrors({});
     setPolicyId(next);
@@ -230,20 +244,20 @@ export function FeatureAccess({
             </>
           ) : org ? (
           <>
-            Whether the workspaces of this organization may offer each feature (Enabled), and how far people go with
-            it there (Access): a ceiling for every one of them, admins included
+            How far people go with each feature in the workspaces of this organization (Access; None takes it out):
+            a ceiling for every one of them, admins included
             {offerHref && access ? (
               <>
                 {' '}
                 (<Link href={offerHref}>{access.name}</Link>)
               </>
             ) : null}
-            . A workspace never offers what is not enabled here.
+            . A workspace never offers what is None here.
           </>
           ) : (
           <>
-            Whether this workspace offers each feature (Enabled), and how far people go with it (Access). Each
-            person&apos;s level decides what they may do with it, admins included. Part of what the workspace offers
+            How far people go with each feature in this workspace (Access); None takes it out of the workspace.
+            Each person&apos;s level decides what they may do with it, admins included. Part of what the workspace offers
             {offerHref && access ? (
               <>
                 {' '}
@@ -293,6 +307,11 @@ export function FeatureAccess({
           {error}
         </SettingsNotice>
       )}
+      {levelsFailed && (
+        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+          Could not read the access levels: the features cannot be changed. Reload to try again.
+        </SettingsNotice>
+      )}
 
       {!state ? (
         !error && <SettingsLoading label="Loading features…" />
@@ -303,7 +322,7 @@ export function FeatureAccess({
           <SettingsTableToolbar
             search={table.search}
             onSearchChange={table.setSearch}
-            searchPlaceholder="Search feature, description, enabled, not offered…"
+            searchPlaceholder="Search feature, description, not offered…"
             meta={
               <>
                 {`${countLabel(shown.length, rows.length, 'feature')} · ${unsaved}`}
@@ -312,8 +331,8 @@ export function FeatureAccess({
             }
           />
           <p className="text-xs text-muted-foreground" data-access-legend="">
-            <strong>Access</strong>: how far people go with an enabled feature. Read lets them see it, Write also
-            create and change, Admin also configure it.{' '}
+            <strong>Access</strong>: how far people go with a feature. None takes it out (nobody uses it, admins
+            included), Read lets them see it, Write also create and change, Admin also configure it.{' '}
             {offer
               ? org
                 ? 'Here it is a cap for every workspace of the organization, admins included.'
@@ -326,9 +345,7 @@ export function FeatureAccess({
               <SettingsTableHead table={table} trailing={<th aria-label="Configure" />} />
               <tbody>
                 {shown.length === 0 && <SettingsTableNoMatch colSpan={columns.length + 1} noun="features" />}
-                {table.paged.pageRows.map((row) => {
-                  const draft = draftFor(row);
-                  return (
+                {table.paged.pageRows.map((row) => (
                     <tr key={row.key} data-feature={row.key} className="align-top">
                       <td>
                         <p className="font-medium text-foreground">{row.label}</p>
@@ -340,38 +357,18 @@ export function FeatureAccess({
                       <td data-field="access">
                         {(() => {
                           const level = levelRow(row.key);
-                          const value = levelOf(row.key);
+                          const value = shownOf(row);
                           return level && levels && value ? (
                             <AccessLevelChoice
                               row={level}
                               value={value}
                               mode={levels.mode}
+                              allowed={pickableLevels(row, level.choices, offer)}
                               disabled={!levels.editable || saving}
-                              onChange={(next) => setAccessDrafts((current) => ({ ...current, [row.key]: next }))}
+                              onChange={(next) => pickLevel(row, next)}
                             />
                           ) : (
                             <span className="text-muted-foreground">—</span>
-                          );
-                        })()}
-                      </td>
-                      <td data-field="enabled">
-                        {(() => {
-                          const on = draft.choice === 'everyone';
-                          const choices = choicesOf(row, offer);
-                          const can = choices.find((c) => c.value === (on ? 'nobody' : 'everyone'))?.enabled ?? false;
-                          const hint = choices.find((c) => c.value === 'everyone')?.hint;
-                          return (
-                            <label className="inline-flex items-center gap-2" title={hint}>
-                              <input
-                                type="checkbox"
-                                checked={on}
-                                disabled={!can || saving}
-                                aria-label={`${offer ? 'Offer' : 'Grant'} ${row.label}`}
-                                data-enabled={row.key}
-                                onChange={(event) => choose(row, event.target.checked ? 'everyone' : 'nobody')}
-                              />
-                              <span className="text-xs text-muted-foreground">{on ? 'Enabled' : 'Disabled'}</span>
-                            </label>
                           );
                         })()}
                         {rowNotes(row, state).map((note) => (
@@ -402,8 +399,7 @@ export function FeatureAccess({
                         })()}
                       </td>
                     </tr>
-                  );
-                })}
+                ))}
               </tbody>
             </table>
           </div>
