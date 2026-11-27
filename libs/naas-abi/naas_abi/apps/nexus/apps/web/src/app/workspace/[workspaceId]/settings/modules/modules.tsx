@@ -12,7 +12,6 @@ import {
   SettingsNotice,
   SettingsPageHeader,
   SettingsTableToolbar,
-  countLabel,
 } from '@/components/settings/settings-ui';
 import {
   SettingsTableClear,
@@ -181,7 +180,7 @@ export function WorkspaceModules({
   };
 
   const editable = offer?.editable ?? false;
-  const offeredCount = rows.filter((row) => row.offer !== 'none').length;
+  const moduleCount = new Set(rows.map((row) => row.module)).size;
   const onOffer = editsOffer(offer);
   const access = offer?.access_policy ?? null;
   const edited = offer?.policy ?? access;
@@ -197,13 +196,8 @@ export function WorkspaceModules({
     <div className="space-y-6">
       <SettingsPageHeader
         title="Modules"
-        badge={
-          offer
-            ? onOffer
-              ? `${offeredCount} offered · ${rows.length - offeredCount} not offered`
-              : `${offeredCount} granted · ${rows.length - offeredCount} not granted`
-            : undefined
-        }
+        // One value: how many modules (a row is a module's kind: agents, apps…).
+        badge={offer ? `${moduleCount} module${moduleCount === 1 ? '' : 's'}` : undefined}
         description={
           !onOffer && edited ? (
             <>
@@ -257,12 +251,7 @@ export function WorkspaceModules({
             search={table.search}
             onSearchChange={table.setSearch}
             searchPlaceholder="Search module, agents, apps, workflows, offered…"
-            meta={
-              <>
-                {countLabel(table.shown.length, rows.length, 'row')}
-                <SettingsTableClear table={table} />
-              </>
-            }
+            meta={<SettingsTableClear table={table} />}
           />
           <div className="org-settings-users-table-wrap">
             <table className="org-settings-users-table">

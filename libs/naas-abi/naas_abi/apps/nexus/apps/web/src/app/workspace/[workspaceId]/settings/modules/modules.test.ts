@@ -73,7 +73,7 @@ describe('Settings › Access › Modules', () => {
     expect(rowKeys(m)).toEqual(['agents|acme.people', 'workflows|acme.sales']);
     expect(wholeSwitch(m, 'agents|acme.people')?.getAttribute('aria-checked')).toBe('true');
     expect(wholeSwitch(m, 'workflows|acme.sales')?.getAttribute('aria-checked')).toBe('false');
-    expect(m.host.textContent).toContain('1 offered · 1 not offered');
+    expect(m.host.textContent).toContain('2 modules');
 
     await pickColumnFilter(m, 'offer', 'Not offered');
     expect(rowKeys(m)).toEqual(['workflows|acme.sales']);
@@ -150,7 +150,7 @@ describe('Settings › Access › Modules', () => {
     await mounted.flush();
     expect(parts.offerApi.read).toHaveBeenLastCalledWith('ws-1', 'pol_grants');
     expect(onPolicyChange).toHaveBeenCalledWith('pol_grants');
-    expect(mounted.host.textContent).toContain('0 granted · 2 not granted');
+    expect(mounted.host.textContent).toContain('2 modules');
 
     await mounted.click(wholeSwitch(mounted, 'agents|acme.people'));
     await mounted.flush();
