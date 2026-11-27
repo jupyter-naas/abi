@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ChevronRight, type LucideIcon } from 'lucide-react';
+import { ChevronDown, ChevronRight, type LucideIcon } from 'lucide-react';
 import { applyBrandColorVariables, brandColorVariables } from '@/lib/color';
 import { rememberBrandColors } from '@/lib/brand-color-cache';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
@@ -86,6 +86,7 @@ export function SettingsNavItem({
   badge,
   badgeTitle,
   description,
+  subgroup,
 }: {
   href: string;
   label: string;
@@ -97,6 +98,9 @@ export function SettingsNavItem({
   badgeTitle?: string;
   /** What the page is for: its hover tip, with the label (none on a phone's list). */
   description?: string;
+  /** A sub-group under the link (Access › Features: the Features pages): its fold toggle, at the
+   *  row's right so the row keeps its look, and what it unfolds. */
+  subgroup?: { open: boolean; onToggle: () => void; label: string; children: ReactNode };
 }) {
   const router = useRouter();
   // The dock's tip: the page's name and what it is for.
@@ -104,7 +108,7 @@ export function SettingsNavItem({
   // On intent only (#1609): a long column must not warm every page it lists.
   const prefetch = () => router.prefetch(href);
   return (
-    <li>
+    <li className={subgroup ? 'settings-nav-item-with-subgroup' : undefined}>
       <Link
         ref={hover.ref}
         href={href}
@@ -131,6 +135,19 @@ export function SettingsNavItem({
         )}
         {chevron && <ChevronRight size={18} className="org-settings-nav-item-chevron" />}
       </Link>
+      {subgroup && (
+        <button
+          type="button"
+          className="settings-nav-subgroup-toggle"
+          aria-expanded={subgroup.open}
+          aria-label={`${subgroup.open ? 'Fold' : 'Unfold'} ${subgroup.label}`}
+          data-action="subgroup"
+          onClick={subgroup.onToggle}
+        >
+          {subgroup.open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+      )}
+      {subgroup?.open && <div className="settings-nav-subgroup">{subgroup.children}</div>}
       {hover.tip}
     </li>
   );

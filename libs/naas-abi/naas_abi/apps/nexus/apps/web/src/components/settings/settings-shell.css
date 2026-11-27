@@ -206,3 +206,59 @@
   gap: var(--space-2);
 }
 
+
+/* Access › Features and its sub-group (the Features pages, and the policy they set): the fold
+   toggle sits at the row's right, over its padding, so the row keeps its look; the pages hang
+   one step in. */
+.settings-nav-item-with-subgroup {
+  position: relative;
+}
+
+.settings-nav-subgroup-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+}
+
+.settings-nav-subgroup-toggle:hover {
+  background: var(--muted-hex, rgba(0, 0, 0, 0.05));
+  color: var(--foreground-hex);
+}
+
+.settings-nav-item-with-subgroup > .org-settings-nav-item {
+  padding-right: 36px;
+}
+
+.settings-nav-subgroup {
+  padding: var(--space-1) 0;
+}
+
+/* The Features pages, slightly in from Access › Features: their icon and text one step right. */
+.settings-nav-subgroup .org-settings-nav-item {
+  padding-left: calc(var(--space-3) + 12px);
+}
+
+/* The policy those pages set, at the same step, tinted so it reads as the filter it is. */
+.settings-nav-subgroup .settings-policy-picker {
+  padding-left: 12px;
+}
+
+.settings-nav-subgroup .settings-policy-picker .search-picker-trigger {
+  background: color-mix(in srgb, var(--workspace-accent, var(--color-primary)) 10%, transparent);
+  color: var(--workspace-accent, var(--color-primary));
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-nav-subgroup .settings-policy-picker .search-picker-trigger:hover {
+  background: color-mix(in srgb, var(--workspace-accent, var(--color-primary)) 16%, transparent);
+}

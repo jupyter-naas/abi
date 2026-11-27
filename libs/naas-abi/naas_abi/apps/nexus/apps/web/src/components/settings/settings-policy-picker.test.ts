@@ -20,6 +20,7 @@ vi.mock('./settings-scope-switcher', () => ({ SettingsScopeSwitcher: () => null 
 
 import { SettingsLevelsNav } from './settings-levels-nav';
 import { usePolicyViewStore } from './settings-policy-picker';
+import { useFeaturesSubgroup } from './features-subgroup';
 
 const WS = 'abi:nexus:organization/acme/nexus:workspace/ws-1';
 const ACCESS = { id: 'pol_w', name: 'Alpha access', owner_scope: WS };
@@ -76,30 +77,43 @@ afterEach(async () => {
   mounted = null;
   NAV.policy = null;
   NAV.pushed = [];
+  NAV.path = '/workspace/ws-1/settings/datasets';
   usePolicyViewStore.setState({ views: {} });
+  useFeaturesSubgroup.setState({ open: false });
 });
 
 const hrefs = (m: Mounted) => [...m.host.querySelectorAll('nav a')].map((a) => a.getAttribute('href'));
 
 describe('the Policy picker of a workspace’s Settings column', () => {
-  it('sits under the Features heading, "<W> access" picked, and the links stay as they are', async () => {
+  it('hangs under Access › Features with the Features pages, folded by default, its toggle at the row\'s right', async () => {
+    NAV.path = '/workspace/ws-1/settings/users';
     usePolicyViewStore.setState({
       views: { 'ws-1|': { status: 'ready', state: state(ACCESS, [row('agents', 'everyone'), row('datasets', 'everyone')]) } },
     });
     mounted = await mount(SettingsLevelsNav, { level: LEVEL });
     await mounted.flush();
-    const picker = mounted.host.querySelector('[data-policy-picker]');
-    expect(picker?.textContent).toContain('Alpha access');
-    // Under the Features heading, in its group.
-    expect(picker?.closest('.settings-level-group')?.querySelector('h2')?.textContent).toBe('Features');
+    // No Features heading any more: its pages are Access › Features' sub-group, folded.
+    expect([...mounted.host.querySelectorAll('h2')].map((h) => h.textContent)).toEqual(['Access']);
+    expect(mounted.host.querySelector('[data-policy-picker]')).toBeNull();
     expect(hrefs(mounted)).toEqual([
       '/workspace/ws-1/settings/users',
       '/workspace/ws-1/settings/features',
       '/workspace/ws-1/settings/modules',
+    ]);
+    const toggle = mounted.host.querySelector('a[href="/workspace/ws-1/settings/features"] + button[data-action="subgroup"]')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    await mounted.click(toggle);
+    const picker = mounted.host.querySelector('[data-features-subgroup] [data-policy-picker]');
+    expect(picker?.textContent).toContain('Alpha access');
+    expect(hrefs(mounted)).toEqual([
+      '/workspace/ws-1/settings/users',
+      '/workspace/ws-1/settings/features',
+      // The sub-group, under Access › Features.
       '/workspace/ws-1/settings/agents',
       '/workspace/ws-1/settings/datasets',
       '/workspace/ws-1/settings/files',
       '/workspace/ws-1/settings/workflows',
+      '/workspace/ws-1/settings/modules',
     ]);
   });
 
@@ -115,14 +129,15 @@ describe('the Policy picker of a workspace’s Settings column', () => {
     });
     mounted = await mount(SettingsLevelsNav, { level: LEVEL });
     await mounted.flush();
-    expect(mounted.host.querySelector('[data-policy-picker]')?.textContent).toContain('Analysts grants');
+    // A page of the sub-group open: it unfolds by itself (a Configure link of Access › Features).
+    expect(mounted.host.querySelector('[data-features-subgroup] [data-policy-picker]')?.textContent).toContain('Analysts grants');
     expect(hrefs(mounted)).toEqual([
       '/workspace/ws-1/settings/users',
       '/workspace/ws-1/settings/features?policy=pol_g',
-      '/workspace/ws-1/settings/modules?policy=pol_g',
       '/workspace/ws-1/settings/datasets?policy=pol_g',
       // Workflows shows no feature: module items, set in Access › Modules.
       '/workspace/ws-1/settings/workflows?policy=pol_g',
+      '/workspace/ws-1/settings/modules?policy=pol_g',
     ]);
     // The page open stays marked, its link carrying the policy.
     expect(mounted.host.querySelector('nav a[aria-current="page"]')?.getAttribute('href')).toBe(
