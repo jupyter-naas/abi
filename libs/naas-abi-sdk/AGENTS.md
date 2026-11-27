@@ -431,7 +431,8 @@ host.
 
 One ContextVar, `CallContext`, holds the caller of the call being served: `principal`
 (the actor), `on_behalf_of` (the user, when acting for one), `audience`, `token_id`,
-`token_issued_at`, `scope` (the token's `abi_scope`), `container` (the container the
+`token_issued_at` (the token's issue instant in seconds, to the microsecond: its
+`abi_iat_us`, else its whole-second `iat`), `scope` (the token's `abi_scope`), `container` (the container the
 call is made in, its name: a request input, not identity), `trace_id`, `triggered_via` and
 `delegated_token`. `CallContext.user` is `on_behalf_of`, else the principal when it is a
 user: services use it wherever an operation concerns "the user". The default is

@@ -59,7 +59,7 @@ class CallContext:
     on_behalf_of: Principal | None = None    # the user, when acting for one
     audience: str | None = None
     token_id: str | None = None              # jti, for audit
-    token_issued_at: int | None = None       # iat: IAM refuses a token older than the revocation floor
+    token_issued_at: float | None = None     # issue instant in seconds, to the microsecond (abi_iat_us, else iat): IAM refuses a token issued at or before the revocation floor
     scope: tuple[Statement, ...] | None = None   # abi_scope narrowing
     container: str | None = None             # the container the call is made in (its name): a request input, not identity
     trace_id: str | None = None

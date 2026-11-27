@@ -1957,6 +1957,7 @@ signing key. HS256 and `NATS_JWT_SECRET` are gone, with no dual mode.
   | `idp` | `{"iss", "sub"}` of the source IdP identity (users only), for audit. |
   | `sid` | The Nexus session id, so a logout ends its exchanged tokens. |
   | `abi_since`, `abi_res` | Delegation start; the target resource of a delegation. |
+  | `abi_iat_us` | The issue instant: an integer of microseconds since the epoch, read from the same clock reading as `iat` and inside `iat`'s second. Revocation compares it with floors. A token without it (signed by an engine before #872) is judged by `iat`. |
   | `iat`, `nbf`, `exp`, `jti` | `exp - iat <= 600`: verifiers refuse anything longer and allow 30 seconds of clock skew. |
 
   **No access token lives longer than ten minutes**, and the engine issues no refresh
@@ -1982,10 +1983,11 @@ signing key. HS256 and `NATS_JWT_SECRET` are gone, with no dual mode.
   (`iam.verifier()`, `token_revoked`) and by the authorizer (a context whose
   `token_issued_at` is at or before it is `suspended`), and the principal's grants
   and coding keys are revoked (their personal API keys too with `include_keys`).
-  A token made after it carries `iat` past the floor (`issue_after_floor`: the
-  exchange, key exchanges, service tokens and `issue_host_token`); that second may
-  not have begun yet, so the principal's next revocation waits for it (one second
-  in all at most) and its floor stays the instant it happened. Suspension
+  The rule: a token is refused when its issue instant (`abi_iat_us`; without it,
+  `iat`) is at or before the floor of its subject or of its actor. The floor is the
+  issuer's clock when the revocation ran, to the microsecond, and both are compared
+  in whole microseconds. A token made after a revocation is past its floor by the
+  clock itself: no `iat` is pushed and no revocation waits. Suspension
   and deletion deny a principal's tokens at once. `iam:RevokeTokens` is in `builtin.self`.
 
 ## Token exchange, personal keys and links
@@ -2616,34 +2618,68 @@ permissions, and a changed catalog waits for approval. A declared type is always
 module scope placed in a workspace: viewers and members need a grant, and the module's
 own approved policy holds `<service>:*` so that the user's grant decides.
 
-**A revocation waits out the second its predecessor pushed tokens into; floors never move ahead.**
-*Decision.* `iat` is whole seconds and a floor is the sub-second instant of a revocation, so
-a token made after one carries `iat = int(floor) + 1`, a second that may not have begun. A
-second revocation of the same principal in that second would set a floor below that `iat`,
-and the token would outlive it for its ten minutes. `revoke_tokens` reads the principal's
-floor from the store (not the cache: another process may have revoked), and while
-`int(floor) + 1` is ahead of the issuer's clock it sleeps the difference (`IAMService(sleep=...)`,
-`time.sleep` by default), then takes the clock as the floor and as the keys' `revoked_at`.
-After writing, it reads the floor again: a later one another process wrote meanwhile is waited
-out the same way and the floor written again. The sleeps add up to one second at most, counted
-from what was asked of `sleep`, whatever the clock does: when the budget runs out first (the
-clock stepped back or stands still), the revocation takes the clock as it is and logs a
-warning. Revocations of one principal in one process run one at a time (a lock per principal),
-so none reads the floor before another of the same process writes it. Rejected: setting the floor to `max(now, int(previous) + 1)`. Floors
-then drift one second ahead per quick revocation, and about thirty of them pushed fresh
-tokens' `iat` past the verifiers' 30 s skew, refusing the user's new sessions until the clock
-caught up.
-*Consequences.* No stored floor is ahead of the issuer's clock. Only the principal's own floor
-counts: a bulk revocation of many principals never waits. The wait never blocks an event loop:
-Nexus calls `revoke_tokens` in a worker thread (`asyncio.to_thread`, `run_in_threadpool`), the IAM NATS adapter on its
-`DomainRPCDispatcher` thread pool, within the 10 s RPC timeout. Left open, for a sub-second
-issue-time claim (#872): the same hole across two principals, where a token's `iat` is pushed by
-its actor's floor and its user is then revoked in that same second, with no earlier floor of
-their own to wait for. That is a module's delegation for a user, and a host token issued on
-behalf of a user (`issue_host_token` with `on_behalf_of`, pushed by its caller's floor). Also
-left to it: two processes revoking one principal at once, where one writes an earlier floor
-between the other's read and write (the re-read only sees a later one); a clock stepping back
-past a pushed second.
+**A token carries its issue instant to the microsecond; a revocation compares with it and never waits (#872).**
+*Decision.* A revocation floor is the sub-second instant `revoke_tokens` ran at, but `iat` is
+whole seconds. #849 pushed the `iat` of a token made after a revocation to `int(floor) + 1`,
+and made the principal's next revocation wait for that second to begin. That left a hole
+across two principals: a module's account is revoked at S+0.1, a delegation for a user acted
+by it is issued at S+0.3 with `iat` pushed to S+1, and the user is revoked at S+0.6. The
+user's floor is earlier than S+1, so the delegation lived its ten minutes. A host token issued
+on behalf of a user had the same shape. Now every engine token carries `abi_iat_us`, the
+issue instant as an integer count of microseconds since the epoch (below 2^53, so exact in
+JSON). `TokenIssuer.issue` reads the clock once and derives `iat` from the same reading
+(`iat = abi_iat_us // 1_000_000`). `TokenClaims.from_payload` refuses an `abi_iat_us` that
+is not an integer (a bool too) or that falls outside `iat`'s second. IAM refuses a token
+when its instant is at or before the floor of its subject or of its actor, comparing whole
+microseconds; the floor's microseconds are computed exactly from its `datetime`, not through
+a float timestamp. `revoke_tokens` reads the clock once and writes the floor and the keys'
+`revoked_at` with it. `issue_after_floor`, `min_issued_at`, the wait, its `sleep` and the
+per-principal lock are removed.
+Rejected:
+- A millisecond claim. The instant must then be truncated, which fails closed: a fresh token
+  issued in the same millisecond as a revocation is refused, and avoiding that needs a push or
+  a wait again. Microseconds are the floor's own precision.
+- A pushed `iat` (#849). It moves a token's instant past the clock, so another principal's
+  later floor in that second misses it.
+- Waiting until a pushed second begins (#849). It covers one principal only, and not two
+  processes revoking it at once.
+- A monotonic issuer clock. After a clock step it puts instants ahead of the clock, the drift
+  this decision removes.
+
+*Consequences.*
+- A tie (a revoke and an issue in the same microsecond, with a store write between them) is
+  refused: it fails closed.
+- Concurrent revocations of one principal need no lock: the store keeps the later floor
+  (`set_token_floor` only moves it forward), and it covers everything issued before either.
+- Another principal's floor never changes a token's instant. With one clock (the process that
+  revokes is the process that issues), no `iat` or stored floor is ahead of the issuer's clock.
+- With two clocks, the result fails closed. A floor is the clock of the process that revoked,
+  and an issue instant is the clock of the process that issues. When the issuer's clock is
+  behind the revoker's (skew between hosts, or a clock that steps back after a revocation),
+  each fresh token for that principal is refused until the issuer's clock passes the floor.
+  Under #849, `issue_after_floor` read the stored floor and prevented this. Clamping
+  `abi_iat_us` to the floor is rejected: it is a push again, and it opens the #872 hole again,
+  as wide as the skew. See "Known limits and open questions".
+- A token without the claim, signed by an engine before this change, keeps the whole-second
+  comparison until it expires (ten minutes at most). Older verifiers ignore the claim: only the
+  engine parses engine-token claims, and the SDK reads only `aud`, `sub` and `act` from an
+  unverified delegation. But an engine before this change still compares
+  `iat <= floor.timestamp()`, and the new issuer does not push `iat`. So during a mixed
+  deployment, an old engine refuses a new token issued in the second of a revocation, after
+  it: a token issued at S+0.5 after a floor at S+0.3 has `iat = S`. This fails closed, and it
+  stops when every engine runs this change.
+- During a mixed deployment, an old engine's pushed token can outlive a new revocation: see
+  "Known limits and open questions".
+- `CallContext.token_issued_at` widens from `int` to `float`: the instant in seconds, to the
+  microsecond (`abi_iat_us`, else `iat`). There is no new field, so core works with any
+  installed SDK and no `naas-abi-sdk` bound moves; the context never crosses NATS (the
+  receiver re-verifies the token). A double holds epoch microseconds exactly enough to recover
+  the integer by `round(x * 1_000_000)` until 2106, and IAM converts back before comparing.
+- The delegation cache (`engine/nats_credentials`) asks `revoked_since` with the instant too,
+  so a delegation re-made in the second of its user's revocation is reused, not re-made on
+  every call.
+- A clock that steps back can let a token outlive a revocation, and an issuer clock behind
+  the revoker's refuses fresh tokens for a while: see "Known limits and open questions".
 
 **Grant only what you hold; existing grants are not checked again.**
 *Decision.* IAM refuses creating or editing a policy, attaching one, adding a group member,
@@ -2876,6 +2912,28 @@ than at W (unscoped). Nexus makes a person's first membership itself, after auth
   cancel that is not sealed (`engine/AGENTS.md`). Proposed, not built: NATS accounts for modules.
 - **Quotas.** `ABI_CLAIM_CHECKS` has no size limit beyond its seven-day age, and the overflow host's
   64 sessions and 1 GiB have no per-caller share: one module can fill either for everyone.
+- **Revocation reads the wall clock twice.** A floor and an issue instant are two readings
+  of a wall clock: the clock of the process that revoked, and the clock of the process that
+  issued. Both directions have a result:
+  - *Fails open.* If the clock steps back between a token's issue and a revocation, the
+    token can outlive the revocation (for its ten minutes at most).
+  - *Fails closed.* If the issuer's clock is behind the revoker's clock (skew between hosts,
+    or a clock that steps back after a revocation), every fresh token for that principal is
+    refused until the issuer's clock passes the floor. With skew between hosts, that is the
+    size of the skew after each revocation.
+
+  A monotonic issuer clock was rejected: after a step it would put instants ahead of the
+  clock. Clamping `abi_iat_us` to the floor was rejected too: it is a push, and it opens
+  the #872 hole again, as wide as the skew (#872).
+- **Rolling upgrade past #872: an old engine's pushed token can outlive a new revocation.**
+  Condition: engines from before #872 and after it share one IAM store. An old engine still
+  pushes `iat` to `int(floor) + 1`, with no `abi_iat_us`, and a new `revoke_tokens` does not
+  wait for that second. Example: bob is revoked at S+0.1; an old engine issues a token for
+  bob at S+0.3 with `iat = S+1`; a new engine revokes bob at S+0.6. The token is not refused
+  (`(S+1) * 1e6 > (S+0.6) * 1e6`) and lives its ten minutes. This is the same-principal hole
+  #849 closed. It stays open for the length of the mixed deployment plus ten minutes (the
+  last pushed token expires). In the other direction it fails closed: an old engine refuses
+  a new token issued in the second of a revocation (see the #872 decision).
 - **The `engine` broker login** may use every subject but `$SYS.>`: the API, Nexus and jobs run on it.
   It is not narrowed to the kernel subjects.
 - **Per-object sharing** of single conversations or files beyond personal resources is the

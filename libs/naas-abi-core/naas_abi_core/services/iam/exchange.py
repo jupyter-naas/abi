@@ -179,7 +179,6 @@ class TokenExchanger:
             session=subject.session,
             since=since,
             resource=resource,
-            min_issued_at=iam.issue_after_floor(subject.user_id, actor),
         )
 
     # -- who may exchange -------------------------------------------------------

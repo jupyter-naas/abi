@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 
 import pytest
 from naas_abi_core.engine.call_context import CallContext, service_account
@@ -201,3 +202,29 @@ def test_a_request_without_an_envelope_keeps_the_caller():
     assert for_request(caller, object()) is caller
     opened = transfer_pb2.OpenRequest(context=common_pb2.CallContext(trace_id="t2"))
     assert for_request(caller, opened).trace_id == "t2"
+
+
+def test_the_context_carries_the_tokens_issue_instant_to_the_microsecond():
+    import time
+
+    from naas_abi_core.engine.nats_auth import TokenClaims
+    from naas_abi_core.engine.nats_identity import token_context
+
+    iat = int(time.time())
+    claims = TokenClaims(
+        issuer="urn:abi:engine:test",
+        subject="usr_01jabcdefghjkmnpqrstvwxyz0",
+        audience="abi:delegated:agent",
+        kind="user",
+        token_id="t1",
+        issued_at=iat,
+        expires_at=iat + 600,
+        actor="sa_01jabcdefghjkmnpqrstvwxyz1",
+        issued_at_us=iat * 1_000_000 + 654_321,
+    )
+    issued_at = token_context(claims).token_issued_at
+    assert isinstance(issued_at, float)
+    assert round(issued_at * 1_000_000) == iat * 1_000_000 + 654_321
+    # A token of an older engine, without the claim: its whole-second iat.
+    older = token_context(replace(claims, issued_at_us=None)).token_issued_at
+    assert older == float(iat)

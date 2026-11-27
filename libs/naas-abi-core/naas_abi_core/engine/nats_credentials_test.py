@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 from naas_abi_core.engine import nats_credentials
 from naas_abi_core.engine.call_context import Principal, as_service_account
@@ -158,6 +160,30 @@ def test_a_cached_delegation_is_dropped_when_the_users_tokens_are_revoked(iam):
     assert iam.verifier().verify(second).subject == bob.id
     with pytest.raises(Exception, match="revoked"):
         iam.verifier().verify(first)
+    # The one re-made after the revocation, in its second, is kept.
+    assert source.token_for(bob) == second
+
+
+def test_a_delegation_made_in_the_second_of_a_revocation_is_reused(iam):
+    """Made a microsecond after its user's revocation, in the same second: it
+    is past the floor, so the cache hands it out again instead of re-making it
+    on every call."""
+    from datetime import UTC, datetime, timedelta
+
+    bob = _user(iam)
+    at = [datetime.fromtimestamp(int(time.time()), UTC) + timedelta(seconds=0.1)]
+    iam.tokens._clock = lambda: at[0]
+    source = nats_credentials.issuer_source(iam, "api")
+    first = source.token_for(bob)
+    at[0] += timedelta(seconds=0.2)
+    with as_service_account("engine"):
+        iam.revoke_tokens(bob.id)
+    at[0] += timedelta(microseconds=1)
+    second = source.token_for(bob)
+    assert second != first
+    at[0] += timedelta(seconds=0.2)
+    assert source.token_for(bob) == second
+    assert iam.verifier().verify(second).subject == bob.id
 
 
 def test_a_job_calls_over_nats_with_its_own_accounts_token():

@@ -292,19 +292,25 @@ class JobAccountSource:
 
 
 def _revoked_since(iam: Any) -> Callable[[Any, IssuedToken], bool]:
-    """Whether a delegation was made before its user's tokens were revoked
-    (IAM's floor): the cache must not hand it out again."""
+    """Whether a delegation was made at or before its user's tokens were
+    revoked (IAM's floor): the cache must not hand it out again. Its issue
+    instant is ``abi_iat_us``, else ``iat``; one it cannot read counts as
+    revoked."""
 
     def revoked(user: Any, issued: IssuedToken) -> bool:
         import jwt
+        from naas_abi_core.engine.nats_auth import (
+            InvalidServiceTokenError,
+            TokenClaims,
+        )
 
         try:
-            issued_at = int(
-                jwt.decode(issued.token, options={"verify_signature": False})["iat"]
+            claims = TokenClaims.from_payload(
+                jwt.decode(issued.token, options={"verify_signature": False})
             )
-        except (jwt.InvalidTokenError, KeyError, TypeError, ValueError):
+        except (jwt.InvalidTokenError, InvalidServiceTokenError):
             return True
-        return bool(iam.revoked_since(user.id, issued_at))
+        return bool(iam.revoked_since(user.id, claims.issued_instant))
 
     return revoked
 

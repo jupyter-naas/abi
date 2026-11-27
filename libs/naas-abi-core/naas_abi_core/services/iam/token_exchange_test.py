@@ -994,7 +994,7 @@ def test_a_token_made_right_after_a_revocation_is_not_cut_off_with_the_old_ones(
     old = _delegated_for(iam, bob)
     with h.as_(actor="api", on_behalf_of=bob):
         iam.revoke_tokens(bob.id)
-    # The same second: the new token's iat is past the floor.
+    # The same second: the new token's issue instant is past the floor.
     new = _delegated_for(iam, bob)
     assert _verify(iam, new)
     with pytest.raises(InvalidServiceTokenError, match="revoked"):
@@ -1004,23 +1004,24 @@ def test_a_token_made_right_after_a_revocation_is_not_cut_off_with_the_old_ones(
     assert _verify(iam, _by_key(iam, key.value).token, API_KEY_AUDIENCE)
 
 
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def _us(instant: datetime) -> int:
+    """An instant in whole microseconds since the epoch, exactly."""
+    return (instant - _EPOCH) // timedelta(microseconds=1)
+
+
 class _Clock:
     """The issuer's clock, a tenth into the real current second (verifiers read
-    ``exp`` from ``time.time``), and a sleep that moves it on and records what
-    it was asked."""
+    ``exp`` from ``time.time``), moved on by ``tick`` only."""
 
     def __init__(self, iam) -> None:
         self.at = datetime.fromtimestamp(int(time.time()), UTC) + timedelta(seconds=0.1)
-        self.slept: list[float] = []
         iam.tokens._clock = lambda: self.at
-        iam._sleep = self.sleep
 
-    def sleep(self, seconds: float) -> None:
-        self.slept.append(seconds)
-        self.at += timedelta(seconds=seconds)
-
-    def tick(self, seconds: float) -> None:
-        self.at += timedelta(seconds=seconds)
+    def tick(self, seconds: float = 0.0, *, microseconds: int = 0) -> None:
+        self.at += timedelta(seconds=seconds, microseconds=microseconds)
 
 
 def _revoke(h, iam, user) -> None:
@@ -1028,42 +1029,187 @@ def _revoke(h, iam, user) -> None:
         iam.revoke_tokens(user.id)
 
 
+def _floor_us(iam, principal_id) -> int:
+    return _us(iam.store.token_floors()[principal_id])
+
+
+def _no_floor_ahead_of(iam, clock) -> bool:
+    return max(iam.store.token_floors().values()) <= clock.at
+
+
+def _suspended(iam, claims) -> bool:
+    decision = iam.authorizer.check(token_context(claims), QUERY, graph("g"))
+    return not decision.allowed and decision.reason == "suspended"
+
+
+@pytest.fixture
+def for_bob(iam, bob, people):
+    """Two ways to make a token for bob acted by the module ``people``, each
+    with the verifier that accepts it: an agent delegation (the exchange) and
+    a host token issued on behalf of bob."""
+    from naas_abi_core.engine.call_context import user
+    from naas_abi_core.engine.call_context_types import Principal
+    from naas_abi_core.engine.nats_auth import HOST_AUDIENCE_PREFIX
+    from naas_abi_core.services.iam.modules import subject_token
+
+    caller = Principal(id=people.id, kind="service_account", name=people.name)
+    hosts = iam.verifier().for_audiences((), prefixes=(HOST_AUDIENCE_PREFIX,))
+    return {
+        "delegation": (
+            lambda: _vouched(iam, bob.id, AGENT_AUDIENCE, resource=MODULE).token,
+            iam.verifier(),
+        ),
+        "host": (
+            lambda: (
+                iam.issue_host_token(
+                    caller, subject_token(people.id), user(bob.id)
+                ).token
+            ),
+            hosts,
+        ),
+    }
+
+
+@pytest.mark.parametrize("made_by", ["delegation", "host"])
+def test_a_token_pushed_past_its_modules_floor_dies_with_its_users_revocation(
+    h, iam, bob, people, for_bob, made_by
+):
+    """#872: the module is revoked, a token for bob acted by it is made, then
+    bob is revoked, all in one second. The token must die with bob's
+    revocation: its issue instant is not pushed past the module's floor."""
+    issue, verifier = for_bob[made_by]
+    clock = _Clock(iam)  # S+0.1
+    h.admin("revoke_tokens", people.id)
+    clock.tick(0.2)  # S+0.3
+    token = issue()
+    claims = verifier.verify(token)
+    assert claims.subject == bob.id and claims.actor == people.id
+    assert not _suspended(iam, claims)
+    clock.tick(0.3)  # S+0.6
+    _revoke(h, iam, bob)
+    with pytest.raises(InvalidServiceTokenError, match="revoked"):
+        verifier.verify(token)
+    assert iam.token_revoked(claims)
+    assert _suspended(iam, claims)
+    clock.tick(0.2)  # S+0.8
+    assert verifier.verify(issue()).subject == bob.id
+
+
+@pytest.mark.parametrize("made_by", ["delegation", "host"])
+def test_revoking_the_module_cuts_off_what_it_acts_for_a_user(
+    h, iam, bob, people, for_bob, made_by
+):
+    issue, verifier = for_bob[made_by]
+    clock = _Clock(iam)
+    clock.tick(0.1)  # S+0.2
+    token = issue()
+    claims = verifier.verify(token)
+    clock.tick(0.3)  # S+0.5
+    h.admin("revoke_tokens", people.id)
+    with pytest.raises(InvalidServiceTokenError, match="revoked"):
+        verifier.verify(token)
+    assert iam.token_revoked(claims)
+    # The actor's side of the check: the module's own subject is suspended.
+    assert iam.subject(token_context(claims), "actor").status == "suspended"
+    assert _suspended(iam, claims)
+
+
+def test_a_token_issued_at_the_floor_is_refused_and_a_microsecond_later_accepted(
+    h, iam, bob
+):
+    clock = _Clock(iam)
+    _revoke(h, iam, bob)
+    # The clock has not moved: the token's instant is the floor itself.
+    with pytest.raises(InvalidServiceTokenError, match="revoked"):
+        _verify(iam, _delegated_for(iam, bob))
+    clock.tick(microseconds=1)
+    later = _verify(iam, _delegated_for(iam, bob))
+    assert later.issued_at_us == _floor_us(iam, bob.id) + 1
+
+
+def test_issue_instants_never_drift_ahead_of_the_clock(h, iam, bob, people):
+    """Revocations of bob and of the module, a fraction of a second apart, each
+    followed by a token for bob acted by the module: every token carries the
+    clock as it was, every earlier one is cut off, and no floor is ahead."""
+    clock = _Clock(iam)
+    earlier = []
+    for turn in range(12):
+        if turn % 2:
+            h.admin("revoke_tokens", people.id)
+        else:
+            _revoke(h, iam, bob)
+        assert _no_floor_ahead_of(iam, clock)
+        assert all(iam.token_revoked(claims) for claims in earlier)
+        clock.tick(0.03)
+        claims = _verify(
+            iam, _vouched(iam, bob.id, AGENT_AUDIENCE, resource=MODULE).token
+        )
+        assert claims.actor == people.id
+        assert claims.issued_at_us == _us(clock.at)
+        assert claims.issued_at <= clock.at.timestamp()
+        earlier.append(claims)
+        clock.tick(0.04)
+    _revoke(h, iam, bob)
+    assert _no_floor_ahead_of(iam, clock)
+    assert all(iam.token_revoked(claims) for claims in earlier)
+    clock.tick(microseconds=1)
+    fresh = _verify(iam, _vouched(iam, bob.id, AGENT_AUDIENCE, resource=MODULE).token)
+    assert fresh.issued_at_us == _us(clock.at)
+
+
+def _signed_without_instant(iam, user, at: datetime) -> str:
+    """A delegation as an engine before #872 signed it: ``iat`` only."""
+    issued_at = int(at.timestamp())
+    claims = nats_auth.TokenClaims(
+        issuer=iam.tokens.issuer,
+        subject=user.id,
+        audience=AGENT_AUDIENCE,
+        kind="user",
+        token_id=nats_auth.new_token_id(),
+        issued_at=issued_at,
+        expires_at=issued_at + 600,
+        actor=iam.store.find_service_account("api").id,
+        actor_name="api",
+    )
+    assert "abi_iat_us" not in claims.to_payload()
+    return nats_auth.sign_token(iam.tokens._current_key(at), claims)
+
+
+def test_a_token_without_an_issue_instant_is_judged_by_its_iat(h, iam, bob):
+    clock = _Clock(iam)
+    _revoke(h, iam, bob)  # S+0.1
+    clock.tick(0.5)
+    same_second = _signed_without_instant(iam, bob, clock.at)
+    with pytest.raises(InvalidServiceTokenError, match="revoked"):
+        _verify(iam, same_second)
+    clock.tick(0.5)
+    later_second = _verify(iam, _signed_without_instant(iam, bob, clock.at))
+    assert later_second.issued_at_us is None
+    assert not iam.token_revoked(later_second)
+    assert not _suspended(iam, later_second)
+
+
 @pytest.mark.parametrize("audience", [SESSION_AUDIENCE, AGENT_AUDIENCE])
 def test_a_token_issued_between_two_revocations_in_one_second_is_cut_off(
     h, iam, bob, audience
 ):
-    """The first revocation pushes the token's ``iat`` into the next second;
-    the second, in the same second, waits for it to begin so its floor covers
-    that ``iat``."""
     clock = _Clock(iam)
     _revoke(h, iam, bob)
     clock.tick(0.2)
     token = _vouched(iam, bob.id, audience).token
     claims = _verify(iam, token, audience)
-    context = token_context(claims)
     clock.tick(0.3)
     _revoke(h, iam, bob)
-    assert clock.slept == [pytest.approx(0.4)]
     with pytest.raises(InvalidServiceTokenError, match="revoked"):
         iam.verifier((audience,)).verify(token)
     assert iam.token_revoked(claims)
-    decision = iam.authorizer.check(context, QUERY, graph("g"))
-    assert not decision.allowed and decision.reason == "suspended"
+    assert _suspended(iam, claims)
     # What is issued after the second revocation works.
+    clock.tick(0.1)
     assert _verify(iam, _vouched(iam, bob.id, audience).token, audience)
 
 
-def test_a_revocation_in_a_later_second_does_not_wait(h, iam, bob):
-    clock = _Clock(iam)
-    _revoke(h, iam, bob)
-    clock.tick(1.0)
-    claims = _verify(iam, _delegated_for(iam, bob))
-    _revoke(h, iam, bob)
-    assert clock.slept == []
-    assert iam.token_revoked(claims)
-
-
-def test_quick_revocations_never_push_a_floor_ahead_of_the_clock(h, iam, bob):
+def test_quick_revocations_never_put_a_floor_ahead_of_the_clock(h, iam, bob):
     """Many revocations of one user, a fraction of a second apart, each followed
     by a fresh token: every earlier token is cut off, no floor is ever ahead of
     the clock, and the user's next token still works."""
@@ -1071,54 +1217,26 @@ def test_quick_revocations_never_push_a_floor_ahead_of_the_clock(h, iam, bob):
     earlier = []
     for _ in range(10):
         _revoke(h, iam, bob)
-        assert max(iam.store.token_floors().values()) <= clock.at
+        assert _no_floor_ahead_of(iam, clock)
         assert all(iam.token_revoked(claims) for claims in earlier)
-        clock.tick(0.2)
+        clock.tick(0.02)
         earlier.append(_verify(iam, _delegated_for(iam, bob)))
-        clock.tick(0.1)
+        clock.tick(0.01)
     _revoke(h, iam, bob)
-    assert max(iam.store.token_floors().values()) <= clock.at
+    assert _no_floor_ahead_of(iam, clock)
     assert all(iam.token_revoked(claims) for claims in earlier)
-    assert all(seconds <= 1 for seconds in clock.slept)
+    clock.tick(0.01)
     fresh = _verify(iam, _delegated_for(iam, bob))
-    assert fresh.issued_at <= clock.at.timestamp() + 1
+    assert fresh.issued_at <= clock.at.timestamp()
 
 
-def test_revoking_another_principal_in_the_same_second_does_not_wait(h, iam, bob):
-    clock = _Clock(iam)
-    alice = h.user("alice")
-    _revoke(h, iam, bob)
-    clock.tick(0.2)
-    _delegated_for(iam, bob)
-    clock.tick(0.2)
-    _revoke(h, iam, alice)
-    assert clock.slept == []
-
-
-@pytest.mark.parametrize("step", [-5.0, 0.0], ids=["steps-back", "stands-still"])
-def test_a_revocation_waits_one_second_at_most_whatever_the_clock_does(
-    h, iam, bob, step
-):
-    clock = _Clock(iam)
-    _revoke(h, iam, bob)
-    clock.tick(0.2)
-    _delegated_for(iam, bob)
-
-    def sleep(seconds: float) -> None:
-        clock.slept.append(seconds)
-        clock.tick(step)
-
-    iam._sleep = sleep
-    _revoke(h, iam, bob)
-    assert clock.slept and sum(clock.slept) <= 1
-
-
-def test_a_later_floor_another_process_wrote_meanwhile_is_waited_for_too(
+def test_a_revocation_that_writes_an_earlier_floor_last_keeps_the_later_one(
     h, iam, bob, monkeypatch
 ):
-    """Another process revokes bob between this revocation's read of the floor
-    and its write, with a clock a little ahead, and a token is issued past that
-    floor: this revocation must cover it."""
+    """Two revocations of bob, as two processes would run them: the first reads
+    the clock, then the second reads it and writes, then the first writes its
+    earlier floor. The stored floor is the later one, and a token issued
+    between the two readings is cut off."""
     clock = _Clock(iam)
     store = iam.store
     write = store.set_token_floor
@@ -1126,53 +1244,17 @@ def test_a_later_floor_another_process_wrote_meanwhile_is_waited_for_too(
 
     def set_token_floor(principal_id, not_before):
         if not issued:
-            write(principal_id, not_before + timedelta(seconds=0.05))
-            iam._floors.clear()
+            clock.tick(0.1)
             issued.append(_verify(iam, _delegated_for(iam, bob)))
+            clock.tick(0.1)
+            _revoke(h, iam, bob)
         write(principal_id, not_before)
 
     monkeypatch.setattr(store, "set_token_floor", set_token_floor)
-    second = int(clock.at.timestamp())
+    first = clock.at
     _revoke(h, iam, bob)
-    # Pushed past the other floor, into a second that had not begun.
-    assert issued[0].issued_at == second + 1
-    assert clock.slept == [pytest.approx(0.9)]
+    assert store.token_floors()[bob.id] == first + timedelta(seconds=0.2)
     assert iam.token_revoked(issued[0])
-    assert max(store.token_floors().values()) <= clock.at
-
-
-def test_revocations_of_one_principal_in_a_process_run_one_at_a_time(
-    h, iam, bob, monkeypatch
-):
-    """The second one reads the floor the first wrote, never before it."""
-    import threading
-
-    clock = _Clock(iam)
-    set_floor = iam._set_floor_past_pushed_second
-    steps: list[str] = []
-    first_in = threading.Event()
-
-    def setting_the_floor(principal_id):
-        name = threading.current_thread().name
-        steps.append(f"{name} in")
-        if name == "first":
-            first_in.set()
-            time.sleep(0.2)
-        floor = set_floor(principal_id)
-        steps.append(f"{name} out")
-        return floor
-
-    monkeypatch.setattr(iam, "_set_floor_past_pushed_second", setting_the_floor)
-    first = threading.Thread(target=_revoke, args=(h, iam, bob), name="first")
-    second = threading.Thread(target=_revoke, args=(h, iam, bob), name="second")
-    first.start()
-    assert first_in.wait(5)
-    second.start()
-    first.join(5)
-    second.join(5)
-    assert steps == ["first in", "first out", "second in", "second out"]
-    # So the second saw the first's floor and waited out its pushed second.
-    assert clock.slept == [pytest.approx(0.9)]
 
 
 def test_a_host_token_made_right_after_a_revocation_is_past_the_floor(
@@ -1190,17 +1272,17 @@ def test_a_host_token_made_right_after_a_revocation_is_past_the_floor(
     caller = Principal(id=people.id, kind="service_account", name=people.name)
 
     _revoke(h, iam, bob)
-    clock.tick(0.2)
+    clock.tick(microseconds=1)
     for_bob = hosts.verify(iam.issue_host_token(caller, recipient, user(bob.id)).token)
     assert for_bob.subject == bob.id
-    assert for_bob.issued_at > iam.store.token_floors()[bob.id].timestamp()
+    assert for_bob.issued_at_us > _floor_us(iam, bob.id)
 
-    clock.tick(1.0)
-    h.admin("revoke_tokens", people.id)
     clock.tick(0.2)
+    h.admin("revoke_tokens", people.id)
+    clock.tick(microseconds=1)
     own = hosts.verify(iam.issue_host_token(caller, recipient).token)
     assert own.subject == people.id
-    assert own.issued_at > iam.store.token_floors()[people.id].timestamp()
+    assert own.issued_at_us > _floor_us(iam, people.id)
 
 
 def test_a_request_cannot_rebind_what_a_key_is_bound_to(h, iam, bob):
