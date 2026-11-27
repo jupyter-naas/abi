@@ -11,7 +11,6 @@ import {
   SettingsNotice,
   SettingsPageHeader,
   SettingsTableToolbar,
-  countLabel,
 } from '@/components/settings/settings-ui';
 import {
   SettingsTableClear,
@@ -23,6 +22,9 @@ import { TablePager } from '@/components/settings/users-table/table-pager';
 import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import { useWorkspaceStore } from '@/stores/workspace';
+// The unsaved-changes bar of the General pages.
+import '@/app/organizations/[orgId]/settings/general/general.css';
+import { reloadWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { PolicyPicker } from '@/components/settings/policy-picker';
 import { isOrgTarget } from '@/lib/access-model/target';
 import { AccessLevelChoice } from '@/components/settings/access-level-choice';
@@ -178,8 +180,12 @@ export function FeatureAccess({
         refused = next.errors ?? {};
         setState(next);
         setRowErrors(refused);
-        // The nav's pages under Features follow what is offered.
-        if (editsOffer(next) && !org) void useWorkspaceStore.getState().fetchWorkspaces();
+        // The nav's pages under Features follow what is offered: a feature taken out (None) drops
+        // its settings page at once, not at the next opening of the settings.
+        if (editsOffer(next) && !org) {
+          void useWorkspaceStore.getState().fetchWorkspaces();
+          void reloadWorkspaceResources(workspaceId);
+        }
       }
       const wanted = Object.fromEntries(
         Object.entries(plan.levels).filter(([key]) => !refused[key.slice('feature:'.length)])
@@ -223,8 +229,6 @@ export function FeatureAccess({
     setPolicyId(next);
     onPolicyChange?.(next);
   };
-  const unsaved =
-    unsavedCount === 0 ? 'No unsaved change' : `${unsavedCount} unsaved change${unsavedCount === 1 ? '' : 's'}`;
 
   return (
     <div className="space-y-6">
@@ -260,14 +264,6 @@ export function FeatureAccess({
           <>
             <UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />
             <Button
-              variant="secondary"
-              data-action="discard"
-              disabled={saving || (unsavedCount === 0 && Object.keys(rowErrors).length === 0)}
-              onClick={discard}
-            >
-              Discard
-            </Button>
-            <Button
               disabled={saving || unsavedCount === 0}
               onClick={() => void save()}
               data-action="save"
@@ -295,6 +291,23 @@ export function FeatureAccess({
           {error}
         </SettingsNotice>
       )}
+      {/* As General: the unsaved changes said in a bar, with Discard changes. */}
+      {unsavedCount > 0 || Object.keys(rowErrors).length > 0 ? (
+        <div className="org-settings-general-draft" role="status">
+          <p className="org-settings-general-draft-text">
+            {unsavedCount > 0 ? 'Unsaved changes.' : 'Some changes were refused: see the rows below.'}
+          </p>
+          <button
+            type="button"
+            onClick={discard}
+            disabled={saving}
+            className="org-settings-general-draft-discard"
+            data-action="discard"
+          >
+            Discard changes
+          </button>
+        </div>
+      ) : null}
       {levelsFailed && (
         <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
           Could not read the access levels: the features cannot be changed. Reload to try again.
@@ -311,23 +324,9 @@ export function FeatureAccess({
             search={table.search}
             onSearchChange={table.setSearch}
             searchPlaceholder="Search feature, description, not offered…"
-            meta={
-              <>
-                {`${countLabel(shown.length, rows.length, 'feature')} · ${unsaved}`}
-                <SettingsTableClear table={table} />
-              </>
-            }
+            // No count nor unsaved line above the search: the bar says what is unsaved.
+            meta={<SettingsTableClear table={table} />}
           />
-          <p className="text-xs text-muted-foreground" data-access-legend="">
-            <strong>Access</strong>: how far people go with a feature. None takes it out (nobody uses it, admins
-            included), Read lets them see it, Write also create and change, Admin also configure it.{' '}
-            {offer
-              ? org
-                ? 'Here it is a cap for every workspace of the organization, admins included.'
-                : 'Here it is a cap for everyone in the workspace, admins included; each person’s level still applies below it.'
-              : 'Here it is what this policy grants whoever holds it, within the workspace’s offer.'}{' '}
-            Unfold Actions to see what each level allows.
-          </p>
           <div className="org-settings-users-table-wrap">
             <table className="org-settings-users-table">
               <SettingsTableHead table={table} trailing={<th aria-label="Configure" />} />

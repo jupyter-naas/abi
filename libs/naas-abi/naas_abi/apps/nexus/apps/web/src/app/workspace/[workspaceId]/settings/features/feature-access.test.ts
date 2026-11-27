@@ -6,6 +6,9 @@ import type { AccessLevel } from '@/lib/access-model/access-levels';
 import type { FeatureAccessState, FeatureRow } from './feature-access-model';
 import { FeatureAccess } from './feature-access';
 
+const reloadWorkspaceResources = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('@/hooks/use-workspace-resources', () => ({ reloadWorkspaceResources }));
+
 vi.mock('next/link', async () => {
   const { createElement } = await import('react');
   return {
@@ -164,9 +167,9 @@ describe('FeatureAccess', () => {
     expect(at(m, 'files', '[data-action="configure"]')?.getAttribute('href')).toBe('/workspace/ws1/settings/files');
     expect(at(m, 'maps', '[data-action="configure"]')?.getAttribute('href')).toBe('/workspace/ws1/settings/maps');
     // What Access is used for, None included, said above the table.
-    expect(m.host.querySelector('[data-access-legend]')?.textContent).toContain('how far people go');
-    expect(m.host.querySelector('[data-access-legend]')?.textContent).toContain('None takes it out');
-    expect(m.host.textContent).toContain('admins included');
+    // No legend, no Discard button: a bar says there are unsaved changes, as on General.
+    expect(m.host.querySelector('[data-access-legend]')).toBeNull();
+    expect(m.host.querySelector('[data-action="discard"]')).toBeNull();
     // Features are the workspace's offer: the description links to "<W> access".
     expect(m.host.querySelector('a[href*="pol_access"]')?.textContent).toBe('Alpha access');
     expect(saveButton(m).disabled).toBe(true);
@@ -209,7 +212,7 @@ describe('FeatureAccess', () => {
 
     await m.click(level(m, 'maps', 'read'));
     await m.click(level(m, 'marketplace', 'write'));
-    expect(m.host.textContent).toContain('2 unsaved changes');
+    expect(m.host.querySelector('.org-settings-general-draft')?.textContent).toContain('Unsaved changes.');
 
     await m.click(saveButton(m));
     await m.flush();
@@ -227,7 +230,7 @@ describe('FeatureAccess', () => {
     expect(picked(m, 'maps')).toBe('read');
     expect(at(m, 'marketplace', '[role="alert"]')?.textContent).toBe('IAM refused the attachment.');
     expect(picked(m, 'marketplace')).toBe('write');
-    expect(m.host.textContent).toContain('1 unsaved change');
+    expect(m.host.querySelector('.org-settings-general-draft')?.textContent).toContain('Unsaved changes.');
   });
 
   it('takes a feature out with None: Nobody, and capped at None', async () => {
@@ -240,6 +243,8 @@ describe('FeatureAccess', () => {
     await m.flush();
     expect(api.save).toHaveBeenCalledWith('ws1', [{ feature: 'chat', choice: 'nobody' }], null);
     expect(levelsApi.save).toHaveBeenCalledWith('ws1', 'feature', { 'feature:chat': 'none' }, null);
+    // Its settings page (Models) leaves the nav at once: the workspace's resources are read again.
+    expect(reloadWorkspaceResources).toHaveBeenCalledWith('ws1');
   });
 
   it('lays the features out as Users: a count, a search that narrows the table, columns that sort', async () => {
@@ -247,13 +252,12 @@ describe('FeatureAccess', () => {
     const keys = () => [...m.host.querySelectorAll('tr[data-feature]')].map((tr) => tr.getAttribute('data-feature'));
 
     expect(m.host.textContent).toContain('2 offered · 3 not offered');
-    expect(m.host.textContent).toContain('5 features');
+    expect(keys()).toHaveLength(5);
     await m.click(m.host.querySelector('[data-sort="access"]'));
     expect(keys()).toEqual(['chat', 'search', 'files', 'maps', 'marketplace']);
 
     await m.type(m.host.querySelector('input[type="search"], input') as HTMLInputElement, 'feeds');
     expect(keys()).toEqual(['maps']);
-    expect(m.host.textContent).toContain('1 of 5 features');
     await m.click(m.host.querySelector('[data-action="clear-filters"]'));
     expect(keys()).toHaveLength(5);
   });
@@ -263,14 +267,15 @@ describe('FeatureAccess', () => {
     const m = await render(api);
 
     await m.click(level(m, 'chat', 'none'));
-    expect(m.host.textContent).toContain('1 unsaved change');
+    expect(m.host.querySelector('.org-settings-general-draft')?.textContent).toContain('Unsaved changes.');
+    expect(m.host.querySelector('.org-settings-general-draft')?.textContent).toContain('Unsaved changes.');
     await m.click(level(m, 'chat', 'admin'));
-    expect(m.host.textContent).toContain('No unsaved change');
+    expect(m.host.querySelector('.org-settings-general-draft')).toBeNull();
 
     await m.click(level(m, 'chat', 'read'));
     await m.click(m.host.querySelector('[data-action="discard"]'));
     expect(picked(m, 'chat')).toBe('admin');
-    expect(m.host.textContent).toContain('No unsaved change');
+    expect(m.host.querySelector('.org-settings-general-draft')).toBeNull();
     expect(api.save).not.toHaveBeenCalled();
   });
 
@@ -326,13 +331,13 @@ describe('FeatureAccess', () => {
     expect(at(m, 'maps', '[data-level-actions]')?.textContent).toContain('nexus:CreateView');
 
     await m.click(level(m, 'maps', 'read'));
-    expect(m.host.textContent).toContain('1 unsaved change');
+    expect(m.host.querySelector('.org-settings-general-draft')?.textContent).toContain('Unsaved changes.');
     await m.click(saveButton(m));
     await m.flush();
     expect(levelsApi.save).toHaveBeenCalledWith('ws1', 'feature', { 'feature:maps': 'read' }, null);
     expect(api.save).not.toHaveBeenCalled();
     expect(picked(m, 'maps')).toBe('read');
-    expect(m.host.textContent).toContain('No unsaved change');
+    expect(m.host.querySelector('.org-settings-general-draft')).toBeNull();
   });
 
   it('says so, read-only, when the access levels cannot be read', async () => {
