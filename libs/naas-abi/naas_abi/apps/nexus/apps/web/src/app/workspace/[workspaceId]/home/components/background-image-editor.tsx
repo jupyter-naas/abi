@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { createPortal } from 'react-dom';
 import { ImageIcon, Link2, Loader2, Minus, Move, Plus, RotateCcw, Trash2, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,8 @@ import {
   wheelZoomStep,
   type BackgroundFraming,
 } from '@/lib/home-background';
+import { usePageState } from '@/hooks/use-page-state';
+import type { PageKey } from '@/lib/page-state';
 import { authFetch } from '@/stores/auth';
 import { DeskWallpaper } from './desk-wallpaper';
 
@@ -38,6 +40,14 @@ const KEY_PAN_PX = 16;
  * shows. Save stores the new draft (moved to `.home/background-img`, old files
  * cleaned up) or the current wallpaper's new framing; Cancel discards.
  */
+/** What a page holding the editor in one Save (Settings › General) calls. */
+export type WallpaperControl = {
+  /** Commits the new image or framing; true when saved (or nothing to save), false on failure. */
+  save: () => Promise<boolean>;
+  /** Drops the staged image and the framing, back to the wallpaper in place. */
+  discard: () => void;
+};
+
 export function BackgroundImageEditor({
   open,
   workspaceId,
@@ -48,6 +58,9 @@ export function BackgroundImageEditor({
   saveLabel = 'Validate',
   cancelLabel = 'Cancel',
   actionsContainer,
+  control,
+  onDirtyChange,
+  keepAs,
 }: {
   /** Loads the current wallpaper each time it becomes true (always true inline). */
   open: boolean;
@@ -67,6 +80,18 @@ export function BackgroundImageEditor({
    * the top right of a settings section header (Settings > General).
    */
   actionsContainer?: HTMLElement | null;
+  /**
+   * Held by the page: its own Save and Discard commit or drop the wallpaper, and the editor
+   * shows no Save or Cancel of its own (Remove stays).
+   */
+  control?: Ref<WallpaperControl>;
+  /** Whether a new image or a new framing waits to be saved. */
+  onDirtyChange?: (dirty: boolean) => void;
+  /**
+   * Where the page keeps its unsaved edits (`usePageState`): the staged image and the framing
+   * survive leaving the page and come back on return, as a form's draft does.
+   */
+  keepAs?: PageKey;
 }) {
   const [source, setSource] = useState<Source>('file');
   const [url, setUrl] = useState('');
@@ -76,11 +101,20 @@ export function BackgroundImageEditor({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [imageAspect, setImageAspect] = useState(0);
   const [framing, setFraming] = useState<BackgroundFraming>(DEFAULT_FRAMING);
+  /** The framing of the wallpaper in place, to tell a re-framing from none. */
+  const [savedFraming, setSavedFraming] = useState<BackgroundFraming>(DEFAULT_FRAMING);
   const [busy, setBusy] = useState<'load' | 'save' | 'remove' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ x: number; y: number } | null>(null);
+  // The unsaved image and framing, kept for a return to the page (``keepAs``).
+  const [kept, setKept] = usePageState<{ draft: string | null; framing: BackgroundFraming } | null>(
+    keepAs ?? null,
+    null
+  );
+  const keptRef = useRef(kept);
+  keptRef.current = kept;
 
   // Revoke the preview blob whenever it is replaced or the dialog unmounts.
   useEffect(() => () => {
@@ -105,6 +139,7 @@ export function BackgroundImageEditor({
     setCurrent(null);
     setPreviewUrl(null);
     setFraming(DEFAULT_FRAMING);
+    setSavedFraming(DEFAULT_FRAMING);
     setBusy(null);
     setError(null);
   }, []);
@@ -136,7 +171,33 @@ export function BackgroundImageEditor({
   // Open on the wallpaper already in place: a drive wallpaper with its framing,
   // or an external one (Settings → Theme) pre-filled in From URL and loaded.
   useEffect(() => {
-    if (!open || !currentBackgroundUrl) return;
+    if (!open) return;
+    const restore = keptRef.current;
+    let cancelled = false;
+    // An image staged and not saved before the page was left: back on it, framed as it was.
+    if (restore?.draft) {
+      const name = restore.draft;
+      setBusy('load');
+      void (async () => {
+        try {
+          const blob = await fetchBackgroundDraft(workspaceId, name);
+          if (cancelled) return;
+          setDraft(name);
+          setCurrent(null);
+          setFraming(restore.framing);
+          setPreviewUrl(URL.createObjectURL(blob));
+        } catch {
+          // The staged image is gone (another was staged since): start from the wallpaper.
+          if (!cancelled) setKept(null);
+        } finally {
+          if (!cancelled) setBusy(null);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (!currentBackgroundUrl) return;
     if (!isApiBackgroundUrl(currentBackgroundUrl)) {
       setSource('url');
       setUrl(currentBackgroundUrl);
@@ -145,7 +206,6 @@ export function BackgroundImageEditor({
     }
     const { imageUrl, framing: saved, fileName } = parseBackgroundImageUrl(currentBackgroundUrl);
     if (!imageUrl || !fileName) return;
-    let cancelled = false;
     setBusy('load');
     void (async () => {
       try {
@@ -154,7 +214,9 @@ export function BackgroundImageEditor({
         const blob = await response.blob();
         if (cancelled) return;
         setCurrent(fileName);
-        setFraming(saved);
+        // A re-framing not saved before the page was left comes back.
+        setFraming(restore?.framing ?? saved);
+        setSavedFraming(saved);
         setPreviewUrl(URL.createObjectURL(blob));
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load the current background image');
@@ -185,9 +247,21 @@ export function BackgroundImageEditor({
     onClose();
   }, [busy, draft, workspaceId, reset, onClose]);
 
-  const validate = async () => {
+  const reframed =
+    framing.x !== savedFraming.x || framing.y !== savedFraming.y || framing.zoom !== savedFraming.zoom;
+  const dirty = Boolean(draft) || (Boolean(current) && reframed);
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  // Keep the unsaved edit for a return (nothing while loading: the restore is in flight).
+  useEffect(() => {
+    if (!keepAs || busy === 'load') return;
+    setKept(dirty ? { draft, framing } : null);
+  }, [keepAs, busy, dirty, draft, framing, setKept]);
+
+  const validate = async (): Promise<boolean> => {
     const target = draft ? { draft } : current ? { current } : null;
-    if (!target) return;
+    if (!target) return true;
     setBusy('save');
     setError(null);
     try {
@@ -195,11 +269,20 @@ export function BackgroundImageEditor({
       onSaved(saved);
       reset();
       onClose();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save the background image');
       setBusy(null);
+      return false;
     }
   };
+
+  useImperativeHandle(control, () => ({
+    save: () => (dirty ? validate() : Promise.resolve(true)),
+    discard: () => {
+      if (dirty) cancel();
+    },
+  }));
 
   const remove = async () => {
     setBusy('remove');
@@ -446,6 +529,8 @@ export function BackgroundImageEditor({
               Remove wallpaper
             </button>
           ) : null}
+          {control ? null : (
+          <>
           <button
             type="button"
             onClick={cancel}
@@ -469,6 +554,8 @@ export function BackgroundImageEditor({
             {busy === 'save' && <Loader2 size={14} className="animate-spin" />}
             {saveLabel}
           </button>
+          </>
+          )}
         </div>
         );
         return actionsContainer ? createPortal(actions, actionsContainer) : actions;

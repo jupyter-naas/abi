@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Brush,
   Camera,
@@ -19,8 +19,10 @@ import {
   SettingsNotice,
   SettingsSection,
 } from '@/components/settings/settings-ui';
+import { usePageDraft } from '@/hooks/use-page-state';
 import { getApiUrl } from '@/lib/config';
 import { fetchCurrentBackgroundImage } from '@/lib/home-background';
+import { readOrganization } from '@/lib/organization-resource';
 import { existingWorkspaceGroups } from '@/lib/workspace-groups';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
@@ -30,13 +32,15 @@ import {
   PRESET_COLORS,
   DEFAULT_THEME,
 } from '@/stores/workspace';
-import { BackgroundImageEditor } from '../../home/components/background-image-editor';
+import { BackgroundImageEditor, type WallpaperControl } from '../../home/components/background-image-editor';
 import { resolveDeskImageUrl } from '../../home/home-desk';
 import { WorkspaceConfiguration } from './workspace-configuration';
+import { organizationColors } from './organization-colors';
 import { WorkspaceGroupSelect } from '@/app/organizations/[orgId]/settings/workspaces/workspace-group-select';
 import '@/app/account/profile/profile.css';
 // The unsaved-changes bar, as Organization › General shows it.
 import '@/app/organizations/[orgId]/settings/general/general.css';
+import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 import './general.css';
 
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
@@ -76,9 +80,25 @@ export default function GeneralSettingsPage() {
   const canEdit = workspace?.currentUserRole === 'owner' || workspace?.currentUserRole === 'admin';
 
   const updateWorkspace = useWorkspaceStore((state) => state.updateWorkspace);
-  const [name, setName] = useState(workspace?.name ?? '');
-  const [description, setDescription] = useState(workspace?.description ?? '');
-  const [group, setGroup] = useState(workspace?.group ?? '');
+  // The name, description and group as saved, and the unsaved edits over them: kept for a
+  // return to the page, as Organization › General keeps its own (lib/page-state.ts).
+  const savedName = workspace?.name ?? '';
+  const savedDescription = workspace?.description ?? '';
+  const savedGroup = workspace?.group ?? '';
+  const server = useMemo(
+    () => (workspace ? { name: savedName, description: savedDescription, group: savedGroup } : null),
+    [workspace, savedName, savedDescription, savedGroup]
+  );
+  const draft = usePageDraft(
+    currentWorkspaceId ? { scope: `workspace:${currentWorkspaceId}`, page: 'general' } : null,
+    server
+  );
+  const name = draft.values?.name ?? savedName;
+  const description = draft.values?.description ?? savedDescription;
+  const group = draft.values?.group ?? savedGroup;
+  const setName = (next: string) => draft.set({ name: next });
+  const setDescription = (next: string) => draft.set({ description: next });
+  const setGroup = (next: string) => draft.set({ group: next });
   const [existingGroups, setExistingGroups] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -92,10 +112,34 @@ export default function GeneralSettingsPage() {
   // Remounts the inline wallpaper editor after Save/Cancel so it reloads the current wallpaper.
   const [wallpaperEditorKey, setWallpaperEditorKey] = useState(0);
   const [driveBackgroundUrl, setDriveBackgroundUrl] = useState<string | undefined>();
+  // The wallpaper is saved and discarded with the rest of the page (its editor shows no buttons).
+  const wallpaperControl = useRef<WallpaperControl>(null);
+  const [wallpaperDirty, setWallpaperDirty] = useState(false);
+  // The organization's colors, offered first among the color choices.
+  const [orgColors, setOrgColors] = useState<{ name: string; value: string }[]>([]);
 
   useEffect(() => {
     if (workspace) setCustomColor(workspace.theme?.primaryColor || DEFAULT_THEME.primaryColor);
   }, [workspace]);
+
+  const organizationId = workspace?.organizationId;
+  useEffect(() => {
+    setOrgColors([]);
+    if (!organizationId) return;
+    let cancelled = false;
+    void readOrganization(organizationId)
+      .then(async (response) => {
+        if (!response.ok || cancelled) return;
+        const org = (await response.json()) as { name?: string; primary_color?: string; accent_color?: string };
+        if (!cancelled) setOrgColors(organizationColors(org));
+      })
+      .catch(() => {
+        // No organization colors: the presets stay.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId]);
 
   const ownGroup = workspace?.group ?? '';
   useEffect(() => {
@@ -108,16 +152,10 @@ export default function GeneralSettingsPage() {
     };
   }, [workspace?.organizationId, ownGroup]);
 
-  // Follow the store when switching workspace or after a save (not on every keystroke).
-  const workspaceName = workspace?.name ?? '';
-  const workspaceDescription = workspace?.description ?? '';
-  const workspaceGroup = workspace?.group ?? '';
+  // Another workspace: its own draft, no error of the last one.
   useEffect(() => {
-    setName(workspaceName);
-    setDescription(workspaceDescription);
-    setGroup(workspaceGroup);
     setDetailsError(null);
-  }, [currentWorkspaceId, workspaceName, workspaceDescription, workspaceGroup]);
+  }, [currentWorkspaceId]);
 
   // As on Home: the wallpaper lives in Workspace Files; when the theme lost
   // its pointer, ask the API for the committed file.
@@ -154,20 +192,26 @@ export default function GeneralSettingsPage() {
   const trimmedDescription = description.trim();
   const trimmedGroup = group.trim();
 
-  const dirty =
-    trimmedName !== workspace.name ||
-    trimmedDescription !== (workspace.description ?? '') ||
-    trimmedGroup !== (workspace.group ?? '');
+  const detailsDirty =
+    draft.dirty.length > 0 &&
+    (trimmedName !== workspace.name ||
+      trimmedDescription !== (workspace.description ?? '') ||
+      trimmedGroup !== (workspace.group ?? ''));
+  const dirty = detailsDirty || wallpaperDirty;
+  // The organization's colors first, then the presets they are not among.
+  const colorChoices = [
+    ...orgColors,
+    ...PRESET_COLORS.filter((c) => !orgColors.some((o) => o.value.toLowerCase() === c.value.toLowerCase())),
+  ];
 
-  /** Discard changes: back to the name, group and description the workspace holds. */
+  /** Discard changes: back to the name, group, description and wallpaper the workspace holds. */
   const discardDetails = () => {
-    setName(workspace.name);
-    setDescription(workspace.description ?? '');
-    setGroup(workspace.group ?? '');
+    draft.discard();
     setDetailsError(null);
+    wallpaperControl.current?.discard();
   };
 
-  /** Save changes (top right): the workspace name, group and description. */
+  /** Save changes (top right): the workspace name, group and description, then the wallpaper. */
   const handleSaveDetails = async () => {
     if (!trimmedName) {
       setDetailsError('The name cannot be empty.');
@@ -176,6 +220,14 @@ export default function GeneralSettingsPage() {
     setDetailsError(null);
     setSaving(true);
     try {
+      if (wallpaperDirty && !(await wallpaperControl.current?.save())) {
+        throw new Error('The wallpaper could not be saved: see the Desktop wallpaper section.');
+      }
+      if (!detailsDirty) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+        return;
+      }
       const res = await authFetch(`/api/workspaces/${currentWorkspaceId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -191,6 +243,7 @@ export default function GeneralSettingsPage() {
         description: trimmedDescription,
         group: trimmedGroup || undefined,
       });
+      draft.discard();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -252,27 +305,27 @@ export default function GeneralSettingsPage() {
   };
 
   const selectedRing = 'ring-2 ring-foreground ring-offset-2 ring-offset-background';
-  const isCustomColor = !PRESET_COLORS.some((c) => c.value === theme.primaryColor);
+  const isCustomColor = !colorChoices.some((c) => c.value === theme.primaryColor);
 
   return (
     <div className="workspace-general space-y-6">
       <AccountPageHeader
         title="General"
-        subtitle="The workspace name, group, description, logo, desk wallpaper and colors, and its config preseeding. What it offers is under Access (Features, Modules)."
+        subtitle="The workspace's name, group, logo, description, desktop wallpaper, colors and config preseeding."
         actions={
           canEdit ? (
             <button
               type="button"
               onClick={() => void handleSaveDetails()}
               disabled={!dirty || saving}
+              // The button of Organization › General: faded until something changes, in the
+              // workspace's color (--primary, which the workspace's Settings set).
               className={
-                saved
-                  ? 'account-profile-save-button account-profile-save-button-saved workspace-general-save'
-                  : 'account-profile-save-button workspace-general-save'
+                saved ? 'org-settings-primary-button org-settings-primary-button-saved' : 'org-settings-primary-button'
               }
             >
               <Save size={16} />
-              {saving ? 'Saving...' : saved ? 'Saved!' : 'Save changes'}
+              {saved ? 'Saved!' : saving ? 'Saving...' : 'Save changes'}
             </button>
           ) : undefined
         }
@@ -283,7 +336,13 @@ export default function GeneralSettingsPage() {
       )}
       {canEdit && dirty ? (
         <div className="org-settings-general-draft" role="status">
-          <p className="org-settings-general-draft-text">Unsaved changes.</p>
+          <p className="org-settings-general-draft-text">
+            {draft.conflicts.length > 0
+              ? `Changed elsewhere since you began editing: ${draft.conflicts
+                  .map((f) => ({ name: 'Name', description: 'Description', group: 'Workspace Group' })[f] ?? f)
+                  .join(', ')}. Saving keeps your version.`
+              : 'Unsaved changes.'}
+          </p>
           <button type="button" onClick={discardDetails} className="org-settings-general-draft-discard">
             Discard changes
           </button>
@@ -432,7 +491,7 @@ export default function GeneralSettingsPage() {
           <>
             <p className="mb-3 text-sm text-muted-foreground">
               The Home desk background. PNG, JPEG, GIF, WEBP or AVIF, up to 10 MB. Drag to move,
-              Ctrl + scroll to zoom (50% to 400%), then save.
+              Ctrl + scroll to zoom (50% to 400%); Save changes saves it with the rest of the page.
             </p>
             <BackgroundImageEditor
               key={wallpaperEditorKey}
@@ -447,9 +506,10 @@ export default function GeneralSettingsPage() {
                 setDriveBackgroundUrl(undefined);
                 applyWorkspaceTheme(currentWorkspaceId, { backgroundImageUrl: '' });
               }}
-              saveLabel="Save wallpaper"
-              cancelLabel="Discard changes"
               actionsContainer={wallpaperActions}
+              control={wallpaperControl}
+              onDirtyChange={setWallpaperDirty}
+              keepAs={{ scope: `workspace:${currentWorkspaceId}`, page: 'general', detail: 'wallpaper' }}
             />
           </>
         ) : (
@@ -476,7 +536,7 @@ export default function GeneralSettingsPage() {
         <div className="space-y-6">
           <SettingsField label="Primary Color" hint={`Current: ${theme.primaryColor}`}>
             <div className="flex flex-wrap gap-3">
-              {PRESET_COLORS.map((color) => (
+              {colorChoices.map((color) => (
                 <button
                   key={color.value}
                   type="button"
@@ -519,7 +579,7 @@ export default function GeneralSettingsPage() {
 
           <SettingsField label="Accent Color" hint={`Current: ${theme.accentColor || 'Not set'}`}>
             <div className="flex flex-wrap gap-3">
-              {PRESET_COLORS.map((color) => (
+              {colorChoices.map((color) => (
                 <button
                   key={color.value}
                   type="button"

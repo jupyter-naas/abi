@@ -190,17 +190,16 @@ export function WorkspaceGroupSelect({
             setOpen(true);
           }
         }}
-        className={cn(
-          'search-picker-trigger account-profile-field-input min-h-9 justify-between text-sm text-foreground',
-          trimmedValue && 'is-filtered'
-        )}
+        // The field style of the form's text inputs (Name...): same text size, height and border.
+        className="account-profile-field-input flex items-center justify-between gap-2 text-left disabled:cursor-default"
+        data-group-trigger=""
         aria-label={`Workspace group: ${triggerLabel}`}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={open ? listId : undefined}
         title={triggerLabel}
       >
-        <span className="search-picker-label">{triggerLabel}</span>
+        <span className={cn('min-w-0 flex-1 truncate', !trimmedValue && 'text-muted-foreground')}>{triggerLabel}</span>
         <ChevronDown size={14} className="shrink-0 opacity-70" />
       </button>
       {open &&
@@ -238,7 +237,7 @@ export function WorkspaceGroupSelect({
                   }
                 }}
                 placeholder="Search or create group…"
-                className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none focus-visible:ring-0 placeholder:text-muted-foreground"
+                className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none focus-visible:ring-0 placeholder:text-muted-foreground"
                 role="combobox"
                 aria-label="Search workspace groups"
                 aria-autocomplete="list"
@@ -271,7 +270,7 @@ export function WorkspaceGroupSelect({
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => pick(index)}
                       className={cn(
-                        'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs',
+                        'flex w-full items-center gap-2 px-3 py-2 text-left text-sm',
                         active === index ? 'bg-muted' : 'hover:bg-muted/70',
                         row.kind === 'create' && 'text-workspace-accent'
                       )}
@@ -286,7 +285,7 @@ export function WorkspaceGroupSelect({
                 })}
               </div>
               {!rows.length && (
-                <p role="status" className="px-3 py-4 text-xs text-muted-foreground">
+                <p role="status" className="px-3 py-4 text-sm text-muted-foreground">
                   Type a name to create a new group.
                 </p>
               )}
