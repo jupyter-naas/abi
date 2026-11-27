@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
 import { Input, Textarea } from '@/components/ui/input';
 import { useSettingsReloadGeneration } from '@/components/settings/settings-reload';
+import { ModuleLink } from '@/components/settings/module-link';
 import { usePageState } from '@/hooks/use-page-state';
 import {
   SettingsEmpty,
@@ -20,7 +21,6 @@ import {
   SettingsPageHeader,
   SettingsSection,
   SettingsTableToolbar,
-  countLabel,
 } from '@/components/settings/settings-ui';
 import {
   SettingsTableClear,
@@ -224,14 +224,14 @@ export default function AgentsPage() {
             <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
             <Button onClick={() => setShowAddForm(true)}>
               <Plus size={16} />
-              Add Agent
+              Create agent
             </Button>
           </>
         }
       />
 
       {showAddForm && (
-        <SettingsSection title="Add New Agent">
+        <SettingsSection title="Create agent">
           <div className="grid gap-4">
             <div className="grid grid-cols-2 gap-4">
               <SettingsField label="Name *">
@@ -286,7 +286,7 @@ export default function AgentsPage() {
                 Cancel
               </Button>
               <Button onClick={handleAddAgent} disabled={!newAgent.name.trim()}>
-                Add Agent
+                Create
               </Button>
             </div>
           </div>
@@ -297,7 +297,7 @@ export default function AgentsPage() {
         <SettingsEmpty
           icon={<Bot size={40} className="opacity-40" />}
           title="No agents configured"
-          description="Use Add Agent at the top right to create your first agent."
+          description="Use Create agent at the top right to create your first agent."
         />
       ) : (
         <div className="space-y-4">
@@ -305,12 +305,8 @@ export default function AgentsPage() {
             search={table.search}
             onSearchChange={table.setSearch}
             searchPlaceholder="Search agents..."
-            meta={
-              <>
-                {countLabel(table.shown.length, rows.length, 'agent')}
-                <SettingsTableClear table={table} />
-              </>
-            }
+            // No count above the search: the badge says how many, the pager how many are shown.
+            meta={<SettingsTableClear table={table} />}
           />
 
           <div className="org-settings-users-table-wrap">
@@ -340,7 +336,9 @@ export default function AgentsPage() {
                         <div className="min-w-0 flex-1">
                           <p className="font-medium">{agent.name}</p>
                           {agent.class_name ? (
-                            <p className="pb-0.5 text-micro italic text-muted-foreground">{agentModule(agent)}</p>
+                            <p className="pb-0.5 text-micro italic text-muted-foreground">
+                              <ModuleLink workspaceId={workspaceId} module={agentModule(agent)} />
+                            </p>
                           ) : null}
                           <p
                             className="line-clamp-2 min-h-[2rem] text-xs text-muted-foreground"

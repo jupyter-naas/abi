@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
+import { SettingsNotice, SettingsPageHeader, SettingsSection } from '@/components/settings/settings-ui';
 import {
   createOfferApi,
   type FileMode,
@@ -39,10 +39,13 @@ export function WorkspaceFiles({
   workspaceId,
   offerApi = DEFAULT_OFFER_API,
   featureApi = DEFAULT_FEATURE_API,
+  description,
 }: {
   workspaceId: string;
   offerApi?: OfferApi;
   featureApi?: FeatureAccessApi;
+  /** The page's line under its title. */
+  description?: string;
 }) {
   const [offer, setOffer] = useState<OfferState | null>(null);
   const [features, setFeatures] = useState<FeatureAccessState | null>(null);
@@ -103,7 +106,16 @@ export function WorkspaceFiles({
       setOffer(await offerApi.saveFiles(workspaceId, { [row.key]: mode }));
     }, `${row.label}: ${MODE_LABELS[mode]}.`);
 
+  // One total: the kinds of files listed (Workspace, Organization, Platform, System, My Files).
+  const kinds = offer ? 1 + (offer.files ?? []).length + (offer.my_files ? 1 : 0) : null;
+
   return (
+    <>
+    <SettingsPageHeader
+      title="Files"
+      badge={kinds === null ? undefined : `${kinds} kind${kinds === 1 ? '' : 's'} of files`}
+      description={description}
+    />
     <SettingsSection>
       {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
       {notice && (
@@ -196,5 +208,6 @@ export function WorkspaceFiles({
         </div>
       )}
     </SettingsSection>
+    </>
   );
 }

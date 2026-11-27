@@ -80,7 +80,9 @@ describe('DatasetsOffer', () => {
     ]);
     expect(box(m, 'finance')?.checked).toBe(true);
     expect(box(m, 'hr')?.checked).toBe(false);
-    expect(m.host.textContent).toContain('1 offered · 2 not offered');
+    // One total in the badge, no count above the search.
+    expect(m.host.textContent).toContain('3 namespaces');
+    expect(m.host.textContent).not.toContain('not offered ·');
     // The description fits one line and links "<W> access".
     expect(m.host.querySelector('a[href*="pol_access"]')?.textContent).toBe('Alpha access');
     // Reopening is the platform admin's: the legend says so.
@@ -100,12 +102,12 @@ describe('DatasetsOffer', () => {
     const m = await render(api);
     await m.click(box(m, 'finance'));
     await m.click(box(m, 'hr'));
-    expect(m.host.textContent).toContain('2 unsaved changes');
+    expect(saveButton(m).disabled).toBe(false);
     await m.click(saveButton(m));
     await m.flush();
     expect(api.save).toHaveBeenCalledWith('ws1', { finance: false, hr: true });
     expect(box(m, 'finance')?.checked).toBe(false);
-    expect(m.host.textContent).toContain('No unsaved change');
+    expect(saveButton(m).disabled).toBe(true);
   });
 
   it('says what IAM refused and keeps the drafts', async () => {
@@ -117,7 +119,7 @@ describe('DatasetsOffer', () => {
     await m.flush();
     expect(m.host.textContent).toContain('only the platform admin lifts its Denies');
     expect(box(m, 'hr')?.checked).toBe(true);
-    expect(m.host.textContent).toContain('1 unsaved change');
+    expect(saveButton(m).disabled).toBe(false);
   });
 
   it('says so when the deployment lists no dataset', async () => {

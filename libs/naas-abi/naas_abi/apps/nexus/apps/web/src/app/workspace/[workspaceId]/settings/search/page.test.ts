@@ -75,7 +75,9 @@ describe('Workspace settings › Search', () => {
 
     await mounted.type(search(), 'zebras');
     expect(rows()).toEqual(['topic-37']);
-    expect(mounted.host.textContent).toContain(`1 of ${total} entries`);
+    // One total in the badge, no count above the search.
+    expect(mounted.host.textContent).toContain(`${total} entries`);
+    expect(mounted.host.textContent).not.toContain(`1 of ${total} entries`);
   });
 
   it('filters on a column (Group and Enabled replace the dropdowns) and goes back to the first page', async () => {

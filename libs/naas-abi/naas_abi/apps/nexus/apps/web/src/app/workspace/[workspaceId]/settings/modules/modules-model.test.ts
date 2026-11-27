@@ -9,9 +9,17 @@ import {
   moduleExportRow,
   moduleGroups,
   moduleRows,
+  moduleRowHref,
   moduleSearchTexts,
   offerSummary,
 } from './modules-model';
+
+describe('moduleRowHref', () => {
+  it("opens Access › Modules on a module's row, through its search", () => {
+    expect(moduleRowHref('ws 1', 'acme.people')).toBe('/workspace/ws%201/settings/modules?module=acme.people');
+    expect(moduleRowHref('ws-1', '')).toBe('/workspace/ws-1/settings/modules');
+  });
+});
 
 const PUBLISHERS = {
   scope: WS,

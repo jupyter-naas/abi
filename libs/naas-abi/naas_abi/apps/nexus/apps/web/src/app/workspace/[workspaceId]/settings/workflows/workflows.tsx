@@ -4,13 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Workflow } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { ModuleLink } from '@/components/settings/module-link';
 import {
   SettingsEmpty,
   SettingsLoading,
   SettingsNotice,
   SettingsPageHeader,
   SettingsTableToolbar,
-  countLabel,
 } from '@/components/settings/settings-ui';
 import {
   SettingsTableClear,
@@ -36,7 +36,7 @@ import {
 /**
  * Workspace settings › Workflows: the workflows and pipelines of the workspace's modules,
  * read-only, laid out as Settings › Users (a search, columns that sort and filter, pages, an
- * export). Who may run each is decided by policies alone, on Roles & permissions: there is no
+ * export). Who may run each is decided by policies alone, in Access › Policies: there is no
  * workspace on/off switch.
  */
 export default function WorkflowsSettingsPage() {
@@ -86,7 +86,8 @@ export default function WorkflowsSettingsPage() {
     <div className="space-y-6">
       <SettingsPageHeader
         title="Workflows"
-        badge={items ? countLabel(all.length, all.length, 'item') : undefined}
+        // One total: workflows and pipelines alike.
+        badge={items ? `${all.length} workflow${all.length === 1 ? '' : 's'}` : undefined}
         description="The workflows and pipelines of this workspace's modules. Who runs each is decided by policies, on Roles & permissions."
         actions={<UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />}
       />
@@ -107,12 +108,8 @@ export default function WorkflowsSettingsPage() {
             search={table.search}
             onSearchChange={table.setSearch}
             searchPlaceholder="Search workflows..."
-            meta={
-              <>
-                {countLabel(shown.length, all.length, 'item')}
-                <SettingsTableClear table={table} />
-              </>
-            }
+            // No count above the search: the badge says how many, the pager how many are shown.
+            meta={<SettingsTableClear table={table} />}
           />
 
           <div className="org-settings-users-table-wrap">
@@ -133,7 +130,10 @@ export default function WorkflowsSettingsPage() {
                     <td>
                       <Badge variant={item.type === 'pipeline' ? 'warning' : 'primary'}>{item.type}</Badge>
                     </td>
-                    <td className="truncate text-muted-foreground">{item.module_id}</td>
+                    <td className="truncate text-muted-foreground">
+                      {/* Its row in Access › Modules, where the workspace offers it. */}
+                      <ModuleLink workspaceId={workspaceId ?? ''} module={item.module_id} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

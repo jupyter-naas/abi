@@ -9,6 +9,7 @@ const APPS = vi.hoisted(() =>
       app_id: `app-${n}`,
       app_name: `app-${n}`,
       module_path: 'acme.apps',
+      module_name: 'acme.apps',
       name: `App ${n}`,
       description: i === 36 ? 'Counts the zebra herd' : `The app number ${n}`,
       // The last four are alpha: the "core" category keeps 41.
@@ -55,7 +56,8 @@ describe('Workspace settings › Apps', () => {
     // The search reaches every row, not only the page shown.
     await m.type(q('input[placeholder="Search apps..."]'), 'zebra');
     expect(rows()).toEqual(['app-37']);
-    expect(m.host.textContent).toContain('1 of 45 apps');
+    // No count above the search: the badge says how many apps, the pager how many are shown.
+    expect(m.host.textContent).not.toContain('1 of 45 apps');
     await m.type(q('input[placeholder="Search apps..."]'), '');
 
     // The Category column filters, and goes back to the first page.
@@ -63,9 +65,16 @@ describe('Workspace settings › Apps', () => {
     expect(shown()).toMatch(/^Rows 21–/);
     await pickFacet(m, 'category', 'core');
     expect(shown()).toBe('Rows 1–20 of 41');
-    expect(m.host.textContent).toContain('41 of 45 apps');
     await m.click(q('[data-action="clear-filters"]'));
     expect(shown()).toBe('Rows 1–20 of 45');
+  });
+
+  it("links each app's module to its row in Access › Modules, and sends to Access › Policies", async () => {
+    const m = (mounted = await mount(AppsSettingsPage, {}));
+    await m.flush();
+    expect(m.host.textContent).toContain('45 apps');
+    const link = m.host.querySelector('[data-app="app-01"] a[data-module-link]');
+    expect(link?.getAttribute('href')).toBe('/workspace/ws-1/settings/modules?module=acme.apps');
   });
 
   it('sorts from a column header', async () => {

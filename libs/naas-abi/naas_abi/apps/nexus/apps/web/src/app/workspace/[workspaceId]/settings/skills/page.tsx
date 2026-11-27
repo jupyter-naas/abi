@@ -14,7 +14,6 @@ import {
   SettingsPageHeader,
   SettingsSection,
   SettingsTableToolbar,
-  countLabel,
 } from '@/components/settings/settings-ui';
 import {
   SettingsTableClear,
@@ -76,7 +75,6 @@ export default function SkillsSettingsPage() {
     sortValue: skillSortValue,
     initialSort: 'skill',
   });
-  const enabledCount = skills.filter((s) => s.enabled).length;
 
   const exportShown = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
@@ -128,7 +126,8 @@ export default function SkillsSettingsPage() {
     <div className="space-y-6">
       <SettingsPageHeader
         title="Skills"
-        badge={`${enabledCount} enabled`}
+        // One total: how many skills (the Enabled column says which are on).
+        badge={`${skills.length} skill${skills.length === 1 ? '' : 's'}`}
         description={
           <>
             Reusable prompts invocable in the chat with /&lt;slug&gt; — or type /create-skill in the chat and the
@@ -140,14 +139,14 @@ export default function SkillsSettingsPage() {
             <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
             <Button onClick={() => setShowAddForm(true)}>
               <Plus size={16} />
-              Add Skill
+              Create skill
             </Button>
           </>
         }
       />
 
       {showAddForm && (
-        <SettingsSection title="Add New Skill">
+        <SettingsSection title="Create skill">
           <div className="grid gap-4">
             <div className="grid grid-cols-2 gap-4">
               <SettingsField label="Name *">
@@ -206,7 +205,7 @@ export default function SkillsSettingsPage() {
               >
                 Cancel
               </Button>
-              <Button onClick={handleAddSkill}>Add Skill</Button>
+              <Button onClick={handleAddSkill}>Create</Button>
             </div>
           </div>
         </SettingsSection>
@@ -222,12 +221,8 @@ export default function SkillsSettingsPage() {
         search={table.search}
         onSearchChange={table.setSearch}
         searchPlaceholder="Search skills..."
-        meta={
-          <>
-            {`${countLabel(table.shown.length, skills.length, 'skill')} · ${enabledCount} enabled`}
-            <SettingsTableClear table={table} />
-          </>
-        }
+        // No count above the search: the badge says how many, the pager how many are shown.
+        meta={<SettingsTableClear table={table} />}
       />
 
       <div className="org-settings-users-table-wrap">
@@ -237,7 +232,7 @@ export default function SkillsSettingsPage() {
             {skills.length === 0 ? (
               <tr>
                 <td colSpan={SKILL_COLUMNS.length + 1} className="org-settings-users-no-match">
-                  No skills yet. Type /create-skill in the chat, or add one here.
+                  No skills yet. Type /create-skill in the chat, or create one here.
                 </td>
               </tr>
             ) : (

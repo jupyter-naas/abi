@@ -61,7 +61,9 @@ describe('Workspace settings › Ontologies (resource access)', () => {
 
     await mounted.type(mounted.host.querySelector('input[placeholder="Search ontologies…"]'), 'zebra');
     expect(rows()).toEqual(['onto-37']);
-    expect(mounted.host.textContent).toContain('1 of 45 ontologies');
+    // One total in the badge, no count above the search.
+    expect(mounted.host.textContent).toContain('45 ontologies');
+    expect(mounted.host.textContent).not.toContain('1 of 45 ontologies');
   });
 
   it('filters Availability and Enabled from their columns, back to the first page', async () => {
@@ -100,6 +102,10 @@ describe('Workspace settings › Graphs (resource access)', () => {
     expect(rows()).toEqual(['onto-03', 'onto-04']);
     await filterColumn(mounted, 'edit', 'No');
     expect(rows()).toEqual(['onto-03']);
-    expect(mounted.host.textContent).toContain('2 readable · 1 editable');
+    expect(mounted.host.textContent).not.toContain('2 readable · 1 editable');
+    expect(mounted.host.textContent).toContain('45 graphs');
+    // Its options in a section of their own, under the page's title.
+    expect([...mounted.host.querySelectorAll('h3')].map((h) => h.textContent)).toContain('Options');
+    expect(mounted.host.textContent).not.toContain('Workspace access');
   });
 });

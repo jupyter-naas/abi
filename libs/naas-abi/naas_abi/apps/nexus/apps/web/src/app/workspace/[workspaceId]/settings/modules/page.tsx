@@ -13,12 +13,14 @@ function Modules() {
   const workspaceId = useParams().workspaceId as string;
   const router = useRouter();
   const pathname = usePathname();
-  const policy = useSearchParams().get('policy');
+  const search = useSearchParams();
+  const policy = search.get('policy');
   return (
     <WorkspaceModules
       key={workspaceId}
       workspaceId={workspaceId}
       initialPolicy={policy}
+      initialSearch={search.get('module')}
       onPolicyChange={(next) => router.replace(next ? `${pathname}?policy=${encodeURIComponent(next)}` : pathname)}
     />
   );

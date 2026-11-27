@@ -11,7 +11,6 @@ import {
   SettingsNotice,
   SettingsPageHeader,
   SettingsTableToolbar,
-  countLabel,
 } from '@/components/settings/settings-ui';
 import {
   SettingsTableClear,
@@ -82,7 +81,6 @@ export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; a
   const shown = table.shown;
   const changes = changesFrom(rows, drafts);
   const unsavedCount = Object.keys(changes).length;
-  const offeredCount = rows.filter((row) => row.offered).length;
   const access = state?.access_policy ?? null;
   const accessHref = access ? ownerHref(access.owner_scope, access.id) : null;
 
@@ -110,14 +108,12 @@ export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; a
     downloadTableExport(DATASET_EXPORT_HEADERS, shown.map(datasetExportRow), format, `datasets_${date}`, 'Datasets');
   };
 
-  const unsaved =
-    unsavedCount === 0 ? 'No unsaved change' : `${unsavedCount} unsaved change${unsavedCount === 1 ? '' : 's'}`;
-
   return (
     <div className="space-y-6">
       <SettingsPageHeader
         title="Datasets"
-        badge={state ? `${offeredCount} offered · ${rows.length - offeredCount} not offered` : undefined}
+        // One total: how many namespaces (the Offered column says which are used).
+        badge={state ? `${rows.length} namespace${rows.length === 1 ? '' : 's'}` : undefined}
         description={
           <>
             The dataset namespaces {org ? 'the workspaces of this organization may use' : 'this workspace uses'}
@@ -169,12 +165,8 @@ export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; a
             search={table.search}
             onSearchChange={table.setSearch}
             searchPlaceholder="Search namespace, offered, not offered…"
-            meta={
-              <>
-                {`${countLabel(shown.length, rows.length, 'namespace')} · ${unsaved}`}
-                <SettingsTableClear table={table} />
-              </>
-            }
+            // No count above the search: the badge says how many, the pager how many are shown.
+            meta={<SettingsTableClear table={table} />}
           />
           <p className="text-xs text-muted-foreground" data-datasets-legend="">
             Unchecking a namespace hides its datasets {org ? 'in every workspace of the organization' : 'in this workspace'},

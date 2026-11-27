@@ -99,7 +99,10 @@ describe('Workspace settings › Maps', () => {
 
     await mounted.type(mounted.host.querySelector('input[placeholder="Search feeds…"]'), 'zebra');
     expect(attr('data-feed')).toEqual(['feed-37']);
-    expect(mounted.host.textContent).toContain('1 of 45 feeds');
+    // One total in the badge, no count above the search.
+    expect(mounted.host.textContent).toContain('45 feeds');
+    expect(mounted.host.textContent).not.toContain('1 of 45 feeds');
+    expect(mounted.host.textContent).not.toContain(' shown');
   });
 
   it('filters Group and Enabled from their columns, back to the first page; bulk actions follow', async () => {
@@ -130,5 +133,6 @@ describe('Workspace settings › Maps', () => {
     await mounted.click(mounted.host.querySelector('[data-action="clear-filters"]'));
     await mounted.type(mounted.host.querySelector('input[placeholder="Search layers…"]'), 'bridges');
     expect(attr('data-layer')).toEqual(['feed-01-bridges']);
+    expect(mounted.host.textContent).not.toContain('1 of 3 layers');
   });
 });

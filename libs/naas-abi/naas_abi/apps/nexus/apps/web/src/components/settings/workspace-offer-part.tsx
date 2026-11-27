@@ -16,7 +16,8 @@ export function WorkspaceOfferPart({
 }: {
   workspaceId: string;
   parts: readonly OfferPart[];
-  description: string;
+  /** Under the section's title; the page's header says it when left out. */
+  description?: string;
   /** Told after each change, e.g. to read the page's list again. */
   onChanged?: () => void;
 }) {

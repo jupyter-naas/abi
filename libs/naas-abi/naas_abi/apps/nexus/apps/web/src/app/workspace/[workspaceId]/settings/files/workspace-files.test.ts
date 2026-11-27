@@ -91,6 +91,9 @@ describe('WorkspaceFiles', () => {
     expect(choice(m, 'system_files', 'write')).toBeNull();
     expect(choice(m, 'system_files', 'read')?.disabled).toBe(true);
     expect(m.host.textContent).toContain('Viewers read theirs');
+    // The header of the pages under Features: its title and one total.
+    expect(m.host.querySelector('h2')?.textContent).toBe('Files');
+    expect(m.host.textContent).toContain('5 kinds of files');
   });
 
   it('turns Workspace Files off through the feature, and a file section to another mode through the offer', async () => {

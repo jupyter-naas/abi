@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { OfferSwitch } from '@/components/access/offer/offer-editor';
@@ -100,6 +100,7 @@ export function WorkspaceModules({
   initialPolicy = null,
   onPolicyChange,
   pickerPrefix,
+  initialSearch = null,
 }: {
   workspaceId: string;
   api?: IamAdminApi;
@@ -110,6 +111,8 @@ export function WorkspaceModules({
   onPolicyChange?: (policyId: string | null) => void;
   /** Before the Policy dropdown, in its row: Platform settings' Organization picker. */
   pickerPrefix?: ReactNode;
+  /** The search the table opens with (`?module=`: a page under Features linking to a module's row). */
+  initialSearch?: string | null;
 }) {
   const [policyId, setPolicyId] = useState<string | null>(initialPolicy);
   const [offer, setOffer] = useState<OfferState | null>(null);
@@ -151,6 +154,13 @@ export function WorkspaceModules({
     searchTexts: groupSearchTexts,
     initialSort: 'module',
   });
+  // A link from Agents, Apps or Workflows opens on its module's row: the search set once.
+  const searched = useRef(false);
+  useEffect(() => {
+    if (searched.current || !initialSearch) return;
+    searched.current = true;
+    table.setSearch(initialSearch);
+  }, [initialSearch, table]);
 
   const loadItems = async (row: ModuleRow) => {
     if (!offer) return;

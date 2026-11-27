@@ -72,7 +72,9 @@ describe('Workspace settings › Skills', () => {
     // The search reaches every skill, not only the page shown.
     await m.type(q('input[placeholder="Search skills..."]'), 'zebra');
     expect(rows()).toEqual(['skill-37']);
-    expect(m.host.textContent).toContain('1 of 45 skills');
+    // One total in the badge, no count above the search.
+    expect(m.host.textContent).toContain('45 skills');
+    expect(m.host.textContent).not.toContain('1 of 45 skills');
 
     // The Enabled column filters on the status, and goes back to the first page.
     await m.type(q('input[placeholder="Search skills..."]'), '');
@@ -80,7 +82,7 @@ describe('Workspace settings › Skills', () => {
     expect(shown()).toMatch(/^Rows 21–/);
     await filterColumn(m, 'enabled', 'Enabled');
     expect(shown()).toBe('Rows 1–20 of 41');
-    expect(m.host.textContent).toContain('41 of 45 skills · 41 enabled');
+    expect(m.host.textContent).not.toContain('41 enabled');
 
     await m.click(q('[data-action="clear-filters"]'));
     expect(shown()).toBe('Rows 1–20 of 45');
@@ -102,5 +104,6 @@ describe('Workspace settings › Skills', () => {
     expect(mounted.host.querySelectorAll('[data-skill]')).toHaveLength(0);
     expect(mounted.host.textContent).toContain('No skills match the current search and filters');
     expect(mounted.host.querySelector('[data-action="export"]')).not.toBeNull();
+    expect([...mounted.host.querySelectorAll('button')].map((b) => b.textContent)).toContain('Create skill');
   });
 });

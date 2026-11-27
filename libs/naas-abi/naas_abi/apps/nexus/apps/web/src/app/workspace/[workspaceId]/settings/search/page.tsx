@@ -21,7 +21,7 @@ import { Checkbox, radioClass } from '@/components/ui/checkbox';
 import { fieldClass } from '@/components/ui/input';
 import { SettingsReloadButton } from '@/components/settings/settings-reload';
 import {
-  SettingsEmpty, SettingsLoading, SettingsNotice, SettingsPageHeader, SettingsTableToolbar, countLabel,
+  SettingsEmpty, SettingsLoading, SettingsNotice, SettingsPageHeader, SettingsTableToolbar,
 } from '@/components/settings/settings-ui';
 import {
   SettingsTableClear, SettingsTableHead, SettingsTableNoMatch, useSettingsTable,
@@ -122,7 +122,6 @@ function SearchSettings() {
     sortValue: searchSortValue,
     initialSort: 'group',
   });
-  const enabledRows = entries.filter(entry => entry.on).length;
   const exportShown = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
     downloadTableExport(SEARCH_EXPORT_HEADERS, table.shown.map(searchExportRow), format, `search_${date}`, 'Search');
@@ -166,7 +165,8 @@ function SearchSettings() {
       {prompt.dialog}
       <SettingsPageHeader
         title="Search"
-        badge={`${enabledRows} enabled · ${entries.length - enabledRows} disabled`}
+        // One total: topics, features and web engines (the Enabled column says which are on).
+        badge={`${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`}
         description="What the search page of this workspace can look into. A disabled entry disappears from search for every member. Topics read every graph this workspace can read, unless a topic is limited to some of them."
         actions={
           <>
@@ -188,12 +188,8 @@ function SearchSettings() {
         search={table.search}
         onSearchChange={table.setSearch}
         searchPlaceholder="Search topics, features and engines..."
-        meta={
-          <>
-            {`${countLabel(table.shown.length, entries.length, 'entry', 'entries')} · ${enabledRows} enabled · ${topics.length} topic${topics.length === 1 ? '' : 's'}`}
-            <SettingsTableClear table={table} />
-          </>
-        }
+        // No count above the search: the badge says how many, the pager how many are shown.
+        meta={<SettingsTableClear table={table} />}
       />
 
       <div className="org-settings-users-table-wrap">

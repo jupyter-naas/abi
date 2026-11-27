@@ -21,7 +21,7 @@ import { useConfirm } from '@/components/ui/dialogs';
 import { SettingsReloadButton } from '@/components/settings/settings-reload';
 import {
   SettingsEmpty, SettingsLoading, SettingsNotice, SettingsPageHeader, SettingsSection,
-  SettingsTableToolbar, countLabel,
+  SettingsTableToolbar,
 } from '@/components/settings/settings-ui';
 import {
   SettingsTableClear, SettingsTableHead, SettingsTableNoMatch, useSettingsTable,
@@ -202,9 +202,6 @@ function MapsSettings() {
   );
 
   // ── Overview rows (read before an item's page returns: the table's hook comes first) ──
-  const shownCount = all.filter(
-    (e) => !hidden.includes(e.id) && !hiddenFeeds.includes(e.feedId ?? e.id),
-  ).length;
   const feedsById = new Map(feeds.map((feed) => [feed.id, feed]));
   // Every feed with its layers (records, built-ins, graph layers); a record whose layers are not
   // listed yet still gets its row. Deployment feeds this workspace may not use (e.g. set to "No
@@ -378,7 +375,8 @@ function MapsSettings() {
       {confirmDialog}
       <SettingsPageHeader
         title="Maps"
-        badge={`${shownCount} shown`}
+        // One total: how many feeds (the Enabled column says which are shown).
+        badge={`${feedEntries.length} feed${feedEntries.length === 1 ? '' : 's'}`}
         description="Feeds are data sources; layers are what Maps lists and draws, each a view on one feed. Hidden layers disappear for every member of the workspace."
         actions={
           <>
@@ -434,12 +432,8 @@ function MapsSettings() {
               </>
             )
           }
-          meta={
-            <>
-              {countLabel(feedTable.shown.length, feedEntries.length, 'feed')}
-              <SettingsTableClear table={feedTable} />
-            </>
-          }
+          // No count above the search: the badge says how many, the pager how many are shown.
+          meta={<SettingsTableClear table={feedTable} />}
         />
         <div className="org-settings-users-table-wrap">
           <table className="org-settings-users-table table-fixed">
@@ -702,12 +696,7 @@ function FeedPage({
             search={layerTable.search}
             onSearchChange={layerTable.setSearch}
             searchPlaceholder="Search layers…"
-            meta={
-              <>
-                {countLabel(layerTable.shown.length, layerRows.length, 'layer')}
-                <SettingsTableClear table={layerTable} />
-              </>
-            }
+            meta={<SettingsTableClear table={layerTable} />}
           />
           <div className="org-settings-users-table-wrap">
             <table className="org-settings-users-table table-fixed">

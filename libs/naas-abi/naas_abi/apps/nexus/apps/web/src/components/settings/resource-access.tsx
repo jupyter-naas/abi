@@ -13,7 +13,6 @@ import {
   SettingsNotice,
   SettingsPageHeader,
   SettingsTableToolbar,
-  countLabel,
   SettingsSection,
 } from '@/components/settings/settings-ui';
 import {
@@ -197,20 +196,10 @@ export function ResourceAccessEditor({
     initialSort: 'name',
   });
   const shown = table.shown;
-  const enabledCount =
-    kind === 'ontologies'
-      ? (draft.enabled || []).length
-      : rows.filter((row) => row.access !== 'none').length;
-  const editableCount = kind === 'graphs' ? rows.filter((row) => row.access === 'edit').length : 0;
-  const unavailableCount = catalog.filter((item) => !item.available).length;
-  const noun = kind === 'ontologies' ? 'ontology' : 'graph';
-  const meta = [
-    countLabel(shown.length, catalog.length, noun, kind === 'ontologies' ? 'ontologies' : 'graphs'),
-    kind === 'ontologies' ? `${enabledCount} enabled` : `${enabledCount} readable · ${editableCount} editable`,
-    unavailableCount ? `${unavailableCount} unavailable` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  // One total: how many ontologies or graphs (the columns say which are enabled, read, edited).
+  const total = `${catalog.length} ${
+    kind === 'ontologies' ? (catalog.length === 1 ? 'ontology' : 'ontologies') : catalog.length === 1 ? 'graph' : 'graphs'
+  }`;
 
   const exportShown = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
@@ -227,7 +216,7 @@ export function ResourceAccessEditor({
     <section className="space-y-4" aria-busy={loading || saving}>
       <SettingsPageHeader
         title={title}
-        badge={snapshot ? (kind === 'ontologies' ? `${enabledCount} enabled` : `${enabledCount} readable`) : undefined}
+        badge={snapshot ? total : undefined}
         description={
           kind === 'ontologies'
             ? 'Choose the ontologies available in this workspace.'
@@ -258,7 +247,7 @@ export function ResourceAccessEditor({
         snapshot && (
           <>
             {kind === 'graphs' && (
-              <SettingsSection title="Workspace access">
+              <SettingsSection title="Options">
                 <fieldset className="flex flex-col gap-2.5" disabled={saving}>
                   <Checkbox
                     checked={!!draft.read_all}
@@ -288,12 +277,8 @@ export function ResourceAccessEditor({
               search={table.search}
               onSearchChange={table.setSearch}
               searchPlaceholder={`Search ${title.toLowerCase()}…`}
-              meta={
-                <>
-                  {meta}
-                  <SettingsTableClear table={table} />
-                </>
-              }
+              // No count above the search: the badge says how many, the pager how many are shown.
+              meta={<SettingsTableClear table={table} />}
             />
             <div className="org-settings-users-table-wrap">
               <table className="org-settings-users-table">

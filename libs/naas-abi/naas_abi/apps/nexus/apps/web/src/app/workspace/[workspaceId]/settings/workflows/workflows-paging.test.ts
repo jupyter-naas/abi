@@ -55,7 +55,8 @@ describe('Workspace settings › Workflows', () => {
     // The search reaches every row, not only the page shown.
     await m.type(q('input[placeholder="Search workflows..."]'), 'zebra');
     expect(rows()).toEqual(['workflow/acme.people/flow-37']);
-    expect(m.host.textContent).toContain('1 of 45 items');
+    // No count above the search: the badge says how many workflows, the pager how many are shown.
+    expect(m.host.textContent).not.toContain('1 of 45');
     await m.type(q('input[placeholder="Search workflows..."]'), '');
 
     // The Type column filters, and goes back to the first page.
@@ -66,5 +67,14 @@ describe('Workspace settings › Workflows', () => {
     expect(rows().every((key) => key?.startsWith('workflow/'))).toBe(true);
     await m.click(q('[data-action="clear-filters"]'));
     expect(shown()).toBe('Rows 1–20 of 45');
+  });
+
+  it("says one total, and links each item's module to its row in Access › Modules", async () => {
+    const m = (mounted = await mount(WorkflowsSettingsPage, {}));
+    await m.flush();
+    expect(m.host.textContent).toContain('45 workflows');
+    expect(m.host.textContent).not.toContain('45 items');
+    const link = m.host.querySelector('[data-workflow="workflow/acme.people/flow-01"] a[data-module-link]');
+    expect(link?.getAttribute('href')).toBe('/workspace/ws-1/settings/modules?module=acme.people');
   });
 });

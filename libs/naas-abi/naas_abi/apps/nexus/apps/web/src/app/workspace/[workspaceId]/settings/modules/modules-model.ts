@@ -14,6 +14,15 @@ import {
 } from '@/lib/access-model/workspace-offer';
 import type { PublishersView } from '@/lib/iam-admin/types';
 
+/**
+ * Access › Modules on a module's row (its search set to the module): where the pages under
+ * Features (Agents, Apps, Workflows) send for what the workspace offers of a module.
+ */
+export function moduleRowHref(workspaceId: string, module: string): string {
+  const page = `/workspace/${encodeURIComponent(workspaceId)}/settings/modules`;
+  return module ? `${page}?module=${encodeURIComponent(module)}` : page;
+}
+
 export type ModuleOffer = 'whole' | 'items' | 'none';
 export const MODULE_OFFER_LABELS: Record<ModuleOffer, string> = {
   whole: 'Whole module',

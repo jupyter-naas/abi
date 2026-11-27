@@ -167,6 +167,19 @@ describe('Settings › Access › Modules', () => {
     );
   });
 
+  it("opens on a module's row when another page links to it (`?module=`)", async () => {
+    const parts = setup();
+    mounted = await mount(WorkspaceModules, {
+      workspaceId: 'ws-1',
+      api: parts.api,
+      offerApi: parts.offerApi as unknown as OfferApi,
+      initialSearch: 'acme.sales',
+    });
+    await mounted.flush();
+    expect(rowKeys(mounted)).toEqual(['acme.sales']);
+    expect((mounted.host.querySelector('input[type="text"]') as HTMLInputElement).value).toBe('acme.sales');
+  });
+
   it('is read-only when IAM does not let the caller change "<W> access"', async () => {
     const parts = setup();
     parts.offerApi.read.mockResolvedValue({ ...OFFER, editable: false });
