@@ -98,6 +98,21 @@ def test_a_generated_nats_stack_runs_the_idp_in_its_own_container(
     assert "IDP_SERVICE_KEY" not in env  # an operator creates it (a module's key)
 
 
+def test_the_engine_signs_in_through_the_redirect_uri_the_idp_registers(
+    tmp_path: Path,
+) -> None:
+    # Without API_URL the Nexus API fell back to http://localhost:8000 and sent
+    # that redirect URI, which the idp client refused (invalid_request, #1643).
+    setup_local_deploy(str(tmp_path), base_domain="example.com", nats=True)
+    services = _services(tmp_path / "docker-compose.yml")
+    abi = dict(e.split("=", 1) for e in services["abi"]["environment"])
+    idp = dict(e.split("=", 1) for e in services["idp"]["environment"])
+
+    assert abi["API_URL"] == "${NEXUS_API_URL}"
+    assert idp["ABI_IDP_REDIRECT_URIS"] == abi["API_URL"] + "/api/auth/oidc/callback"
+    assert _env_values(tmp_path / ".env")["NEXUS_API_URL"].startswith("https://")
+
+
 def test_deploy_local_moves_the_engine_keys_out_of_env(tmp_path: Path) -> None:
     # An engine before the sidecar wrote IAM's keys into .env, and docker
     # compose refused it ("unexpected character "/" in variable name").

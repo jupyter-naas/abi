@@ -92,6 +92,10 @@ x-abi-template: &abi_template
     - VECTOR_STORE_ADAPTER=qdrant
     - QDRANT_HOST=qdrant
     - QDRANT_PORT=${QDRANT_PORT}
+    # The Nexus API's public URL: the sign-in redirect URI
+    # (<API_URL>/api/auth/oidc/callback) must be the one the idp service
+    # registers (ABI_IDP_REDIRECT_URIS below), not the localhost default.
+    - API_URL=${NEXUS_API_URL}
     # Override to point at a remote/dedicated Ollama server instead of the host.
     - ABI_OLLAMA_BASE_URL=${ABI_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
 {% if INCLUDE_CODING %}

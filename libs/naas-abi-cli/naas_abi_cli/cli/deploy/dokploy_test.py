@@ -297,6 +297,8 @@ def test_abi_is_built_from_the_project_dockerfile_without_a_source_mount(
             assert not volume.startswith(".:"), (name, volume)
             assert ".venv" not in volume, (name, volume)
     assert "ENV=dokploy" in services["abi"]["environment"]
+    # The sign-in redirect URI is the public one the idp registers (#1643).
+    assert "API_URL=${NEXUS_API_URL}" in services["abi"]["environment"]
 
 
 @pytest.mark.parametrize("nats, coding", MODES)
