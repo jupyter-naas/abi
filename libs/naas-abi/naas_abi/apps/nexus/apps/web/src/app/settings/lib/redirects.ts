@@ -13,6 +13,7 @@ import {
 import { PLATFORM_DRIVES_PATH } from '../drives/drives-model';
 import { PLATFORM_GENERAL_PATH } from '../general/general-model';
 import { PLATFORM_ORGANIZATIONS_PATH } from '../organizations/organizations-model';
+import { PLATFORM_THEME_PATH } from '../theme/theme-model';
 import { PLATFORM_USERS_PATH } from '../users/users-model';
 import { SECTION_PATHS } from './service-pages';
 import {
@@ -30,6 +31,7 @@ const OLD_CONSOLE_PATH = '/settings/console';
 /** The first segments under /settings that Platform Settings serves, from its section paths. */
 export const PLATFORM_SETTINGS_SECTIONS: readonly string[] = [
   PLATFORM_GENERAL_PATH,
+  PLATFORM_THEME_PATH,
   PLATFORM_TABLES_PATH,
   SECTION_PATHS.system,
   SECTION_PATHS.activity,

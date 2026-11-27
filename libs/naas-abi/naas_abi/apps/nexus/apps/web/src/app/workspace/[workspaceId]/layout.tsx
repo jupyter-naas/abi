@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { getWorkspaceSwitchPath, isWorkspacePathAllowed, pathNeedsAgentCatalog, pathNeedsGraphExport } from '@/lib/feature-access';
-import { GraphExportToastHost } from '@/components/graph/graph-export-toast-host';
+import { GraphExportResume } from '@/components/graph/graph-export-resume';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { selectSession, useAuthStore } from '@/stores/auth';
 import { useWebPassReady } from '@/lib/use-web-pass-ready';
@@ -112,7 +112,7 @@ export default function WorkspaceIdLayout({
 
   return (
     <>
-      {pathNeedsGraphExport(pathname) && <GraphExportToastHost workspaceId={workspaceId} />}
+      {pathNeedsGraphExport(pathname) && <GraphExportResume workspaceId={workspaceId} />}
       {webPassReady ? children : null}
     </>
   );

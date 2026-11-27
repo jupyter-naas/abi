@@ -4,13 +4,15 @@ import './data/data.css';
 
 import { Fragment, useMemo, useState } from 'react';
 import { Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { createDataApi, type DataApi } from './data/data-api';
 import type { ResourceEntry } from './data/data-types';
 import { DeleteDialog } from './data/dialogs';
 import { formatExpiry } from './system-format';
 import { groupRemoteModules, moduleTone } from './system-model';
 import type { ModulesView } from './system-types';
-import { Chips, JobList, RowToggle, Section, SourceNotes, Status, toggled } from './system-ui';
+import { Chips, JobList, RowToggle, SourceNotes, Status, toggled } from './system-ui';
 
 /** A discovery instance as the Data tab names it (``<module>/<instance>``). */
 function instanceEntry(moduleId: string, instanceId: string): ResourceEntry {
@@ -53,7 +55,7 @@ export function SystemModules({
 
   return (
     <div className="system-tab-body">
-      <Section title="Engine modules" subtitle="Loaded in the engine process this API runs in.">
+      <Card title="Engine modules" description="Loaded in the engine process this API runs in." bodyClassName="space-y-3">
         {view.engine.length === 0 ? (
           <p className="system-empty">No modules loaded.</p>
         ) : (
@@ -84,9 +86,9 @@ export function SystemModules({
             </table>
           </div>
         )}
-      </Section>
+      </Card>
 
-      <Section title="Remote modules" subtitle="Registered in NATS discovery, one row per module.">
+      <Card title="Remote modules" description="Registered in NATS discovery, one row per module." bodyClassName="space-y-3">
         <SourceNotes sources={view.sources} />
         {groups.length === 0 ? (
           view.sources.discovery?.available !== false && (
@@ -151,15 +153,15 @@ export function SystemModules({
                                     <td>v{instance.contract_major}</td>
                                     <td>{formatExpiry(instance.expires_at)}</td>
                                     <td className="system-num">
-                                      <button
-                                        type="button"
-                                        className="data-button data-button-danger-ghost"
+                                      <Button
+                                        variant="destructive-ghost"
+                                        size="sm"
                                         aria-label={`Evict ${instance.instance_id}`}
                                         title="Remove this registration (crashed or stuck instances)"
                                         onClick={() => setEvicting(instanceEntry(group.module_id, instance.instance_id))}
                                       >
                                         <Trash2 size={13} aria-hidden="true" /> Evict
-                                      </button>
+                                      </Button>
                                     </td>
                                   </tr>
                                 ))}
@@ -175,7 +177,7 @@ export function SystemModules({
             </table>
           </div>
         )}
-      </Section>
+      </Card>
       {evicting && (
         <DeleteDialog
           entry={evicting}

@@ -1,110 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useEffect, useRef, useCallback, useId, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { useAgentsStore, type Agent } from '@/stores/agents';
-import { useWorkspaceStore } from '@/stores/workspace';
-
-// ============================================================
-// Generic Modal Backdrop
-// ============================================================
-
-export function ModalBackdrop({
-  open,
-  onClose,
-  children,
-  widthClassName = 'max-w-md',
-}: {
-  open: boolean;
-  onClose: () => void;
-  children: ReactNode;
-  /** Content width; prompts use the default, previews go wider. */
-  widthClassName?: string;
-}) {
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      // An Escape a field inside has used (a list it closed) leaves the modal open.
-      if (e.key === 'Escape' && !e.defaultPrevented) onClose();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
-        onClick={onClose}
-      />
-      {/* Content */}
-      <div className={cn('relative z-10 mx-4 w-full animate-in zoom-in-95 fade-in duration-200', widthClassName)}>
-        {children}
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-// ============================================================
-// useAgentList - same list as chat page (AgentSelector)
-// Use this in any dialog that needs to show or select agents.
-// ============================================================
-
-export function useAgentList(searchQuery = '') {
-  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
-  const { agents, fetchAgents, getAgent } = useAgentsStore();
-
-  // The API lists exactly the agents the caller may use in the workspace.
-  const usableAgents = agents;
-
-  const filteredAgents = useMemo(
-    () =>
-      searchQuery.trim()
-        ? usableAgents.filter(
-            (a: Agent) =>
-              a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              a.description.toLowerCase().includes(searchQuery.toLowerCase())
-          )
-        : usableAgents,
-    [usableAgents, searchQuery]
-  );
-
-  const defaultAgents = useMemo(
-    () =>
-      filteredAgents
-        .filter((a: Agent) => a.isDefault)
-        .sort((a: Agent, b: Agent) => a.name.localeCompare(b.name)),
-    [filteredAgents]
-  );
-
-  const customAgents = useMemo(
-    () =>
-      filteredAgents
-        .filter((a: Agent) => !a.isDefault)
-        .sort((a: Agent, b: Agent) => a.name.localeCompare(b.name)),
-    [filteredAgents]
-  );
-
-  useEffect(() => {
-    if (currentWorkspaceId) {
-      fetchAgents(currentWorkspaceId);
-    }
-  }, [currentWorkspaceId, fetchAgents]);
-
-  return {
-    usableAgents,
-    defaultAgents,
-    customAgents,
-    filteredAgents,
-    getAgent,
-  } as const;
-}
+import { Dialog } from '@/components/ui/dialog';
+import { Field } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Notice } from '@/components/ui/notice';
+import { Spinner } from '@/components/ui/spinner';
 
 // ============================================================
 // PromptDialog - replaces window.prompt
@@ -133,6 +36,7 @@ export function PromptDialog({
   onCancel: () => void;
   validate?: (value: string) => string | null; // returns error message or null
 }) {
+  const fieldId = useId();
   const [value, setValue] = useState(defaultValue);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -141,72 +45,53 @@ export function PromptDialog({
     if (open) {
       setValue(defaultValue);
       setError(null);
-      // Focus input after animation
       requestAnimationFrame(() => inputRef.current?.select());
     }
   }, [open, defaultValue]);
 
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim();
-    if (!trimmed) {
-      setError('Name cannot be empty');
-      return;
-    }
-    if (validate) {
-      const err = validate(trimmed);
-      if (err) {
-        setError(err);
-        return;
-      }
-    }
-    onConfirm(trimmed);
+    const err = !trimmed ? 'Name cannot be empty' : (validate?.(trimmed) ?? null);
+    if (err) setError(err);
+    else onConfirm(trimmed);
   }, [value, validate, onConfirm]);
 
   return (
-    <ModalBackdrop open={open} onClose={onCancel}>
-      <div className="border border-border bg-background p-6 shadow-2xl">
-        <h3 className="text-base font-semibold text-foreground">{title}</h3>
-        {description && (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-        )}
-        <input
+    <Dialog
+      open={open}
+      title={title}
+      description={description}
+      onClose={onCancel}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel}>
+            {cancelLabel}
+          </Button>
+          <Button onClick={handleSubmit}>{confirmLabel}</Button>
+        </>
+      }
+    >
+      <Field label={title} error={error} htmlFor={fieldId} className="[&>label]:sr-only">
+        <Input
+          id={fieldId}
           ref={inputRef}
-          type="text"
           value={value}
           onChange={(e) => {
             setValue(e.target.value);
             setError(null);
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') handleSubmit();
+            // ⌘/Ctrl+Enter is the dialog's own submit: answering here too would submit twice.
+            if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) handleSubmit();
           }}
           placeholder={placeholder}
-          className={cn(
-            'mt-4 w-full border bg-muted/50 px-3 py-2 text-sm text-foreground',
-            'outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-workspace-accent focus-visible:ring-offset-2',
-            error ? 'border-red-500' : 'border-border'
-          )}
-          autoFocus
+          aria-invalid={error ? true : undefined}
+          className={cn(error && 'border-destructive')}
+          data-autofocus
         />
-        {error && (
-          <p className="mt-1 text-xs text-red-500">{error}</p>
-        )}
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            {cancelLabel}
-          </button>
-          <button
-            onClick={handleSubmit}
-            className="bg-workspace-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-workspace-accent/90"
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </ModalBackdrop>
+      </Field>
+    </Dialog>
   );
 }
 
@@ -214,6 +99,11 @@ export function PromptDialog({
 // ConfirmDialog - replaces window.confirm
 // ============================================================
 
+/**
+ * Asks before an action. With `confirmText`, the action stays disabled until that text is
+ * typed (type-to-confirm, for what cannot be undone). `busy` and `error` let an async
+ * action keep the dialog open while it runs and say why it failed.
+ */
 export function ConfirmDialog({
   open,
   title,
@@ -221,35 +111,74 @@ export function ConfirmDialog({
   confirmLabel = 'Delete',
   cancelLabel = 'Cancel',
   destructive = true,
+  confirmText,
+  busy = false,
+  error,
+  children,
   onConfirm,
   onCancel,
 }: {
   open: boolean;
   title: string;
-  description?: string;
+  description?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
+  confirmText?: string;
+  busy?: boolean;
+  error?: ReactNode;
+  children?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const fieldId = useId();
+  const [typed, setTyped] = useState('');
+  useEffect(() => {
+    if (open) setTyped('');
+  }, [open]);
+  const ready = !busy && (!confirmText || typed.trim() === confirmText);
+  const confirm = () => {
+    if (ready) onConfirm();
+  };
   return (
-    <ModalBackdrop open={open} onClose={onCancel}>
-      <div className="border border-border bg-background p-6 shadow-2xl">
-        <h3 className="text-base font-semibold text-foreground">{title}</h3>
-        {description && (
-          <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{description}</p>
-        )}
-        <div className="mt-6 flex justify-end gap-2">
+    <Dialog
+      open={open}
+      size="sm"
+      title={title}
+      tone={destructive ? 'danger' : 'neutral'}
+      onClose={onCancel}
+      onSubmit={confirm}
+      footer={
+        <>
           <Button variant="ghost" onClick={onCancel}>
             {cancelLabel}
           </Button>
-          <Button variant={destructive ? 'destructive' : 'primary'} onClick={onConfirm}>
+          <Button variant={destructive ? 'destructive' : 'primary'} disabled={!ready} onClick={confirm}>
+            {busy ? <Spinner size={14} /> : null}
             {confirmLabel}
           </Button>
-        </div>
-      </div>
-    </ModalBackdrop>
+        </>
+      }
+    >
+      {description ? <p className="whitespace-pre-line text-muted-foreground">{description}</p> : null}
+      {children}
+      {confirmText ? (
+        <Field label={<>Type <code className="font-mono">{confirmText}</code> to confirm</>} htmlFor={fieldId}>
+          <Input
+            id={fieldId}
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) confirm();
+            }}
+            autoComplete="off"
+            spellCheck={false}
+            data-autofocus
+          />
+        </Field>
+      ) : null}
+      {error ? <Notice tone="error">{error}</Notice> : null}
+    </Dialog>
   );
 }
 
@@ -285,7 +214,10 @@ export function usePrompt() {
       confirmLabel?: string;
     }): Promise<string | null> => {
       return new Promise((resolve) => {
-        setState({
+        // A new question replaces a pending one: the pending one is answered "cancelled".
+        setState((previous) => {
+          previous.resolve?.(null);
+          return {
           open: true,
           title: opts.title,
           description: opts.description,
@@ -293,6 +225,7 @@ export function usePrompt() {
           defaultValue: opts.defaultValue || '',
           confirmLabel: opts.confirmLabel || 'Create',
           resolve,
+          };
         });
       });
     },
@@ -325,6 +258,7 @@ interface ConfirmState {
   open: boolean;
   title: string;
   description?: string;
+  confirmText?: string;
   confirmLabel: string;
   destructive: boolean;
   resolve: ((value: boolean) => void) | null;
@@ -345,15 +279,21 @@ export function useConfirm() {
       description?: string;
       confirmLabel?: string;
       destructive?: boolean;
+      /** Type-to-confirm: the text the person must type first. */
+      confirmText?: string;
     }): Promise<boolean> => {
       return new Promise((resolve) => {
-        setState({
+        setState((previous) => {
+          previous.resolve?.(false);
+          return {
           open: true,
           title: opts.title,
           description: opts.description,
           confirmLabel: opts.confirmLabel || 'Delete',
           destructive: opts.destructive ?? true,
+          confirmText: opts.confirmText,
           resolve,
+          };
         });
       });
     },
@@ -367,6 +307,7 @@ export function useConfirm() {
       description={state.description}
       confirmLabel={state.confirmLabel}
       destructive={state.destructive}
+      confirmText={state.confirmText}
       onConfirm={() => {
         state.resolve?.(true);
         setState((s) => ({ ...s, open: false, resolve: null }));

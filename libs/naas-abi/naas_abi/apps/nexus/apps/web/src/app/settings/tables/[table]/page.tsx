@@ -36,9 +36,9 @@ import { useTablesView } from '../../lib/tables-view';
 import { matchesSearch } from '../../lib/search';
 import { pageWindow, TABLE_PAGE_SIZE } from '../../lib/pagination';
 import { fetchTableSchema, SchemaTable, type SchemaState } from '../../components/schema-table';
-import { SearchBox } from '@/components/settings/search-box';
 import '@/app/organizations/[orgId]/settings/users/users.css';
 import { countFacets, readApiError, safeDecode } from '../../lib/page-helpers';
+import { SearchBox } from '@/components/ui/search-box';
 
 /** One table, as `GET /api/admin/tables/{name}` returns it. */
 interface PlatformTable {

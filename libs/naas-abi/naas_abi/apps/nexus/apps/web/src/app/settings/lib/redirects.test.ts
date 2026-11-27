@@ -131,6 +131,7 @@ describe('PLATFORM_SETTINGS_SECTIONS', () => {
   it('is the first segment of each section path', () => {
     expect(PLATFORM_SETTINGS_SECTIONS).toEqual([
       'general',
+      'theme',
       'tables',
       'system',
       'activity',

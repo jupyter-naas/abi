@@ -35,7 +35,7 @@ function streamedExport(counts: { triples: string; individuals: string }) {
 describe('graph export jobs', () => {
   beforeEach(() => {
     authFetch.mockReset();
-    useGraphExportStore.setState({ recordsByWorkspace: {}, toasts: [], isExportPageActive: true });
+    useGraphExportStore.setState({ recordsByWorkspace: {}, isExportPageActive: true });
   });
 
   it('reads the counts from the headers and stops the streamed body', async () => {

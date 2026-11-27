@@ -9,13 +9,11 @@ import { ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/input';
-import {
-  SettingsField,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsSection,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
+import { Loading } from '@/components/ui/spinner';
+import { Field } from '@/components/ui/field';
+import { Card } from '@/components/ui/card';
 
 const getApiBase = () => getApiUrl();
 
@@ -174,10 +172,10 @@ export default function ModelDetailPage() {
       </div>
 
       {loading ? (
-        <SettingsLoading label="Loading model…" />
+        <Loading label="Loading model…" />
       ) : error && !model ? (
         <div className="space-y-4">
-          <SettingsNotice tone="error">{error}</SettingsNotice>
+          <Notice tone="error">{error}</Notice>
           <Button variant="secondary" onClick={() => void load()}>
             Retry
           </Button>
@@ -204,18 +202,18 @@ export default function ModelDetailPage() {
             }
           />
 
-          <SettingsSection title="Display properties">
+          <Card title="Display properties">
             <div className="space-y-4">
-              <SettingsField label="Name">
+              <Field label="Name">
                 <Input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   placeholder="Model display name"
                 />
-              </SettingsField>
+              </Field>
 
-              <SettingsField label="Description">
+              <Field label="Description">
                 <Textarea
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
@@ -223,18 +221,18 @@ export default function ModelDetailPage() {
                   className="resize-y"
                   placeholder="Short description shown in the model list"
                 />
-              </SettingsField>
+              </Field>
 
-              <SettingsField label="Image URL">
+              <Field label="Image URL">
                 <Input
                   type="text"
                   value={form.image}
                   onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
                   placeholder="https://… or a relative asset path"
                 />
-              </SettingsField>
+              </Field>
 
-              <SettingsField label="Context window">
+              <Field label="Context window">
                 <Input
                   type="number"
                   min={0}
@@ -243,11 +241,11 @@ export default function ModelDetailPage() {
                   placeholder="e.g. 200000"
                 />
                 {contextWindowInvalid && <p className="text-xs text-destructive">Context window must be a number.</p>}
-              </SettingsField>
+              </Field>
             </div>
-          </SettingsSection>
+          </Card>
 
-          <SettingsSection title="Source identity (read-only)">
+          <Card title="Source identity (read-only)">
             <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
               <ReadOnly label="Model ID" value={model.model_id} mono />
               <ReadOnly label="Provider" value={model.provider} />
@@ -255,7 +253,7 @@ export default function ModelDetailPage() {
               <ReadOnly label="Status" value={model.configured ? 'Configured' : 'Not configured'} />
               <ReadOnly label="Module path" value={model.module_path} mono wide />
             </dl>
-          </SettingsSection>
+          </Card>
 
           <div className="flex items-center gap-3 border-t border-border pt-5">
             <Button onClick={() => void handleSave()} disabled={!isDirty || saving || contextWindowInvalid}>

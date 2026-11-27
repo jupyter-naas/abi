@@ -4,7 +4,8 @@
 import { useEffect, useState } from 'react';
 import { Binary, FileQuestion } from 'lucide-react';
 import { formatBytes, isImage } from '../data-model';
-import { EmptyState } from '../data-ui';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const HEX_BYTES = 4096;
 const IMAGE_LIMIT = 15 * 1024 * 1024;
@@ -37,7 +38,7 @@ function ImagePreview({ name, load }: { name: string; load: () => Promise<Blob |
       if (revoked) URL.revokeObjectURL(revoked);
     };
   }, [load]);
-  if (failed) return <EmptyState icon={FileQuestion} title="Preview unavailable" />;
+  if (failed) return <EmptyState icon={<FileQuestion size={22} strokeWidth={1.5} />} title="Preview unavailable" />;
   if (!url) return <div className="binary-image-loading" aria-busy="true" />;
   return (
     <figure className="binary-image">
@@ -65,14 +66,12 @@ export function BinaryView({
   }
   return (
     <div className="binary">
-      <EmptyState icon={Binary} title="Binary content">
-        {[formatBytes(size), mediaType].filter(Boolean).join(' · ') || 'Not text'}
-      </EmptyState>
+      <EmptyState icon={<Binary size={22} strokeWidth={1.5} />} title="Binary content" description={[formatBytes(size), mediaType].filter(Boolean).join(' · ') || 'Not text'} />
       {load && !lines && (
         <div className="binary-actions">
-          <button
-            type="button"
-            className="data-button"
+          <Button
+            variant="secondary"
+            size="sm"
             disabled={busy}
             onClick={async () => {
               setBusy(true);
@@ -82,7 +81,7 @@ export function BinaryView({
             }}
           >
             {busy ? 'Loading…' : 'Show hex dump'}
-          </button>
+          </Button>
         </div>
       )}
       {lines && (

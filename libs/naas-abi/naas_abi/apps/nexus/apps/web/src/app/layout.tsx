@@ -4,6 +4,7 @@ import Script from 'next/script';
 import { AnalyticsPageTracker } from '@/components/analytics-page-tracker';
 import { AuthSessionManager } from '@/components/auth-session-manager';
 import { ThemeProvider } from '@/components/theme-provider';
+import { Toaster } from '@/components/ui/toast';
 import { ViewBanner } from '@/components/view-as/view-banner';
 import { TenantProvider } from '@/contexts/tenant-context';
 import { WebSocketProvider } from '@/contexts/websocket-context';
@@ -159,6 +160,8 @@ export default function RootLayout({
               <AnalyticsPageTracker />
               {children}
             </WebSocketProvider>
+            {/* The app's one toast stack: any component calls toast() from components/ui/toast. */}
+            <Toaster />
           </TenantProvider>
         </ThemeProvider>
       </body>

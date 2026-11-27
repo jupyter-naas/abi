@@ -3,7 +3,8 @@
 /** Small pieces shared by the key-value and cache views: key families, expiry, value lines. */
 import { formatBytes, formatDuration } from '../data-model';
 import type { ResourceEntry } from '../data-types';
-import { Badge, useNow, type Tone } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { useNow, type Tone } from '../data-ui';
 
 const PREFIX = /^([A-Za-z0-9_.-]{1,24})[:/]/;
 
@@ -27,9 +28,9 @@ export function keyFamily(key: string): KeyFamily | null {
 }
 
 const FAMILY_TONES: Record<KeyFamily, Tone> = {
-  lock: 'warn',
+  lock: 'warning',
   session: 'info',
-  job: 'accent',
+  job: 'primary',
   other: 'neutral',
 };
 
@@ -38,7 +39,7 @@ export function PrefixBadge({ id }: { id: string }) {
   const family = keyFamily(id);
   if (!prefix || !family) return null;
   return (
-    <Badge tone={FAMILY_TONES[family]} mono title={`Key family "${prefix}"`}>
+    <Badge variant={FAMILY_TONES[family]} mono title={`Key family "${prefix}"`}>
       {prefix}
     </Badge>
   );
@@ -56,8 +57,8 @@ export function ttlState(expiresAt: string | undefined, now: number): TtlState {
   const at = Date.parse(expiresAt);
   if (Number.isNaN(at)) return { tone: 'neutral', label: 'no expiry', seconds: null };
   const seconds = Math.round((at - now) / 1000);
-  if (seconds <= 0) return { tone: 'danger', label: 'expired', seconds: 0 };
-  if (seconds < 60) return { tone: 'warn', label: `expires in ${seconds} s`, seconds };
+  if (seconds <= 0) return { tone: 'destructive', label: 'expired', seconds: 0 };
+  if (seconds < 60) return { tone: 'warning', label: `expires in ${seconds} s`, seconds };
   return { tone: 'info', label: `expires in ${formatDuration(seconds)}`, seconds };
 }
 
@@ -68,7 +69,7 @@ export function TtlBadge({ expiresAt }: { expiresAt?: string }) {
   const state = ttlState(expiresAt, now);
   return (
     <span className="data-keyvalue-ttl" title={expiresAt ? new Date(expiresAt).toLocaleString() : undefined}>
-      <Badge tone={state.tone}>{state.label}</Badge>
+      <Badge variant={state.tone}>{state.label}</Badge>
     </span>
   );
 }
@@ -76,13 +77,13 @@ export function TtlBadge({ expiresAt }: { expiresAt?: string }) {
 const ENCODING_LABELS: Record<string, [string, Tone]> = {
   json: ['JSON', 'info'],
   text: ['Text', 'neutral'],
-  binary: ['Binary', 'warn'],
+  binary: ['Binary', 'warning'],
 };
 
 export function EncodingBadge({ encoding }: { encoding?: string }) {
   if (!encoding) return null;
   const [label, tone] = ENCODING_LABELS[encoding] ?? [encoding, 'neutral'];
-  return <Badge tone={tone}>{label}</Badge>;
+  return <Badge variant={tone}>{label}</Badge>;
 }
 
 /** The one-line value under a key: the server's snippet, or what kind of bytes it holds. */

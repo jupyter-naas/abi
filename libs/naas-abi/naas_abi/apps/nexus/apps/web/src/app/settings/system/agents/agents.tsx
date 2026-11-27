@@ -15,9 +15,15 @@ import * as Tooltip from '@radix-ui/react-tooltip';
 import { AlertTriangle, Bot, MessageSquare, RefreshCw, Square, Waypoints, X } from 'lucide-react';
 import type { Failure } from '../data/data-api';
 import { absoluteTime, plural } from '../data/data-model';
-import { CopyButton, EmptyState, Field, Hint, Notice, RelativeTime, SkeletonRows, StatusPill, useNow } from '../data/data-ui';
-import { Modal } from '../data/modal';
-import { ToastStack, useToasts } from '../data/toasts';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/dialogs';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Notice } from '@/components/ui/notice';
+import { Loading } from '@/components/ui/spinner';
+import { Tabs } from '@/components/ui/tabs';
+import { toast } from '@/components/ui/toast';
+import { CopyButton, Property, Hint, RelativeTime, StatusPill, useNow } from '../data/data-ui';
 import { formatMs, moduleLabel } from '../jobs/jobs-model';
 import { createAgentsApi, type AgentsApi } from './agents-api';
 import { STATUS_FILTERS, isActive, isCancellable, runDuration, splitKey, statusLabel, statusTone } from './agents-model';
@@ -41,20 +47,13 @@ function Duration({ run }: { run: AgentRunSummary }) {
 function StatusFilter({ value, onChange }: { value: string[]; onChange: (statuses: string[]) => void }) {
   const active = STATUS_FILTERS.find((f) => f.statuses.join(',') === value.join(','))?.id ?? 'all';
   return (
-    <div className="data-segmented" role="tablist" aria-label="Run status">
-      {STATUS_FILTERS.map((f) => (
-        <button
-          key={f.id}
-          type="button"
-          role="tab"
-          aria-selected={active === f.id}
-          className={active === f.id ? 'data-segment data-segment-active' : 'data-segment'}
-          onClick={() => onChange(f.statuses)}
-        >
-          {f.label}
-        </button>
-      ))}
-    </div>
+    <Tabs
+      variant="segmented"
+      label="Run status"
+      value={active}
+      onChange={(id) => onChange(STATUS_FILTERS.find((f) => f.id === id)?.statuses ?? [])}
+      items={STATUS_FILTERS}
+    />
   );
 }
 
@@ -67,12 +66,14 @@ function RunsList({
   selected: string | null;
   onOpen: (run: AgentRunSummary) => void;
 }) {
-  if (runs === null) return <SkeletonRows rows={6} />;
+  if (runs === null) return <Loading />;
   if (!runs.length) {
     return (
-      <EmptyState icon={Bot} title="No agent runs match">
-        Runs appear here when a caller (Nexus, another module) invokes an agent a module hosts over NATS.
-      </EmptyState>
+      <EmptyState
+        icon={<Bot size={22} strokeWidth={1.5} />}
+        title="No agent runs match"
+        description="Runs appear here when a caller (Nexus, another module) invokes an agent a module hosts over NATS."
+      />
     );
   }
   return (
@@ -141,7 +142,7 @@ function RunPanel({
   if (!run) {
     return (
       <aside className="data-inspector run-panel" aria-label="Selected agent run">
-        {failure ? <Notice tone="danger">{failure.reason}</Notice> : <SkeletonRows rows={4} />}
+        {failure ? <Notice tone="error">{failure.reason}</Notice> : <Loading />}
       </aside>
     );
   }
@@ -160,9 +161,9 @@ function RunPanel({
             </div>
           </div>
           <Hint label="Close" shortcut="Esc">
-            <button type="button" className="data-icon-button" aria-label="Close" onClick={onClose}>
+            <Button variant="ghost" size="icon" aria-label="Close" onClick={onClose}>
               <X size={16} aria-hidden="true" />
-            </button>
+            </Button>
           </Hint>
         </div>
         <div className="data-inspector-facts">
@@ -181,42 +182,44 @@ function RunPanel({
           </span>
         </div>
         {(run.error_code || run.error_message) && (
-          <Notice tone={run.status === 'CANCELLED' ? 'neutral' : 'danger'}>
-            <AlertTriangle size={14} aria-hidden="true" />
+          <Notice
+            tone={run.status === 'CANCELLED' ? 'info' : 'error'}
+            icon={<AlertTriangle size={14} aria-hidden="true" />}
+          >
             <span className="run-error">
               {run.error_code}
               {run.error_message ? ` · ${run.error_message}` : ''}
             </span>
           </Notice>
         )}
-        {failure && <Notice tone="danger">{failure.reason}</Notice>}
+        {failure && <Notice tone="error">{failure.reason}</Notice>}
       </header>
       <div className="data-inspector-body">
         <dl className="data-fields">
-          <Field label="Caller">
+          <Property label="Caller">
             <code className="data-mono">{run.caller || '—'}</code>
-          </Field>
-          <Field label="Thread">
+          </Property>
+          <Property label="Thread">
             <code className="data-mono">{run.thread_id || '—'}</code>
-          </Field>
-          <Field label="Owner instance">
+          </Property>
+          <Property label="Owner instance">
             <code className="data-mono">{run.owner || '—'}</code>
-          </Field>
-          <Field label="Submitted">{absoluteTime(run.submitted_at)}</Field>
-          <Field label="Finished">{run.finished_at ? absoluteTime(run.finished_at) : '—'}</Field>
+          </Property>
+          <Property label="Submitted">{absoluteTime(run.submitted_at)}</Property>
+          <Property label="Finished">{run.finished_at ? absoluteTime(run.finished_at) : '—'}</Property>
         </dl>
         <h4 className="agents-events-title">
           Events <span className="jobs-tab-count">{run.events}</span>
         </h4>
         {!detail ? (
-          <SkeletonRows rows={3} />
+          <Loading />
         ) : detail.event_list.length ? (
           <ol className="agents-events">
             {detail.event_list.map((event) => (
               <li key={event.sequence} className="agents-event">
                 <span className="agents-event-head">
                   <span className="data-num data-muted">{event.sequence}</span>
-                  <span className="data-badge">{event.event}</span>
+                  <Badge>{event.event}</Badge>
                 </span>
                 <pre className="agents-event-text">
                   {event.preview}
@@ -226,23 +229,25 @@ function RunPanel({
             ))}
           </ol>
         ) : (
-          <EmptyState icon={MessageSquare} title="No events yet">
-            Streamed runs record each event as the agent emits it.
-          </EmptyState>
+          <EmptyState
+            icon={<MessageSquare size={22} strokeWidth={1.5} />}
+            title="No events yet"
+            description="Streamed runs record each event as the agent emits it."
+          />
         )}
       </div>
       <footer className="data-inspector-actions">
         {run.trace_id ? (
-          <button type="button" className="data-button" onClick={() => onOpenTrace(run.trace_id)}>
+          <Button variant="secondary" size="sm" onClick={() => onOpenTrace(run.trace_id)}>
             <Waypoints size={14} aria-hidden="true" /> Open trace
-          </button>
+          </Button>
         ) : null}
         <span className="data-spacer" />
         {isCancellable(run.status) && (
           <Hint label="Ask the owning host to stop it">
-            <button type="button" className="data-button data-button-danger-ghost" onClick={() => onCancel(run)}>
+            <Button variant="destructive-ghost" size="sm" onClick={() => onCancel(run)}>
               <Square size={13} aria-hidden="true" /> Cancel
-            </button>
+            </Button>
           </Hint>
         )}
       </footer>
@@ -268,35 +273,22 @@ function CancelDialog({
     if (result) setFailure(result);
   };
   return (
-    <Modal
+    <ConfirmDialog
+      open
       title={`Cancel ${run.agent}?`}
-      subtitle={<span className="data-mono">{run.invocation_id}</span>}
-      icon={<Square size={18} />}
-      tone="danger"
-      onClose={onClose}
-      onSubmit={submit}
-      footer={
-        <>
-          <span className="data-modal-hint">Recorded in the audit log</span>
-          <button type="button" className="data-button" onClick={onClose}>
-            Keep running
-          </button>
-          <button type="button" className="data-button data-button-danger" disabled={busy} onClick={submit}>
-            {busy ? 'Cancelling…' : 'Cancel run'}
-          </button>
-        </>
-      }
+      confirmLabel={busy ? 'Cancelling…' : 'Cancel run'}
+      cancelLabel="Keep running"
+      busy={busy}
+      error={failure?.reason}
+      onConfirm={submit}
+      onCancel={onClose}
     >
-      <p className="data-modal-text">
-        The host that owns this run (<code className="data-mono">{run.owner}</code>) stops it at its next step and
-        records it as cancelled. Whatever the agent already did (tool calls, writes) is not undone.
+      <p className="text-muted-foreground">
+        <code className="data-mono">{run.invocation_id}</code>: the host that owns this run (
+        <code className="data-mono">{run.owner}</code>) stops it at its next step and records it as cancelled. Whatever
+        the agent already did (tool calls, writes) is not undone. Recorded in the audit log.
       </p>
-      {failure && (
-        <Notice tone="danger">
-          <AlertTriangle size={14} aria-hidden="true" /> {failure.reason}
-        </Notice>
-      )}
-    </Modal>
+    </ConfirmDialog>
   );
 }
 
@@ -312,7 +304,6 @@ export function AgentsTab({ api: injected, nonce = 0 }: { api?: AgentsApi; nonce
   const [runFailure, setRunFailure] = useState<Failure | null>(null);
   const [cancelling, setCancelling] = useState<AgentRunSummary | null>(null);
   const [reloads, setReloads] = useState(0);
-  const { toasts, push, dismiss } = useToasts();
   const loadedMore = useRef(false);
 
   useEffect(() => {
@@ -392,7 +383,7 @@ export function AgentsTab({ api: injected, nonce = 0 }: { api?: AgentsApi; nonce
     if (!cancelling) return null;
     const result = await api.cancel(cancelling.module_id, cancelling.run_id);
     if (!result.ok) return result;
-    push({ tone: 'success', title: `Cancellation sent to ${cancelling.agent}`, detail: 'Recorded in the audit log' });
+    toast({ tone: 'success', title: `Cancellation sent to ${cancelling.agent}`, detail: 'Recorded in the audit log' });
     setCancelling(null);
     setReloads((n) => n + 1);
     return null;
@@ -415,14 +406,9 @@ export function AgentsTab({ api: injected, nonce = 0 }: { api?: AgentsApi; nonce
             </div>
             <div className="data-service-actions">
               <Hint label="Refresh">
-                <button
-                  type="button"
-                  className="data-icon-button data-icon-button-bordered"
-                  aria-label="Refresh"
-                  onClick={() => setReloads((n) => n + 1)}
-                >
+                <Button variant="secondary" size="icon" aria-label="Refresh" onClick={() => setReloads((n) => n + 1)}>
                   <RefreshCw size={14} aria-hidden="true" />
-                </button>
+                </Button>
               </Hint>
             </div>
           </header>
@@ -432,7 +418,7 @@ export function AgentsTab({ api: injected, nonce = 0 }: { api?: AgentsApi; nonce
           </div>
           <div className="data-browser">
             {failure && (
-              <Notice tone="warn">
+              <Notice tone="warning" className="mx-6 mt-3">
                 {failure.source && <strong>{failure.source}</strong>}
                 {failure.source ? ': ' : ''}
                 {failure.reason}
@@ -441,9 +427,9 @@ export function AgentsTab({ api: injected, nonce = 0 }: { api?: AgentsApi; nonce
             <RunsList runs={runs} selected={selected} onOpen={(run) => setSelected(run.key)} />
             {next && runs && (
               <div className="data-load-more">
-                <button type="button" className="data-button" onClick={loadMore}>
+                <Button variant="secondary" size="sm" onClick={loadMore}>
                   Load older runs
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -459,7 +445,6 @@ export function AgentsTab({ api: injected, nonce = 0 }: { api?: AgentsApi; nonce
           />
         )}
         {cancelling && <CancelDialog run={cancelling} onConfirm={submitCancel} onClose={() => setCancelling(null)} />}
-        <ToastStack toasts={toasts} dismiss={dismiss} />
       </div>
     </Tooltip.Provider>
   );

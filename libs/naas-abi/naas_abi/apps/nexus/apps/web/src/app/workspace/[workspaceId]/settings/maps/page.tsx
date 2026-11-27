@@ -20,10 +20,11 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
 import { SettingsReloadButton } from '@/components/settings/settings-reload';
-import {
-  SettingsEmpty, SettingsLoading, SettingsNotice, SettingsPageHeader, SettingsSection,
-  SettingsTableToolbar, countLabel,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import {
   SettingsTableClear, SettingsTableHead, SettingsTableNoMatch, useSettingsTable,
 } from '@/components/settings/users-table/settings-table';
@@ -266,11 +267,11 @@ function MapsSettings() {
       <div className="space-y-6">
         {confirmDialog}
         {backBar}
-        {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
+        {tableError && <Notice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></Notice>}
         {loading && !creating && !feed ? (
-          <SettingsLoading />
+          <Loading />
         ) : !creating && !feed ? (
-          <SettingsEmpty title={<>There is no feed “{selectedFeed}”.</>} />
+          <EmptyState framed title={<>There is no feed “{selectedFeed}”.</>} />
         ) : (
           <FeedPage
             key={selectedFeed}
@@ -311,11 +312,11 @@ function MapsSettings() {
       <div className="space-y-6">
         {confirmDialog}
         {backBar}
-        {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
+        {tableError && <Notice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></Notice>}
         {loading && !creating && !layer ? (
-          <SettingsLoading />
+          <Loading />
         ) : !creating && !layer ? (
-          <SettingsEmpty title={<>There is no editable layer “{selectedLayer}”. Built-in and graph layers are hidden or recolored from the table.</>} />
+          <EmptyState framed title={<>There is no editable layer “{selectedLayer}”. Built-in and graph layers are hidden or recolored from the table.</>} />
         ) : (
           <>
             <SettingsPageHeader
@@ -351,8 +352,8 @@ function MapsSettings() {
                 ) : undefined
               }
             />
-            {!canEdit && <SettingsNotice>Only workspace owners and admins can edit layers.</SettingsNotice>}
-            <SettingsSection title="Layer">
+            {!canEdit && <Notice>Only workspace owners and admins can edit layers.</Notice>}
+            <Card title="Layer">
               <MapsFeedLayerForm
                 key={selectedLayer}
                 workspaceId={workspaceId}
@@ -366,7 +367,7 @@ function MapsSettings() {
                   if (creating) go({ layer: saved.id });
                 }}
               />
-            </SettingsSection>
+            </Card>
           </>
         )}
       </div>
@@ -398,12 +399,12 @@ function MapsSettings() {
         }
       />
 
-      {error && <SettingsNotice tone="error"><span role="alert">{error}</span></SettingsNotice>}
-      {permissions.error && <SettingsNotice tone="error"><span role="alert">{permissions.error}</span></SettingsNotice>}
-      {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
-      {!canEdit && !loading && <SettingsNotice>Only workspace owners and admins can change feeds and layers.</SettingsNotice>}
+      {error && <Notice tone="error"><span role="alert">{error}</span></Notice>}
+      {permissions.error && <Notice tone="error"><span role="alert">{permissions.error}</span></Notice>}
+      {tableError && <Notice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></Notice>}
+      {!canEdit && !loading && <Notice>Only workspace owners and admins can change feeds and layers.</Notice>}
 
-      <SettingsSection
+      <Card
         title="Feed Layers"
         description="Each row is a feed (data source) and the layers drawn from it. Open a feed to edit its layers; switch it off to hide all its layers for every member of this workspace. Built-in feeds (Environment, SIGINT, Situation) are listed with the others."
       >
@@ -549,7 +550,7 @@ function MapsSettings() {
           </table>
         </div>
         <TablePager total={feedTable.shown.length} paged={feedTable.paged} />
-      </SettingsSection>
+      </Card>
 
       <MapsSettingsBasemapsSection workspaceId={workspaceId} canEdit={canEdit} permissions={permissions} />
     </div>
@@ -671,9 +672,9 @@ function FeedPage({
         }
       />
 
-      {!canEdit && <SettingsNotice>Only workspace owners and admins can edit feeds.</SettingsNotice>}
+      {!canEdit && <Notice>Only workspace owners and admins can edit feeds.</Notice>}
 
-      <SettingsSection title="Feed">
+      <Card title="Feed">
         <MapsLayerEditorForm
           key={feed?.id ?? 'new'}
           variant="page"
@@ -687,10 +688,10 @@ function FeedPage({
           onSavedWorkspace={onSaved}
           onSavedGeoJson={onSavedGeoJson}
         />
-      </SettingsSection>
+      </Card>
 
       {feed ? (
-        <SettingsSection
+        <Card
           title="Layers"
           actions={canEdit && !shared ? (
             <Button variant="secondary" onClick={() => onNewLayer(feed.id)}>
@@ -796,7 +797,7 @@ function FeedPage({
                 Feature types in this feed with no layer of their own
                 {showsAll ? ' (an “every feature” layer still shows them)' : ''}:
               </p>
-              {addError ? <SettingsNotice tone="error">{addError}</SettingsNotice> : null}
+              {addError ? <Notice tone="error">{addError}</Notice> : null}
               <div className="flex flex-wrap gap-2">
                 {uncovered.map((t) => (
                   <Button key={t.label} variant="secondary" size="sm" disabled={adding !== null} onClick={() => void addTypeLayer(t.label)}>
@@ -807,7 +808,7 @@ function FeedPage({
               </div>
             </div>
           ) : null}
-        </SettingsSection>
+        </Card>
       ) : null}
     </div>
   );

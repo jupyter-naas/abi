@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Eye, X } from 'lucide-react';
-import { ModalBackdrop } from '@/components/ui/dialogs';
+import { Eye } from 'lucide-react';
+import { Dialog } from '@/components/ui/dialog';
 import { beginView, viewAsEligibility, viewAsUnavailable, type ViewAsEligibility } from '@/lib/view-as';
 import type { ViewableWorkspace } from '@/lib/view-model';
 import { viewFlagActive } from '@/lib/view-flag';
@@ -139,25 +139,26 @@ export function ViewAsControl({
         <Eye size={16} aria-hidden="true" />
         View as {name}
       </button>
-      <ModalBackdrop open={open} onClose={close}>
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="view-as-title"
-          className="access-view-as-dialog border border-border bg-background p-6 shadow-2xl"
-        >
-          <div className="flex items-start justify-between gap-4">
-            <h3 id="view-as-title" className="text-base font-semibold text-foreground">
-              View as {name}
-            </h3>
-            <button type="button" className="access-view-as-close" onClick={close} aria-label="Close" disabled={starting}>
-              <X size={16} />
+      <Dialog
+        open={open}
+        onClose={close}
+        dismissible={!starting}
+        title={`View as ${name}`}
+        description={`Open a workspace as ${name} sees it: what they may use and read there. A banner lets you stop the view.`}
+        className="access-view-as-dialog"
+        onSubmit={() => void go()}
+        footer={
+          <>
+            <button type="button" className="org-settings-users-secondary-button" disabled={starting} onClick={close}>
+              Cancel
             </button>
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Open a workspace as {name} sees it: what they may use and read there. A banner lets you stop the view.
-          </p>
-          <label className="mt-4 flex flex-col gap-2">
+            <button type="button" className="org-settings-primary-button" disabled={starting} onClick={() => void go()}>
+              {starting ? 'Starting…' : 'Start'}
+            </button>
+          </>
+        }
+      >
+          <label className="flex flex-col gap-2">
             <span className="org-settings-field-label">Workspace</span>
             <select
               className="org-settings-input"
@@ -178,16 +179,7 @@ export function ViewAsControl({
               {error}
             </p>
           )}
-          <div className="mt-6 flex justify-end gap-2">
-            <button type="button" className="org-settings-users-secondary-button" disabled={starting} onClick={close}>
-              Cancel
-            </button>
-            <button type="button" className="org-settings-primary-button" disabled={starting} onClick={() => void go()}>
-              {starting ? 'Starting…' : 'Start'}
-            </button>
-          </div>
-        </div>
-      </ModalBackdrop>
+      </Dialog>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Globe, Image as ImageIcon, LogIn, Network, RefreshCw } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
-import { SettingsSection } from '@/components/settings/settings-ui';
+import { Card } from '@/components/ui/card';
 import {
   siteIdentitySections,
   siteName,
@@ -147,7 +147,7 @@ export default function PlatformGeneralPage() {
       {sections.map((section) => {
         const Icon = SECTION_ICONS[section.id];
         return (
-          <SettingsSection
+          <Card
             key={section.id}
             title={
               <span className="flex items-center gap-2">
@@ -169,7 +169,7 @@ export default function PlatformGeneralPage() {
                 </div>
               ))}
             </dl>
-          </SettingsSection>
+          </Card>
         );
       })}
     </div>

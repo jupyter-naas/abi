@@ -8,13 +8,10 @@ import { AccessLevelChoice } from '@/components/settings/access-level-choice';
 import { BulkAccessBar, SelectAllCell, SelectRowCell, useRowSelection } from '@/components/settings/bulk-access';
 import { PolicyPicker } from '@/components/settings/policy-picker';
 import { isOrgTarget } from '@/lib/access-model/target';
-import {
-  SettingsEmpty,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
 import {
   SettingsTableClear,
   SettingsTableHead,
@@ -182,21 +179,21 @@ export function CoreServices({
       </div>
 
       {error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {error}
-        </SettingsNotice>
+        </Notice>
       )}
       {notice && (
         <p className="text-xs text-muted-foreground" role="status" data-services-notice="">
           {notice}
         </p>
       )}
-      {state && !state.editable && state.reason && <SettingsNotice tone="info">{state.reason}</SettingsNotice>}
+      {state && !state.editable && state.reason && <Notice tone="info">{state.reason}</Notice>}
 
       {!state ? (
-        !error && <SettingsLoading label="Loading services…" />
+        !error && <Loading label="Loading services…" />
       ) : rows.length === 0 ? (
-        <SettingsEmpty title="No core service has levels here." />
+        <EmptyState framed title="No core service has levels here." />
       ) : (
         <div className="space-y-4">
           <SettingsTableToolbar

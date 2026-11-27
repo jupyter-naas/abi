@@ -161,26 +161,34 @@ describe('New document click paths', () => {
     const files = [
       '../../app/workspace/[workspaceId]/documents/page.tsx',
       '../../app/workspace/[workspaceId]/documents/[slug]/page.tsx',
-      '../shell/sidebar/documents-section.tsx',
     ];
     for (const file of files) {
       const src = source(file);
       expect(src).toContain("pushOfficeCreate(router, 'document'");
       expect(src).not.toMatch(/await[\s\S]{0,120}pushOfficeCreate/);
     }
+    // The sidebar's New goes through the shared section, configured per kind.
+    expect(source('../shell/sidebar/documents-section.tsx')).toContain("create: { overlay: 'document' }");
+    const section = source('../shell/sidebar/office-section.tsx');
+    expect(section).toContain('pushOfficeCreate(router, create.overlay');
+    expect(section).not.toMatch(/await[\s\S]{0,120}pushOfficeCreate/);
   });
 
   it('paints via pushOfficeCreate on every Slides entry, with no await before it', () => {
     const files = [
       '../../app/workspace/[workspaceId]/slides/page.tsx',
       '../../app/workspace/[workspaceId]/slides/[slug]/page.tsx',
-      '../shell/sidebar/slides-section.tsx',
     ];
     for (const file of files) {
       const src = source(file);
       expect(src).toContain("pushOfficeCreate(router, 'deck'");
       expect(src).not.toMatch(/await[\s\S]{0,120}pushOfficeCreate/);
     }
+    // The sidebar's New goes through the shared section, configured per kind.
+    expect(source('../shell/sidebar/slides-section.tsx')).toContain("create: { overlay: 'deck' }");
+    const section = source('../shell/sidebar/office-section.tsx');
+    expect(section).toContain('pushOfficeCreate(router, create.overlay');
+    expect(section).not.toMatch(/await[\s\S]{0,120}pushOfficeCreate/);
   });
 
   it('keeps /documents/new a cheap shell that loads create after first paint', () => {

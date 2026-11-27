@@ -20,6 +20,8 @@ import {
   X,
 } from 'lucide-react';
 import { KpiCard } from '@/components/ui/kpi-card';
+import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
@@ -403,41 +405,35 @@ function RelationPickerDialog({
   onCancel: () => void;
 }) {
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-lg border border-border bg-popover p-4 shadow-xl">
-        <h3 className="text-sm font-semibold">Choose a relation</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Multiple relations connect {getClassLabel(parentId)} and {getClassLabel(childId)}.
-        </p>
-        <ul className="mt-3 max-h-64 space-y-1 overflow-y-auto">
-          {edges.map((edge) => (
-            <li key={edge.id}>
-              <button
-                type="button"
-                onClick={() => onPick(edge)}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
-              >
-                <GitBranch size={14} className="shrink-0 text-muted-foreground" />
-                <span className="truncate">{getClassLabel(edge.source)}</span>
-                <span className="shrink-0 text-muted-foreground">→</span>
-                <span className="truncate font-medium">{edge.type}</span>
-                <span className="shrink-0 text-muted-foreground">→</span>
-                <span className="truncate">{getClassLabel(edge.target)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-3 flex justify-end">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
+    <Dialog
+      title="Choose a relation"
+      description={`Multiple relations connect ${getClassLabel(parentId)} and ${getClassLabel(childId)}.`}
+      onClose={onCancel}
+      footer={
+        <Button variant="secondary" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      }
+    >
+      <ul className="max-h-64 space-y-1 overflow-y-auto">
+        {edges.map((edge) => (
+          <li key={edge.id}>
+            <button
+              type="button"
+              onClick={() => onPick(edge)}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+            >
+              <GitBranch size={14} className="shrink-0 text-muted-foreground" />
+              <span className="truncate">{getClassLabel(edge.source)}</span>
+              <span className="shrink-0 text-muted-foreground">→</span>
+              <span className="truncate font-medium">{edge.type}</span>
+              <span className="shrink-0 text-muted-foreground">→</span>
+              <span className="truncate">{getClassLabel(edge.target)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Dialog>
   );
 }
 

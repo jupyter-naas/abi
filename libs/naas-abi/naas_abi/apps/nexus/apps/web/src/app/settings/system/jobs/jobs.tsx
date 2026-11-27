@@ -11,11 +11,17 @@ import './jobs.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { AlertTriangle, ChevronRight, RefreshCw, Search } from 'lucide-react';
+import { AlertTriangle, ChevronRight, RefreshCw } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
+import { SearchBox } from '@/components/ui/search-box';
+import { Loading } from '@/components/ui/spinner';
+import { Tabs } from '@/components/ui/tabs';
+import { toast } from '@/components/ui/toast';
 import type { Failure } from '../data/data-api';
 import { absoluteTime, plural } from '../data/data-model';
-import { Hint, Kbd, Notice } from '../data/data-ui';
-import { ToastStack, useToasts } from '../data/toasts';
+import { Hint } from '../data/data-ui';
 import { createTracesApi, type TracesApi } from '../traces/traces-api';
 import { createJobsApi, type JobsApi } from './jobs-api';
 import {
@@ -72,22 +78,22 @@ function FailuresBanner({
   const jobs = [...new Set(failures.runs.map((r) => r.job))];
   const named = jobs.slice(0, 3).join(', ') + (jobs.length > 3 ? ` and ${jobs.length - 3} more` : '');
   return (
-    <div data-failures>
-      <Notice tone="danger">
-        <AlertTriangle size={14} aria-hidden="true" />
-        <span>
-          {plural(failures.count, 'run', 'runs')}
-          {failures.more ? '+' : ''} failed{failures.since ? ` since ${absoluteTime(failures.since)}` : ''} · {named}
-        </span>
-        <span className="data-spacer" />
-        <button type="button" className="data-button" onClick={onShow}>
-          Show failed runs
-        </button>
-        {onSeen && (
-          <button type="button" className="data-button" onClick={onSeen}>
-            Mark as seen
-          </button>
-        )}
+    <div data-failures className="mx-6 mt-3">
+      <Notice tone="error" icon={<AlertTriangle size={14} aria-hidden="true" />}>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex-1">
+            {plural(failures.count, 'run', 'runs')}
+            {failures.more ? '+' : ''} failed{failures.since ? ` since ${absoluteTime(failures.since)}` : ''} · {named}
+          </span>
+          <Button variant="secondary" size="sm" onClick={onShow}>
+            Show failed runs
+          </Button>
+          {onSeen && (
+            <Button variant="secondary" size="sm" onClick={onSeen}>
+              Mark as seen
+            </Button>
+          )}
+        </div>
       </Notice>
     </div>
   );
@@ -128,7 +134,6 @@ export function JobsTab({
   const [search, setSearch] = useState('');
   const [triggering, setTriggering] = useState<TriggerRequest | null>(null);
   const [cancelling, setCancelling] = useState<RunSummary | null>(null);
-  const { toasts, push, dismiss } = useToasts();
   const searchRef = useRef<HTMLInputElement>(null);
   const [reloads, setReloads] = useState(0);
   const loadedMore = useRef(false);
@@ -278,7 +283,7 @@ export function JobsTab({
     setTriggering(null);
     setPending(result.data.key);
     go({ run: result.data.key });
-    push({ tone: 'success', title: `Started ${triggering.job}`, detail: 'Recorded in the audit log' });
+    toast({ tone: 'success', title: `Started ${triggering.job}`, detail: 'Recorded in the audit log' });
     return null;
   };
 
@@ -286,7 +291,7 @@ export function JobsTab({
     if (!cancelling) return null;
     const result = await api.cancel(cancelling.module_id, cancelling.run_id);
     if (!result.ok) return result;
-    push({ tone: 'success', title: `Cancellation sent to ${cancelling.job}`, detail: 'The run stops at its next check' });
+    toast({ tone: 'success', title: `Cancellation sent to ${cancelling.job}`, detail: 'The run stops at its next check' });
     setCancelling(null);
     return null;
   };
@@ -324,36 +329,28 @@ export function JobsTab({
             {/* The page's frame holds the title; this line is the summary. */}
             <div className="data-service-heading">
               <p className="data-service-description">
-                {overview && <span className="data-badge data-badge-mono">{overview.project}</span>}{' '}
+                {overview && <Badge mono>{overview.project}</Badge>}{' '}
                 {overview
                   ? `${plural(jobs.length, 'job', 'jobs')}${workflows ? ` (${workflows} workflows)` : ''} · ${running} running${failing ? ` · ${failing} failing` : ''}`
                   : 'Schedules, triggers and every run of module jobs.'}
               </p>
             </div>
             <div className="data-service-actions">
-              <div className="data-segmented" role="tablist" aria-label="Jobs views">
-                {(['jobs', 'runs'] as const).map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    role="tab"
-                    aria-selected={location.view === v && !location.job}
-                    className={location.view === v && !location.job ? 'data-segment data-segment-active' : 'data-segment'}
-                    onClick={() => go({ view: v, job: null })}
-                  >
-                    {v === 'jobs' ? 'Jobs' : 'Runs'}
-                  </button>
-                ))}
-              </div>
+              <Tabs
+                variant="segmented"
+                label="Jobs views"
+                // An open job selects neither view.
+                value={(location.job ? '' : location.view) as JobsLocation['view']}
+                onChange={(view) => go({ view, job: null })}
+                items={[
+                  { id: 'jobs', label: 'Jobs' },
+                  { id: 'runs', label: 'Runs' },
+                ]}
+              />
               <Hint label="Refresh">
-                <button
-                  type="button"
-                  className="data-icon-button data-icon-button-bordered"
-                  aria-label="Refresh"
-                  onClick={() => setReloads((n) => n + 1)}
-                >
+                <Button variant="secondary" size="icon" aria-label="Refresh" onClick={() => setReloads((n) => n + 1)}>
                   <RefreshCw size={14} aria-hidden="true" />
-                </button>
+                </Button>
               </Hint>
             </div>
           </header>
@@ -379,34 +376,10 @@ export function JobsTab({
               <StatusFilter value={location.statuses} onChange={(statuses) => go({ statuses })} />
             )}
             {location.view === 'jobs' && !location.job && workflows > 0 && (
-              <div className="data-segmented" role="tablist" aria-label="Kind">
-                {KIND_FILTERS.map((k) => (
-                  <button
-                    key={k.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={kind === k.id}
-                    className={kind === k.id ? 'data-segment data-segment-active' : 'data-segment'}
-                    onClick={() => go({ kind: k.id })}
-                  >
-                    {k.label}
-                  </button>
-                ))}
-              </div>
+              <Tabs variant="segmented" label="Kind" value={kind} onChange={(k) => go({ kind: k })} items={KIND_FILTERS} />
             )}
             {location.view === 'jobs' && !location.job && (
-              <label className="data-search">
-                <Search size={14} aria-hidden="true" />
-                <input
-                  ref={searchRef}
-                  className="data-search-input"
-                  placeholder="Filter jobs"
-                  aria-label="Filter jobs"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                {!search && <Kbd>/</Kbd>}
-              </label>
+              <SearchBox ref={searchRef} size="sm" className="w-72 shrink" placeholder="Filter jobs" value={search} onChange={setSearch} />
             )}
           </div>
           <div className="data-browser">
@@ -417,9 +390,9 @@ export function JobsTab({
                 onSeen={onFailuresSeen}
               />
             )}
-            {overviewFailure && <Notice tone="danger">{overviewFailure.reason}</Notice>}
+            {overviewFailure && <Notice tone="error" className="mx-6 mt-3">{overviewFailure.reason}</Notice>}
             {down.map(([source, status]) => (
-              <Notice key={source} tone="warn">
+              <Notice key={source} tone="warning" className="mx-6 mt-3">
                 <strong>{source}</strong>: {status.reason}
               </Notice>
             ))}
@@ -435,16 +408,16 @@ export function JobsTab({
                   onRun={() => startTrigger(job)}
                 />
               ) : overview ? (
-                <Notice tone="warn">This job is not declared by any loaded or registered module anymore.</Notice>
+                <Notice tone="warning" className="mx-6 mt-3">This job is not declared by any loaded or registered module anymore.</Notice>
               ) : null
             ) : location.view === 'runs' ? (
               <>
                 <RunsList runs={runs} selected={location.run} showJob onOpen={openRun} />
                 {next && runs && (
                   <div className="data-load-more">
-                    <button type="button" className="data-button" onClick={loadMore}>
+                    <Button variant="secondary" size="sm" onClick={loadMore}>
                       Load older runs
-                    </button>
+                    </Button>
                   </div>
                 )}
               </>
@@ -458,7 +431,7 @@ export function JobsTab({
                 onOpenRun={openRun}
               />
             ) : (
-              <p className="data-empty-text jobs-loading">Loading jobs…</p>
+              <Loading label="Loading jobs…" />
             )}
           </div>
         </section>
@@ -493,7 +466,6 @@ export function JobsTab({
           />
         )}
         {cancelling && <CancelDialog run={cancelling} onConfirm={submitCancel} onClose={() => setCancelling(null)} />}
-        <ToastStack toasts={toasts} dismiss={dismiss} />
       </div>
     </Tooltip.Provider>
   );

@@ -5,7 +5,7 @@ import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
-import { SettingsNotice, SettingsSection, countLabel, settingsTable } from '@/components/settings/settings-ui';
+import { countLabel, settingsTable } from '@/components/settings/settings-ui';
 import { cn } from '@/lib/utils';
 import { useMapsStore, workspaceLayoutsOf } from '@/stores/maps';
 import { basemapsApi, type BasemapCategory, type WorkspaceBasemap } from '../lib/basemaps-api';
@@ -14,6 +14,8 @@ import { basemapDefFromApi } from '../lib/maps-basemaps';
 import { MapsBasemapThumb } from './maps-basemap-control';
 import { MapsNewBasemapModal } from './maps-new-basemap-modal';
 import { MapsAccessCell, type MapsPermissions } from './maps-settings-access';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 
 const CATEGORY_LABEL: Record<BasemapCategory, string> = {
   standard: 'Standard',
@@ -97,7 +99,7 @@ export function MapsSettingsBasemapsSection({
   return (
     <>
       {confirmDialog}
-      <SettingsSection
+      <Card
         title="Basemaps"
         description="Background map styles in the map type control, shared by every member of the workspace. Built-in and deployment basemaps can be renamed, restyled or hidden; custom ones can also be deleted."
         actions={
@@ -109,12 +111,12 @@ export function MapsSettingsBasemapsSection({
         }
       >
         {!canEdit ? (
-          <SettingsNotice>Only workspace owners and admins can change basemaps.</SettingsNotice>
+          <Notice>Only workspace owners and admins can change basemaps.</Notice>
         ) : null}
         {error ? (
-          <SettingsNotice tone="error">
+          <Notice tone="error">
             <span role="alert" className="whitespace-pre-line">{error}</span>
-          </SettingsNotice>
+          </Notice>
         ) : null}
 
         <p className="mb-3 text-sm text-muted-foreground">
@@ -229,7 +231,7 @@ export function MapsSettingsBasemapsSection({
             </tbody>
           </table>
         </div>
-      </SettingsSection>
+      </Card>
 
       <MapsNewBasemapModal
         open={modalOpen}

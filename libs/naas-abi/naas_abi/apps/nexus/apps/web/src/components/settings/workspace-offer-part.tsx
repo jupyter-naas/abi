@@ -5,7 +5,7 @@
  * Workflows (and pipelines) or Models it offers, each switch saved at once as the caller. The
  * policy's page shows the document only; the offer is changed from these pages.
  */
-import { SettingsSection } from '@/components/settings/settings-ui';
+import { Card } from '@/components/ui/card';
 import { WorkspaceOfferEditor, type OfferPart } from '@/components/access/offer/offer-editor';
 
 export function WorkspaceOfferPart({
@@ -21,10 +21,10 @@ export function WorkspaceOfferPart({
   onChanged?: () => void;
 }) {
   return (
-    <SettingsSection title="Offered in this workspace" description={description}>
+    <Card title="Offered in this workspace" description={description}>
       <div data-offer-part={parts.join(' ')}>
         <WorkspaceOfferEditor workspaceId={workspaceId} parts={parts} bare onChanged={onChanged} />
       </div>
-    </SettingsSection>
+    </Card>
   );
 }

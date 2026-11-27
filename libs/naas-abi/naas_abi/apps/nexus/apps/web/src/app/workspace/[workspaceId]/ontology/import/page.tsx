@@ -20,7 +20,7 @@ import { useOntologyStore } from '@/stores/ontology';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { KpiCard } from '@/components/ui/kpi-card';
-import { ToastStack, type ToastItem } from '@/components/graph/toast-notification';
+import { toast } from '@/components/ui/toast';
 
 const ACCEPTED_EXTENSIONS = ['.ttl', '.owl', '.rdf', '.n3', '.nt'];
 
@@ -109,20 +109,6 @@ export default function OntologyImportPage() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [records, setRecords] = useState<ImportRecord[]>([]);
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
-
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
-  const pushToast = useCallback((toast: Omit<ToastItem, 'id'>) => {
-    const item: ToastItem = {
-      ...toast,
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    };
-    setToasts((prev) => [...prev, item]);
-  }, []);
-
   useEffect(() => {
     setRecords(loadRecords(workspaceId));
   }, [workspaceId]);
@@ -188,11 +174,7 @@ export default function OntologyImportPage() {
         return next;
       });
 
-      pushToast({
-        type: 'success',
-        title: 'Import complete',
-        message: `"${ontology.name}" imported — ${classes} class${classes !== 1 ? 'es' : ''}, ${properties} propert${properties !== 1 ? 'ies' : 'y'}`,
-      });
+      toast.success('Import complete', `"${ontology.name}" imported — ${classes} class${classes !== 1 ? 'es' : ''}, ${properties} propert${properties !== 1 ? 'ies' : 'y'}`);
       clearFile();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Import failed';
@@ -203,18 +185,17 @@ export default function OntologyImportPage() {
         saveRecords(workspaceId, next);
         return next;
       });
-      pushToast({ type: 'error', title: 'Import failed', message: msg });
+      toast.error('Import failed', msg);
     } finally {
       setImporting(false);
     }
-  }, [file, importing, workspaceId, importReferenceFromContent, pushToast, clearFile]);
+  }, [file, importing, workspaceId, importReferenceFromContent, clearFile]);
 
   const lastDone = records.find((r) => r.status === 'done');
 
   return (
     <div className="flex h-full flex-col">
       <Header title="Import Ontology" nav={<OntologyMenuBar />} />
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto px-6 py-6">

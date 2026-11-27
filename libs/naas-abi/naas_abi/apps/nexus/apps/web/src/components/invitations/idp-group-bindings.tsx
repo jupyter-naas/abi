@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
-import { SettingsNotice, SettingsSection, settingsTable } from '@/components/settings/settings-ui';
+import { settingsTable } from '@/components/settings/settings-ui';
 import {
   bindGroup,
   fetchGroupBindings,
@@ -13,6 +13,8 @@ import {
   type GroupBindings,
   type InviteScope,
 } from '@/lib/invitations';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 
 const label = (role: string) => role.charAt(0).toUpperCase() + role.slice(1);
 
@@ -83,14 +85,14 @@ export function IdpGroupBindings({
   };
 
   return (
-    <SettingsSection
+    <Card
       title="Identity provider groups"
       description="Everyone in a group of your identity provider gets the role here when they sign in. Group names are the ones the provider sends."
     >
       {error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />} className="mb-4">
+        <Notice tone="error" icon={<AlertCircle size={14} />} className="mb-4">
           {error}
-        </SettingsNotice>
+        </Notice>
       )}
       {state.bindings.length > 0 && (
         <div className={`${settingsTable.wrapper} mb-4`}>
@@ -167,6 +169,6 @@ export function IdpGroupBindings({
           Bind group
         </Button>
       </div>
-    </SettingsSection>
+    </Card>
   );
 }

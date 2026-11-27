@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
-import { DocumentsIndexGallery, SectionsTemplateStrip } from '@/components/documents/documents-index-gallery';
-import { invalidateSectionsCover } from '@/components/documents/documents-cover-thumb';
+import { OfficeIndexGallery, OfficeTemplateStrip } from '@/components/office/office-index-gallery';
+import { invalidateOfficeCover } from '@/components/office/office-cover-thumb';
+import { DOCUMENTS_KIND } from '@/components/office/office-kinds';
+import { DOCUMENTS_COVER_FIT } from '@/components/documents/documents-preview-fit';
 import { DocumentsMenuBar } from '@/components/documents/documents-menu-bar';
-import { DocumentsStatusBar } from '@/components/documents/documents-status-bar';
+import { DocumentsStatusBar } from '@/components/office/office-status-bar';
 import { OfficeCreateLoader } from '@/components/office/office-create-loader';
 import { pushOfficeCreate, useOfficeCreateStore } from '@/components/office/office-create-state';
 import {
@@ -126,7 +128,7 @@ export default function SectionsIndexPage() {
   useEffect(() => {
     const onUpdated = (event: Event) => {
       const slug = (event as CustomEvent<{ slug?: string }>).detail?.slug;
-      invalidateSectionsCover(workspaceId, slug);
+      invalidateOfficeCover('documents', workspaceId, slug);
       void load({ quiet: true });
     };
     window.addEventListener(DOCUMENTS_UPDATED_EVENT, onUpdated);
@@ -195,7 +197,8 @@ export default function SectionsIndexPage() {
           </div>
         ) : (
           <>
-            <SectionsTemplateStrip
+            <OfficeTemplateStrip
+              kind={DOCUMENTS_KIND}
               templates={templates}
               creating={creating}
               onSelect={(templateId) => void onCreateFromTemplate(templateId)}
@@ -230,7 +233,9 @@ export default function SectionsIndexPage() {
                   {showArchived ? 'No archived documents.' : 'No documents yet.'}
                 </p>
               ) : (
-                <DocumentsIndexGallery
+                <OfficeIndexGallery
+                  kind={DOCUMENTS_KIND}
+                  fit={DOCUMENTS_COVER_FIT}
                   projects={visibleProjects}
                   workspaceId={workspaceId}
                   templates={templates}

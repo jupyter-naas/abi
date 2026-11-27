@@ -4,7 +4,6 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Mail, Search, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { SettingsNotice } from '@/components/settings/settings-ui';
 import { getApiUrl } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import {
@@ -25,6 +24,7 @@ import {
   type AddPeopleOption,
   type FoundPeople,
 } from './add-people-model';
+import { Notice } from '@/components/ui/notice';
 
 function avatarUrl(avatar: string | null | undefined): string {
   if (!avatar) return '';
@@ -300,9 +300,9 @@ export function AddPeople({
         )}
       </div>
       {searchError && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {searchError}
-        </SettingsNotice>
+        </Notice>
       )}
       {createOption?.kind === 'create' && (
         <div
@@ -370,9 +370,9 @@ export function AddPeople({
         </p>
       )}
       {addError && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {addError}
-        </SettingsNotice>
+        </Notice>
       )}
     </div>
   );

@@ -72,6 +72,7 @@ const SERVICE_DESCRIPTIONS: Record<string, string> = {
 /** The platform's pages, by item id (`app/settings/lib/nav.ts`). */
 export const PLATFORM_PAGE_DESCRIPTIONS: Record<string, string> = {
   general: 'Name and identity every organization shares',
+  theme: 'Every component of the design kit, in its states',
   organizations: 'Every organization on the platform',
   users: 'Every account, and what each holds at every level',
   'access-groups': 'Groups of people, to give rights to many at once',

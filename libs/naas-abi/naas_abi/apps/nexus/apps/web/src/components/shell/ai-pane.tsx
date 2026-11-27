@@ -16,7 +16,7 @@ import {
   routeWithSearch,
   getPaneSurfaceForPath,
 } from '@/lib/feature-office-agents';
-import { ColumnResizeHandle } from './column-resize-handle';
+import { ColumnResizeHandle } from '@/components/ui/split-pane';
 import dynamic from 'next/dynamic';
 
 const ChatInterface = dynamic(

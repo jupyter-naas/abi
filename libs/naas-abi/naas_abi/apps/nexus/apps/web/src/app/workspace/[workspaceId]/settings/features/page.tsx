@@ -7,7 +7,7 @@
  */
 import { Suspense } from 'react';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { SettingsLoading } from '@/components/settings/settings-ui';
+import { Loading } from '@/components/ui/spinner';
 import { FeatureAccess } from './feature-access';
 // The choices and notes of a row.
 import '../general/general.css';
@@ -31,7 +31,7 @@ function Features() {
 
 export default function FeaturesSettingsPage() {
   return (
-    <Suspense fallback={<SettingsLoading label="Loading features…" />}>
+    <Suspense fallback={<Loading label="Loading features…" />}>
       <Features />
     </Suspense>
   );

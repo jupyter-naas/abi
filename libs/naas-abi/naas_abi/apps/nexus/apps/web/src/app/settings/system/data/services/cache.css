@@ -12,10 +12,6 @@
   gap: var(--space-3);
 }
 
-.data-cache-preview > .data-notice {
-  margin: 0;
-}
-
 .data-cache-origin {
   display: flex;
   flex-wrap: wrap;

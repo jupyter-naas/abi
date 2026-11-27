@@ -6,7 +6,7 @@
  */
 import { Suspense } from 'react';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { SettingsLoading } from '@/components/settings/settings-ui';
+import { Loading } from '@/components/ui/spinner';
 import { WorkspaceModules } from './modules';
 
 function Modules() {
@@ -26,7 +26,7 @@ function Modules() {
 
 export default function ModulesSettingsPage() {
   return (
-    <Suspense fallback={<SettingsLoading label="Loading modules…" />}>
+    <Suspense fallback={<Loading label="Loading modules…" />}>
       <Modules />
     </Suspense>
   );

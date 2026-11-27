@@ -4,10 +4,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
-import { SheetsIndexGallery, SheetsTemplateStrip } from '@/components/sheets/sheets-index-gallery';
-import { invalidateSheetsCover } from '@/components/sheets/sheets-cover-thumb';
+import { OfficeIndexGallery, OfficeTemplateStrip } from '@/components/office/office-index-gallery';
+import { invalidateOfficeCover } from '@/components/office/office-cover-thumb';
+import { SHEETS_KIND } from '@/components/office/office-kinds';
+import { SHEETS_COVER_FIT } from '@/components/sheets/sheets-preview-fit';
 import { SheetsMenuBar } from '@/components/sheets/sheets-menu-bar';
-import { SheetsStatusBar } from '@/components/sheets/sheets-status-bar';
+import { SheetsStatusBar } from '@/components/office/office-status-bar';
 import {
   openSheetsAgentPane,
   sheetsApiErrorMessage,
@@ -102,7 +104,7 @@ export default function SheetsIndexPage() {
   useEffect(() => {
     const onUpdated = (event: Event) => {
       const slug = (event as CustomEvent<{ slug?: string }>).detail?.slug;
-      invalidateSheetsCover(workspaceId, slug);
+      invalidateOfficeCover('sheets', workspaceId, slug);
       void load({ quiet: true });
     };
     window.addEventListener(SHEETS_DECK_UPDATED_EVENT, onUpdated);
@@ -163,7 +165,8 @@ export default function SheetsIndexPage() {
           </div>
         ) : (
           <>
-            <SheetsTemplateStrip
+            <OfficeTemplateStrip
+              kind={SHEETS_KIND}
               templates={templates}
               creating={creating}
               onSelect={(templateId) => void onCreateFromTemplate(templateId)}
@@ -198,7 +201,9 @@ export default function SheetsIndexPage() {
                   {showArchived ? 'No archived sheets.' : 'No sheets yet.'}
                 </p>
               ) : (
-                <SheetsIndexGallery
+                <OfficeIndexGallery
+                  kind={SHEETS_KIND}
+                  fit={SHEETS_COVER_FIT}
                   projects={visibleProjects}
                   workspaceId={workspaceId}
                   templates={templates}

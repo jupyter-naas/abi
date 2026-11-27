@@ -23,7 +23,6 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspaceHomePath } from '@/lib/feature-access';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
-import { SearchBox } from '@/components/settings/search-box';
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
 import type { FacetBucket } from '@/lib/graph-query/types';
 import { matchesSearch } from '@/app/settings/lib/search';
@@ -37,6 +36,7 @@ import { BulkEditModal } from './bulk-edit-modal';
 import '../components/org-settings-components.css';
 import '../users/users.css';
 import './workspaces.css';
+import { SearchBox } from '@/components/ui/search-box';
 
 interface OrgWorkspace {
   id: string;

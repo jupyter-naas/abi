@@ -3,7 +3,7 @@
 import { useTheme } from 'next-themes';
 import { useState, useEffect } from 'react';
 import { Sun, Moon, Check, SunMoon } from 'lucide-react';
-import { SettingsSection } from '@/components/settings/settings-ui';
+import { Card } from '@/components/ui/card';
 import { AccountPageHeader } from '../components/account-page-header';
 import './appearance.css';
 
@@ -47,7 +47,7 @@ export default function AppearancePage() {
       />
 
       {/* A section as on Organization › General and Branding: a 16px icon and a sentence-case title. */}
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <SunMoon size={16} className="text-muted-foreground" />
@@ -92,7 +92,7 @@ export default function AppearancePage() {
         <p className="account-appearance-hint-text">
           Theme changes are applied immediately and saved to your account.
         </p>
-      </SettingsSection>
+      </Card>
     </div>
   );
 }

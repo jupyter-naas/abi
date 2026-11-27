@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ModalBackdrop } from '@/components/ui/dialogs';
+import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import type { RoleOption } from '@/lib/member-roles';
 
@@ -38,7 +38,6 @@ export function RolePickerDialog({
   onAdd: (picked: RoleOption[]) => Promise<void>;
   problemOf?: (picked: RoleOption[]) => string | null;
 }) {
-  const titleId = useId();
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -81,75 +80,66 @@ export function RolePickerDialog({
   };
 
   return (
-    <ModalBackdrop open={open} onClose={onClose} widthClassName="max-w-lg">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="border border-border bg-background p-6 shadow-2xl"
-        data-role-picker=""
-      >
-        <div className="flex items-start justify-between gap-4">
-          <h3 id={titleId} className="text-base font-semibold text-foreground">
-            {title}
-          </h3>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close" data-action="close">
-            <X size={16} />
-          </Button>
-        </div>
-        <div className="relative mt-4">
-          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            autoFocus
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by name"
-            aria-label="Search"
-            className="h-9 pl-8"
-            data-field="role-search"
-          />
-        </div>
-        <ul className="mt-3 max-h-72 overflow-y-auto border border-border" data-role-options="">
-          {shown.length === 0 && (
-            <li className="px-3 py-4 text-sm text-muted-foreground">
-              {options.length === 0 ? 'Nothing more to add.' : 'Nothing matches.'}
-            </li>
-          )}
-          {shown.map((option) => {
-            const hint = roleHint(option);
-            return (
-              <li key={option.id} className="border-b border-border last:border-b-0" data-role-option={option.id}>
-                <label className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-muted/50">
-                  <Checkbox
-                    checked={picked.includes(option.id)}
-                    onCheckedChange={(on) => toggle(option, on)}
-                    aria-label={option.name}
-                    disabled={busy}
-                    className="mt-0.5"
-                  />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm text-foreground">{option.name}</span>
-                    {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
-                  </span>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-        {(problem || error) && (
-          <p className="mt-3 text-xs text-destructive" role="alert" data-role-problem="">
-            {error || problem}
-          </p>
-        )}
-        <div className="mt-4 flex justify-end gap-2">
+    <Dialog
+      open={open}
+      title={title}
+      onClose={onClose}
+      data-role-picker=""
+      footer={
+        <>
           <Button variant="secondary" size="sm" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button size="sm" onClick={() => void add()} disabled={chosen.length === 0 || !!problem || busy} data-action="add-picked">
             {busy ? 'Adding…' : chosen.length > 1 ? `Add ${chosen.length}` : 'Add'}
           </Button>
-        </div>
+        </>
+      }
+    >
+      <div className="relative">
+        <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          autoFocus
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search by name"
+          aria-label="Search"
+          className="h-9 pl-8"
+          data-field="role-search"
+        />
       </div>
-    </ModalBackdrop>
+      <ul className="max-h-72 overflow-y-auto border border-border" data-role-options="">
+        {shown.length === 0 && (
+          <li className="px-3 py-4 text-sm text-muted-foreground">
+            {options.length === 0 ? 'Nothing more to add.' : 'Nothing matches.'}
+          </li>
+        )}
+        {shown.map((option) => {
+          const hint = roleHint(option);
+          return (
+            <li key={option.id} className="border-b border-border last:border-b-0" data-role-option={option.id}>
+              <label className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-muted/50">
+                <Checkbox
+                  checked={picked.includes(option.id)}
+                  onCheckedChange={(on) => toggle(option, on)}
+                  aria-label={option.name}
+                  disabled={busy}
+                  className="mt-0.5"
+                />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm text-foreground">{option.name}</span>
+                  {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      {(problem || error) && (
+        <p className="text-xs text-destructive" role="alert" data-role-problem="">
+          {error || problem}
+        </p>
+      )}
+    </Dialog>
   );
 }

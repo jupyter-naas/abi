@@ -23,8 +23,8 @@ export function statusLabel(status: string): string {
 export function statusTone(status: string): Tone {
   if (status === 'SUCCEEDED') return 'success';
   if (status === 'RUNNING' || status === 'QUEUED') return 'info';
-  if (status === 'RETRYING' || status === 'TIMED_OUT') return 'warn';
-  if (status === 'FAILED') return 'danger';
+  if (status === 'RETRYING' || status === 'TIMED_OUT') return 'warning';
+  if (status === 'FAILED') return 'destructive';
   return 'neutral';
 }
 

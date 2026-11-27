@@ -5,14 +5,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { ownerHref } from '@/components/access/policies/policy-owners';
 import { Button } from '@/components/ui/button';
-import {
-  SettingsEmpty,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-  countLabel,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
 import {
   SettingsTableClear,
   SettingsTableHead,
@@ -149,20 +145,20 @@ export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; a
       />
 
       {error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {error}
-        </SettingsNotice>
+        </Notice>
       )}
       {state?.error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {state.error}
-        </SettingsNotice>
+        </Notice>
       )}
 
       {!state ? (
-        !error && <SettingsLoading label="Loading datasets…" />
+        !error && <Loading label="Loading datasets…" />
       ) : rows.length === 0 ? (
-        <SettingsEmpty title="No dataset namespace." />
+        <EmptyState framed title="No dataset namespace." />
       ) : (
         <div className="space-y-4">
           <SettingsTableToolbar

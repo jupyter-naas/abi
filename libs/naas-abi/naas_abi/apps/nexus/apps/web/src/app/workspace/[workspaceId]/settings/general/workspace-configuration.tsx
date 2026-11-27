@@ -2,11 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { FileCog } from 'lucide-react';
-import {
-  SettingsEmpty,
-  SettingsNotice,
-  SettingsSection,
-} from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import { authFetch } from '@/stores/auth';
 
 interface SeedRow {
@@ -72,10 +70,10 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
 
   return (
     <>
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+      {error && <Notice tone="error">{error}</Notice>}
 
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <FileCog size={16} className="text-muted-foreground" />
@@ -87,7 +85,7 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
         {!config ? (
           !error && <p className="text-sm text-muted-foreground">Loading seeds...</p>
         ) : config.seeds.length === 0 ? (
-          <SettingsEmpty
+          <EmptyState framed
             icon={<FileCog size={20} />}
             title="No config preseeding"
             description="The deployment config does not preload this workspace."
@@ -120,7 +118,7 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
             </table>
           </div>
         )}
-      </SettingsSection>
+      </Card>
     </>
   );
 }

@@ -3,7 +3,10 @@
 /** Runs, newest first: status, job, trigger, when, how long. */
 import { ListChecks } from 'lucide-react';
 import { absoluteTime } from '../data/data-model';
-import { EmptyState, RelativeTime, SkeletonRows } from '../data/data-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Tabs } from '@/components/ui/tabs';
+import { RelativeTime } from '../data/data-ui';
 import { moduleLabel, startDelay, formatMs } from './jobs-model';
 import type { RunSummary } from './jobs-types';
 import { RunDuration, RunStatus, TriggerTag } from './jobs-ui';
@@ -21,20 +24,13 @@ export const STATUS_FILTERS: { id: string; label: string; statuses: string[] }[]
 export function StatusFilter({ value, onChange }: { value: string[]; onChange: (statuses: string[]) => void }) {
   const active = STATUS_FILTERS.find((f) => f.statuses.join(',') === value.join(','))?.id ?? 'all';
   return (
-    <div className="data-segmented" role="tablist" aria-label="Run status">
-      {STATUS_FILTERS.map((f) => (
-        <button
-          key={f.id}
-          type="button"
-          role="tab"
-          aria-selected={active === f.id}
-          className={active === f.id ? 'data-segment data-segment-active' : 'data-segment'}
-          onClick={() => onChange(f.statuses)}
-        >
-          {f.label}
-        </button>
-      ))}
-    </div>
+    <Tabs
+      variant="segmented"
+      label="Run status"
+      value={active}
+      onChange={(id) => onChange(STATUS_FILTERS.find((f) => f.id === id)?.statuses ?? [])}
+      items={STATUS_FILTERS}
+    />
   );
 }
 
@@ -51,12 +47,14 @@ export function RunsList({
   loading?: boolean;
   onOpen: (run: RunSummary) => void;
 }) {
-  if (runs === null) return <SkeletonRows rows={6} />;
+  if (runs === null) return <Loading />;
   if (!runs.length) {
     return (
-      <EmptyState icon={ListChecks} title={loading ? 'Loading runs…' : 'No runs match'}>
-        Runs appear here as soon as a host picks up a trigger: a schedule tick, an event, or Run now.
-      </EmptyState>
+      <EmptyState
+        icon={<ListChecks size={22} strokeWidth={1.5} />}
+        title={loading ? 'Loading runs…' : 'No runs match'}
+        description="Runs appear here as soon as a host picks up a trigger: a schedule tick, an event, or Run now."
+      />
     );
   }
   return (

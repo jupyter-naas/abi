@@ -30,7 +30,8 @@ import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { Checkbox } from '@/components/ui/checkbox';
 import { buttonVariants } from '@/components/ui/button';
-import { SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import '../components/org-settings-components.css';
 import './branding.css';
 
@@ -52,7 +53,7 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <SettingsSection
+    <Card
       title={
         <span className="flex items-center gap-2">
           <Icon size={16} className="text-muted-foreground" />
@@ -63,7 +64,7 @@ function Section({
       bodyClassName="space-y-6 p-4"
     >
       {children}
-    </SettingsSection>
+    </Card>
   );
 }
 
@@ -385,7 +386,7 @@ export const OrgBrandingSettings = forwardRef<
 
   return (
     <div className="org-settings-branding-form">
-      {uploadError && <SettingsNotice tone="error">{uploadError}</SettingsNotice>}
+      {uploadError && <Notice tone="error">{uploadError}</Notice>}
 
       <div className="org-settings-branding-logos">
         <Section icon={Square} title="Square logo">

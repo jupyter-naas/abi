@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { createElement, Fragment, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mount, type Mounted } from '../../system-render';
+import { badgeVariant, mount, type Mounted } from '../../system-render';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
 import { CachePreview, TierBadges, cacheView } from './cache';
 
@@ -37,14 +37,16 @@ describe('cache view', () => {
     });
 
     expect(mounted.host.querySelector('[data-col="type"]')?.textContent).toBe('JSON');
-    expect(mounted.host.querySelector('[data-col="tier"] .data-badge-warn')?.textContent).toBe('hot');
+    const tier = mounted.host.querySelector('[data-col="tier"] .data-cache-tiers > span');
+    expect(tier?.textContent).toBe('hot');
+    expect(badgeVariant(tier)).toBe('warning');
     expect(mounted.host.querySelector('[data-col="age"] time')?.getAttribute('datetime')).toBe('2026-10-02T10:00:00Z');
     expect(mounted.host.textContent).toContain('{"name": "Acme"}');
   });
 
   it('names every tier holding an opened entry', async () => {
     mounted = await mount(TierBadges, { entry: entry('k', { tier: 'hot', tiers: 'hot, cold' }) });
-    expect([...mounted.host.querySelectorAll('.data-badge')].map((b) => b.textContent)).toEqual(['hot', 'cold']);
+    expect([...mounted.host.querySelectorAll('.data-cache-tiers > span')].map((b) => b.textContent)).toEqual(['hot', 'cold']);
   });
 
   it('never shows a pickle, explains why and offers its raw bytes', async () => {

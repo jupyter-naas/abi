@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import {
   createOfferApi,
   type FileMode,
@@ -104,8 +105,8 @@ export function WorkspaceFiles({
     }, `${row.label}: ${MODE_LABELS[mode]}.`);
 
   return (
-    <SettingsSection>
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+    <Card>
+      {error && <Notice tone="error">{error}</Notice>}
       {notice && (
         <p className="text-xs text-muted-foreground" role="status" data-files-notice="">
           {notice}
@@ -195,6 +196,6 @@ export function WorkspaceFiles({
           </table>
         </div>
       )}
-    </SettingsSection>
+    </Card>
   );
 }

@@ -4,7 +4,8 @@ import './coding-environment.css';
 
 import { Bot, LayoutTemplate, Monitor, TerminalSquare } from 'lucide-react';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
-import { Avatar, Badge, RelativeTime, StatusPill } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, RelativeTime, StatusPill } from '../data-ui';
 import { StatusView, phaseTone } from '../viewers/status-view';
 import type { ServiceView } from './types';
 
@@ -16,7 +17,7 @@ function isTemplate(entry: ResourceEntry): boolean {
 
 function AgentReadiness({ ready }: { ready: boolean }) {
   return (
-    <Badge tone={ready ? 'success' : 'neutral'}>
+    <Badge variant={ready ? 'success' : 'neutral'}>
       <Bot size={11} aria-hidden="true" /> {ready ? 'Agent ready' : 'Agent not ready'}
     </Badge>
   );

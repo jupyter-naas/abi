@@ -1,10 +1,13 @@
 'use client';
 
 import { Fragment, useState } from 'react';
+import { Card } from '@/components/ui/card';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { Loading } from '@/components/ui/spinner';
 import type { Loaded } from './system-api';
 import { formatBytes, formatCount, sourceLabel } from './system-format';
 import type { JetStreamSummary, NatsConnection, NatsServer } from './system-types';
-import { Kpi, RowToggle, Section, SourceNote, toggled } from './system-ui';
+import { RowToggle, SourceNote, toggled } from './system-ui';
 
 type Resource<T> = Loaded<T> | null;
 
@@ -12,22 +15,18 @@ function Unavailable({ state }: { state: Exclude<Resource<unknown>, null | { ok:
   return <SourceNote label={sourceLabel(state.source ?? 'nats_monitor')} reason={state.reason} />;
 }
 
-function Loading() {
-  return <p className="system-empty">Loading…</p>;
-}
-
 function ServerSummary({ server }: { server: NatsServer }) {
   return (
     <div className="system-kpis">
-      <Kpi label="Version" value={server.version} hint={server.server_name || server.server_id} />
-      <Kpi label="Uptime" value={server.uptime} />
-      <Kpi label="Connections" value={formatCount(server.connections)} hint={`${formatCount(server.total_connections)} since start`} />
-      <Kpi label="Subscriptions" value={formatCount(server.subscriptions)} />
-      <Kpi label="Messages in / out" value={`${formatCount(server.in_msgs)} / ${formatCount(server.out_msgs)}`} />
-      <Kpi label="Bytes in / out" value={`${formatBytes(server.in_bytes)} / ${formatBytes(server.out_bytes)}`} />
-      <Kpi label="Memory / CPU" value={`${formatBytes(server.mem_bytes)} / ${server.cpu_percent}%`} />
-      <Kpi label="Slow consumers" value={formatCount(server.slow_consumers)} />
-      <Kpi label="Max payload" value={formatBytes(server.max_payload)} hint={server.jetstream ? 'JetStream on' : 'JetStream off'} />
+      <KpiCard label="Version" value={server.version} hint={server.server_name || server.server_id} />
+      <KpiCard label="Uptime" value={server.uptime} />
+      <KpiCard label="Connections" value={formatCount(server.connections)} hint={`${formatCount(server.total_connections)} since start`} />
+      <KpiCard label="Subscriptions" value={formatCount(server.subscriptions)} />
+      <KpiCard label="Messages in / out" value={`${formatCount(server.in_msgs)} / ${formatCount(server.out_msgs)}`} />
+      <KpiCard label="Bytes in / out" value={`${formatBytes(server.in_bytes)} / ${formatBytes(server.out_bytes)}`} />
+      <KpiCard label="Memory / CPU" value={`${formatBytes(server.mem_bytes)} / ${server.cpu_percent}%`} />
+      <KpiCard label="Slow consumers" value={formatCount(server.slow_consumers)} />
+      <KpiCard label="Max payload" value={formatBytes(server.max_payload)} hint={server.jetstream ? 'JetStream on' : 'JetStream off'} />
     </div>
   );
 }
@@ -76,11 +75,11 @@ function JetStream({ summary }: { summary: JetStreamSummary }) {
   return (
     <>
       <div className="system-kpis">
-        <Kpi label="Streams" value={summary.streams.length} />
-        <Kpi label="Consumers" value={summary.consumers} />
-        <Kpi label="Messages" value={formatCount(summary.messages)} />
-        <Kpi label="Storage" value={formatBytes(summary.storage_bytes)} hint={`${formatBytes(summary.memory_bytes)} in memory`} />
-        <Kpi label="API requests" value={formatCount(summary.api_requests)} hint={`${formatCount(summary.api_errors)} errors`} />
+        <KpiCard label="Streams" value={summary.streams.length} />
+        <KpiCard label="Consumers" value={summary.consumers} />
+        <KpiCard label="Messages" value={formatCount(summary.messages)} />
+        <KpiCard label="Storage" value={formatBytes(summary.storage_bytes)} hint={`${formatBytes(summary.memory_bytes)} in memory`} />
+        <KpiCard label="API requests" value={formatCount(summary.api_requests)} hint={`${formatCount(summary.api_errors)} errors`} />
       </div>
       <div className="system-table-wrap">
         <table className="system-table">
@@ -169,10 +168,10 @@ export function SystemNats({
 }) {
   return (
     <div className="system-tab-body">
-      <Section title="Server" subtitle="From the broker's monitoring endpoint (/varz).">
+      <Card title="Server" description="From the broker's monitoring endpoint (/varz)." bodyClassName="space-y-3">
         {server === null ? <Loading /> : server.ok ? <ServerSummary server={server.data} /> : <Unavailable state={server} />}
-      </Section>
-      <Section title="Connections" subtitle="Every client connected to the broker (/connz).">
+      </Card>
+      <Card title="Connections" description="Every client connected to the broker (/connz)." bodyClassName="space-y-3">
         {connections === null ? (
           <Loading />
         ) : connections.ok ? (
@@ -180,10 +179,10 @@ export function SystemNats({
         ) : (
           <Unavailable state={connections} />
         )}
-      </Section>
-      <Section title="JetStream" subtitle="Streams and their consumers (/jsz): discovery KV, jobs, bus.">
+      </Card>
+      <Card title="JetStream" description="Streams and their consumers (/jsz): discovery KV, jobs, bus." bodyClassName="space-y-3">
         {jetstream === null ? <Loading /> : jetstream.ok ? <JetStream summary={jetstream.data} /> : <Unavailable state={jetstream} />}
-      </Section>
+      </Card>
     </div>
   );
 }

@@ -44,16 +44,12 @@ import {
   type SortDir,
   type WorkspaceMemberRow,
 } from './members-model';
-import {
-  SettingsEmpty,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-  countLabel,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
 // The table of Platform and Organization settings › Users: columns that sort and filter.
 import '@/app/organizations/[orgId]/settings/users/users.css';
+import { Notice } from '@/components/ui/notice';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
 
 type Member = WorkspaceMemberRow;
 
@@ -74,7 +70,7 @@ const peopleApi = createPeopleApi();
 
 export default function MembersPage() {
   return (
-    <Suspense fallback={<SettingsLoading label="Loading members…" />}>
+    <Suspense fallback={<Loading label="Loading members…" />}>
       <Members />
     </Suspense>
   );
@@ -265,15 +261,15 @@ function Members() {
       />
 
       {actionError && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {actionError}
-        </SettingsNotice>
+        </Notice>
       )}
 
       {inviteNotice && (
-        <SettingsNotice tone="info" icon={<Mail size={14} />}>
+        <Notice tone="info" icon={<Mail size={14} />}>
           {inviteNotice}
-        </SettingsNotice>
+        </Notice>
       )}
 
       {canManage && (
@@ -298,9 +294,9 @@ function Members() {
       )}
 
       {loading ? (
-        <SettingsLoading label="Loading members…" />
+        <Loading label="Loading members…" />
       ) : members.length === 0 ? (
-        <SettingsEmpty title="No members yet." />
+        <EmptyState framed title="No members yet." />
       ) : (
         <div className="space-y-4">
         <SettingsTableToolbar

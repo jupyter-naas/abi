@@ -6,7 +6,7 @@
  */
 import { Suspense } from 'react';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { SettingsLoading } from '@/components/settings/settings-ui';
+import { Loading } from '@/components/ui/spinner';
 import { orgTarget } from '@/lib/access-model/target';
 import { WorkspaceModules } from '@/app/workspace/[workspaceId]/settings/modules/modules';
 // The choices and notes of a row (Workspace › General's CSS) and the table of Users.
@@ -30,7 +30,7 @@ function Page() {
 
 export default function OrgModulesPage() {
   return (
-    <Suspense fallback={<SettingsLoading label="Loading…" />}>
+    <Suspense fallback={<Loading label="Loading…" />}>
       <Page />
     </Suspense>
   );

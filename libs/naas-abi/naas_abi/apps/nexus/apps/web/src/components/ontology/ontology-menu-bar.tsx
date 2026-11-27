@@ -1,8 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
@@ -12,7 +10,7 @@ import { browserRoute, viewRoute, termTabs, ontologyBrowser } from '@/lib/ontolo
 import { useWorkspaceStore } from '@/stores/workspace';
 import { dashboardRoute } from '@/lib/ontology-dashboard';
 import { ONTOLOGY_SPACING, ontologySpacing, ontologySpacingRoute } from '@/lib/ontology-spacing';
-import { APP_MENU_ROW, APP_MENU_SURFACE, APP_MENU_TRIGGER } from '@/components/shell/app-menu-classes';
+import { Menu, MenuBar, type MenuEntry } from '@/components/ui/menu';
 
 export function OntologyMenuBar() {
   const router = useRouter();
@@ -22,9 +20,6 @@ export function OntologyMenuBar() {
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const root = `/workspace/${workspaceId}/ontology`;
-  const row = APP_MENU_ROW;
-  const surface = APP_MENU_SURFACE;
-  const trigger = APP_MENU_TRIGGER;
   function navigate(view: string) {
     const query = searchParams?.toString() || '';
     router.push(`${root}?${view === 'overview' ? dashboardRoute(query) : viewRoute(query, view)}`, { scroll: false });
@@ -38,73 +33,61 @@ export function OntologyMenuBar() {
     if (path) params.set('ontology', path);
     router.push(`${root}/${page}${params.size ? `?${params}` : ''}`);
   }
-  return <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-    <nav className="flex shrink-0 items-center gap-1" aria-label="Ontology menus">
-      <span className="mr-1 hidden text-xs font-semibold text-foreground sm:inline">Ontology</span>
-      <DropdownMenu.Root><DropdownMenu.Trigger className={trigger}>File <ChevronDown size={11} /></DropdownMenu.Trigger>
-        <DropdownMenu.Portal><DropdownMenu.Content align="start" sideOffset={5} className={surface}>
-          <DropdownMenu.Item className={row} disabled>New Class</DropdownMenu.Item>
-          <DropdownMenu.Item className={row} disabled>New Object Property</DropdownMenu.Item>
-          <p className="max-w-[220px] px-3 py-1 text-xs text-muted-foreground">Creation is unavailable until changes can be saved to an ontology file.</p>
-          <DropdownMenu.Separator className="my-1 h-px bg-border" />
-          <DropdownMenu.Item className={row} onSelect={() => filePage('import')}>Import Ontology…</DropdownMenu.Item>
-          <DropdownMenu.Item className={row} onSelect={() => filePage('export')}>Export Ontology…</DropdownMenu.Item>
-        </DropdownMenu.Content></DropdownMenu.Portal>
-      </DropdownMenu.Root>
-      <DropdownMenu.Root><DropdownMenu.Trigger className={trigger}>View <ChevronDown size={11} /></DropdownMenu.Trigger>
-        <DropdownMenu.Portal><DropdownMenu.Content align="start" sideOffset={5} className={surface}>
-          <DropdownMenu.Label className="px-3 py-1 text-xs text-muted-foreground">Sidebar</DropdownMenu.Label>
-          <DropdownMenu.RadioGroup value={ontologyBrowser(searchParams?.toString() || '') === 'dictionary' ? 'dictionary' : 'files'} onValueChange={selectBrowser}>
-            {(['files', 'dictionary'] as const).map(mode => <DropdownMenu.RadioItem key={mode} value={mode} className={row}>
-              <span className="flex w-3 items-center"><DropdownMenu.ItemIndicator><Check size={12} /></DropdownMenu.ItemIndicator></span>
-              {mode === 'files' ? 'Files' : 'Dictionary'}
-            </DropdownMenu.RadioItem>)}
-          </DropdownMenu.RadioGroup>
-          <DropdownMenu.Separator className="my-1 h-px bg-border" />
-          {(ontologyBrowser(searchParams?.toString() || '') === 'dictionary' ? [['system', 'System'], ['details', 'Details'], ['network', 'Network'], ['overview', 'Dashboard']] : [['network', 'Network'], ['overview', 'Dashboard'], ...termTabs]).map(([view, label]) =>
-            <DropdownMenu.Item key={view} className={row} onSelect={() => navigate(view)}>{label}</DropdownMenu.Item>)}
-          <DropdownMenu.Separator className="my-1 h-px bg-border" />
-          <DropdownMenu.Label className="px-3 py-1 text-xs text-muted-foreground">Connectors</DropdownMenu.Label>
-          <DropdownMenu.RadioGroup value={searchParams?.get('connectors') === 'curved' ? 'curved' : 'orthogonal'} onValueChange={value => {
-            const params = new URLSearchParams(searchParams?.toString() || '');
-            params.set('connectors', value);
-            router.replace(`${root}?${params}`, { scroll: false });
-          }}>
-            {([['orthogonal', 'Right angles'], ['curved', 'Curves']] as const).map(([value, label]) => <DropdownMenu.RadioItem key={value} value={value} className={row}>
-              <span className="flex w-3 items-center"><DropdownMenu.ItemIndicator><Check size={12} /></DropdownMenu.ItemIndicator></span>{label}
-            </DropdownMenu.RadioItem>)}
-          </DropdownMenu.RadioGroup>
-          <DropdownMenu.Separator className="my-1 h-px bg-border" />
-          <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className={row}>
-              Spacing <span className="ml-auto text-muted-foreground">{spacing.label}</span><ChevronRight size={12} />
-            </DropdownMenu.SubTrigger>
-            <DropdownMenu.Portal><DropdownMenu.SubContent sideOffset={4} collisionPadding={8} className={surface}>
-              <DropdownMenu.RadioGroup value={spacing.value} onValueChange={value => {
-                router.replace(`${root}?${ontologySpacingRoute(searchParams?.toString() || '', value)}`, { scroll: false });
-              }}>
-                {ONTOLOGY_SPACING.map(option => <DropdownMenu.RadioItem key={option.value} value={option.value} className={row}>
-                  <span className="flex w-3 items-center"><DropdownMenu.ItemIndicator><Check size={12} /></DropdownMenu.ItemIndicator></span>{option.label}
-                </DropdownMenu.RadioItem>)}
-              </DropdownMenu.RadioGroup>
-            </DropdownMenu.SubContent></DropdownMenu.Portal>
-          </DropdownMenu.Sub>
-          <DropdownMenu.Separator className="my-1 h-px bg-border" />
-          <DropdownMenu.Item className={row} disabled={refreshing} onSelect={() => {
-            setRefreshing(true); setRefreshError(null);
-            void (async () => {
-              try {
-                const response = await authFetch(`${getApiUrl()}/api/ontology/cache/clear${ontologyApiQuery()}`, { method: 'POST' });
-                if (!response.ok) throw new Error(`Refresh failed (${response.status}).`);
-                useOntologyStore.setState(state => ({ graphRefreshTrigger: state.graphRefreshTrigger + 1 }));
-              } catch (error) {
-                setRefreshError(error instanceof Error ? error.message : 'Refresh failed. Try again.');
-              } finally { setRefreshing(false); }
-            })();
-          }}>{refreshing ? 'Refreshing…' : 'Refresh'}</DropdownMenu.Item>
-        </DropdownMenu.Content></DropdownMenu.Portal>
-      </DropdownMenu.Root>
-    </nav>
-    {refreshError && <span role="alert" className="text-xs text-destructive">{refreshError}</span>}
-  </div>;
+  const query = searchParams?.toString() || '';
+  const dictionary = ontologyBrowser(query) === 'dictionary';
+  const curved = searchParams?.get('connectors') === 'curved';
+  function setConnectors(value: string) {
+    const params = new URLSearchParams(query);
+    params.set('connectors', value);
+    router.replace(`${root}?${params}`, { scroll: false });
+  }
+  async function refresh() {
+    setRefreshing(true); setRefreshError(null);
+    try {
+      const response = await authFetch(`${getApiUrl()}/api/ontology/cache/clear${ontologyApiQuery()}`, { method: 'POST' });
+      if (!response.ok) throw new Error(`Refresh failed (${response.status}).`);
+      useOntologyStore.setState(state => ({ graphRefreshTrigger: state.graphRefreshTrigger + 1 }));
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : 'Refresh failed. Try again.');
+    } finally { setRefreshing(false); }
+  }
+  const fileItems: MenuEntry[] = [
+    { id: 'new-class', label: 'New Class', disabled: true },
+    { id: 'new-property', label: 'New Object Property', disabled: true },
+    { id: 'no-create', kind: 'note', label: 'Creation is unavailable until changes can be saved to an ontology file.' },
+    { id: 'sep-io', kind: 'separator' },
+    { id: 'import', label: 'Import Ontology…', onSelect: () => filePage('import') },
+    { id: 'export', label: 'Export Ontology…', onSelect: () => filePage('export') },
+  ];
+  const views = dictionary ? [['system', 'System'], ['details', 'Details'], ['network', 'Network'], ['overview', 'Dashboard']] : [['network', 'Network'], ['overview', 'Dashboard'], ...termTabs];
+  const viewItems: MenuEntry[] = [
+    { id: 'sidebar', kind: 'heading', label: 'Sidebar' },
+    { id: 'files', label: 'Files', checked: !dictionary, onSelect: () => selectBrowser('files') },
+    { id: 'dictionary', label: 'Dictionary', checked: dictionary, onSelect: () => selectBrowser('dictionary') },
+    { id: 'sep-views', kind: 'separator' },
+    ...views.map(([view, label]) => ({ id: `view-${view}`, label, onSelect: () => navigate(view) })),
+    { id: 'sep-connectors', kind: 'separator' },
+    { id: 'connectors', kind: 'heading', label: 'Connectors' },
+    { id: 'orthogonal', label: 'Right angles', checked: !curved, onSelect: () => setConnectors('orthogonal') },
+    { id: 'curved', label: 'Curves', checked: curved, onSelect: () => setConnectors('curved') },
+    { id: 'sep-spacing', kind: 'separator' },
+    {
+      id: 'spacing', kind: 'submenu', label: 'Spacing', value: spacing.label,
+      items: ONTOLOGY_SPACING.map(option => ({
+        id: option.value, label: option.label, checked: option.value === spacing.value,
+        onSelect: () => router.replace(`${root}?${ontologySpacingRoute(query, option.value)}`, { scroll: false }),
+      })),
+    },
+    { id: 'sep-refresh', kind: 'separator' },
+    { id: 'refresh', label: refreshing ? 'Refreshing…' : 'Refresh', disabled: refreshing, onSelect: () => void refresh() },
+  ];
+  return <MenuBar
+    label="Ontology menus"
+    title="Ontology"
+    className="flex-wrap"
+    trailing={refreshError && <span role="alert" className="ml-2 text-xs text-destructive">{refreshError}</span>}
+  >
+    <Menu label="File" items={fileItems} />
+    <Menu label="View" items={viewItems} />
+  </MenuBar>;
 }

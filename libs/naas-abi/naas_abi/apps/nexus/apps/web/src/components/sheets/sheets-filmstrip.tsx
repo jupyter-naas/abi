@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { type SheetTabItem } from './sheets-outline';
-import { SheetsTabThumb } from './sheets-cover-thumb';
+import { OfficePartThumb } from '@/components/office/office-cover-thumb';
+import { SHEETS_KIND } from '@/components/office/office-kinds';
+import { SHEETS_COVER_FIT } from './sheets-preview-fit';
 
 export function SheetsTabStrip({
   html,
@@ -58,7 +60,7 @@ export function SheetsTabStrip({
                   dragging === tab.index && 'opacity-50',
                 )}
               >
-                <SheetsTabThumb html={thumbHtml} index={tab.index} title={label} />
+                <OfficePartThumb fit={SHEETS_COVER_FIT} testId={SHEETS_KIND.partThumbTestId} html={thumbHtml} index={tab.index} title={label} />
                 <span className="truncate px-1 text-xs font-medium text-foreground">{label}</span>
                 <span className="px-1 text-[10px] text-muted-foreground">Tab {tab.index + 1}</span>
               </button>

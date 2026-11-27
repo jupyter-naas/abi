@@ -9,14 +9,10 @@ import { invalidateGraphExplorer } from '@/stores/graph-explorer';
 import { useOntologyStore } from '@/stores/ontology';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-  countLabel,
-  SettingsSection,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import {
   SettingsTableClear,
   SettingsTableHead,
@@ -244,22 +240,22 @@ export function ResourceAccessEditor({
         }
       />
       {error && (
-        <SettingsNotice tone="error">
+        <Notice tone="error">
           <span role="alert">{error}</span>
-        </SettingsNotice>
+        </Notice>
       )}
       {saved && (
-        <SettingsNotice tone="success">
+        <Notice tone="success">
           <span role="status">Assignments saved.</span>
-        </SettingsNotice>
+        </Notice>
       )}
       {loading ? (
-        <SettingsLoading label={`Loading ${title.toLowerCase()}…`} />
+        <Loading label={`Loading ${title.toLowerCase()}…`} />
       ) : (
         snapshot && (
           <>
             {kind === 'graphs' && (
-              <SettingsSection title="Workspace access">
+              <Card title="Workspace access">
                 <fieldset className="flex flex-col gap-2.5" disabled={saving}>
                   <Checkbox
                     checked={!!draft.read_all}
@@ -283,7 +279,7 @@ export function ResourceAccessEditor({
                     label="Allow members to create graphs"
                   />
                 </fieldset>
-              </SettingsSection>
+              </Card>
             )}
             <SettingsTableToolbar
               search={table.search}

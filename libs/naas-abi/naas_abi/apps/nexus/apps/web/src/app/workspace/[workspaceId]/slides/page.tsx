@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
-import { SlidesIndexGallery, SlidesTemplateStrip } from '@/components/slides/slides-index-gallery';
-import { invalidateSlidesCover } from '@/components/slides/slides-cover-thumb';
+import { OfficeIndexGallery, OfficeTemplateStrip } from '@/components/office/office-index-gallery';
+import { invalidateOfficeCover } from '@/components/office/office-cover-thumb';
+import { SLIDES_KIND } from '@/components/office/office-kinds';
+import { SLIDES_COVER_FIT } from '@/components/slides/slides-preview-fit';
 import { SlidesMenuBar } from '@/components/slides/slides-menu-bar';
-import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
+import { SlidesStatusBar } from '@/components/office/office-status-bar';
 import { OfficeCreateLoader } from '@/components/office/office-create-loader';
 import { pushOfficeCreate, useOfficeCreateStore } from '@/components/office/office-create-state';
 import { openSlidesAgentPane, slidesApiErrorMessage } from '@/lib/create-slides-project';
@@ -117,7 +119,7 @@ export default function SlidesIndexPage() {
   useEffect(() => {
     const onUpdated = (event: Event) => {
       const slug = (event as CustomEvent<{ slug?: string }>).detail?.slug;
-      invalidateSlidesCover(workspaceId, slug);
+      invalidateOfficeCover('slides', workspaceId, slug);
       void load({ quiet: true });
     };
     window.addEventListener(SLIDES_DECK_UPDATED_EVENT, onUpdated);
@@ -186,7 +188,8 @@ export default function SlidesIndexPage() {
           </div>
         ) : (
           <>
-            <SlidesTemplateStrip
+            <OfficeTemplateStrip
+              kind={SLIDES_KIND}
               templates={templates}
               creating={creating}
               onSelect={(templateId) => onCreateFromTemplate(templateId)}
@@ -221,7 +224,9 @@ export default function SlidesIndexPage() {
                   {showArchived ? 'No archived presentations.' : 'No presentations yet.'}
                 </p>
               ) : (
-                <SlidesIndexGallery
+                <OfficeIndexGallery
+                  kind={SLIDES_KIND}
+                  fit={SLIDES_COVER_FIT}
                   projects={visibleProjects}
                   workspaceId={workspaceId}
                   templates={templates}

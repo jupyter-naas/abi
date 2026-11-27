@@ -6,7 +6,9 @@
  * minimap or double-click a span to zoom.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Layers, Search, ZoomOut } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Layers, ZoomOut } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { SearchBox } from '@/components/ui/search-box';
 import { Hint } from '../data/data-ui';
 import {
   buildTree,
@@ -433,16 +435,14 @@ export function Waterfall({
   return (
     <div className="trace-waterfall" style={height ? { height } : undefined}>
       <div className="trace-toolbar">
-        <label className="data-search trace-filter">
-          <Search size={13} aria-hidden="true" />
-          <input
-            className="data-search-input"
-            placeholder="Filter spans (name, service, attribute)"
-            aria-label="Filter spans"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-        </label>
+        <SearchBox
+          size="sm"
+          className="trace-filter"
+          placeholder="Filter spans (name, service, attribute)"
+          label="Filter spans"
+          value={filter}
+          onChange={setFilter}
+        />
         <span className="data-muted trace-count">
           {matches ? `${matches.size} of ${rows.length} spans` : `${rows.length} spans`}
           {!matches && groups > 0 ? ` · ${groups} folded` : ''}
@@ -455,25 +455,27 @@ export function Waterfall({
           </button>
         )}
         <Hint label={grouping ? 'Show repeated calls one by one' : 'Fold repeated calls into one row'}>
-          <button
-            type="button"
-            className="data-icon-button"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="trace-toggle h-7 w-7"
             aria-label="Fold repeated calls"
             aria-pressed={grouping}
             onClick={() => setGrouping((on) => !on)}
           >
             <Layers size={14} aria-hidden="true" />
-          </button>
+          </Button>
         </Hint>
         <Hint label="Expand all">
-          <button type="button" className="data-icon-button" aria-label="Expand all" onClick={() => setCollapsed(new Set())}>
+          <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Expand all" onClick={() => setCollapsed(new Set())}>
             <ChevronsUpDown size={14} aria-hidden="true" />
-          </button>
+          </Button>
         </Hint>
         <Hint label="Collapse all (then open one level at a time)">
-          <button
-            type="button"
-            className="data-icon-button"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
             aria-label="Collapse all"
             onClick={() => {
               setCollapsed(new Set(rows.filter((r) => r.children).map((r) => r.span.span_id)));
@@ -481,7 +483,7 @@ export function Waterfall({
             }}
           >
             <ChevronsDownUp size={14} aria-hidden="true" />
-          </button>
+          </Button>
         </Hint>
       </div>
       <Minimap rows={rows} total={total} window={window} onZoom={setWindow} />

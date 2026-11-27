@@ -5,7 +5,13 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, Hourglass, Play, ScrollText, Square, Waypoints, X } from 'lucide-react';
 import type { Failure } from '../data/data-api';
 import { absoluteTime } from '../data/data-model';
-import { Badge, CopyButton, EmptyState, Hint, Notice, RelativeTime, SkeletonRows } from '../data/data-ui';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Notice } from '@/components/ui/notice';
+import { Loading } from '@/components/ui/spinner';
+import { Tabs } from '@/components/ui/tabs';
+import { CopyButton, Hint, RelativeTime } from '../data/data-ui';
 import { JsonTree } from '../data/viewers/json-tree';
 import type { TracesApi } from '../traces/traces-api';
 import { TraceView } from '../traces/trace-view';
@@ -83,9 +89,15 @@ function Timeline({ run }: { run: RunSummary }) {
 function Logs({ lines }: { lines: string[] }) {
   if (!lines.length) {
     return (
-      <EmptyState icon={ScrollText} title="No log lines">
-        Lines a job writes with <code className="data-mono">ctx.log(...)</code> show up here (up to 200 per run).
-      </EmptyState>
+      <EmptyState
+        icon={<ScrollText size={22} strokeWidth={1.5} />}
+        title="No log lines"
+        description={
+          <>
+            Lines a job writes with <code className="data-mono">ctx.log(...)</code> show up here (up to 200 per run).
+          </>
+        }
+      />
     );
   }
   return (
@@ -113,12 +125,10 @@ function Logs({ lines }: { lines: string[] }) {
 function TruncatedResultView({ bytes, preview }: TruncatedResult) {
   return (
     <div className="run-result-cut">
-      <Notice tone="warn">
-        <span>
-          {bytes === undefined ? 'The result is too large to keep' : `The result is ${formatBytes(bytes)}`}: the first{' '}
-          {formatBytes(preview.length)} are shown. A workflow should store large data in object storage and return a
-          reference to it.
-        </span>
+      <Notice tone="warning">
+        {bytes === undefined ? 'The result is too large to keep' : `The result is ${formatBytes(bytes)}`}: the first{' '}
+        {formatBytes(preview.length)} are shown. A workflow should store large data in object storage and return a
+        reference to it.
       </Notice>
       <pre className="data-text">{preview}</pre>
     </div>
@@ -165,9 +175,11 @@ export function RunPanel({
     return (
       <aside className="data-inspector run-panel" aria-label="Selected run">
         <div className="data-inspector-loading">
-          <EmptyState icon={Hourglass} title="Queued">
-            The trigger is on the bus; the run appears as soon as a host picks it up.
-          </EmptyState>
+          <EmptyState
+            icon={<Hourglass size={22} strokeWidth={1.5} />}
+            title="Queued"
+            description="The trigger is on the bus; the run appears as soon as a host picks it up."
+          />
         </div>
       </aside>
     );
@@ -177,11 +189,13 @@ export function RunPanel({
       <aside className="data-inspector run-panel" aria-label="Selected run">
         <div className="data-inspector-loading">
           {failure ? (
-            <EmptyState icon={AlertTriangle} title={failure.status === 404 ? 'Run not found' : 'Could not open the run'}>
-              {failure.reason}
-            </EmptyState>
+            <EmptyState
+              icon={<AlertTriangle size={22} strokeWidth={1.5} />}
+              title={failure.status === 404 ? 'Run not found' : 'Could not open the run'}
+              description={failure.reason}
+            />
           ) : (
-            <SkeletonRows rows={4} />
+            <Loading />
           )}
         </div>
       </aside>
@@ -189,8 +203,8 @@ export function RunPanel({
   }
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
-    ...(workflow ? [{ id: 'steps' as const, label: 'Steps', count: workflow.steps.length }] : []),
-    { id: 'logs', label: 'Logs', count: detail?.logs.length },
+    ...(workflow ? [{ id: 'steps' as const, label: 'Steps', count: workflow.steps.length || undefined }] : []),
+    { id: 'logs', label: 'Logs', count: detail?.logs.length || undefined },
     { id: 'payload', label: workflow ? 'Input' : 'Payload' },
     { id: 'result', label: run.status === 'SUCCEEDED' ? 'Result' : 'Output' },
     { id: 'trace', label: 'Trace' },
@@ -215,9 +229,9 @@ export function RunPanel({
             </div>
           </div>
           <Hint label="Close" shortcut="Esc">
-            <button type="button" className="data-icon-button" aria-label="Close" onClick={onClose}>
+            <Button variant="ghost" size="icon" aria-label="Close" onClick={onClose}>
               <X size={16} aria-hidden="true" />
-            </button>
+            </Button>
           </Hint>
         </div>
         <div className="data-inspector-facts">
@@ -234,58 +248,47 @@ export function RunPanel({
               {run.attempt}/{run.max_attempts}
             </span>
           </span>
-          {run.attempt > 1 && <Badge tone="warn">retried</Badge>}
+          {run.attempt > 1 && <Badge variant="warning">retried</Badge>}
         </div>
         <Timeline run={run} />
         {run.status === 'SKIPPED' && (
-          <Notice tone="neutral">
-            <span>Nothing to do{run.skip_reason ? `: ${run.skip_reason}` : ''}</span>
-          </Notice>
+          <Notice tone="info">Nothing to do{run.skip_reason ? `: ${run.skip_reason}` : ''}</Notice>
         )}
         {run.error && (
-          <Notice tone="danger">
-            <AlertTriangle size={14} aria-hidden="true" />
+          <Notice tone="error" icon={<AlertTriangle size={14} aria-hidden="true" />}>
             <span className="run-error">{run.error}</span>
           </Notice>
         )}
-        <nav className="data-inspector-tabs" role="tablist" aria-label="Run views">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === t.id}
-              className={tab === t.id ? 'data-inspector-tab data-inspector-tab-active' : 'data-inspector-tab'}
-              onClick={() => setTab(t.id)}
-            >
-              {t.label}
-              {t.count ? <span className="jobs-tab-count">{t.count}</span> : null}
-            </button>
-          ))}
-        </nav>
+        <Tabs label="Run views" className="mt-3" value={tab} onChange={setTab} items={tabs} />
       </header>
       <div className="data-inspector-body">
         {!detail ? (
-          <SkeletonRows rows={4} />
+          <Loading />
         ) : tab === 'steps' && workflow ? (
           <StepTimeline run={run} workflow={workflow} onOpenChild={onOpenChild} />
         ) : tab === 'logs' ? (
           <Logs lines={detail.logs} />
         ) : tab === 'payload' ? (
           isEmpty(detail.payload) ? (
-            <EmptyState icon={ScrollText} title={workflow ? 'Empty input' : 'Empty payload'}>
-              {workflow ? 'This run was started with no input.' : 'Schedules send none; Run now and events may.'}
-            </EmptyState>
+            <EmptyState
+              icon={<ScrollText size={22} strokeWidth={1.5} />}
+              title={workflow ? 'Empty input' : 'Empty payload'}
+              description={workflow ? 'This run was started with no input.' : 'Schedules send none; Run now and events may.'}
+            />
           ) : (
             <JsonTree value={detail.payload} />
           )
         ) : tab === 'result' ? (
           isEmpty(detail.result) ? (
-            <EmptyState icon={ScrollText} title={run.status === 'SUCCEEDED' ? 'No result returned' : 'No output'}>
-              {run.status === 'SUCCEEDED'
-                ? 'The handler returned nothing (or None).'
-                : 'Only successful runs record what the handler returned.'}
-            </EmptyState>
+            <EmptyState
+              icon={<ScrollText size={22} strokeWidth={1.5} />}
+              title={run.status === 'SUCCEEDED' ? 'No result returned' : 'No output'}
+              description={
+                run.status === 'SUCCEEDED'
+                  ? 'The handler returned nothing (or None).'
+                  : 'Only successful runs record what the handler returned.'
+              }
+            />
           ) : truncatedResult(detail.result) ? (
             <TruncatedResultView {...(truncatedResult(detail.result) as TruncatedResult)} />
           ) : typeof detail.result === 'object' ? (
@@ -303,23 +306,25 @@ export function RunPanel({
             onOpenTrace={onOpenTrace}
           />
         ) : (
-          <EmptyState icon={Waypoints} title="No trace">
-            Tracing was off when this run started, or its host predates trace recording.
-          </EmptyState>
+          <EmptyState
+            icon={<Waypoints size={22} strokeWidth={1.5} />}
+            title="No trace"
+            description="Tracing was off when this run started, or its host predates trace recording."
+          />
         )}
       </div>
       <footer className="data-inspector-actions">
         <Hint label="Run the job again with the same payload">
-          <button type="button" className="data-button" onClick={() => onRerun(run, detail?.payload ?? {})}>
+          <Button variant="secondary" size="sm" onClick={() => onRerun(run, detail?.payload ?? {})}>
             <Play size={14} aria-hidden="true" /> Re-run
-          </button>
+          </Button>
         </Hint>
         <span className="data-spacer" />
         {isActive(run.status) && (
           <Hint label="Ask the host to stop it; the job sees ctx.cancelled">
-            <button type="button" className="data-button data-button-danger-ghost" onClick={() => onCancel(run)}>
+            <Button variant="destructive-ghost" size="sm" onClick={() => onCancel(run)}>
               <Square size={13} aria-hidden="true" /> Cancel
-            </button>
+            </Button>
           </Hint>
         )}
       </footer>

@@ -57,7 +57,7 @@ describe('jobs model', () => {
     expect(decodeJobsLocation(encodeJobsLocation(location, new URLSearchParams('tab=jobs')))).toEqual(location);
     expect(splitKey('ops.reports/digest:7')).toEqual(['ops.reports', 'digest:7']);
     expect(moduleLabel('operations.projects.nats_probe.researcher')).toBe('researcher');
-    expect([statusTone('SUCCEEDED'), statusTone('FAILED'), statusTone('RETRYING')]).toEqual(['success', 'danger', 'warn']);
+    expect([statusTone('SUCCEEDED'), statusTone('FAILED'), statusTone('RETRYING')]).toEqual(['success', 'destructive', 'warning']);
   });
 
   it('treats skipped runs as nothing to do, never as failures', () => {

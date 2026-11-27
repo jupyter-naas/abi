@@ -5,14 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Workflow } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import {
-  SettingsEmpty,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-  countLabel,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
 import {
   SettingsTableClear,
   SettingsTableHead,
@@ -92,12 +88,12 @@ export default function WorkflowsSettingsPage() {
         actions={<UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />}
       />
 
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+      {error && <Notice tone="error">{error}</Notice>}
 
       {items === null ? (
-        <SettingsLoading label="Loading workflows…" />
+        <Loading label="Loading workflows…" />
       ) : all.length === 0 ? (
-        <SettingsEmpty
+        <EmptyState framed
           icon={<Workflow size={40} className="opacity-40" />}
           title="No workflows in this workspace"
           description="The modules of this workspace run no workflow or pipeline."

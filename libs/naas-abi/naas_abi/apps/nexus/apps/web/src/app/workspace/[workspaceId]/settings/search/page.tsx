@@ -21,9 +21,10 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox, radioClass } from '@/components/ui/checkbox';
 import { fieldClass } from '@/components/ui/input';
 import { SettingsReloadButton } from '@/components/settings/settings-reload';
-import {
-  SettingsEmpty, SettingsLoading, SettingsNotice, SettingsPageHeader, SettingsTableToolbar, countLabel,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
 import {
   SettingsTableClear, SettingsTableHead, SettingsTableNoMatch, useSettingsTable,
 } from '@/components/settings/users-table/settings-table';
@@ -139,9 +140,9 @@ function SearchSettings() {
           <SettingsReloadButton />
         </div>
         {loading && !selected ? (
-          <SettingsLoading />
+          <Loading />
         ) : !selected ? (
-          <SettingsEmpty title={<>There is no topic “{selectedId}” in this workspace.</>} />
+          <EmptyState framed title={<>There is no topic “{selectedId}” in this workspace.</>} />
         ) : (
           <TopicEditor
             key={`${selected.id}:${selected.source}`}
@@ -181,9 +182,9 @@ function SearchSettings() {
         }
       />
 
-      {error && <SettingsNotice tone="error"><span role="alert">{error}</span></SettingsNotice>}
-      {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
-      {!canEdit && !loading && <SettingsNotice>Only workspace owners and admins can change search topics.</SettingsNotice>}
+      {error && <Notice tone="error"><span role="alert">{error}</span></Notice>}
+      {tableError && <Notice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></Notice>}
+      {!canEdit && !loading && <Notice>Only workspace owners and admins can change search topics.</Notice>}
 
       <SettingsTableToolbar
         search={table.search}
@@ -434,13 +435,13 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
           </div>
         )}
       </div>
-      {savedAt && !dirty && <SettingsNotice tone="success"><span role="status">Saved.</span></SettingsNotice>}
+      {savedAt && !dirty && <Notice tone="success"><span role="status">Saved.</span></Notice>}
       {errors.length > 0 && (
-        <SettingsNotice tone="error">
+        <Notice tone="error">
           <ul role="alert" className="list-disc space-y-0.5 pl-4">
             {errors.map((e, i) => <li key={i}>{e}</li>)}
           </ul>
-        </SettingsNotice>
+        </Notice>
       )}
 
       <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-2">

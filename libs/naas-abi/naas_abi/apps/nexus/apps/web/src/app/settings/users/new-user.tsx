@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Mail, UserPlus } from 'lucide-react';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '@/app/organizations/[orgId]/settings/components/org-settings-section-card';
-import { SettingsNotice } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
 import { RoleEditor } from '@/components/people/role-editor';
 import {
   createMemberRolesApi,
@@ -146,9 +146,9 @@ export function NewUser({
       />
 
       {error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           <span role="alert">{error}</span>
-        </SettingsNotice>
+        </Notice>
       )}
 
       {said.length > 0 && (

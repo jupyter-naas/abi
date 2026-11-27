@@ -13,12 +13,10 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import {
-  SettingsEmpty,
-  SettingsField,
-  SettingsNotice,
-  SettingsSection,
-} from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Field } from '@/components/ui/field';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import { usePageDraft } from '@/hooks/use-page-state';
 import { getApiUrl } from '@/lib/config';
 import { fetchCurrentBackgroundImage } from '@/lib/home-background';
@@ -178,7 +176,7 @@ export default function GeneralSettingsPage() {
   const currentBackgroundUrl = themeBackgroundUrl || driveBackgroundUrl;
 
   if (!workspace || !currentWorkspaceId) {
-    return <SettingsEmpty title="No workspace selected" />;
+    return <EmptyState framed title="No workspace selected" />;
   }
 
   const logoSrc = assetUrl(theme.logoUrl);
@@ -332,7 +330,7 @@ export default function GeneralSettingsPage() {
       />
 
       {(detailsError || logoError) && (
-        <SettingsNotice tone="error">{detailsError || logoError}</SettingsNotice>
+        <Notice tone="error">{detailsError || logoError}</Notice>
       )}
       {canEdit && dirty ? (
         <div className="org-settings-general-draft" role="status">
@@ -478,7 +476,7 @@ export default function GeneralSettingsPage() {
         </div>
       </AccountSectionCard>
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <ImageIcon size={16} className="text-muted-foreground" />
@@ -517,9 +515,9 @@ export default function GeneralSettingsPage() {
             Only workspace owners and admins can change the wallpaper.
           </p>
         )}
-      </SettingsSection>
+      </Card>
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <Palette size={16} className="text-muted-foreground" />
@@ -534,7 +532,7 @@ export default function GeneralSettingsPage() {
         }
       >
         <div className="space-y-6">
-          <SettingsField label="Primary Color" hint={`Current: ${theme.primaryColor}`}>
+          <Field label="Primary Color" hint={`Current: ${theme.primaryColor}`}>
             <div className="flex flex-wrap gap-3">
               {colorChoices.map((color) => (
                 <button
@@ -575,9 +573,9 @@ export default function GeneralSettingsPage() {
                 </div>
               </div>
             </div>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label="Accent Color" hint={`Current: ${theme.accentColor || 'Not set'}`}>
+          <Field label="Accent Color" hint={`Current: ${theme.accentColor || 'Not set'}`}>
             <div className="flex flex-wrap gap-3">
               {colorChoices.map((color) => (
                 <button
@@ -595,10 +593,10 @@ export default function GeneralSettingsPage() {
                 </button>
               ))}
             </div>
-          </SettingsField>
+          </Field>
 
         </div>
-      </SettingsSection>
+      </Card>
 
       {canEdit && workspace && <WorkspaceConfiguration workspaceId={workspace.id} />}
     </div>

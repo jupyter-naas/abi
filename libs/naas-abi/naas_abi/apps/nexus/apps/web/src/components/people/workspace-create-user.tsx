@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AlertCircle, ArrowLeft, UserPlus } from 'lucide-react';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
-import { SettingsNotice } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
 // The creation pages' buttons: Cancel (secondary) then Create (primary, faded until it may create).
 import '@/app/organizations/[orgId]/settings/users/users.css';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
@@ -158,9 +158,9 @@ export function WorkspaceCreateUserForm({
       />
 
       {(loadError || error) && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           <span role="alert">{loadError || error}</span>
-        </SettingsNotice>
+        </Notice>
       )}
 
       <AccountSectionCard padded stack>

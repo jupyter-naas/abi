@@ -21,7 +21,7 @@ import {
 } from '@/lib/people';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
-import { SettingsNotice } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
 // The creation pages' buttons: Cancel (secondary) then Create (primary, faded until it may create).
 import '@/app/organizations/[orgId]/settings/users/users.css';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
@@ -304,9 +304,9 @@ export function CreateUserForm({
       />
 
       {error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           <span role="alert">{error}</span>
-        </SettingsNotice>
+        </Notice>
       )}
 
       {notice && (

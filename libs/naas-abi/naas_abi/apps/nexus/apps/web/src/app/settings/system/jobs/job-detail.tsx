@@ -2,7 +2,11 @@
 
 /** One job: its schedule and next ticks, health, queue, settings, and its runs. */
 import { AlertTriangle, Clock, Hand, Play, Radio, type LucideIcon } from 'lucide-react';
-import { Badge, Notice, RelativeTime } from '../data/data-ui';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card as KitCard } from '@/components/ui/card';
+import { Notice } from '@/components/ui/notice';
+import { RelativeTime } from '../data/data-ui';
 import { JsonTree } from '../data/viewers/json-tree';
 import { FAILED, formatMs, health, isWorkflow, statusLabel } from './jobs-model';
 import type { JobView, RunSummary } from './jobs-types';
@@ -13,10 +17,9 @@ const KIND_ICONS: Record<string, LucideIcon> = { cron: Clock, every: Clock, even
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="job-card">
-      <h3 className="job-card-title">{title}</h3>
+    <KitCard title={title} bodyClassName="flex flex-col gap-2.5">
       {children}
-    </section>
+    </KitCard>
   );
 }
 
@@ -44,8 +47,8 @@ export function JobDetail({
         <div className="job-detail-heading">
           <div className="job-detail-title-row">
             <h2 className="job-detail-title">{job.name}</h2>
-            {isWorkflow(job) && <Badge tone="success">workflow</Badge>}
-            <Badge tone={job.location === 'remote' ? 'info' : 'neutral'}>
+            {isWorkflow(job) && <Badge variant="success">workflow</Badge>}
+            <Badge variant={job.location === 'remote' ? 'info' : 'neutral'}>
               {job.location === 'remote' ? `remote · ${job.instances} instance${job.instances === 1 ? '' : 's'}` : 'engine'}
             </Badge>
           </div>
@@ -54,21 +57,22 @@ export function JobDetail({
           </p>
           {job.description && <p className="job-detail-description">{job.description}</p>}
         </div>
-        <button type="button" className="data-button data-button-primary" onClick={onRun}>
+        <Button size="sm" onClick={onRun}>
           <Play size={14} aria-hidden="true" /> Run now
-        </button>
+        </Button>
       </header>
 
       {job.last_run && FAILED.includes(job.last_run.status) && (
-        <Notice tone="danger">
-          <AlertTriangle size={14} aria-hidden="true" />
-          <span className="job-last-failure">
-            Last run {statusLabel(job.last_run.status).toLowerCase()} <RelativeTime iso={job.last_run.started_at} />
-            {job.last_run.error && <code className="data-mono">{job.last_run.error}</code>}
-          </span>
-          <button type="button" className="data-text-button" onClick={() => job.last_run && onOpenRun(job.last_run)}>
-            Open the run
-          </button>
+        <Notice tone="error" icon={<AlertTriangle size={14} aria-hidden="true" />}>
+          <div className="flex items-start gap-2">
+            <span className="job-last-failure">
+              Last run {statusLabel(job.last_run.status).toLowerCase()} <RelativeTime iso={job.last_run.started_at} />
+              {job.last_run.error && <code className="data-mono">{job.last_run.error}</code>}
+            </span>
+            <button type="button" className="data-text-button" onClick={() => job.last_run && onOpenRun(job.last_run)}>
+              Open the run
+            </button>
+          </div>
         </Notice>
       )}
 

@@ -5,7 +5,7 @@ import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { authFetch } from '@/stores/auth';
 import { DOCUMENTS_UPDATED_EVENT } from '@/stores/documents';
-import { type DocumentsProjectTree } from '@/components/shell/sidebar/documents-tree';
+import { type OfficeProjectTree as DocumentsProjectTree } from '@/components/shell/sidebar/office-tree';
 import { createPersistedOpenState } from '@/lib/persisted-open-state';
 import { sectionsComposerFiles } from './documents-composer-model';
 

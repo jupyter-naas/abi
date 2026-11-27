@@ -9,14 +9,10 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  SettingsEmpty,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-  countLabel,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
 import {
   SettingsTableClear,
   SettingsTableHead,
@@ -237,7 +233,7 @@ export function ModelsPanel() {
   };
 
   if (loading) {
-    return <SettingsLoading label="Loading models…" />;
+    return <Loading label="Loading models…" />;
   }
 
   return (
@@ -250,14 +246,14 @@ export function ModelsPanel() {
       />
 
       {error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           <p className="font-medium">Failed to load models</p>
           <p>{error}</p>
-        </SettingsNotice>
+        </Notice>
       )}
 
       {models.length === 0 ? (
-        <SettingsEmpty
+        <EmptyState framed
           icon={<Cloud size={40} className="opacity-40" />}
           title="No models discovered"
           description="The naas_abi_marketplace.ai catalog is empty or unreachable."
@@ -341,7 +337,7 @@ export function ModelsPanel() {
         </div>
       )}
 
-      <SettingsNotice icon={<AlertCircle size={14} />}>
+      <Notice icon={<AlertCircle size={14} />}>
         <div>
           <p className="font-medium text-foreground">Models come from the marketplace catalog</p>
           <p>
@@ -350,7 +346,7 @@ export function ModelsPanel() {
             <code> config.yaml</code> and its API key is present in <strong>Settings → Secrets</strong>.
           </p>
         </div>
-      </SettingsNotice>
+      </Notice>
     </div>
   );
 }

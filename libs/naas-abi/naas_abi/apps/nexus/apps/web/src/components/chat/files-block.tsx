@@ -5,7 +5,7 @@ import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { authFetch } from '@/stores/auth';
 import { SLIDES_DECK_UPDATED_EVENT } from '@/stores/slides';
-import { type SlidesProjectTree } from '@/components/shell/sidebar/slides-tree';
+import { type OfficeProjectTree as SlidesProjectTree } from '@/components/shell/sidebar/office-tree';
 import { createPersistedOpenState } from '@/lib/persisted-open-state';
 import { slidesComposerFiles } from './slides-composer-model';
 
