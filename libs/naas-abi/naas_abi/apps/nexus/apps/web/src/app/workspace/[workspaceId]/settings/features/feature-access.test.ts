@@ -166,8 +166,10 @@ describe('FeatureAccess', () => {
     // Other policies are edited from the Policy dropdown: no column of them.
     expect(m.host.querySelector('[data-effect]')).toBeNull();
     expect(at(m, 'agents', 'a')).toBeNull();
-    expect(at(m, 'files', '[data-action="configure"]')?.getAttribute('href')).toBe('/workspace/ws1/settings/files');
-    expect(at(m, 'maps', '[data-action="configure"]')?.getAttribute('href')).toBe('/workspace/ws1/settings/maps');
+    // A link to its page for a feature given; none for one at None (Files, Maps here).
+    expect(at(m, 'chat', '[data-action="configure"]')?.getAttribute('href')).toBe('/workspace/ws1/settings/models');
+    expect(at(m, 'files', '[data-action="configure"]')).toBeNull();
+    expect(at(m, 'maps', '[data-action="configure"]')).toBeNull();
     // What Access is used for, None included, said above the table.
     // No legend, no Discard button: a bar says there are unsaved changes, as on General.
     expect(m.host.querySelector('[data-access-legend]')).toBeNull();
@@ -240,7 +242,10 @@ describe('FeatureAccess', () => {
     const levelsApi = fakeLevels();
     const m = await render(api, levelsApi);
 
+    expect(at(m, 'chat', '[data-action="configure"]')).not.toBeNull();
     await m.click(level(m, 'chat', 'none'));
+    // Given to no one: no page to configure, as soon as it is picked.
+    expect(at(m, 'chat', '[data-action="configure"]')).toBeNull();
     await m.click(saveButton(m));
     await m.flush();
     expect(api.save).toHaveBeenCalledWith('ws1', [{ feature: 'chat', choice: 'nobody' }], null);

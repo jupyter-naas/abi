@@ -428,7 +428,8 @@ export function FeatureAccess({
                       </td>
                       <td className="whitespace-nowrap text-right">
                         {(() => {
-                          const href = org ? null : featurePage(workspaceId, row.key);
+                          // No page to configure for a feature given to no one (Access None).
+                          const href = org || shownOf(row) === 'none' ? null : featurePage(workspaceId, row.key);
                           return href ? (
                             <Link href={policyHref(href)} className="text-xs text-primary hover:underline" data-action="configure">
                               Configure {row.label} →
