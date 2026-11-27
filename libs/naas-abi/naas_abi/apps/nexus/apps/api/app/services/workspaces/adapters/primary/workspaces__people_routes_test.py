@@ -699,3 +699,39 @@ async def test_a_workspace_owner_leaves_only_by_an_owner_and_never_as_the_last(a
         removed = await http.delete("/api/organizations/org-1/members/flo/access")
     assert removed.status_code == 200, removed.text
     assert await role("flo", WS2) is None and await role("flo", WS1) is None
+
+
+# -- a member's profile, read at the workspace ------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_reads_a_members_account_and_organization_profile(api) -> None:
+    async with api.as_("admin") as http:
+        found = await http.get("/api/workspaces/ws-1/members/member/profile")
+    assert found.status_code == 200, found.text
+    body = found.json()
+    assert (body["user_id"], body["name"], body["email"]) == (
+        "member",
+        "Member",
+        "member@example.com",
+    )
+    assert body["organization_id"] == "org-1"
+    assert set(body["organization_profile"]) == {
+        "organization",
+        "job_title",
+        "service_line",
+        "country",
+        "interest",
+        "bio",
+        "avatar",
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_profile_is_read_only_of_a_member_of_this_workspace(api) -> None:
+    async with api.as_("admin") as http:
+        # flo is in ws-2, not ws-1: nothing to say about them here.
+        assert (await http.get("/api/workspaces/ws-1/members/flo/profile")).status_code == 404
+    async with api.as_("stranger") as http:
+        refused = await http.get("/api/workspaces/ws-1/members/member/profile")
+        assert refused.status_code in (403, 404)
