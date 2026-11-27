@@ -5,6 +5,10 @@ import Link from 'next/link';
 import { AlertCircle, ArrowLeft, UserPlus } from 'lucide-react';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
+import { Notice } from '@/components/ui/notice';
+// The creation pages' buttons: Cancel (secondary) then Create (primary, faded until it may create).
+import '@/app/organizations/[orgId]/settings/users/users.css';
+import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 import { createPeopleApi, looksLikeEmail, type CreatedPerson, type PeopleApi } from '@/lib/people';
 import {
   createMemberRolesApi,
@@ -130,14 +134,20 @@ export function WorkspaceCreateUserForm({
         subtitle={`Add someone to ${workspaceName}. They are created at once and invited until they first sign in; an email that already has an account is linked to it.`}
         actions={
           <div className="org-member-detail-actions">
-            <button type="button" onClick={onCancel} disabled={creating} className="org-member-detail-cancel-button">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={creating}
+              className="org-settings-users-secondary-button"
+              data-action="cancel"
+            >
               Cancel
             </button>
             <button
               type="button"
               onClick={() => void submit()}
               disabled={creating || !!loadError}
-              className="account-profile-save-button"
+              className="org-settings-primary-button"
               data-action="create"
             >
               <UserPlus size={16} />
@@ -148,10 +158,9 @@ export function WorkspaceCreateUserForm({
       />
 
       {(loadError || error) && (
-        <div className="org-settings-users-alert" role="alert">
-          <AlertCircle size={16} />
-          <span>{loadError || error}</span>
-        </div>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
+          <span role="alert">{loadError || error}</span>
+        </Notice>
       )}
 
       <AccountSectionCard padded stack>

@@ -95,6 +95,17 @@ def effective_seed_modules(slug: str | None, catalog_seed: dict[str, Any] | None
     return set()
 
 
+def effective_seed_ontologies(slug: str | None, catalog_seed: dict[str, Any] | None) -> list[str]:
+    """The ontology refs a workspace's seed enables (``module:file.ttl``...): its stored
+    ``catalog_seed`` first, then the config's ``ontologies``."""
+    if catalog_seed is not None and "ontologies" in catalog_seed:
+        refs = catalog_seed.get("ontologies") or []
+    else:
+        yaml_ws = _yaml_seed(slug)
+        refs = list(getattr(yaml_ws, "ontologies", None) or []) if yaml_ws is not None else []
+    return sorted({str(r).strip() for r in refs if str(r).strip()})
+
+
 def has_seed(slug: str | None, catalog_seed: dict[str, Any] | None) -> bool:
     """Whether the workspace has a seed at all (a stored ``catalog_seed`` or a
     configured entry): only those get an offer from it."""

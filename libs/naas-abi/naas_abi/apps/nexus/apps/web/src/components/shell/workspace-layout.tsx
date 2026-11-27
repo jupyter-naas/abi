@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { rememberBrandColors } from '@/lib/brand-color-cache';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import dynamic from 'next/dynamic';
@@ -222,6 +223,15 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
       root.style.setProperty('--workspace-accent', accentColor);
       root.style.setProperty('--workspace-primary-hsl', primaryHSL);
       root.style.setProperty('--workspace-accent-hsl', accentHSL);
+      // Kept for the next hard refresh of this page: painted before the app runs.
+      rememberBrandColors(window.location.pathname, {
+        '--primary': primaryHSL,
+        '--accent': accentHSL,
+        '--workspace-primary': primaryColor,
+        '--workspace-accent': accentColor,
+        '--workspace-primary-hsl': primaryHSL,
+        '--workspace-accent-hsl': accentHSL,
+      });
     }
   }, [primaryColor, accentColor]);
   

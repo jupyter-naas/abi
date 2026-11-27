@@ -213,6 +213,9 @@ describe('NewOrganization', () => {
     await mounted.click(create());
     await mounted.flush();
     expect(mounted.host.querySelector('[role="alert"]')?.textContent).toBe('Slug already exists');
+    // As Organization › General: an untitled first block, then Contact and Address sections.
+    expect(mounted.host.querySelector('.org-settings-card-heading-title')).toBeNull();
+    expect([...mounted.host.querySelectorAll('section h3')].map((h) => h.textContent)).toEqual(['Contact', 'Address']);
     expect(navigate).not.toHaveBeenCalled();
   });
 });

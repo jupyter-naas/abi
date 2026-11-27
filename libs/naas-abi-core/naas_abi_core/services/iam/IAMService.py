@@ -64,8 +64,10 @@ from naas_abi_core.services.iam.adapters.secondary.authorizer__policy import (
     PolicyAuthorizer,
 )
 from naas_abi_core.services.iam.catalog import (
+    LEVELS,
     ActionCatalog,
     CatalogRegistry,
+    Level,
     ResourceType,
     removed_actions,
 )
@@ -152,6 +154,7 @@ from naas_abi_core.services.iam.policy import (
     bind_variables,
     check_owned_document,
     denies_beyond_scope,
+    is_given,
     parse_policy_document,
     within_scope,
 )
@@ -617,6 +620,9 @@ class IAMService(IIAMService, PolicySource):
         # A container's bounds: what its membership groups hold at it bounds what
         # ${my workspaces} grants there, and grants nothing itself ("Bounds").
         bounds_at = self._membership_bounds(held, fresh=fresh)
+        # The levels the roles reached through ${my workspaces} give at each
+        # container: with the roles held there, what caps a given statement.
+        reached_levels: dict[str, set[Level]] = {}
         for attachment, group in held:
             if self._is_bound(attachment, group):
                 statements += [
@@ -664,6 +670,10 @@ class IAMService(IIAMService, PolicySource):
                     bounds_at.get(container, ()),
                     fresh=fresh,
                 )
+                if attachment.policy_id in roles.ROLE_LEVELS:
+                    reached_levels.setdefault(container, set()).update(
+                        roles.ROLE_LEVELS[attachment.policy_id]
+                    )
                 if attachment.policy_id in roles.ROLES and self._brings_companions(
                     container
                 ):
@@ -673,6 +683,9 @@ class IAMService(IIAMService, PolicySource):
         statements += self._membership_companion(
             companion_roles, {a.policy_id for a, _ in held}, fresh=fresh
         )
+        if memberships is None:
+            memberships = self._memberships(principal, record)
+        statements += self._given(memberships, held, reached_levels, fresh=fresh)
         if principal.kind == "user":
             # builtin.self is held by every user, implicitly.
             statements += self._statements_of(roles.SELF, None, None, fresh=fresh)
@@ -704,6 +717,18 @@ class IAMService(IIAMService, PolicySource):
         found = self._find_group(group)
         return found is not None and found.membership_of == attachment.scope
 
+    def _is_bound_at(self, attachment: Attachment) -> bool:
+        """Whether a stored attachment is a bound: its principal is a membership
+        group of its scope."""
+        return attachment.scope is not None and self._membership_group_of(
+            attachment.principal_id, attachment.scope
+        )
+
+    def _membership_group_of(self, principal_id: str, container: str) -> bool:
+        """Whether ``principal_id`` is a membership group of ``container``."""
+        found = self._find_group(principal_id)
+        return found is not None and found.membership_of == container
+
     def _membership_bounds(
         self, held: Sequence[tuple[Attachment, str | None]], *, fresh: bool = False
     ) -> dict[str, list[tuple[Bound, ...]]]:
@@ -732,6 +757,9 @@ class IAMService(IIAMService, PolicySource):
                                 bounding.document.statements
                             )
                             if statement.effect == "Allow"
+                            # The bound's given statements grant outside the
+                            # container: they offer nothing in it.
+                            and not (bounding is policy and is_given(statement))
                         )
                         if whole
                         else (),
@@ -772,6 +800,107 @@ class IAMService(IIAMService, PolicySource):
             ]
         return found
 
+    def _given(
+        self,
+        memberships: Sequence[tuple[str, str]],
+        held: Sequence[tuple[Attachment, str | None]],
+        reached_levels: Mapping[str, set[Level]],
+        *,
+        fresh: bool = False,
+    ) -> list[EffectiveStatement]:
+        """What the bounds of the principal's containers give it ("Given
+        statements"): at each container of ``memberships``, the given statements
+        of every bound its active membership groups hold there, whichever of
+        them the principal is in. Each action counts only within the levels the
+        principal holds at the container (``_levels_at``), written out, an
+        unknown one dropped. Not bounded by the bound's chain, and marked
+        ``given``: held by nobody to give again."""
+        found: list[EffectiveStatement] = []
+        seen: set[str] = set()
+        for membership_group, container in memberships:
+            if container in seen:
+                continue
+            seen.add(container)
+            groups = [
+                group_id
+                for group_id in self.store.membership_groups(container)
+                if self._active(group_id)
+            ]
+            bounds = [
+                attachment
+                for attachment in (self.store.attachments_for(groups) if groups else [])
+                if attachment.scope == container
+            ]
+            if not bounds:
+                continue
+            levels = self._levels_at(container, held, reached_levels.get(container))
+            if not levels:
+                continue
+            for attachment in bounds:
+                policy = (
+                    self._load_policy(attachment.policy_id)
+                    if fresh
+                    else self._cached_policy(attachment.policy_id)
+                )
+                if policy is None:
+                    continue
+                for index, statement in policy.document.given:
+                    actions = self._within_levels(statement.actions, levels)
+                    if not actions:
+                        continue
+                    found.append(
+                        EffectiveStatement(
+                            statement=replace(statement, actions=actions),
+                            policy_id=policy.id,
+                            statement_index=index,
+                            attachment_id=attachment.id,
+                            scope=container,
+                            via_group=attachment.principal_id,
+                            membership_group=membership_group,
+                            given=True,
+                        )
+                    )
+        return found
+
+    def _levels_at(
+        self,
+        container: str,
+        held: Sequence[tuple[Attachment, str | None]],
+        reached: Iterable[Level] | None,
+    ) -> set[Level]:
+        """The levels of the built-in roles the principal holds at ``container``:
+        ``reached`` through ``${my workspaces}``, and those of ``held`` attached
+        at it or below a container it is within (a bound's grant nothing). The
+        platform admin, unscoped, holds every level."""
+        levels: set[Level] = set(reached or ())
+        for attachment, group in held:
+            policy_id, scope = attachment.policy_id, attachment.scope
+            if policy_id == roles.PLATFORM_ADMIN and scope is None:
+                return set(LEVELS)
+            if policy_id not in roles.ROLE_LEVELS or scope is None:
+                continue
+            at = scope == container or (
+                is_below(scope) and within(container, container_of_scope(scope))
+            )
+            if at and not self._is_bound(attachment, group):
+                levels |= roles.ROLE_LEVELS[policy_id]
+        return levels
+
+    def _within_levels(
+        self, patterns: Iterable[str], levels: set[Level]
+    ) -> tuple[str, ...]:
+        """The registered actions ``patterns`` name whose level is one of
+        ``levels``, written out."""
+        kept: dict[str, None] = {}
+        for pattern in patterns:
+            for action in self._registry.matching(pattern):
+                service, _, name = action.partition(":")
+                catalog = self._registry.get(service)
+                spec = catalog.action(name) if catalog is not None else None
+                if spec is not None and spec.level in levels:
+                    kept[action] = None
+        return tuple(kept)
+
     def _memberships(
         self, principal: CallPrincipal, record: PrincipalRecord | None
     ) -> list[tuple[str, str]]:
@@ -805,7 +934,8 @@ class IAMService(IIAMService, PolicySource):
         """Where a policy attached at ``${my workspaces}`` applies: each
         ``(container, membership group)`` of ``memberships`` within the owner of
         the policy and of the group holding it (``holder_group``; None: the
-        principal itself, the platform's), each container once."""
+        principal itself, the platform's), each container once; a built-in role
+        never at a container whose type is marked ``no_membership_roles``."""
         policy = (
             self._load_policy(policy_id) if fresh else self._cached_policy(policy_id)
         )
@@ -815,9 +945,12 @@ class IAMService(IIAMService, PolicySource):
         if holder_group is not None:
             group = self._find_group(holder_group)
             holder_owner = group.owner_scope if group is not None else UNRESOLVED
+        is_role = policy_id in roles.ROLES
         reached: dict[str, str] = {}
         for membership_group, container in memberships:
             if container in reached:
+                continue
+            if is_role and not self._membership_roles_at(container):
                 continue
             if within_owner(policy.owner_scope, container) and within_owner(
                 holder_owner, container
@@ -2435,6 +2568,9 @@ class IAMService(IIAMService, PolicySource):
             policy_id=policy_id,
             parents=[p.document for p in chain],
         )
+        if owner != PLATFORM_SCOPE:
+            # Given statements: what the policy, as a bound, gives outside it.
+            self._require_given_held(parsed.given, policy_id=policy_id)
         policy = self.store.create_policy(
             Policy(
                 id=policy_id,
@@ -2476,7 +2612,7 @@ class IAMService(IIAMService, PolicySource):
             inherited = {
                 p.id: attachment_resource(p.id, "*", scope)
                 for p in found
-                if p.owner_scope != scope and p.document.confined_to_scope
+                if p.owner_scope != scope and p.document.confined_or_given
             }
             # A Deny beyond ${scope}, its own or its chain's: offered only to
             # whoever may attach it unscoped too (``_require_attach``).
@@ -2538,12 +2674,22 @@ class IAMService(IIAMService, PolicySource):
             owners = [owner, *_owners_above(owner)]
         if principal_id is not None and not self._receives_at(principal_id, scope):
             return Page([], None)
+        bound_target = principal_id is None or (
+            scope is not None and self._membership_group_of(principal_id, scope)
+        )
 
         def keep(found: list[Policy]) -> set[str]:
             if scope is None:
                 fit = [p for p in found if not self._names_scope(p)]
             else:
-                fit = [p for p in found if p.document.confined_to_scope]
+                # A bound may hold given statements too: offered for the
+                # container's membership groups (and to anyone, unnamed).
+                fit = [
+                    p
+                    for p in found
+                    if p.document.confined_to_scope
+                    or (p.document.confined_or_given and bound_target)
+                ]
             names = {p.id: attachment_resource(p.id, who, scope) for p in fit}
             allowed = set(self.filter("iam:AttachPolicy", names.values()).allowed)
             kept = {i for i, n in names.items() if n in allowed}
@@ -2645,13 +2791,21 @@ class IAMService(IIAMService, PolicySource):
         check_owned_document(updated.document, current.owner_scope)
         self._require_keeps_own_denies(current, updated)
         attachments = self.store.list_attachments(policy_id=policy_id)
-        if not updated.document.confined_to_scope and any(
-            a.scope is not None for a in attachments
+        scoped = [a for a in attachments if a.scope is not None]
+        # Where it is a bound: there its given statements grant.
+        bounds = (
+            [a for a in scoped if self._is_bound_at(a)]
+            if updated.document.given
+            else []
+        )
+        if not updated.document.confined_to_scope and (
+            not updated.document.confined_or_given or len(bounds) < len(scoped)
         ):
             # Evaluation would ignore the rest at those scopes: say so instead.
             raise ValueError(
                 f"{policy_id} is attached at a scope: every Allow resource must "
-                "be ${scope} or start with ${scope}/"
+                "be ${scope} or start with ${scope}/ (only a bound may also "
+                "hold statements naming absolute names alone)"
             )
         reparented = parent_id != current.parent_id
         changed = reparented or updated.document != current.document
@@ -2674,6 +2828,12 @@ class IAMService(IIAMService, PolicySource):
                 current.owner_scope,
                 chain,
                 previous=current.document,
+            )
+        if changed and (current.owner_scope != PLATFORM_SCOPE or bounds):
+            # Given statements: only what the edit adds needs holding.
+            self._require_given_held(
+                self._given_added(current.document, updated.document),
+                policy_id=policy_id,
             )
         if changed:
             self._check_unscoped_chain(updated, chain, below)
@@ -2732,7 +2892,13 @@ class IAMService(IIAMService, PolicySource):
             new_owner = self._owner_checked(owner)
             self.require("iam:CreatePolicy", policy_resource(policy_id, new_owner))
             self._check_owner_known(new_owner)
-            check_owned_document(policy.document, new_owner)
+            # A platform policy's absolute Allows were never given statements:
+            # moved into a container, they are refused as before.
+            check_owned_document(
+                policy.document,
+                new_owner,
+                given=policy.owner_scope != PLATFORM_SCOPE,
+            )
             after[policy_id] = new_owner
 
         def owner_of(policy: Policy) -> str:
@@ -3140,10 +3306,12 @@ class IAMService(IIAMService, PolicySource):
         if scope is None:
             return
         policy = self._find_policy(policy_id)
-        if (
-            policy is None
-            or not policy.document.confined_to_scope
-            or not self._denies_beyond_scope(policy)
+        if policy is None or not self._denies_beyond_scope(policy):
+            return
+        if not (
+            policy.document.confined_or_given
+            if self._membership_group_of(principal_id, scope)
+            else policy.document.confined_to_scope
         ):
             return
         self._require_unscoped_attach(policy_id, principal_id)
@@ -3321,7 +3489,8 @@ class IAMService(IIAMService, PolicySource):
         principal = self._get_principal(principal_id)
         if principal.status == "deleted":
             raise IAMConflictError(f"Principal {principal_id} is deleted")
-        self._check_attachable(policy, scope)
+        bound = _bound_target(principal, scope)
+        self._check_attachable(policy, scope, bound=bound)
         self._check_receives(principal, scope)
         existing = self._find_attachment(policy_id, principal_id, scope)
         if existing is not None:
@@ -3333,6 +3502,9 @@ class IAMService(IIAMService, PolicySource):
                 policy_id=policy_id,
                 parents=self._parents(policy),
             )
+            if bound:
+                # A bound's given statements grant to the container's members.
+                self._require_given_held(policy.document.given, policy_id=policy_id)
         attachment = self.store.attach(
             Attachment(new_id("att"), policy_id, principal_id, scope)
         )
@@ -3371,7 +3543,11 @@ class IAMService(IIAMService, PolicySource):
             )
         return [*sorted(found)]
 
-    def _check_attachable(self, policy: Policy, scope: str | None) -> None:
+    def _check_attachable(
+        self, policy: Policy, scope: str | None, *, bound: bool = False
+    ) -> None:
+        """``bound``: the attachment is a bound (a membership group of ``scope``
+        holding the policy there), which may hold given statements too."""
         if not within_owner(policy.owner_scope, scope):
             self._outside_owner(
                 "iam:GetPolicy",
@@ -3383,8 +3559,13 @@ class IAMService(IIAMService, PolicySource):
             raise ValueError(
                 f"{policy.id} uses ${{scope}}, or its chain does: attach it at a scope"
             )
-        if scope is not None and not policy.document.confined_to_scope:
-            # A scope only fills ${scope}: anything else would reach past it.
+        if scope is not None and not (
+            policy.document.confined_or_given
+            if bound
+            else policy.document.confined_to_scope
+        ):
+            # A scope only fills ${scope}: anything else would reach past it,
+            # but a bound's given statements, held-checked unscoped.
             raise ValueError(
                 f"{policy.id} names resources outside ${{scope}}, and "
                 "only a policy confined to its scope is attached at one"
@@ -3500,6 +3681,16 @@ class IAMService(IIAMService, PolicySource):
                 self.store.attach(Attachment(new_id("att"), companion, principal_id))
             elif companion != wanted and present:
                 self.store.detach(companion, principal_id, None)
+
+    def _membership_roles_at(self, container: str) -> bool:
+        """Whether a built-in role attached at ``${my workspaces}`` applies at
+        ``container``: not at one whose type is marked ``no_membership_roles``
+        (Nexus's organization)."""
+        if container in (PLATFORM_SCOPE, UNRESOLVED) or is_below(container):
+            return True
+        last = parse_container(as_container(container))[-1]
+        found = self._registry.resource_type(last.service, last.type)
+        return found is None or not found.no_membership_roles
 
     def _brings_companions(self, scope: str) -> bool:
         """Whether a role at ``scope`` brings the platform companions: below a
@@ -3713,6 +3904,8 @@ class IAMService(IIAMService, PolicySource):
                 names_nothing(r) for r in statement.resources
             ):
                 continue
+            if owner != PLATFORM_SCOPE and is_given(statement):
+                continue  # a bound's grant outside it: no chain bounds it
             where = f"statements[{index}]" + (
                 f" ({statement.sid})" if statement.sid else ""
             )
@@ -3818,6 +4011,66 @@ class IAMService(IIAMService, PolicySource):
                         reason=found.reason,
                     )
 
+    def _require_given_held(
+        self, given: Sequence[tuple[int, Statement]], *, policy_id: str
+    ) -> None:
+        """``GrantNotHeldError`` unless the caller holds, unscoped and with no
+        chain, every given statement of ``given`` (index in its document,
+        statement): a bound gives them to the container's members wherever
+        they name, bounded by nothing. What the caller was only given counts
+        for nothing (``_held_side``). A write a first-party account makes for
+        no user is its own, as for ``_require_held``."""
+        if not given:
+            return
+        ctx = current_call_context()
+        if ctx.on_behalf_of is None and self._first_party(ctx.principal):
+            return
+        with grants.budget():
+            found = self._holdings(ctx).first_uncovered(
+                [statement for _index, statement in given], None
+            )
+        if found is not None:
+            raise GrantNotHeldError(
+                found.action,
+                found.resource,
+                policy_id=policy_id,
+                statement=given[found.statement][0],
+                sid=found.sid,
+                scope=None,
+                reason=found.reason,
+            )
+
+    def _given_added(
+        self, before: PolicyDocument, after: PolicyDocument
+    ) -> list[tuple[int, Statement]]:
+        """The given statements of ``after`` that give something ``before``'s did
+        not: each resource, with the statement's actions, that ``before``'s given
+        statements do not cover (unproven is added). Narrowing adds nothing."""
+        previous = [statement for _index, statement in before.given]
+        holdings = grants.Holdings(
+            [
+                grants.Side(
+                    tuple(
+                        grants.held_statement(s, None, principal_id="-", user_id=None)
+                        for s in previous
+                    ),
+                    "",
+                )
+            ],
+            self._registry,
+        )
+        added: list[tuple[int, Statement]] = []
+        with grants.budget():
+            for index, statement in after.given:
+                for resource in statement.resources:
+                    single = replace(statement, resources=(resource,))
+                    if (
+                        not previous
+                        or holdings.first_uncovered([single], None) is not None
+                    ):
+                        added.append((index, single))
+        return added
+
     def _holdings(self, ctx: CallContext, scope: str | None = None) -> grants.Holdings:
         """What decides for the caller, side by side: the user a call acts for
         (never the first-party account acting, whose statements would stand in
@@ -3875,6 +4128,8 @@ class IAMService(IIAMService, PolicySource):
                     policy_id=effective.policy_id,
                 )
                 for effective in subject.statements
+                # What was given to a container's members is not theirs to give.
+                if not effective.given
                 for statement in _unbounded(effective)
             ),
             lacks,
@@ -5730,6 +5985,16 @@ def _bind_bounds(
             ),
         )
         for bound in bounds
+    )
+
+
+def _bound_target(principal: PrincipalRecord, scope: str | None) -> bool:
+    """Whether attaching to ``principal`` at ``scope`` makes a bound: a
+    membership group of that container (AGENTS.md, "Bounds")."""
+    return (
+        scope is not None
+        and principal.kind == "group"
+        and principal.membership_of == scope
     )
 
 

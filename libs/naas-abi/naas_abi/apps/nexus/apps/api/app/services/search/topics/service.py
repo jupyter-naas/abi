@@ -25,6 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema impo
     SWITCHABLE_SCOPE_IDS,
     SearchTopic,
     SearchTopicNotFoundError,
+    SearchTopicSwitchedOffError,
     SearchTopicValidationError,
     TopicDetail,
     TopicFact,
@@ -121,6 +122,13 @@ class SearchTopicService:
                 return topic
         raise SearchTopicNotFoundError(f"Unknown search topic: {topic_id}")
 
+    async def running_topic(self, workspace_id: str, topic_id: str) -> SearchTopic:
+        """The topic, to run: refused when the workspace switched it off."""
+        topic = await self.get_topic(workspace_id, topic_id)
+        if not topic.enabled:
+            raise SearchTopicSwitchedOffError(f"This workspace switched {topic.label} off")
+        return topic
+
     async def save_topic(
         self, workspace_id: str, topic: SearchTopic, *, user_id: str | None
     ) -> SearchTopic:
@@ -170,7 +178,7 @@ class SearchTopicService:
         limit: int = 30,
         offset: int = 0,
     ) -> TopicResults:
-        topic = await self.get_topic(workspace_id, topic_id)
+        topic = await self.running_topic(workspace_id, topic_id)
         limit = max(1, min(limit, MAX_RESULTS))
         sparql = render(
             topic.results_query,
@@ -277,7 +285,7 @@ class SearchTopicService:
         uri: str,
         store: IGraphQueryStore,
     ) -> TopicDetail:
-        topic = await self.get_topic(workspace_id, topic_id)
+        topic = await self.running_topic(workspace_id, topic_id)
         header_sparql = render(topic.header_query, "header", {"uri": uri})
 
         async def run_section(section: Any) -> TopicSectionResult:

@@ -21,6 +21,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
 import { Input } from '@/components/ui/input';
 import { SettingsPageHeader, SettingsFilterSelect, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Field } from '@/components/ui/field';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import {
   useServersStore,
@@ -29,11 +35,6 @@ import {
   serverTypeLabels,
   serverTypeDescriptions,
 } from '@/stores/servers';
-import { Notice } from '@/components/ui/notice';
-import { EmptyState } from '@/components/ui/empty-state';
-import { Loading } from '@/components/ui/spinner';
-import { Field } from '@/components/ui/field';
-import { Card } from '@/components/ui/card';
 
 const serverTypeOptions: { id: ServerTypeEnum; label: string; description: string }[] = [
   { id: 'ollama', label: 'Ollama', description: 'Run open-source models locally' },
@@ -255,11 +256,6 @@ export function ServersPanel({
     });
   };
 
-  // Only block on the first load; later refetches keep showing the cached list.
-  if (!mounted || (loading && servers.length === 0)) {
-    return <Loading label="Loading servers…" />;
-  }
-
   const query = searchQuery.trim().toLowerCase();
   const filteredServers = servers.filter((server) => {
     if (typeFilter !== 'all' && server.type !== typeFilter) return false;
@@ -273,6 +269,18 @@ export function ServersPanel({
       (server.description || '').toLowerCase().includes(query)
     );
   });
+  // 20 a page: the search and the filters reach every server, and a change of them goes back to
+  // the first page.
+  const paged = usePagedRows(
+    filteredServers,
+    JSON.stringify([searchQuery, typeFilter, healthFilter, enabledFilter]),
+  );
+
+  // Only block on the first load; later refetches keep showing the cached list.
+  if (!mounted || (loading && servers.length === 0)) {
+    return <Loading label="Loading servers…" />;
+  }
+
   const onlineCount = servers.filter((server) => server.status === 'online').length;
   const enabledCount = servers.filter((server) => server.enabled).length;
 
@@ -291,7 +299,7 @@ export function ServersPanel({
       <SettingsPageHeader
         title="Servers"
         badge={`${enabledCount} enabled`}
-        description="Configure inference servers for running AI models"
+        description="The inference servers that run AI models"
         actions={
           <>
             {workspacePicker}
@@ -482,8 +490,8 @@ export function ServersPanel({
                   </td>
                 </tr>
               )}
-              {filteredServers.map((server) => (
-                <tr key={server.id} className={settingsTable.row}>
+              {paged.pageRows.map((server) => (
+                <tr key={server.id} data-server={server.id} className={settingsTable.row}>
                   {editingId === server.id ? (
                     <td className={settingsTable.td} colSpan={6}>
                       <div className="space-y-3">
@@ -645,6 +653,7 @@ export function ServersPanel({
             </tbody>
           </table>
         </div>
+        <TablePager total={filteredServers.length} paged={paged} />
         </div>
       )}
 

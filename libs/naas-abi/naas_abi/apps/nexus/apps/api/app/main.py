@@ -598,6 +598,62 @@ async def _migrate_pending_invitations() -> None:
     await migrate_when_ready(AsyncSessionLocal, async_engine)
 
 
+def _install_workspace_models() -> None:
+    """The engine asks Nexus which chat model a remote module's turn uses in the
+    workspace it runs in (its offer's Models section, ``iam/workspace_models``). Read on
+    this loop. With no engine (a test), nothing to register."""
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.iam import workspace_models
+
+    try:
+        from naas_abi import ABIModule
+
+        registry = ABIModule.get_instance().engine.services.model_registry
+    except Exception:  # noqa: BLE001 - no engine here: no remote module turns either
+        logging.getLogger(__name__).warning(
+            "No model registry: remote modules' turns keep their own models"
+        )
+        return
+    workspace_models.install_substitute(registry, asyncio.get_running_loop())
+
+
+async def _offer_moves() -> None:
+    """What moves into each access policy, once each (``search_sources_offer``,
+    ``ontologies_offer``, ``files_offer``, ``graphs_offer``, ``models_offer``,
+    ``maps_offer``), and what each organization's people hold (``org_people_view``). Not
+    while IAM's moves wait: the next start does it."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.services.iam import (
+        authz,
+        files_offer,
+        graphs_offer,
+        maps_offer,
+        models_offer,
+        ontologies_offer,
+        org_people_view,
+        search_sources_offer,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime as iam_runtime
+
+    if authz.upgrading():
+        return
+    for move in (
+        search_sources_offer,
+        ontologies_offer,
+        files_offer,
+        graphs_offer,
+        org_people_view,
+        models_offer,
+        maps_offer,
+    ):
+        try:
+            async with AsyncSessionLocal() as db:
+                await move.migrate(db, iam_runtime.iam())
+        except Exception:  # noqa: BLE001 - retried at the next start
+            logging.getLogger(__name__).exception(f"{move.MIGRATION_NAME} could not run")
+
+
 async def _place_workspace_resources() -> None:
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
     from naas_abi.apps.nexus.apps.api.app.services.iam import placements
@@ -635,6 +691,8 @@ async def _startup(app: FastAPI) -> None:
     # Nexus's authorization lives in IAM: its action catalog and feature policies,
     # and (once) the memberships and superadmin flags it kept itself before.
     await _prepare_iam()
+    await _offer_moves()
+    _install_workspace_models()
     _watch_upgrade()
     await _hint_unlinked_users()
 

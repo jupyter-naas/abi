@@ -78,6 +78,25 @@ def test_render_landing_html_escapes_config_values():
     assert 'href="https://example.com/f.ico?a=1&amp;b=&quot;2&quot;"' in body
 
 
+def test_render_landing_html_links_the_docs_only_when_they_are_served():
+    from naas_abi_core.apps.api.api import render_landing_html
+
+    page = {
+        "title": "X API",
+        "description": "d",
+        "logo": "/static/logo.png",
+        "favicon": "/f.ico",
+    }
+
+    served = render_landing_html(**page, docs=True)
+    assert '<a href="/redoc">Go to Documentation</a>' in served
+
+    hidden = render_landing_html(**page, docs=False)
+    assert "/redoc" not in hidden
+    assert "Go to Documentation" not in hidden
+    assert "<h1>Welcome to X API!</h1>" in hidden
+
+
 def test_resolve_branding_asset(tmp_path):
     from naas_abi_core.apps.api.api import resolve_branding_asset
 

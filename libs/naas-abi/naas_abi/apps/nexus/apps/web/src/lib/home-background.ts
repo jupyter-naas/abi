@@ -105,14 +105,14 @@ export function isApiBackgroundUrl(url: string | undefined): boolean {
 // the preview and on the desk (see DeskWallpaper).
 // ---------------------------------------------------------------------------
 
-/** Focal point (% of the image, 0–100) and zoom (1 = cover). */
+/** Focal point (% of the image, 0–100) and zoom (1 = cover; below 1 the image is smaller than the frame). */
 export interface BackgroundFraming {
   x: number;
   y: number;
   zoom: number;
 }
 
-export const MIN_BACKGROUND_ZOOM = 1;
+export const MIN_BACKGROUND_ZOOM = 0.5;
 export const MAX_BACKGROUND_ZOOM = 4;
 export const DEFAULT_FRAMING: BackgroundFraming = { x: 50, y: 50, zoom: 1 };
 
@@ -158,6 +158,8 @@ export function parseBackgroundImageUrl(url: string | undefined): {
  * a `box`-sized frame. The image covers the frame (CSS `cover`), is shifted
  * by background-position, then scaled by `zoom` around the focal point; one
  * percent of focal point moves the image by (overflow·zoom + frame·(zoom−1))/100 px.
+ * Zoomed out (zoom < 1) that can be negative: the image, smaller than the frame,
+ * then follows the pointer, from flush left/top (0) to flush right/bottom (100).
  */
 export function panFraming(
   framing: BackgroundFraming,
@@ -171,9 +173,21 @@ export function panFraming(
   const coverHeight = Math.max(box.height, box.width / imageAspect);
   const perPercentX = ((coverWidth - box.width) * framing.zoom + box.width * (framing.zoom - 1)) / 100;
   const perPercentY = ((coverHeight - box.height) * framing.zoom + box.height * (framing.zoom - 1)) / 100;
+  // Near zero the image cannot move along that axis (it spans the frame exactly).
+  const moves = (perPercent: number) => Math.abs(perPercent) > 1e-6;
   return clampFraming({
     ...framing,
-    x: perPercentX > 0 ? framing.x - dx / perPercentX : framing.x,
-    y: perPercentY > 0 ? framing.y - dy / perPercentY : framing.y,
+    x: moves(perPercentX) ? framing.x - dx / perPercentX : framing.x,
+    y: moves(perPercentY) ? framing.y - dy / perPercentY : framing.y,
   });
+}
+
+/**
+ * The zoom a wheel event asks of the preview: `step` in when scrolling up, out
+ * when scrolling down, only with Ctrl held (a trackpad pinch arrives as such).
+ * Null otherwise: a plain scroll is the page's.
+ */
+export function wheelZoomStep(event: { ctrlKey: boolean; deltaY: number }, step: number): number | null {
+  if (!event.ctrlKey || event.deltaY === 0) return null;
+  return event.deltaY < 0 ? step : -step;
 }

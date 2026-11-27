@@ -457,3 +457,78 @@ def test_listed_generation_and_tool_options_reach_the_provider():
     assert bound == {"bind_tools": tool_options}
     assert {key: invoked[key] for key in options} == options
     assert "model" not in invoked and "n" not in invoked
+
+
+# -- a host's substitute (a workspace's models) -----------------------------------------
+
+
+def _substituting_primary(substitute):
+    """A primary over a real registry holding two chat models, with ``substitute``."""
+    from naas_abi_core.models.Model import ChatModel
+    from naas_abi_core.services.model_registry.ModelRegistryService import (
+        ModelRegistryService,
+    )
+
+    registry = ModelRegistryService()
+    for cid, model_id in (("gpt-x", "gpt-x-2026"), ("qwen-3.8", "qwen-3.8-int4")):
+        registry.register(
+            cid, ChatModel(model_id=model_id, provider="openai", model=UsageModel())
+        )
+    registry.register_model_substitute(substitute)
+    primary = ModelRegistryNATS(registry, "test")
+    resolved: list[str] = []
+
+    def resolve(ref, action="Resolve"):
+        resolved.append(ref.canonical_id)
+        model = registry._get_chat_model(ref.canonical_id, ref.provider or None)
+        if ref.model_id and model.model_id != ref.model_id:
+            raise AssertionError("a pinned variant of another model")
+        return ref.canonical_id, model, None
+
+    primary._resolve = resolve
+    return primary, resolved
+
+
+def _in(container):
+    from dataclasses import replace
+
+    from naas_abi_core.engine.call_context import current_call_context, use_call_context
+
+    return use_call_context(replace(current_call_context(), container=container))
+
+
+def test_a_remote_chat_uses_the_model_its_container_is_given():
+    """The module's own model is swapped, pinned provider and variant dropped, before
+    the registry resolves it: the descriptor names the substitute."""
+    primary, resolved = _substituting_primary(
+        lambda container, cid: "qwen-3.8" if container == "ws-a" else cid
+    )
+    request = _chat_request()
+    request.ref.provider, request.ref.model_id = "openai", "gpt-x-2026"
+    with _in("ws-a"):
+        asyncio.run(primary._execute("chat", request, "caller"))
+    with _in("ws-b"):
+        asyncio.run(primary._execute("chat", _chat_request(), "caller"))
+    assert resolved == ["qwen-3.8", "gpt-x"]
+
+
+def test_a_remote_resolve_names_the_substitute():
+    primary, _resolved = _substituting_primary(lambda container, cid: "qwen-3.8")
+    with _in("ws-a"):
+        response = asyncio.run(
+            primary._execute(
+                "resolve",
+                pb.ResolveRequest(ref=pb.ModelRef(canonical_id="gpt-x", kind="chat")),
+                "caller",
+            )
+        )
+    assert response.model.ref.canonical_id == "qwen-3.8"
+
+
+def test_an_embedding_is_never_substituted():
+    primary, _resolved = _substituting_primary(lambda container, cid: "qwen-3.8")
+    request = pb.EmbedRequest(
+        ref=pb.ModelRef(canonical_id="embed-x", kind="embedding"), texts=["a"]
+    )
+    ref = asyncio.run(primary._substituted(request.ref))
+    assert ref.canonical_id == "embed-x"

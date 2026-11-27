@@ -1,14 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FileCog, Package } from 'lucide-react';
-import { authFetch } from '@/stores/auth';
-import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
-import { describeModuleResources } from '@/lib/workspace-resources';
-import { FeatureAccess } from './feature-access';
-import { Notice } from '@/components/ui/notice';
+import { FileCog } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
+import { Notice } from '@/components/ui/notice';
 import { Card } from '@/components/ui/card';
+import { authFetch } from '@/stores/auth';
 
 interface SeedRow {
   kind: string;
@@ -37,17 +34,13 @@ const SEED_KIND_LABELS: Record<string, string> = {
 };
 
 /**
- * Features, Modules and Config preseeding (Settings > General, admins). Features are who may use
- * each enabled feature here (`feature-access.tsx`: each choice a policy the API writes, so
- * policies stay the one place access is decided, on Access › Policies too); Modules are what you
- * may use here (`/resources`: each module with the agents, apps, workflows and pipelines IAM lets
- * you use), read-only. The seeds are owned by ``nexus_config.organizations[].workspaces[]`` in
- * the config and follow it after an API restart.
+ * Config preseeding (Settings > General, admins): what the deployment config loads into the
+ * workspace. The seeds are owned by ``nexus_config.organizations[].workspaces[]`` in the config
+ * and follow it after an API restart. The modules it offers are Access › Modules.
  */
 export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string }) {
   const [config, setConfig] = useState<WorkspaceConfiguration | null>(null);
   const [error, setError] = useState('');
-  const { status: resourcesStatus, resources } = useWorkspaceResources(workspaceId);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,34 +72,6 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
     <>
       {error && <Notice tone="error">{error}</Notice>}
 
-      <FeatureAccess workspaceId={workspaceId} />
-
-      <Card
-        title={
-          <span className="flex items-center gap-2">
-            <Package size={16} className="text-muted-foreground" />
-            Modules
-          </span>
-        }
-        description="What you may use here: each module with the agents, apps, workflows and pipelines you may use."
-      >
-        {resourcesStatus === 'loading' ? (
-          <p className="text-sm text-muted-foreground">Loading modules...</p>
-        ) : !resources ? (
-          <p className="text-sm text-muted-foreground">What you may use here could not be read.</p>
-        ) : resources.modules.length === 0 ? (
-          <span className="text-sm text-muted-foreground">No module you may use here.</span>
-        ) : (
-          <ul className="workspace-general-modules">
-            {resources.modules.map((entry) => (
-              <li key={entry.module} className="workspace-general-modules-row">
-                <span className="workspace-general-modules-name">{entry.module}</span>
-                <span className="workspace-general-modules-items">{describeModuleResources(entry)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
 
       <Card
         title={

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MapsDataset } from './datasets';
 import { buildLayoutEntries, type WorkspaceFeedLayer, type WorkspaceMapLayout } from './layouts';
-import { feedVisibilityRows, filterFeedRows, type FeedVisibilityRow } from './maps-feed-visibility';
+import { feedVisibilityRows, type FeedVisibilityRow } from './maps-feed-visibility';
 
 const ds = (id: string, group: string): MapsDataset => ({
   id, title: id[0].toUpperCase() + id.slice(1), description: '', group, icon: 'Map', order: 0,
@@ -38,28 +38,5 @@ describe('feedVisibilityRows', () => {
       importedLayers: [{ id: 'mine', title: 'Mine', description: '', icon: 'Layers', group: 'Custom', order: 0, color: '#000000' }],
     });
     expect(feedVisibilityRows(entries, [])).toEqual([]);
-  });
-});
-
-describe('filterFeedRows', () => {
-  const row = (id: string, group: string, shown: boolean): FeedVisibilityRow => ({
-    id, title: id.toUpperCase(), group, source: 'Built-in', layers: 1, shown,
-  });
-  const rows = [row('quakes', 'Environment', true), row('iss', 'SIGINT', false), row('alpha', 'Organizations Facilities', true)];
-  const ids = (search: string, group: string, status: 'all' | 'enabled' | 'disabled') =>
-    filterFeedRows(rows, { search, group, status }).map((r) => r.id);
-
-  it('keeps every row with no filter', () => {
-    expect(ids('', 'all', 'all')).toEqual(['quakes', 'iss', 'alpha']);
-  });
-
-  it('searches name, id, group and source, and filters by group and status', () => {
-    expect(ids('sig', 'all', 'all')).toEqual(['iss']);
-    expect(ids('ALPHA', 'all', 'all')).toEqual(['alpha']);
-    expect(ids('built-in', 'all', 'all')).toEqual(['quakes', 'iss', 'alpha']);
-    expect(ids('', 'environment', 'all')).toEqual(['quakes']);
-    expect(ids('', 'all', 'disabled')).toEqual(['iss']);
-    expect(ids('', 'all', 'enabled')).toEqual(['quakes', 'alpha']);
-    expect(ids('', 'SIGINT', 'enabled')).toEqual([]);
   });
 });

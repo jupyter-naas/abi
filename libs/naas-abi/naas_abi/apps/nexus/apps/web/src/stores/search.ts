@@ -373,11 +373,13 @@ async function searchSource(
     case 'brave':
     case 'duckduckgo':
     case 'wikipedia':
-      // Web search API
+      // Web search API: through an engine the workspace offers, so always naming it.
+      if (!context.workspaceId) return [];
       const webResponse = await authFetch(`${baseUrl}/api/search/web`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          workspace_id: context.workspaceId,
           query,
           engine: source.id,
         }),

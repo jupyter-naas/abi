@@ -12,6 +12,10 @@ TYPES = (
     rtype("view"),
     rtype("graph_cache", id="singleton"),
     rtype("ontology"),
+    # An ontology file a workspace offers, by the id the editor names it with
+    # (``module:file.ttl``): no role holds one, the level policies grant the type and
+    # the workspace's offer (``OfferOntologies``) bounds it.
+    rtype("ontology_file", policy_only=True),
     rtype("icon"),
     rtype("layout"),
     rtype("layer"),
@@ -34,6 +38,8 @@ ACTIONS = (
     action("RefreshGraphCache", "write", "graph_cache", feature="graph"),
     action("ListOntologies", "list", "ontology", feature="ontology"),
     action("GetOntology", "read", "ontology", feature="ontology"),
+    # Read an ontology file where the workspace's offer names it.
+    action("UseOntology", "read", "ontology_file", feature="ontology"),
     # Enabling an ontology file in a workspace, decided on the file named in the
     # workspace's organization (``services/ontology/ontology_access.py``): granted
     # at an organization or at the platform, never by the workspace's own admins.

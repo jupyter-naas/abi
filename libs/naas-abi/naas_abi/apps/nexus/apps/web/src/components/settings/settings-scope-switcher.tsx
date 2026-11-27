@@ -3,8 +3,10 @@
 import { useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { SearchPicker } from '@/components/shell/sidebar/search-picker';
+import { useHoverTip } from '@/components/ui/hover-tip';
 import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { useWorkspaceStore, type Workspace } from '@/stores/workspace';
+import { SCOPE_PICKER_DESCRIPTIONS } from './settings-page-descriptions';
 import {
   organizationSettingsSwitchPath,
   organizationsOfWorkspaces,
@@ -15,30 +17,36 @@ import {
 
 type Option = { id: string; label: string };
 
+/** A picker's tip waits a pause: it explains the picker, it is not in the way of using it. */
+export const SCOPE_TIP_DELAY_MS = 1500;
+
 const NONE: Workspace[] = [];
 
-/** A level picked as Files picks a drive (its single-choice picker, with a search box), under
- *  its kind. */
+/** A level picked as Files picks a drive (its single-choice picker, with a search box), in the
+ *  pages' text size; no heading: the column's levels say which is which. */
 function ScopeDropdown({
   kind,
   value,
   options,
   onPick,
+  description,
 }: {
   kind: 'Organization' | 'Workspace';
   value: string;
   options: Option[];
   onPick: (id: string) => void;
+  /** What it picks and what it drives: its tip, after a pause. */
+  description: string;
 }) {
   const noun = kind.toLowerCase();
   const current = options.find((o) => o.id === value)?.label ?? value;
+  const hover = useHoverTip({ title: kind, description, delay: SCOPE_TIP_DELAY_MS });
   return (
-    <div className="settings-scope-switcher" data-scope-switcher={noun}>
-      <span className="settings-scope-kind" aria-hidden="true">
-        {kind}
-      </span>
+    <div ref={hover.ref} className="settings-scope-switcher" data-scope-switcher={noun} {...hover.anchorProps}>
+      {hover.tip}
       <SearchPicker
         single
+        size="sm"
         ariaLabel={`Switch ${noun}`}
         items={options.map((o) => ({ value: o.id, label: o.label }))}
         value={[value]}
@@ -50,6 +58,7 @@ function ScopeDropdown({
         error={null}
         label={current}
         noun={`${noun}s`}
+        nativeTitles={false}
       />
     </div>
   );
@@ -87,6 +96,7 @@ export function SettingsScopeSwitcher() {
             kind="Organization"
             value={org.id}
             options={byWorkspace.map((o) => ({ id: o.id, label: o.name }))}
+            description={SCOPE_PICKER_DESCRIPTIONS.workspaceOrganization}
             onPick={(id) => {
               const first = byWorkspace.find((o) => o.id === id)?.workspaces[0];
               if (first) open(first.id);
@@ -98,6 +108,7 @@ export function SettingsScopeSwitcher() {
           value={workspace.id}
           options={siblings.map((w) => ({ id: w.id, label: w.name }))}
           onPick={open}
+          description={SCOPE_PICKER_DESCRIPTIONS.workspace}
         />
       </div>
     );
@@ -115,6 +126,7 @@ export function SettingsScopeSwitcher() {
           value={orgId}
           options={options}
           onPick={(id) => router.push(organizationSettingsSwitchPath(pathname, id))}
+          description={SCOPE_PICKER_DESCRIPTIONS.organization}
         />
       </div>
     );

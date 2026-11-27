@@ -36,6 +36,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.permissions__sch
 from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.service import (
     MapsAccess,
     MapsPolicy,
+    OfferedMaps,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.port import MapsSettingsStorePort
 from naas_abi.apps.nexus.apps.api.app.services.maps.settings.settings__schema import (
@@ -117,7 +118,9 @@ class MapsBasemapService:
                 user_id=None,
             )
 
-    async def _visible(self, workspace_id: str, policy: MapsPolicy) -> list[MapsBasemap]:
+    async def _visible(
+        self, workspace_id: str, policy: MapsPolicy | OfferedMaps
+    ) -> list[MapsBasemap]:
         own = [
             basemap
             for basemap in await self._store.list(workspace_id)
@@ -182,7 +185,7 @@ class MapsBasemapService:
     ) -> MapsBasemapList:
         """The workspace's basemaps; ``enabled_custom`` is the config's custom list
         (``None``: decide nothing). ``seed=False`` writes neither: the list is what is stored."""
-        policy = await self._access.policy(KIND_BASEMAP)
+        policy = await self._access.in_workspace(KIND_BASEMAP, workspace_id)
         allowed = [(b, p) for b, p in seeds if policy.allows(b.id, DEPLOYMENT, workspace_id)]
         if allowed and seed:
             await self.ensure_seeded(workspace_id, allowed, revisions)
@@ -196,7 +199,7 @@ class MapsBasemapService:
 
     async def get(self, workspace_id: str, basemap_id: str) -> MapsBasemap:
         """A basemap the workspace may use: its own, or one shared with it."""
-        policy = await self._access.policy(KIND_BASEMAP)
+        policy = await self._access.in_workspace(KIND_BASEMAP, workspace_id)
         for basemap in await self._visible(workspace_id, policy):
             if basemap.id == basemap_id:
                 return basemap

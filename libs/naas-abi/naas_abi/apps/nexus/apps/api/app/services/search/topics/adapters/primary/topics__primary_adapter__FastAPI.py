@@ -25,6 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.gr
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQueryStore
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
+from naas_abi.apps.nexus.apps.api.app.services.search.sources import ALL_SOURCES
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.adapters.secondary.postgres import (
     PostgresSearchTopicStore,
 )
@@ -38,6 +39,7 @@ from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema impo
     ROLE_CONTRACTS,
     SearchTopic,
     SearchTopicNotFoundError,
+    SearchTopicSwitchedOffError,
     SearchTopicValidationError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
@@ -150,6 +152,8 @@ def _http_error(exc: Exception) -> HTTPException:
         return HTTPException(status_code=422, detail={"errors": exc.errors})
     if isinstance(exc, SearchTopicNotFoundError):
         return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, SearchTopicSwitchedOffError):
+        return HTTPException(status_code=403, detail=str(exc))
     if isinstance(exc, GraphAccessError):
         return HTTPException(status_code=403, detail=str(exc))
     if isinstance(exc, GraphQuerySpecError):
@@ -179,6 +183,18 @@ async def get_contract() -> dict[str, Any]:
     }
 
 
+async def _shown_sources(user: Any, workspace_id: str) -> set[str]:
+    """The sources the user may read here (``UseSearchSource``) and the workspace offers:
+    as its other lists, what a workspace shows is within its offer, for everyone (an
+    organization's or the platform's admin, whom IAM lets use more, included)."""
+    allowed = await authz.AUTHZ.allowed_ids(
+        "UseSearchSource", user=user, workspace=workspace_id, ids=ALL_SOURCES
+    )
+    container = await authz.AUTHZ.container_of(workspace_id)
+    offer = await authz.AUTHZ.offer_of(container) if container else None
+    return allowed if offer is None else allowed & set(offer.search_sources)
+
+
 @router.get("", dependencies=[guard("ListTopics", literal="-")])
 async def list_topics(
     workspace_id: str = Query(...),
@@ -188,33 +204,26 @@ async def list_topics(
     topics = await service.list_topics(workspace_id)
     return {
         "topics": [t.to_dict() for t in topics],
-        "disabled_scopes": sorted(await service.disabled_scopes(workspace_id)),
+        "disabled_scopes": sorted(
+            set(ALL_SOURCES) - await _shown_sources(current_user, workspace_id)
+        ),
         "can_edit": await authz.allowed(
             "UpdateTopic", user=current_user, workspace=workspace_id, id="-"
         ),
     }
 
 
-class ScopeEnabledIn(BaseModel):
-    enabled: bool
-
-
 @router.put("/scopes/{scope_id}", dependencies=[guard("SetSearchScope", id="scope_id")])
-async def set_scope_enabled(
-    scope_id: str,
-    body: ScopeEnabledIn,
-    workspace_id: str = Query(...),
-    current_user=Depends(get_current_user_required),
-    service: SearchTopicService = Depends(get_search_topic_service),
-) -> dict[str, Any]:
-    """Switch a Nexus feature or a web engine on or off in this workspace's search."""
-    try:
-        disabled = await service.set_scope_enabled(
-            workspace_id, scope_id, body.enabled, user_id=current_user.id
-        )
-    except Exception as exc:
-        raise _http_error(exc) from exc
-    return {"disabled_scopes": sorted(disabled)}
+async def set_scope_enabled(scope_id: str, workspace_id: str = Query(...)) -> dict[str, Any]:
+    """Gone: the sources of a workspace's search are its offer ("<W> access",
+    ``PUT /api/workspaces/{id}/offer/search-sources``), decided by IAM."""
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "The search sources are the workspace's offer: change them with "
+            f"PUT /api/workspaces/{workspace_id}/offer/search-sources"
+        ),
+    )
 
 
 @router.post("/preview", dependencies=[declares("PreviewTopic")])
@@ -249,7 +258,8 @@ async def topic_results(
     service: SearchTopicService = Depends(get_search_topic_service),
 ) -> dict[str, Any]:
     try:
-        topic = await service.get_topic(workspace_id, topic_id)
+        # Before the cache: a topic switched off answers nothing, cached or not.
+        topic = await service.running_topic(workspace_id, topic_id)
         store, scope_key = await _scoped(current_user.id, workspace_id, topic.graphs)
         # A view writes nothing: no placement, no key (it may start a generation), no entry.
         cache = None if viewing() else await _placed_search_cache(workspace_id)

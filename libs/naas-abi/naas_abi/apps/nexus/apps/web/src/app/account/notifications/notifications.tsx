@@ -54,6 +54,9 @@ export default function NotificationsPage() {
     },
   ]);
   const [saved, setSaved] = useState(false);
+  // What was last saved: Save stays faded until the settings differ from it.
+  const [savedSettings, setSavedSettings] = useState(settings);
+  const dirty = settings.some((s, i) => s.email !== savedSettings[i]?.email || s.push !== savedSettings[i]?.push);
 
   const toggleSetting = (id: string, type: 'email' | 'push') => {
     setSettings(
@@ -64,6 +67,7 @@ export default function NotificationsPage() {
   };
 
   const handleSave = () => {
+    setSavedSettings(settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -129,6 +133,7 @@ export default function NotificationsPage() {
         <button
           type="button"
           onClick={handleSave}
+          disabled={!dirty}
           className={
             saved
               ? 'account-notifications-save-button account-notifications-save-button-saved'

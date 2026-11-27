@@ -9,6 +9,7 @@
  * query is checked against its role's contract on save, and can be run on the
  * workspace graphs from here before it is.
  */
+import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Play, Plus, RotateCcw, Save, Search, Trash2 } from 'lucide-react';
@@ -20,7 +21,16 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox, radioClass } from '@/components/ui/checkbox';
 import { fieldClass } from '@/components/ui/input';
 import { SettingsReloadButton } from '@/components/settings/settings-reload';
-import { SettingsFilterSelect, SettingsPageHeader, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
+import {
+  SettingsTableClear, SettingsTableHead, SettingsTableNoMatch, useSettingsTable,
+} from '@/components/settings/users-table/settings-table';
+import { TablePager } from '@/components/settings/users-table/table-pager';
+import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
+import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import {
   blankTopic, searchHref,
   type PreviewResult, type QueryRole, type RoleContract, type SearchTopic, type TopicResultRowDef, type TopicSection,
@@ -28,15 +38,14 @@ import {
 import { TopicApiError, topicsApi } from '@/lib/search-topics-api';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
-import { isFeatureEnabled, type FeatureKey } from '@/lib/feature-access';
-import { FEATURE_SCOPES, WEB_ENGINES, webEngineScopeId } from '@/lib/search-scopes';
+import { isFeatureEnabled } from '@/lib/feature-access';
 import { useSearchTopicsStore } from '@/stores/search-topics';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { Notice } from '@/components/ui/notice';
-import { EmptyState } from '@/components/ui/empty-state';
-import { Loading } from '@/components/ui/spinner';
+import {
+  SEARCH_COLUMNS, SEARCH_EXPORT_HEADERS, SOURCE_LABEL, searchCellValues, searchEntries, searchExportRow, searchSearchTexts,
+  searchSortValue, type SearchEntry, type SearchGroup,
+} from './search-settings-model';
 
-const SOURCE_LABEL: Record<SearchTopic['source'], string> = { builtin: 'Built-in', override: 'Customized', custom: 'Custom' };
 
 export default function SearchSettingsPage() {
   return <Suspense fallback={null}><SearchSettings /></Suspense>;
@@ -48,9 +57,6 @@ function SearchSettings() {
   const selectedId = useSearchParams()?.get('topic');
   const { topics, disabledScopes, setDisabledScopes, canEdit, loading, error, load, replace, remove } = useSearchTopicsStore();
   const workspace = useWorkspaceStore(state => state.getCurrentWorkspace());
-  const featureOn = (feature?: FeatureKey) => !feature || isFeatureEnabled({
-    feature, role: workspace?.currentUserRole, workspaceFlags: workspace?.featureFlags,
-  });
   const [contract, setContract] = useState<Record<QueryRole, RoleContract> | null>(null);
   const prompt = usePrompt();
   // Topics created here and not saved yet exist only in the browser.
@@ -66,9 +72,6 @@ function SearchSettings() {
 
   const [toggling, setToggling] = useState<string | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [groupFilter, setGroupFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
   // Features and web engines: one switch each for the whole workspace.
   const toggleScope = async (scopeId: string, enabled: boolean) => {
     setToggling(scopeId); setTableError(null);
@@ -103,6 +106,30 @@ function SearchSettings() {
     select(clean);
   };
 
+  // One list for the table: topics, Nexus features and web engines.
+  const role = workspace?.currentUserRole;
+  const flags = workspace?.featureFlags;
+  const entries = useMemo(
+    () => searchEntries({
+      topics, drafts, disabledScopes,
+      featureOn: scope => !scope.feature || isFeatureEnabled({ feature: scope.feature, role, workspaceFlags: flags }),
+    }),
+    [topics, drafts, disabledScopes, role, flags],
+  );
+  const table = useSettingsTable({
+    rows: entries,
+    columns: SEARCH_COLUMNS,
+    cellValues: searchCellValues,
+    searchTexts: searchSearchTexts,
+    sortValue: searchSortValue,
+    initialSort: 'group',
+  });
+  const enabledRows = entries.filter(entry => entry.on).length;
+  const exportShown = (format: UsersExportFormat) => {
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTableExport(SEARCH_EXPORT_HEADERS, table.shown.map(searchExportRow), format, `search_${date}`, 'Search');
+  };
+
   if (selectedId) {
     return (
       <div className="space-y-6">
@@ -135,40 +162,23 @@ function SearchSettings() {
     );
   }
 
-  // One list for the table: topics, Nexus features and web engines, each with what the filters need.
-  const query = searchQuery.trim().toLowerCase();
-  const matches = (group: string, on: boolean, ...texts: string[]) =>
-    (groupFilter === 'all' || groupFilter === group) &&
-    (statusFilter === 'all' || (statusFilter === 'enabled') === on) &&
-    (!query || texts.some(text => text.toLowerCase().includes(query)));
-  const featureRows = FEATURE_SCOPES.map(scope => {
-    const available = featureOn(scope.feature);
-    return { scope, available, on: available && !disabledScopes.includes(scope.id) };
-  });
-  const engineRows = WEB_ENGINES.map(engine => {
-    const id = webEngineScopeId(engine.id);
-    return { engine, id, on: !disabledScopes.includes(id) };
-  });
-  const shownTopics = topics.filter(t => matches('Custom', t.enabled, t.plural_label, t.id));
-  const shownFeatures = featureRows.filter(r => matches('Workspace', r.on, r.scope.label, r.scope.id, r.scope.description));
-  const shownEngines = engineRows.filter(r => matches('Web', r.on, r.engine.label, r.id, r.engine.description));
-  const totalRows = topics.length + featureRows.length + engineRows.length;
-  const shownRows = shownTopics.length + shownFeatures.length + shownEngines.length;
-  const enabledRows = topics.filter(t => t.enabled).length + featureRows.filter(r => r.on).length + engineRows.filter(r => r.on).length;
 
   return (
     <div className="space-y-6">
       {prompt.dialog}
       <SettingsPageHeader
         title="Search"
-        badge={`${enabledRows} enabled`}
-        description="What the search page of this workspace can look into. A disabled entry disappears from search for every member. Topics read every graph this workspace can read, unless a topic is limited to some of them."
+        badge={`${enabledRows} enabled · ${entries.length - enabledRows} disabled`}
+        description={`${WORKSPACE_PAGE_DESCRIPTIONS['/settings/search']}. A disabled entry is gone from search for every member`}
         actions={
-          canEdit && (
-            <Button onClick={() => void createTopic()}>
-              <Plus size={16} /> New topic
-            </Button>
-          )
+          <>
+            <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
+            {canEdit && (
+              <Button onClick={() => void createTopic()}>
+                <Plus size={16} /> New topic
+              </Button>
+            )}
+          </>
         }
       />
 
@@ -177,126 +187,99 @@ function SearchSettings() {
       {!canEdit && !loading && <Notice>Only workspace owners and admins can change search topics.</Notice>}
 
       <SettingsTableToolbar
-        search={searchQuery}
-        onSearchChange={setSearchQuery}
+        search={table.search}
+        onSearchChange={table.setSearch}
         searchPlaceholder="Search topics, features and engines..."
-        filters={
+        meta={
           <>
-            <SettingsFilterSelect
-              label="Group"
-              value={groupFilter}
-              onChange={setGroupFilter}
-              options={[
-                { value: 'all', label: 'All groups' },
-                { value: 'Custom', label: 'Custom' },
-                { value: 'Workspace', label: 'Workspace' },
-                { value: 'Web', label: 'Web' },
-              ]}
-            />
-            <SettingsFilterSelect
-              label="Status"
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={[
-                { value: 'all', label: 'All statuses' },
-                { value: 'enabled', label: 'Enabled' },
-                { value: 'disabled', label: 'Disabled' },
-              ]}
-            />
+            {`${countLabel(table.shown.length, entries.length, 'entry', 'entries')} · ${enabledRows} enabled · ${topics.length} topic${topics.length === 1 ? '' : 's'}`}
+            <SettingsTableClear table={table} />
           </>
         }
-        meta={`${countLabel(shownRows, totalRows, 'entry', 'entries')} · ${enabledRows} enabled · ${topics.length} topic${topics.length === 1 ? '' : 's'}`}
       />
 
-      <div className={settingsTable.wrapper}>
-        <table className={settingsTable.table}>
-          <thead>
-            <tr className={settingsTable.headRow}>
-              <th className={settingsTable.th}>Name</th>
-              <th className={settingsTable.th}>Group</th>
-              <th className={settingsTable.th}>Type</th>
-              <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
-            </tr>
-          </thead>
+      <div className="org-settings-users-table-wrap">
+        <table className="org-settings-users-table">
+          <SettingsTableHead table={table} />
           <tbody>
             {loading && !topics.length && (
-              <tr><td colSpan={4} className={cn(settingsTable.td, 'text-muted-foreground')}><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
+              <tr><td colSpan={SEARCH_COLUMNS.length} className="text-muted-foreground"><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
             )}
-            {!loading && shownRows === 0 && (
-              <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">No entries match the current search and filters</td></tr>
-            )}
-            {shownTopics.map(t => (
-              <tr key={t.id} onClick={() => select(t.id)} className={cn(settingsTable.row, 'cursor-pointer')}>
-                <td className={settingsTable.td}>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted"><TopicIcon name={t.icon} /></div>
-                    <div className="min-w-0">
-                      <div className={cn('font-medium', !t.enabled && 'text-muted-foreground')}>{t.plural_label}</div>
-                      <div className="font-mono text-xs text-muted-foreground">{t.id}</div>
+            {!loading && table.shown.length === 0 && <SettingsTableNoMatch colSpan={SEARCH_COLUMNS.length} noun="entries" />}
+            {table.paged.pageRows.map(entry => {
+              if (entry.kind === 'feature') {
+                const { scope, available, on } = entry;
+                return (
+                  <ScopeRow key={entry.id} entry={entry}>
+                    <EnabledSwitch label={scope.label} on={on} busy={toggling === scope.id}
+                      disabled={!canEdit || !available} onChange={() => void toggleScope(scope.id, !on)} />
+                  </ScopeRow>
+                );
+              }
+              if (entry.kind === 'engine') {
+                const { engine, id, on } = entry;
+                return (
+                  <ScopeRow key={id} entry={entry}>
+                    <EnabledSwitch label={engine.label} on={on} busy={toggling === id}
+                      disabled={!canEdit} onChange={() => void toggleScope(id, !on)} />
+                  </ScopeRow>
+                );
+              }
+              const t = entry.topic;
+              return (
+                <tr key={t.id} data-entry={t.id} onClick={() => select(t.id)} className="cursor-pointer">
+                  <td>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted"><TopicIcon name={t.icon} /></div>
+                      <div className="min-w-0">
+                        <div className={cn('font-medium', !t.enabled && 'text-muted-foreground')}>{t.plural_label}</div>
+                        <div className="font-mono text-xs text-muted-foreground">{t.id}</div>
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td className={settingsTable.td}><GroupBadge group="Custom" /></td>
-                <td className={cn(settingsTable.td, 'text-muted-foreground')}>{drafts.has(t.id) ? 'Draft' : SOURCE_LABEL[t.source]}</td>
-                <td className={settingsTable.td} onClick={e => e.stopPropagation()}>
-                  <EnabledSwitch
-                    label={t.plural_label}
-                    on={t.enabled}
-                    busy={toggling === t.id}
-                    disabled={!canEdit || drafts.has(t.id)}
-                    onChange={() => void toggleEnabled(t)}
-                  />
-                </td>
-              </tr>
-            ))}
-
-            {shownFeatures.map(({ scope, available, on }) => {
-              return (
-                <ScopeRow key={scope.id} icon={scope.icon} name={scope.label} id={scope.id} group="Workspace" type="Nexus feature"
-                  description={available ? scope.description : `${scope.description} — the ${scope.label} feature is off in this workspace`}>
-                  <EnabledSwitch label={scope.label} on={on} busy={toggling === scope.id}
-                    disabled={!canEdit || !available} onChange={() => void toggleScope(scope.id, !on)} />
-                </ScopeRow>
-              );
-            })}
-
-            {shownEngines.map(({ engine, id, on }) => {
-              return (
-                <ScopeRow key={id} icon={engine.icon} name={engine.label} id={id} group="Web" type="Web engine" description={`${engine.description} — the query leaves Nexus`}>
-                  <EnabledSwitch label={engine.label} on={on} busy={toggling === id}
-                    disabled={!canEdit} onChange={() => void toggleScope(id, !on)} />
-                </ScopeRow>
+                  </td>
+                  <td><GroupBadge group={entry.group} /></td>
+                  <td className="text-muted-foreground">{entry.type}</td>
+                  <td onClick={e => e.stopPropagation()}>
+                    <EnabledSwitch
+                      label={t.plural_label}
+                      on={t.enabled}
+                      busy={toggling === t.id}
+                      disabled={!canEdit || drafts.has(t.id)}
+                      onChange={() => void toggleEnabled(t)}
+                    />
+                  </td>
+                </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      <TablePager total={table.shown.length} paged={table.paged} />
     </div>
   );
 }
 
-function GroupBadge({ group }: { group: 'Custom' | 'Workspace' | 'Web' }) {
+function GroupBadge({ group }: { group: SearchGroup }) {
   return <Badge variant="outline">{group}</Badge>;
 }
 
 /** A feature or web-engine row: nothing to edit but whether search may use it. */
-function ScopeRow({ icon, name, id, group, type, description, children }: {
-  icon: string; name: string; id: string; group: 'Workspace' | 'Web'; type: string; description: string; children: React.ReactNode;
-}) {
+function ScopeRow({ entry, children }: { entry: Exclude<SearchEntry, { kind: 'topic' }>; children: React.ReactNode }) {
+  const icon = entry.kind === 'feature' ? entry.scope.icon : entry.engine.icon;
   return (
-    <tr className={settingsTable.row}>
-      <td className={settingsTable.td}>
+    <tr data-entry={entry.id}>
+      <td>
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted"><TopicIcon name={icon} /></div>
           <div className="min-w-0">
-            <div className="font-medium">{name}</div>
-            <div className="truncate text-xs text-muted-foreground" title={description}>{description}</div>
+            <div className="font-medium">{entry.name}</div>
+            <div className="truncate text-xs text-muted-foreground" title={entry.description}>{entry.description}</div>
           </div>
         </div>
       </td>
-      <td className={settingsTable.td}><GroupBadge group={group} /></td>
-      <td className={cn(settingsTable.td, 'text-muted-foreground')}>{type}</td>
-      <td className={settingsTable.td}><span className="sr-only">{id}</span>{children}</td>
+      <td><GroupBadge group={entry.group} /></td>
+      <td className="text-muted-foreground">{entry.type}</td>
+      <td><span className="sr-only">{entry.id}</span>{children}</td>
     </tr>
   );
 }

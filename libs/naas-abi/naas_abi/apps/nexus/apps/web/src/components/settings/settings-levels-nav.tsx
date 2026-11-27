@@ -42,6 +42,7 @@ export function SettingsLevelsNav({
                 chevron={mobileList}
                 badge={badges?.[link.href]?.text}
                 badgeTitle={badges?.[link.href]?.title}
+                description={link.description}
               />
             ))}
           </ul>

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -113,7 +114,7 @@ async def ontology_catalog_scope(
     workspace (it runs before this)."""
     # Listed once for the request: the route reads the same files again by these paths.
     remember_listings()
-    refs = await _catalog_refs_for_workspace(workspace_id)
+    refs = await _catalog_refs_for_workspace(workspace_id, current_user)
     files = await ontology_service.list_ontology_files(catalog_refs=refs)
     readable = await readable_paths(current_user, workspace_id, [f.path for f in files])
     narrowed = [f for f in files if f.path in readable]
@@ -122,7 +123,25 @@ async def ontology_catalog_scope(
     return paths
 
 
-async def _catalog_refs_for_workspace(workspace_id: str) -> list[str]:
+async def _catalog_refs_for_workspace(workspace_id: str, user: Any = None) -> list[str]:
+    """The ontology refs the workspace offers ("<W> access", ``OfferOntologies``) that
+    IAM lets the caller use there (``UseOntology``): what every route reads from. A
+    workspace whose access policy is no allow-list yet reads its stored list, as before
+    the offer."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+    container = await AUTHZ.container_of(workspace_id) if user is not None else None
+    offer = await AUTHZ.offer_of(container) if container else None
+    if offer is not None:
+        refs = sorted(offer.ontologies)
+        allowed = await AUTHZ.allowed_ids(
+            "UseOntology", user=user, workspace=workspace_id, ids=refs
+        )
+        return [ref for ref in refs if ref in allowed]
+    return await _stored_refs(workspace_id)
+
+
+async def _stored_refs(workspace_id: str) -> list[str]:
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
     from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.resource_access_postgres import (
         load_resource_policy,

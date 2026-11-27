@@ -2,128 +2,54 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import {
-  AlertCircle,
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  CheckCircle,
-  Cloud,
-  SlidersHorizontal,
-  XCircle,
-} from 'lucide-react';
+import { AlertCircle, CheckCircle, Cloud, SlidersHorizontal, XCircle } from 'lucide-react';
 import { readAvailableProviders, readProviderModels } from '@/stores/models';
 import { getApiUrl } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { SettingsPageHeader, SettingsFilterSelect, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
-import { Notice } from '@/components/ui/notice';
+import { SettingsPageHeader, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
+import {
+  SettingsTableClear,
+  SettingsTableHead,
+  SettingsTableNoMatch,
+  useSettingsTable,
+} from '@/components/settings/users-table/settings-table';
+import { TablePager } from '@/components/settings/users-table/table-pager';
+import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
+import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
+import {
+  CONFIGURED,
+  MODEL_COLUMNS,
+  MODEL_EXPORT_HEADERS,
+  formatContext,
+  modelCellValues,
+  modelExportRow,
+  modelRows,
+  modelSearchTexts,
+  modelSortValue,
+  visibleColumnsFrom,
+  type Model,
+  type ModelColumnId,
+  type ModelRow,
+  type Provider,
+} from './models-panel-model';
 
 const getApiBase = () => getApiUrl();
 
-type Model = {
-  canonical_id: string;
-  model_id: string;
-  provider: string;
-  provider_id: string;
-  module_path: string;
-  configured: boolean;
-  name: string | null;
-  description: string | null;
-  image: string | null;
-  context_window: number | null;
-};
-
-type Provider = {
-  id: string;
-  name: string;
-  module_path: string;
-  configured: boolean;
-  logo_url: string | null;
-  config_keys: string[];
-  models: Model[];
-  description?: string | null;
-  tags?: string[];
-  slug?: string | null;
-  privacy_policy_url?: string | null;
-  terms_of_service_url?: string | null;
-  status_page_url?: string | null;
-  headquarters?: string | null;
-  datacenters?: string[] | null;
-};
-
-type SortKey = 'model' | 'provider' | 'context' | 'status';
-type SortDirection = 'asc' | 'desc';
-type StatusFilter = 'configured' | 'not_configured' | 'all';
-
-const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
-  { value: 'configured', label: 'Configured' },
-  { value: 'not_configured', label: 'Not configured' },
-  { value: 'all', label: 'All' },
-];
-
-// Columns map 1:1 to the backend ModelCatalogEntry properties. `defaultVisible`
-// seeds the initial table; the user can add/remove any of them via the Columns
-// menu, and the selection is persisted to localStorage.
-type ColumnKey =
-  | 'image'
-  | 'name'
-  | 'model_id'
-  | 'canonical_id'
-  | 'provider'
-  | 'provider_id'
-  | 'module_path'
-  | 'description'
-  | 'context_window'
-  | 'status';
-
-type ColumnMeta = {
-  key: ColumnKey;
-  label: string;
-  sortBy?: SortKey;
-  defaultVisible: boolean;
-};
-
-const COLUMN_META: ColumnMeta[] = [
-  { key: 'image', label: 'Image', defaultVisible: true },
-  { key: 'name', label: 'Name', sortBy: 'model', defaultVisible: true },
-  { key: 'model_id', label: 'Model ID', defaultVisible: true },
-  { key: 'canonical_id', label: 'Canonical ID', defaultVisible: false },
-  { key: 'provider', label: 'Provider', sortBy: 'provider', defaultVisible: true },
-  { key: 'provider_id', label: 'Provider ID', defaultVisible: false },
-  { key: 'module_path', label: 'Module path', defaultVisible: false },
-  { key: 'description', label: 'Description', defaultVisible: true },
-  { key: 'context_window', label: 'Context', sortBy: 'context', defaultVisible: true },
-  { key: 'status', label: 'Status', sortBy: 'status', defaultVisible: true },
-];
-
-const DEFAULT_VISIBLE_COLUMNS = COLUMN_META.filter((c) => c.defaultVisible).map((c) => c.key);
 // Bumped to v2 so the new default (Description column visible) applies to users
 // who already had a persisted column selection.
 const COLUMN_STORAGE_KEY = 'models-panel-visible-columns-v2';
 
-const formatContext = (ctx: number | null) => {
-  if (!ctx) return '—';
-  return ctx >= 1000 ? `${(ctx / 1000).toFixed(0)}K` : `${ctx}`;
-};
-
-// Fixed widths keep the logo column from being stretched by long content in
-// sibling columns (e.g. a multi-line description), guaranteeing a square logo.
-const columnWidthClass = (key: ColumnKey): string => {
-  switch (key) {
-    case 'image':
-      return 'w-[52px]';
-    case 'description':
-      return 'max-w-xs';
-    default:
-      return '';
-  }
-};
-
+/**
+ * Settings › Models, laid out as Settings › Users: a search, columns that sort and filter (the
+ * provider and the status from their columns, Configured at first), pages, an export. The
+ * Columns menu picks the columns shown; a row opens its model.
+ */
 export function ModelsPanel() {
   const router = useRouter();
   const params = useParams();
@@ -131,28 +57,19 @@ export function ModelsPanel() {
 
   const [providers, setProviders] = useState<Provider[]>([]);
   const [models, setModels] = useState<Model[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [providerFilter, setProviderFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('configured');
-  const [sortKey, setSortKey] = useState<SortKey>('model');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(() => {
+  const [visibleColumns, setVisibleColumns] = useState<Set<ModelColumnId>>(() => {
     if (typeof window !== 'undefined') {
       try {
         const raw = window.localStorage.getItem(COLUMN_STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw) as ColumnKey[];
-          const known = parsed.filter((k) => COLUMN_META.some((c) => c.key === k));
-          if (known.length) return new Set(known);
-        }
+        if (raw) return new Set(visibleColumnsFrom(JSON.parse(raw)));
       } catch {
         // ignore malformed storage and fall back to defaults
       }
     }
-    return new Set(DEFAULT_VISIBLE_COLUMNS);
+    return new Set(visibleColumnsFrom(null));
   });
   const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
   const columnsMenuRef = useRef<HTMLDivElement>(null);
@@ -205,17 +122,27 @@ export function ModelsPanel() {
     return map;
   }, [providers]);
 
-  const configuredCount = useMemo(
-    () => models.filter((m) => m.configured).length,
-    [models]
-  );
+  const rows = useMemo(() => modelRows(models, providers), [models, providers]);
+  const configuredCount = useMemo(() => models.filter((m) => m.configured).length, [models]);
 
+  // Every column filters, shown or not; the header draws the columns shown.
+  const table = useSettingsTable({
+    rows,
+    columns: MODEL_COLUMNS,
+    cellValues: modelCellValues,
+    searchTexts: modelSearchTexts,
+    sortValue: modelSortValue,
+    initialSort: 'name',
+    // The configured models at first, as the Status filter did.
+    initialFilters: { status: { selected: [CONFIGURED] } },
+  });
+  const shown = table.shown;
   const orderedVisibleColumns = useMemo(
-    () => COLUMN_META.filter((c) => visibleColumns.has(c.key)),
+    () => MODEL_COLUMNS.filter((c) => visibleColumns.has(c.id)),
     [visibleColumns]
   );
 
-  const toggleColumn = (key: ColumnKey) => {
+  const toggleColumn = (key: ModelColumnId) => {
     setVisibleColumns((prev) => {
       const next = new Set(prev);
       if (next.has(key)) {
@@ -235,77 +162,9 @@ export function ModelsPanel() {
     router.push(`${base}/${encodeURIComponent(model.canonical_id)}`);
   };
 
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(key);
-      setSortDirection('asc');
-    }
-  };
-
-  const filteredModels = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return models.filter((m) => {
-      if (statusFilter === 'configured' && !m.configured) return false;
-      if (statusFilter === 'not_configured' && m.configured) return false;
-      if (providerFilter !== 'all' && m.provider_id !== providerFilter) return false;
-      if (q) {
-        const haystack = [
-          m.canonical_id,
-          m.model_id,
-          m.provider_id,
-          m.provider,
-          m.name ?? '',
-        ].join(' ').toLowerCase();
-        if (!haystack.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [models, searchQuery, providerFilter, statusFilter]);
-
-  const sortedModels = useMemo(() => {
-    const sorted = [...filteredModels];
-    const dir = sortDirection === 'asc' ? 1 : -1;
-    sorted.sort((a, b) => {
-      switch (sortKey) {
-        case 'model': {
-          const aKey = (a.name ?? a.canonical_id).toLowerCase();
-          const bKey = (b.name ?? b.canonical_id).toLowerCase();
-          return aKey.localeCompare(bKey) * dir;
-        }
-        case 'provider': {
-          const aName = (providersById.get(a.provider_id)?.name ?? a.provider_id).toLowerCase();
-          const bName = (providersById.get(b.provider_id)?.name ?? b.provider_id).toLowerCase();
-          return aName.localeCompare(bName) * dir;
-        }
-        case 'context': {
-          const aCtx = a.context_window ?? -1;
-          const bCtx = b.context_window ?? -1;
-          return (aCtx - bCtx) * dir;
-        }
-        case 'status': {
-          // Configured first when ascending.
-          const aVal = a.configured ? 0 : 1;
-          const bVal = b.configured ? 0 : 1;
-          return (aVal - bVal) * dir;
-        }
-        default:
-          return 0;
-      }
-    });
-    return sorted;
-  }, [filteredModels, sortKey, sortDirection, providersById]);
-
-  const renderSortIcon = (key: SortKey) => {
-    if (sortKey !== key) {
-      return <ArrowUpDown size={12} className="text-muted-foreground/50" />;
-    }
-    return sortDirection === 'asc' ? (
-      <ArrowUp size={12} className="text-foreground" />
-    ) : (
-      <ArrowDown size={12} className="text-foreground" />
-    );
+  const exportShown = (format: UsersExportFormat) => {
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTableExport(MODEL_EXPORT_HEADERS, shown.map(modelExportRow), format, `models_${date}`, 'Models');
   };
 
   const renderImage = (model: Model, provider: Provider | undefined) => {
@@ -332,7 +191,7 @@ export function ModelsPanel() {
     );
   };
 
-  const renderCell = (key: ColumnKey, model: Model, provider: Provider | undefined) => {
+  const renderCell = (key: ModelColumnId, model: ModelRow, provider: Provider | undefined) => {
     switch (key) {
       case 'image':
         return renderImage(model, provider);
@@ -343,7 +202,7 @@ export function ModelsPanel() {
       case 'canonical_id':
         return <code className="font-mono text-xs text-muted-foreground">{model.canonical_id}</code>;
       case 'provider':
-        return <span>{provider?.name ?? model.provider}</span>;
+        return <span>{model.provider_name}</span>;
       case 'provider_id':
         return <code className="font-mono text-xs text-muted-foreground">{model.provider_id}</code>;
       case 'module_path':
@@ -382,7 +241,8 @@ export function ModelsPanel() {
       <SettingsPageHeader
         title="Models"
         badge={`${configuredCount} configured`}
-        description="All AI models discovered from naas_abi_marketplace.ai modules"
+        description="The models of the marketplace AI modules"
+        actions={<UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />}
       />
 
       {error && (
@@ -401,118 +261,79 @@ export function ModelsPanel() {
       ) : (
         <div className="space-y-4">
           <SettingsTableToolbar
-            search={searchQuery}
-            onSearchChange={setSearchQuery}
+            search={table.search}
+            onSearchChange={table.setSearch}
             searchPlaceholder="Search by model, provider, or canonical id..."
             filters={
-              <>
-                <SettingsFilterSelect
-                  label="Provider"
-                  value={providerFilter}
-                  onChange={setProviderFilter}
-                  options={[{ value: 'all', label: 'All providers' }, ...providers.map((p) => ({ value: p.id, label: p.name }))]}
-                  className="sm:w-48"
-                />
-                <SettingsFilterSelect
-                  label="Status"
-                  value={statusFilter}
-                  onChange={(value) => setStatusFilter(value as StatusFilter)}
-                  options={STATUS_FILTERS}
-                />
-                <div className="relative" ref={columnsMenuRef}>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setColumnsMenuOpen((open) => !open)}
-                    className={cn(columnsMenuOpen && 'bg-muted')}
-                  >
-                    <SlidersHorizontal size={16} />
-                    Columns
-                    <Badge>{orderedVisibleColumns.length}</Badge>
-                  </Button>
-                  {columnsMenuOpen && (
-                    <div className="absolute right-0 z-20 mt-2 w-56 border border-border bg-popover p-1 shadow-lg">
-                      <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                        Toggle columns
-                      </div>
-                      {COLUMN_META.map((col) => {
-                        const checked = visibleColumns.has(col.key);
-                        const isLast = checked && visibleColumns.size === 1;
-                        return (
-                          <Checkbox
-                            key={col.key}
-                            checked={checked}
-                            onCheckedChange={() => toggleColumn(col.key)}
-                            disabled={isLast}
-                            label={col.label}
-                            className="flex w-full px-2 py-1.5 hover:bg-muted"
-                          />
-                        );
-                      })}
+              <div className="relative" ref={columnsMenuRef}>
+                <Button
+                  variant="secondary"
+                  onClick={() => setColumnsMenuOpen((open) => !open)}
+                  className={cn(columnsMenuOpen && 'bg-muted')}
+                >
+                  <SlidersHorizontal size={16} />
+                  Columns
+                  <Badge>{orderedVisibleColumns.length}</Badge>
+                </Button>
+                {columnsMenuOpen && (
+                  <div className="absolute right-0 z-20 mt-2 w-56 border border-border bg-popover p-1 shadow-lg">
+                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                      Toggle columns
                     </div>
-                  )}
-                </div>
+                    {MODEL_COLUMNS.map((col) => {
+                      const checked = visibleColumns.has(col.id);
+                      const isLast = checked && visibleColumns.size === 1;
+                      return (
+                        <Checkbox
+                          key={col.id}
+                          checked={checked}
+                          onCheckedChange={() => toggleColumn(col.id)}
+                          disabled={isLast}
+                          label={col.label}
+                          className="flex w-full px-2 py-1.5 hover:bg-muted"
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            }
+            meta={
+              <>
+                {`${countLabel(shown.length, models.length, 'model')} · ${configuredCount} configured · ${providers.length} providers`}
+                <SettingsTableClear table={table} />
               </>
             }
-            meta={`${countLabel(sortedModels.length, models.length, 'model')} · ${configuredCount} configured · ${providers.length} providers`}
           />
 
-          <div className={settingsTable.wrapper}>
-            <table className={settingsTable.table}>
-              <thead>
-                <tr className={settingsTable.headRow}>
-                  {orderedVisibleColumns.map((col) =>
-                    col.sortBy ? (
-                      <th key={col.key} className={cn(settingsTable.th, columnWidthClass(col.key))}>
-                        <button
-                          onClick={() => handleSort(col.sortBy!)}
-                          className="inline-flex items-center gap-1.5 uppercase hover:text-foreground"
-                        >
-                          {col.label}
-                          {renderSortIcon(col.sortBy)}
-                        </button>
-                      </th>
-                    ) : (
-                      <th key={col.key} className={cn(settingsTable.th, columnWidthClass(col.key))}>
-                        {col.label}
-                      </th>
-                    )
-                  )}
-                </tr>
-              </thead>
+          <div className="org-settings-users-table-wrap">
+            <table className="org-settings-users-table">
+              <SettingsTableHead table={{ ...table, columns: orderedVisibleColumns }} />
               <tbody>
-                {sortedModels.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={orderedVisibleColumns.length}
-                      className="p-8 text-center text-muted-foreground"
-                    >
-                      No models match the current filters
-                    </td>
-                  </tr>
-                ) : (
-                  sortedModels.map((model) => {
-                    const provider = providersById.get(model.provider_id);
-                    return (
-                      <tr
-                        key={`${model.provider_id}-${model.canonical_id}`}
-                        onClick={() => openModel(model)}
-                        className={cn(settingsTable.row, 'cursor-pointer')}
-                      >
-                        {orderedVisibleColumns.map((col) => (
-                          <td
-                            key={col.key}
-                            className={cn(settingsTable.td, 'align-top', columnWidthClass(col.key))}
-                          >
-                            {renderCell(col.key, model, provider)}
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })
+                {shown.length === 0 && (
+                  <SettingsTableNoMatch colSpan={orderedVisibleColumns.length} noun="models" />
                 )}
+                {table.paged.pageRows.map((model) => {
+                  const provider = providersById.get(model.provider_id);
+                  return (
+                    <tr
+                      key={`${model.provider_id}-${model.canonical_id}`}
+                      data-model={model.canonical_id}
+                      onClick={() => openModel(model)}
+                      className="cursor-pointer"
+                    >
+                      {orderedVisibleColumns.map((col) => (
+                        <td key={col.id} className={cn('align-top', col.className)}>
+                          {renderCell(col.id, model, provider)}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+          <TablePager total={shown.length} paged={table.paged} />
         </div>
       )}
 

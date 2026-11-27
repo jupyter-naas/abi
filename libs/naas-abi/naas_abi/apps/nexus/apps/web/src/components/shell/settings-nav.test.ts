@@ -13,7 +13,7 @@ import { describeModuleResources, type WorkspaceResources } from '@/lib/workspac
 function resources(over: Partial<WorkspaceResources> = {}): WorkspaceResources {
   return {
     organization_id: 'org-1',
-    features: ['agents', 'apps', 'files', 'graph', 'maps', 'ontology', 'search', 'skills', 'settings'],
+    features: ['agents', 'apps', 'chat', 'datasets', 'files', 'graph', 'maps', 'ontology', 'search', 'skills', 'settings'],
     modules: [],
     totals: { agents: 2, apps: 1, workflows: 0, pipelines: 1 },
     ...over,
@@ -53,9 +53,14 @@ describe('workspace settings nav', () => {
     expect(shown({ 'iam:Explain': true, 'nexus:ReadSystem': true })).not.toContain('Policies');
     const access = visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { access: IAM }).find((g) => g.label === 'Access');
     expect(access?.items.map((item) => [item.label, item.href])).toEqual([
-      ['Groups', '/settings/groups'],
       ['Policies', '/settings/policies'],
+      ['Features', '/settings/features'],
+      ['Core Services', '/settings/core-services'],
+      ['Modules', '/settings/modules'],
     ]);
+    // Groups sit with the people, under Users.
+    const general = visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { access: IAM }).find((g) => g.label === 'General');
+    expect(general?.items.map((item) => item.label)).toEqual(['General', 'Users', 'Groups']);
     expect(labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { access: IAM }))).not.toContain('Roles & permissions');
   });
 
@@ -103,9 +108,14 @@ describe('workspace settings nav', () => {
     expect(shown).toContain('Apps');
     expect(shown).not.toContain('Agents');
     expect(shown).not.toContain('Maps');
+    // Models configures the chat: gone with it.
+    expect(shown).not.toContain('Models');
+    expect(labels(visibleSettingsGroups(resources({ features: ['chat'] })))).toContain('Models');
     // No feature: always there.
-    expect(shown).toContain('Models');
     expect(shown).toContain('General');
+    // Features (General) and Files (Features): Files is where Workspace Files is turned on.
+    expect(shown).toContain('Features');
+    expect(shown).toContain('Files');
   });
 
   it('hides Apps and Workflows when the caller may use none of theirs', () => {
@@ -143,7 +153,7 @@ describe('workspace settings nav', () => {
   });
 
   it('has no Infrastructure: the map of the code is the platform\'s, in Platform › System', () => {
-    expect(visibleSettingsGroups(null).map((group) => group.label)).toEqual(['General', 'Features']);
+    expect(visibleSettingsGroups(null).map((group) => group.label)).toEqual(['General', 'Access', 'Features']);
     expect(settingsItemFor('/workspace/ws-1/settings/infrastructure/layers')).toBeUndefined();
   });
 

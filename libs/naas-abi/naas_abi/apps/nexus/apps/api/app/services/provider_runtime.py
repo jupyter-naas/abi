@@ -804,7 +804,8 @@ async def complete_with_abi(
         agent = await asyncio.to_thread(_turn_copy, template_agent, thread_id)
         if agent is None:
             raise PermissionError(f"You may not use the agent {config.model} here")
-        with agents_own_models(agent):
+        models, llm_model = await _workspace_models_for_turn(agent, llm_model)
+        with agents_own_models(agent, models):
             if llm_model:
                 _retarget_inprocess_chat_model(agent, llm_model)
 
@@ -1439,35 +1440,81 @@ def _retarget_inprocess_chat_model(agent: Any, model_id: str) -> None:
     Applies recursively to nested sub-agents so orchestrators (e.g. Axi) and
     delegated specialists (e.g. Counter-UAS) share the same per-request model.
     """
-    from naas_abi_core.services.agent.tools.utils import can_bind_tools
-
     chat_model = _load_inprocess_chat_model(model_id)
     base = getattr(chat_model, "model", chat_model)
-
-    def _apply_to_node(node: Any) -> None:
-        node._chat_model = base
-        tools_to_bind: list[Any] = []
-        tools_to_bind.extend(getattr(node, "_structured_tools", []) or [])
-        tools_to_bind.extend(getattr(node, "_native_tools", []) or [])
-        if tools_to_bind and can_bind_tools(base):
-            node._chat_model_with_tools = base.bind_tools(tools_to_bind)
-            requires_ws = getattr(type(node), "_requires_workspace", None)
-            if callable(requires_ws):
-                gated = [t for t in tools_to_bind if not requires_ws(t)]
-                node._chat_model_without_workspace_tools = (
-                    base.bind_tools(gated)
-                    if len(gated) != len(tools_to_bind)
-                    else node._chat_model_with_tools
-                )
-            else:
-                node._chat_model_without_workspace_tools = node._chat_model_with_tools
-            return
-        node._chat_model_with_tools = base
-        node._chat_model_without_workspace_tools = base
-
-    _apply_to_node(agent)
+    _bind_chat_model(agent, base)
     for sub_agent in getattr(agent, "_agents", None) or []:
         _retarget_inprocess_chat_model(sub_agent, model_id)
+
+
+def _bind_chat_model(node: Any, base: Any) -> None:
+    """Rebind one agent node (not its sub-agents) to ``base``, its tools bound again."""
+    from naas_abi_core.services.agent.tools.utils import can_bind_tools
+
+    node._chat_model = base
+    tools_to_bind: list[Any] = []
+    tools_to_bind.extend(getattr(node, "_structured_tools", []) or [])
+    tools_to_bind.extend(getattr(node, "_native_tools", []) or [])
+    if tools_to_bind and can_bind_tools(base):
+        node._chat_model_with_tools = base.bind_tools(tools_to_bind)
+        requires_ws = getattr(type(node), "_requires_workspace", None)
+        if callable(requires_ws):
+            gated = [t for t in tools_to_bind if not requires_ws(t)]
+            node._chat_model_without_workspace_tools = (
+                base.bind_tools(gated)
+                if len(gated) != len(tools_to_bind)
+                else node._chat_model_with_tools
+            )
+        else:
+            node._chat_model_without_workspace_tools = node._chat_model_with_tools
+        return
+    node._chat_model_with_tools = base
+    node._chat_model_without_workspace_tools = base
+
+
+def inprocess_agent_model_ids(agent_name: str) -> set[str]:
+    """The models an in-process agent was built with (the registry's gates on its chat
+    model); none for an agent not found or a model the registry does not name."""
+    from naas_abi_core.services.model_registry.agent_models import gated_model_ids
+
+    template = _resolve_inprocess_abi_agent(agent_name)
+    return gated_model_ids(getattr(template, "_chat_model", None)) if template else set()
+
+
+def keep_agent_to_models(
+    agent: Any, models: Any, *, load: Callable[[str], Any] | None = None
+) -> list[str]:
+    """For a turn in a workspace limited to some models (``iam/workspace_models``), on
+    its own copy of the agent: the agent and each sub-agent built on a model the
+    workspace does not offer (or on one the registry's gate does not name) is switched
+    to the workspace's default model; the others keep theirs. Returns the class names
+    switched. ``load``: the default model's loader (the registry's, by default)."""
+    from naas_abi_core.services.model_registry.agent_models import gated_model_ids
+
+    if not models.restricted:
+        return []
+    switched: list[str] = []
+    base: Any = None
+
+    def visit(node: Any, depth: int) -> None:
+        nonlocal base
+        if depth > _MAX_AGENT_DEPTH:
+            return
+        current = getattr(node, "_chat_model", None)
+        if current is not None:
+            ids = gated_model_ids(current)
+            if not ids or not all(models.allows(i) for i in ids):
+                default = models.model_for(None)
+                if base is None:
+                    loaded = (load or _load_inprocess_chat_model)(default)
+                    base = getattr(loaded, "model", loaded)
+                _bind_chat_model(node, base)
+                switched.append(type(node).__name__)
+        for sub in getattr(node, "_agents", None) or []:
+            visit(sub, depth + 1)
+
+    visit(agent, 0)
+    return switched
 
 
 def _inprocess_agent_class_name(agent: Any) -> str:
@@ -1534,15 +1581,41 @@ def agent_model_owners(agent: Any, container: str | None) -> dict[str, list[str]
     return owners
 
 
-def agents_own_models(agent: Any) -> Any:
+def agents_own_models(agent: Any, models: Any = None) -> Any:
     """For the turn of ``agent``: its own models are allowed to whoever may use it
     (``module:UseAgent`` on its scope where the turn runs), whatever their model
-    set (core ``model_registry/agent_models``). Any other model stays theirs."""
+    set (core ``model_registry/agent_models``), those the workspace uses only
+    (``models``, ``iam/workspace_models``: every one when None). Any other model stays
+    theirs."""
     from naas_abi_core.engine.call_context import current_call_context
     from naas_abi_core.services.model_registry.agent_models import agent_models
 
     owners = agent_model_owners(agent, current_call_context().container)
+    if models is not None:
+        owners = {cid: scopes for cid, scopes in owners.items() if models.allows(cid)}
     return agent_models("module:UseAgent", owners)
+
+
+async def _workspace_models_for_turn(agent: Any, llm_model: str | None) -> tuple[Any, str | None]:
+    """The workspace models of this turn (``workspace_models.models_for_turn``) and the
+    model it runs on: a picked model the workspace does not offer is switched to its
+    default; with none picked, each agent node on a model it does not offer is
+    (``keep_agent_to_models``). Raises ``ModelNotOfferedError`` with no default."""
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import (
+        models_for_turn,
+    )
+
+    models = await models_for_turn()
+    if not models.restricted:
+        return models, llm_model
+    if llm_model:
+        return models, models.model_for(llm_model)
+    switched = await asyncio.to_thread(keep_agent_to_models, agent, models)
+    if switched:
+        logger.info("Switched to the workspace's default model: %s", ", ".join(switched))
+    return models, None
 
 
 def _turn_copy(template_agent: Any, thread_id: str | None) -> Any | None:
@@ -1795,8 +1868,18 @@ async def stream_with_abi_inprocess(
     if agent is None:
         yield f"\n\n**Error:** You may not use the agent {agent_name} here."
         return
-    # The agent's own models are its users', whatever their model set.
-    with agents_own_models(agent):
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import (
+        ModelNotOfferedError,
+    )
+
+    try:
+        models, llm_model = await _workspace_models_for_turn(agent, llm_model)
+    except ModelNotOfferedError as exc:
+        yield f"\n\n**Error:** {exc}"
+        return
+    # The agent's own models are its users', whatever their model set (those the
+    # workspace uses).
+    with agents_own_models(agent, models):
         async for chunk in _stream_inprocess_turn(
             agent, agent_name, latest_user_message, thread_id, llm_model
         ):

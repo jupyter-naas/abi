@@ -171,4 +171,22 @@ async def effective_graph_policies(
         policies[f"{organization}/{workspace}"] = WorkspaceGraphPolicyConfig.model_validate_json(
             data
         )
+    # A workspace's offer says what it is given ("<W> access", ``given_graphs``): the saved
+    # rows are only what an access policy that is no allow-list yet still goes by.
+    from naas_abi.apps.nexus.apps.api.app.services.iam import given_graphs
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
+
+    workspaces = await db.execute(
+        select(
+            WorkspaceModel.id,
+            WorkspaceModel.slug,
+            WorkspaceModel.organization_id,
+            OrganizationModel.slug,
+        ).outerjoin(OrganizationModel, WorkspaceModel.organization_id == OrganizationModel.id)
+    )
+    for workspace_id, workspace, organization_id, organization in workspaces:
+        offer = await AUTHZ.offer_of(workspace_container(organization_id, str(workspace_id)))
+        if offer is not None:
+            policies[f"{organization}/{workspace}"] = given_graphs.config_of(offer)
     return policies

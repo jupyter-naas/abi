@@ -2,7 +2,7 @@
 (schema 9), shown on its page.
 
 A group the access model makes (a level group, an organization's or a workspace's groups,
-a capability group, a workspace's Platform Files group) is given its sentence when it is
+a capability group) is given its sentence when it is
 made; one made before descriptions existed is given it by each start
 (``describe_groups``), once: a description someone wrote is kept. A group a person makes
 is theirs to describe (``described`` answers None for it).
@@ -35,10 +35,6 @@ ALL_WORKSPACE_ADMINS = (
 )
 MODELS_ALL = "Who may use every model of the platform, beyond a workspace's own."
 WORKFLOW_RUNNERS = "Who may run the organization's workflows, within what it offers."
-PLATFORM_FILES = (
-    "The people of a workspace given Platform Files, kept in step by Nexus: they read "
-    "(or also write) the platform's files."
-)
 WORKSPACE = (
     "Everyone who belongs to the workspace: they use what it offers, at their level "
     "(Viewer or Member)."
@@ -63,7 +59,6 @@ def described(
     """The sentence of a group of the access model, told by its name at its owner and its
     markers; None for any other group (a person's: theirs to describe)."""
     from naas_abi.apps.nexus.apps.api.app.services.iam import capabilities, levels
-    from naas_abi.apps.nexus.apps.api.app.services.iam.platform_files import GROUP_PREFIX
 
     name = name or ""
     owner = owner or PLATFORM
@@ -78,8 +73,6 @@ def described(
             return ALL_WORKSPACE_ADMINS
         if name == capabilities.MODELS_ALL:
             return MODELS_ALL
-        if name.startswith(GROUP_PREFIX):
-            return PLATFORM_FILES
         return None
     if is_workspace_container(owner) and membership_of == owner:
         if name.endswith(" workspace"):

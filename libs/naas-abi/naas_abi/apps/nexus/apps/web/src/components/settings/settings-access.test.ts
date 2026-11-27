@@ -135,8 +135,9 @@ const IAM_ALL = [
 const ALL_PLATFORM = ['nexus:ReadSystem', 'nexus:ListUsers', 'nexus:ListDrives', ...IAM_ALL];
 // At an organization or a workspace IAM answers its platform-only actions false.
 const IAM_CONTAINER = ['iam:ListPolicies', 'iam:CreatePolicy', 'iam:ListGroups', 'iam:ListAttachments'];
-const PLATFORM_GROUPS = ['Administration', 'Access', 'System', 'Activity', 'Resources', 'Data'];
-const PLATFORM_ACCESS = ['Groups', 'Policies', 'Service accounts', 'Module approvals', 'Simulator', 'Audit', 'Models'];
+// The first group has no heading: the test names it after its level (Platform).
+const PLATFORM_GROUPS = ['Platform', 'Access', 'System', 'Activity', 'Resources', 'Data'];
+const PLATFORM_ACCESS = ['Policies', 'Features', 'Core Services', 'Modules', 'Service accounts', 'Module approvals', 'Simulator', 'Audit', 'Models'];
 
 describe('who sees what in Settings', () => {
   it('a platform admin: the four tabs, Settings opening on the workspace, the Platform tab with every group', async () => {
@@ -151,25 +152,25 @@ describe('who sees what in Settings', () => {
     expect(seen.settings).toBe('/workspace/ws-1/settings/general');
     expect(seen.level).toBe('Workspace');
     expect(Object.keys(seen.column)).toEqual(['Workspace', 'Access', 'Features']);
-    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users']));
-    expect(seen.column.Access).toEqual(['Groups', 'Policies']);
+    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users', 'Groups']));
+    expect(seen.column.Access).toEqual(['Policies', 'Features', 'Core Services', 'Modules']);
 
     const platform = await seenBy(root, seen.opens.Platform);
     expect(seen.opens.Platform).toBe('/settings/general');
     expect(platform.level).toBe('Platform');
     expect(Object.keys(platform.column)).toEqual(PLATFORM_GROUPS);
-    expect(platform.column.Administration).toEqual(['General', 'Theme', 'Organizations', 'Users']);
+    expect(platform.column.Platform).toEqual(['General', 'Theme', 'Organizations', 'Users', 'Groups']);
     expect(platform.column.Resources).toContain('Drives');
     expect(platform.column.Access).toEqual(PLATFORM_ACCESS);
     expect(platform.column.System).toEqual(expect.arrayContaining(['Overview', 'Jobs', 'Layers', 'Diagrams']));
     // A policy's page and a person's keep the Platform column.
     expect((await seenBy(root, '/settings/access/policies/builtin.owner')).column.Access).toEqual(PLATFORM_ACCESS);
-    expect((await seenBy(root, '/settings/users/usr_bob')).column.Administration).toContain('Users');
+    expect((await seenBy(root, '/settings/users/usr_bob')).column.Platform).toContain('Users');
 
     const organization = await seenBy(root, seen.opens.Organization);
     expect(organization.column).toEqual({
-      Organization: ['General', 'Branding', 'Workspaces', 'Users'],
-      Access: ['Groups', 'Policies'],
+      Organization: ['General', 'Branding', 'Workspaces', 'Users', 'Groups'],
+      Access: ['Policies', 'Features', 'Core Services', 'Modules'],
     });
   });
 
@@ -201,12 +202,12 @@ describe('who sees what in Settings', () => {
     };
     const seen = await seenBy(olivia);
     expect(seen.tabs).toEqual(['Organization', 'Workspace', 'Account']);
-    expect(seen.column.Access).toEqual(['Policies']);
+    expect(seen.column.Access).toEqual(['Policies', 'Features', 'Core Services', 'Modules']);
     const organization = await seenBy(olivia, seen.opens.Organization);
     expect(organization.level).toBe('Organization');
     expect(organization.column).toEqual({
       Organization: ['General', 'Branding', 'Workspaces', 'Users'],
-      Access: ['Policies'],
+      Access: ['Policies', 'Features', 'Core Services', 'Modules'],
     });
   });
 
@@ -220,10 +221,10 @@ describe('who sees what in Settings', () => {
     expect(seen.tabs).toEqual(['Workspace', 'Account']);
     expect(seen.settings).toBe('/workspace/ws-1/settings/general');
     expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users']));
-    expect(seen.column.Access).toEqual(['Policies']);
+    expect(seen.column.Access).toEqual(['Policies', 'Features', 'Core Services', 'Modules']);
   });
 
-  it('a workspace owner IAM gives no right over access: the workspace with Members, no Access', async () => {
+  it('a workspace owner IAM gives no right over access: the workspace with Members, Access with the offer alone', async () => {
     const seen = await seenBy({
       id: 'otto',
       workspaceRole: 'owner',
@@ -232,7 +233,8 @@ describe('who sees what in Settings', () => {
     });
     expect(seen.level).toBe('Workspace');
     expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users']));
-    expect(Object.keys(seen.column)).not.toContain('Access');
+    // Features and Modules are the workspace's offer, read by its owner (changed as IAM lets them).
+    expect(seen.column.Access).toEqual(['Features', 'Core Services', 'Modules']);
     expect(Object.values(seen.column).flat()).not.toContain('Policies');
   });
 
@@ -332,8 +334,8 @@ describe('who sees what in Settings', () => {
     const platform = await seenBy(sam, seen.opens.Platform);
     expect(platform.level).toBe('Platform');
     expect(Object.keys(platform.column)).toEqual(PLATFORM_GROUPS);
-    expect(platform.column.Administration).toEqual(['General', 'Theme', 'Organizations']);
-    expect(platform.column.Access).toEqual(['Audit']);
+    expect(platform.column.Platform).toEqual(['General', 'Theme', 'Organizations']);
+    expect(platform.column.Access).toEqual(['Features', 'Core Services', 'Modules', 'Audit']);
     expect(platform.column.System).toEqual(expect.arrayContaining(['Overview', 'Layers', 'Diagrams']));
     expect(platform.column.Resources).toContain('Models');
   });
@@ -344,7 +346,7 @@ describe('who sees what in Settings', () => {
     expect(seen.tabs).toEqual(['Platform', 'Account']);
     expect(seen.opens.Platform).toBe('/settings/users');
     const platform = await seenBy(uma, seen.opens.Platform);
-    expect(platform.column).toEqual({ Administration: ['Users'] });
+    expect(platform.column).toEqual({ Platform: ['Users'] });
   });
 
   it('someone who may list who holds what on the platform (People & roles before): Users and Policies', async () => {
@@ -352,7 +354,7 @@ describe('who sees what in Settings', () => {
     const seen = await seenBy(hal);
     expect(seen.opens.Platform).toBe('/settings/users');
     const platform = await seenBy(hal, seen.opens.Platform);
-    expect(platform.column).toEqual({ Administration: ['Users'], Access: ['Policies'] });
+    expect(platform.column).toEqual({ Platform: ['Users'], Access: ['Policies'] });
   });
 
   it('a delegated IAM admin of the platform: the Access pages IAM opens to them, each alone', async () => {
@@ -364,7 +366,7 @@ describe('who sees what in Settings', () => {
     };
     const seen = await seenBy(ivy);
     expect(seen.opens.Platform).toBe('/settings/access/groups');
-    expect((await seenBy(ivy, seen.opens.Platform)).column).toEqual({ Access: ['Groups', 'Simulator'] });
+    expect((await seenBy(ivy, seen.opens.Platform)).column).toEqual({ Platform: ['Groups'], Access: ['Simulator'] });
 
     const sid: Person = {
       id: 'sid',

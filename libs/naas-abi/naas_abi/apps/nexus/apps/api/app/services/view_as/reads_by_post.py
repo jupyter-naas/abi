@@ -113,6 +113,14 @@ READS_BY_POST: tuple[ReadByPost, ...] = (
         BODY,
     ),
     ReadByPost(
+        "/api/search/web",
+        "a web search through an engine the workspace offers: the body carries the query",
+        "allowed",
+        "the search page's web results, as the person; the query leaves the platform as "
+        "it does for them",
+        BODY,
+    ),
+    ReadByPost(
         "/api/search/topics/preview",
         "previews a topic query's result: the body carries the query; nothing is stored",
         "allowed",

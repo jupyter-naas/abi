@@ -17,6 +17,7 @@ import pytest
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam import roles
 from naas_abi_core.services.iam.IAMPorts import (
+    GrantNotHeldError,
     IAMNotFoundError,
     IIAMService,
     PermissionDeniedError,
@@ -246,9 +247,23 @@ def run_members_and_viewers(iam: IAMService, as_user: AsUser) -> None:
 def run_owned_documents(iam: IAMService, as_user: AsUser) -> None:
     t = team(iam)
     with as_user(t.ws_admin) as admin:
-        # An owned policy names only ${scope}: resources, a Deny's included.
+        # An owned policy names only ${scope}: resources, a Deny's included. An
+        # Allow of absolute names alone is a given statement, which the
+        # workspace's admin does not hold: refused as not held.
+        with pytest.raises(GrantNotHeldError):
+            admin.create_policy(
+                "wide",
+                document(statement("Allow", ["triple_store:Query"], ["*"])),
+                scope=WS1,
+            )
         for doc in (
-            document(statement("Allow", ["triple_store:Query"], ["*"])),
+            document(
+                statement(
+                    "Allow",
+                    ["triple_store:Query"],
+                    ["${scope}/triple_store:graph/*", "*"],
+                )
+            ),
             document(
                 statement(
                     "Allow", ["triple_store:Query"], ["${scope}/triple_store:graph/*"]
@@ -261,7 +276,7 @@ def run_owned_documents(iam: IAMService, as_user: AsUser) -> None:
             with pytest.raises(ValueError):  # PolicyValidationError in process
                 admin.create_policy("wide", doc, scope=WS1)
         policy = admin.create_policy("ok", reader(), scope=WS1)
-        with pytest.raises(ValueError):
+        with pytest.raises(GrantNotHeldError):
             admin.update_policy(
                 policy.id,
                 expected_revision=1,

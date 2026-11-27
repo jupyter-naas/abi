@@ -7,13 +7,14 @@ import { ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { SettingsFilterSelect, SettingsPageHeader, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 import { buildServiceUrl, resolveServiceHost } from '@/lib/docker-services';
 import { describePlatformServices, type ConfiguredService } from '@/lib/platform-services';
 import { authFetch } from '@/stores/auth';
 import { orgSettingsSectionPath } from '../lib/nav';
 import { ServicesForbidden } from './services-forbidden';
-import { Notice } from '@/components/ui/notice';
-import { Loading } from '@/components/ui/spinner';
 
 type LoadState =
   | { status: 'loading' }
@@ -61,9 +62,6 @@ export default function ServicesSettingsPage() {
     };
   }, []);
 
-  if (state.status === 'loading') return <Loading />;
-  if (state.status === 'forbidden') return <ServicesForbidden />;
-
   const host = resolveServiceHost();
   const services = describePlatformServices(state.status === 'ready' ? state.services : []).map((service) => ({
     ...service,
@@ -83,6 +81,13 @@ export default function ServicesSettingsPage() {
         .includes(query)
     );
   });
+  // 20 a page: the search and the filters reach every service, and a change of them goes back to
+  // the first page.
+  const paged = usePagedRows(filteredServices, JSON.stringify([searchQuery, providerFilter, webUiFilter]));
+
+  if (state.status === 'loading') return <Loading />;
+  if (state.status === 'forbidden') return <ServicesForbidden />;
+
   const servicePath = (webUiId: string) => `${orgSettingsSectionPath(orgId, 'services')}/${webUiId}`;
 
   return (
@@ -90,7 +95,7 @@ export default function ServicesSettingsPage() {
       <SettingsPageHeader
         title="Services"
         badge={services.length}
-        description="Platform services set in config.yaml. Open a service with a web UI to manage it inside Nexus."
+        description="Platform services with a web UI, opened inside Nexus"
       />
 
       {state.status === 'error' && <Notice tone="error">{state.message}</Notice>}
@@ -145,12 +150,13 @@ export default function ServicesSettingsPage() {
                   </td>
                 </tr>
               )}
-              {filteredServices.map((service) => {
+              {paged.pageRows.map((service) => {
                 const Icon = service.icon;
                 const webUi = service.webUi;
                 return (
                   <tr
                     key={service.id}
+                    data-service={service.id}
                     className={cn(settingsTable.row, webUi && 'cursor-pointer')}
                     onClick={webUi ? () => router.push(servicePath(webUi.id)) : undefined}
                     title={webUi ? `Open ${webUi.label}` : undefined}
@@ -213,6 +219,7 @@ export default function ServicesSettingsPage() {
             </tbody>
           </table>
         </div>
+        <TablePager total={filteredServices.length} paged={paged} />
       </div>
     </div>
   );

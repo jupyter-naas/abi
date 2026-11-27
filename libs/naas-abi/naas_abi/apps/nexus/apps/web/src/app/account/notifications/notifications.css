@@ -87,8 +87,14 @@
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.account-notifications-save-button:hover {
+.account-notifications-save-button:hover:not(:disabled) {
   background-color: var(--color-primary-hover);
+}
+
+/* Faded until something changes, as Organization › General's Save. */
+.account-notifications-save-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .account-notifications-save-button-saved {

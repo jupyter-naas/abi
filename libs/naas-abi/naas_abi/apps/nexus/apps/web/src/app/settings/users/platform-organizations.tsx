@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { orgSettingsSectionPath } from '@/app/organizations/[orgId]/settings/lib/nav';
@@ -16,7 +16,21 @@ type Loaded = { state: 'loading' } | { state: 'error'; error: string } | { state
  * organization (its Users), where their workspaces, groups and policies there are changed.
  * `personId` is their IAM id or their account id.
  */
-export function PlatformOrganizations({ personId, nonce = 0, fetcher }: { personId: string; nonce?: number; fetcher?: Fetcher }) {
+export function PlatformOrganizations({
+  personId,
+  nonce = 0,
+  fetcher,
+  onAccess,
+}: {
+  personId: string;
+  nonce?: number;
+  fetcher?: Fetcher;
+  /** The answer, for the page to name the person with their account (one read for both); null
+   *  when there is none (no account, an error). */
+  onAccess?: (access: UserAccess | null) => void;
+}) {
+  const told = useRef(onAccess);
+  told.current = onAccess;
   const [loaded, setLoaded] = useState<Loaded>({ state: 'loading' });
 
   useEffect(() => {
@@ -27,7 +41,11 @@ export function PlatformOrganizations({ personId, nonce = 0, fetcher }: { person
       // directory is not downloaded to find it. Not found: no account (an invitee, a deleted one).
       const answer = await userAccess(personId, fetcher);
       if (!live) return;
-      if (answer.ok) return setLoaded({ state: 'ready', access: answer.data });
+      if (answer.ok) {
+        told.current?.(answer.data);
+        return setLoaded({ state: 'ready', access: answer.data });
+      }
+      told.current?.(null);
       setLoaded({ state: 'error', error: answer.status === 404 ? 'They have no account yet.' : answer.error });
     })();
     return () => {

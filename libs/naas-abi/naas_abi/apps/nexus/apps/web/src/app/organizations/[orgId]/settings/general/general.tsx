@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { BadgeCheck, Building2, Check, Clock, Copy, Mail, MapPin, Save } from 'lucide-react';
+import { BadgeCheck, Check, Clock, Copy, Mail, MapPin, Save } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { getApiUrl } from '@/lib/config';
 import { selectSession, useAuthStore } from '@/stores/auth';
 import { readOrganization, readOrganizationDomains } from '@/lib/organization-resource';
 import { usePageDraft } from '@/hooks/use-page-state';
@@ -22,6 +24,7 @@ import {
   type OrganizationIdentity,
 } from './identity';
 import { DEFAULT_TIMEZONE, timezoneChange, timezoneFrom, timezoneLabel, timezoneOptions } from './timezone';
+import '@/app/account/profile/profile.css';
 import '../components/org-settings-components.css';
 import './general.css';
 
@@ -52,6 +55,31 @@ const FIELD_LABELS: Record<string, string> = Object.fromEntries([
   ['timezone', 'Timezone'],
 ]);
 
+/** What heads the page, as last read or saved (not the unsaved name): as Workspace › General. */
+type OrgSummary = {
+  name: string;
+  slug: string;
+  logoUrl: string;
+  logoEmoji: string;
+  primaryColor: string;
+  role: string;
+};
+
+const summaryFrom = (body: Record<string, unknown>): OrgSummary => {
+  const text = (key: string) => (typeof body[key] === 'string' ? (body[key] as string) : '');
+  return {
+    name: text('name'),
+    slug: text('slug'),
+    logoUrl: text('logo_url'),
+    logoEmoji: text('logo_emoji'),
+    primaryColor: text('primary_color') || '#22c55e',
+    role: text('current_user_role'),
+  };
+};
+
+/** An API path (`/uploads/...`) served by the API host; any other URL as it is. */
+const assetUrl = (url: string): string => (url.startsWith('/') ? `${getApiUrl()}${url}` : url);
+
 type DomainsState =
   | { status: 'loading' }
   | { status: 'ready'; domains: OrgDomain[] }
@@ -67,6 +95,7 @@ export default function OrganizationGeneralPage() {
   // The organization as last read (a fresh read replaces it), and the unsaved edits over it:
   // kept for a return to the page, never overwritten by a read (lib/page-state.ts).
   const [server, setServer] = useState<GeneralFields | null>(null);
+  const [summary, setSummary] = useState<OrgSummary | null>(null);
   const draft = usePageDraft<GeneralFields>(orgId ? { scope: `organization:${orgId}`, page: 'general' } : null, server);
   const values = draft.values ?? BLANK;
   const initial = server ?? BLANK;
@@ -97,7 +126,9 @@ export default function OrganizationGeneralPage() {
         if (cancelled) return;
 
         if (orgRes.ok) {
-          setServer(generalFrom(await orgRes.json()));
+          const body = await orgRes.json();
+          setServer(generalFrom(body));
+          setSummary(summaryFrom(body));
         } else {
           console.error('Failed to fetch organization:', orgRes.status);
         }
@@ -152,7 +183,10 @@ export default function OrganizationGeneralPage() {
         body: JSON.stringify(body),
       });
       if (response.ok) {
-        setServer(generalFrom(await response.json()));
+        const saved = await response.json();
+        setServer(generalFrom(saved));
+        // The save answers the organization without the caller's role: keep it.
+        setSummary((current) => ({ ...summaryFrom(saved), role: current?.role ?? '' }));
         draft.discard();
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
@@ -243,11 +277,45 @@ export default function OrganizationGeneralPage() {
         </div>
       ) : null}
 
-      <OrgSettingsSectionCard padded>
-        <div className="org-settings-card-heading">
-          <Building2 size={20} />
-          <h3 className="org-settings-card-heading-title">Organization</h3>
+      {summary ? (
+        <div className="account-profile-avatar-section" data-org-identity="">
+          <div className="account-profile-avatar-wrapper">
+            {summary.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={assetUrl(summary.logoUrl)}
+                alt="Organization logo"
+                className="account-profile-avatar-image org-settings-general-logo"
+              />
+            ) : (
+              <div
+                className="account-profile-avatar-placeholder org-settings-general-logo"
+                style={{ backgroundColor: summary.primaryColor, color: '#fff' }}
+                data-org-initial=""
+              >
+                {summary.logoEmoji || (summary.name || orgId).charAt(0).toUpperCase()}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0">
+            <h3 className="account-profile-avatar-info-name">{summary.name || orgId}</h3>
+            <p className="account-profile-avatar-info-email">
+              {summary.slug ? `/${summary.slug} · ` : ''}
+              {orgId}
+              {summary.role ? ` · Your role: ${summary.role}` : ''}
+            </p>
+            <p className="account-profile-avatar-info-hint">
+              The logo and colors are set in{' '}
+              <Link href={`/organizations/${orgId}/settings/branding`} className="org-settings-general-link">
+                Branding
+              </Link>
+              .
+            </p>
+          </div>
         </div>
+      ) : null}
+
+      <OrgSettingsSectionCard padded>
         <div className="org-settings-section-card-stack">
           {renderField(ORGANIZATION_FIELDS[0])}
           <div className="org-settings-field">
@@ -280,32 +348,41 @@ export default function OrganizationGeneralPage() {
         </div>
       </OrgSettingsSectionCard>
 
-      <OrgSettingsSectionCard padded>
-        <div className="org-settings-card-heading">
-          <Mail size={20} />
-          <h3 className="org-settings-card-heading-title">Contact</h3>
-        </div>
+      <Card
+        title={
+          <span className="flex items-center gap-2">
+            <Mail size={16} className="text-muted-foreground" />
+            Contact
+          </span>
+        }
+      >
         <div className="org-settings-general-grid">{CONTACT_FIELDS.map(renderField)}</div>
-      </OrgSettingsSectionCard>
+      </Card>
 
-      <OrgSettingsSectionCard padded>
-        <div className="org-settings-card-heading">
-          <MapPin size={20} />
-          <h3 className="org-settings-card-heading-title">Address</h3>
-        </div>
+      <Card
+        title={
+          <span className="flex items-center gap-2">
+            <MapPin size={16} className="text-muted-foreground" />
+            Address
+          </span>
+        }
+      >
         <div className="org-settings-section-card-stack">
           {ADDRESS_FIELDS.slice(0, 2).map(renderField)}
           <div className="org-settings-general-grid org-settings-general-grid-3">
             {ADDRESS_FIELDS.slice(2).map(renderField)}
           </div>
         </div>
-      </OrgSettingsSectionCard>
+      </Card>
 
-      <OrgSettingsSectionCard padded>
-        <div className="org-settings-card-heading">
-          <Clock size={20} />
-          <h3 className="org-settings-card-heading-title">Timezone</h3>
-        </div>
+      <Card
+        title={
+          <span className="flex items-center gap-2">
+            <Clock size={16} className="text-muted-foreground" />
+            Timezone
+          </span>
+        }
+      >
         <div className="org-settings-field">
           <label className="org-settings-field-label" htmlFor="org-timezone">
             Timezone
@@ -327,13 +404,16 @@ export default function OrganizationGeneralPage() {
             for the organization and each of its workspaces.
           </p>
         </div>
-      </OrgSettingsSectionCard>
+      </Card>
 
-      <OrgSettingsSectionCard padded>
-        <div className="org-settings-card-heading">
-          <BadgeCheck size={20} />
-          <h3 className="org-settings-card-heading-title">Verified domains</h3>
-        </div>
+      <Card
+        title={
+          <span className="flex items-center gap-2">
+            <BadgeCheck size={16} className="text-muted-foreground" />
+            Verified domains
+          </span>
+        }
+      >
         <div className="org-settings-section-card-stack">
           <p className="org-settings-field-hint">
             Email domains the organization proved it owns: people with these addresses are
@@ -364,7 +444,7 @@ export default function OrganizationGeneralPage() {
             </p>
           ) : null}
         </div>
-      </OrgSettingsSectionCard>
+      </Card>
     </div>
   );
 }

@@ -177,6 +177,10 @@ def test_commit_stores_framing_and_rejects_out_of_range_zoom(client_for) -> None
 
     too_far = client.post("/api/workspaces/ws-1/background-image", json={"draft": draft, "zoom": 9})
     assert too_far.status_code == 422
+    too_small = client.post(
+        "/api/workspaces/ws-1/background-image", json={"draft": draft, "zoom": 0.4}
+    )
+    assert too_small.status_code == 422
 
     ok = client.post(
         "/api/workspaces/ws-1/background-image",
@@ -186,6 +190,30 @@ def test_commit_stores_framing_and_rejects_out_of_range_zoom(client_for) -> None
     assert (
         workspaces.updates[-1] == f"/api/workspaces/ws-1/background-image?v={draft}&x=30&y=70&z=2"
     )
+
+
+def test_commit_zooms_out_down_to_half(client_for) -> None:
+    client, workspaces = client_for("admin")
+    draft = client.post(
+        "/api/workspaces/ws-1/background-image/draft", files={"file": ("a.png", PNG, "image/png")}
+    ).json()["draft"]
+
+    ok = client.post("/api/workspaces/ws-1/background-image", json={"draft": draft, "zoom": 0.5})
+    assert ok.status_code == 200
+    assert (
+        workspaces.updates[-1] == f"/api/workspaces/ws-1/background-image?v={draft}&x=50&y=50&z=0.5"
+    )
+
+
+def test_commit_with_no_zoom_keeps_the_image_unzoomed(client_for) -> None:
+    client, workspaces = client_for("admin")
+    draft = client.post(
+        "/api/workspaces/ws-1/background-image/draft", files={"file": ("a.png", PNG, "image/png")}
+    ).json()["draft"]
+
+    ok = client.post("/api/workspaces/ws-1/background-image", json={"draft": draft})
+    assert ok.status_code == 200
+    assert workspaces.updates[-1] == f"/api/workspaces/ws-1/background-image?v={draft}"
 
 
 def test_commit_can_reframe_the_current_image_without_a_draft(client_for) -> None:

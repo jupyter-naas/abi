@@ -194,19 +194,15 @@
 }
 
 /* Atop the column of an organization's or a workspace's Settings: the level, picked as Files
-   picks a drive (its picker), each under its kind. */
+   picks a drive (its picker), in the pages' text size. */
 .settings-scope {
   margin-bottom: var(--space-4);
-  padding: 0 var(--space-1);
+  padding: 0 var(--space-1) var(--space-4);
+  /* A rule under the pickers sets them apart from the pages listed below. */
+  border-bottom: 1px solid var(--border-hex);
 }
 
 .settings-scope.search-picker-stack {
   gap: var(--space-2);
 }
 
-.settings-scope-kind {
-  display: block;
-  margin-bottom: 2px;
-  font-size: var(--font-size-xs);
-  color: var(--muted-foreground-hex);
-}

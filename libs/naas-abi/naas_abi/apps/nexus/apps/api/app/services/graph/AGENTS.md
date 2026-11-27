@@ -16,10 +16,9 @@ document that says what a workspace shares.
 | File | Role |
 |---|---|
 | `access.py` | `GraphAccessScope`: the graphs *this workspace* offers a caller, already narrowed to what the kernel lets them read (`readable`) and write (`writable`); `workspace_graph_operation` guards every service entry point and maps the kernel's refusals to `GraphAccessError` |
-| `adapters/secondary/workspace_policy.py` | `build_scope` / `load_workspace_scope`: the view of one workspace for one user; `catalog_graphs`; `catalog_inventory` (platform administrators) |
+| `adapters/secondary/workspace_policy.py` | `build_scope` / `load_workspace_scope`: the view of one workspace for one user (`graph_config`: what its offer says, else its saved assignments); `catalog_graphs`; `catalog_inventory` (platform administrators) |
 | `adapters/secondary/graph_iam.py` | What Nexus asks IAM beyond the kernel's own checks: `allowed` (filter graphs by an action, as the user), `may_create`, `owned_by`, `owners`, `within` (the graphs a `read_all` may reach) |
-| `adapters/secondary/graph_placements.py` | `placement_source`s: graphs that still carry a `graphWorkspaceId` triple in Nexus's application graph are placed in that workspace at startup; the saved assignments are projected into IAM in the same pass; a new workspace holds its assignments (`on_workspace_created`) |
-| `adapters/secondary/graph_grants.py` | `GRANTS`: projects a workspace's saved assignments into IAM policies and keeps their holders in step with its members |
+| `adapters/secondary/graph_placements.py` | `placement_source`: graphs that still carry a `graphWorkspaceId` triple in Nexus's application graph are placed in that workspace at startup |
 | `adapters/secondary/scoped_store.py` | Narrows every graph data query to the workspace's SPARQL dataset (its view), on top of the kernel's own checks |
 | `service.py`, `explorer.py`, `query/` | The use cases; routes in `adapters/primary/` declare the kernel action they perform (`declares("triple_store:...")`) |
 
@@ -36,52 +35,37 @@ rule of its own.
   reach exactly its graphs: viewers list and read, members insert, remove and
   create, admins clear and drop (the levels of the `triple_store` catalog). New
   graphs write no ownership triple.
-- **Sharing is a statement for the receiving workspace.** A policy attached at a
-  scope may only allow `${scope}/` resources, so a grant onto another workspace's
-  graph cannot be a scoped attachment. For each workspace `GRANTS` keeps two
-  policies, `workspace.<ws>.graphs.read` and `workspace.<ws>.graphs.write`,
-  made at the platform as `api` and found by name among the platform's policies
-  only (a policy of that name an organization or workspace owns is not them; the
-  IAM admin routes refuse names starting with `workspace.`):
-  - `read` Allows the list and read actions on the graphs the workspace reads or
-    writes (`SharedGraphsRead`), and Denies what the workspace closes: creating
-    graphs when `allow_create` or `include_owned` is off (`NoNewGraphs`), and its
-    own graphs it excludes (`OwnGraphsClosed`);
-  - `write` Allows `Insert` and `Remove` on the graphs it may write.
-  They name graphs wherever placed (`abi:triple_store:graph/<iri>` and
-  `abi:*/triple_store:graph/<iri>`, core's `names.anywhere`, so a graph
-  keeps its identity if it moves) and are attached **without scope** to the members
-  who hold a role in the workspace: `read` to every role, `write` to member and
-  above. `ClearGraph` and `DropGraph` are never shared: lifecycle stays with the
-  workspace that owns the graph. Nexus's application graph and the schema graph are
-  never shared for writing.
-- **The saved assignments stay the editable document.** `workspace_resource_policies`
-  (`kind=graphs`, edited on the workspace's resource-access page, routes in
-  `services/workspaces/adapters/primary/resource_access.py`) is what administrators
-  edit; saving it, and startup, project it into IAM (`graph_grants.sync_workspace`,
-  `sync_all`). Saving checks more than the catalog: an administrator may add only
-  graphs they may drop (their workspace's own) or that the workspace already holds;
-  a platform administrator any; moving a graph from read to write needs the right
-  to drop it; turning `read_all` on is for platform administrators (`ManageSystem`).
+- **Sharing is the receiving workspace's offer.** What a workspace is given of other
+  graphs is the Graphs part of its "<W> access" (`iam/given_graphs.py`, ADR
+  `20261125_offer_gives_outside_resources`): Allows on absolute names (`GivenGraphs`,
+  `GivenGraphsWrite`, `GivenGraphsAll` for `read_all`), which IAM gives the workspace's
+  people while they belong to it, each within their level (a Viewer reads, a Member
+  writes), and Denies within `${scope}` for what it closes (`OfferGraphsDeny`: creating
+  graphs, its own graphs it excludes). `ClearGraph` and `DropGraph` are never given:
+  lifecycle stays with the workspace that owns the graph. Nexus's application graph and
+  the schema graph are never given for writing.
+- **Settings › Graphs writes the offer.** The editor (`kind=graphs`, routes in
+  `services/workspaces/adapters/primary/resource_access.py`) reads the offer and writes
+  it as the caller (`FeatureAccessService.set_graphs`), so IAM's held check applies: an
+  administrator gives only a graph they hold (to read, or to write). The catalog still
+  offers only graphs they may drop or that the workspace holds; turning `read_all` on is
+  for platform administrators (`ManageSystem`). A workspace whose access policy is no
+  allow-list yet is refused (409); its view goes by `workspace_resource_policies`.
+  `graphs_offer_v1` moved the saved assignments and deleted the per-person
+  `workspace.<ws>.graphs.read|write` policies of before.
 - **What remains in Nexus** is `GraphAccessScope`. A user who belongs to several
   workspaces holds the rights of all their graphs; each workspace's pages still
   list, query and cache only its own.
 
 ## Consequences
 
-- **Holders follow memberships.** `GRANTS` registers on
-  `MEMBERSHIPS.on_workspace_roles_changed`, so a role change through `MEMBERSHIPS`
-  calls `sync_members(workspace_id)` (a deleted workspace calls `forget`), and the
-  invitation claim calls `MEMBERSHIPS.changed(scope)`. Any new code that attaches or
-  detaches workspace roles outside `MEMBERSHIPS` must call `GRANTS.sync_members`, or
-  a removed member keeps the shared graphs and a new one lacks them.
-- `api` needs the `iam:*Policy` actions (create, update, delete, get, list) and
-  attach/detach, which the enumerated `builtin.api` statements hold.
-- `read_all` shares the graphs that exist when the assignment is applied (a graph
-  created later joins at the next sync), and only those placed in the workspace's own
-  organization, plus the schema graph (`graph_iam.within`): never another
-  organization's, nor another personal workspace's (one in no organization, at the
-  platform). A platform graph (placed nowhere) is shared by naming it in `read`.
+- **Nothing follows memberships.** A person given a graph through W holds it while they
+  belong to W's groups; leaving ends it at the next decision. An organization's admin,
+  in none of W's groups, is not given W's graphs (nor held by its Denies).
+- `read_all` names patterns, so a graph created later in the organization is read too;
+  only those placed in the workspace's own organization (its own for a workspace in
+  none), plus the schema graph: never another organization's, nor another personal
+  workspace's, nor a platform graph (named in `read` to be given).
 - Nexus's own graphs (`graph/nexus`, `graph/nexus-identity`, any `graph/nexus-<name>`:
   `graph_policy_config.is_nexus_system_graph`) are in no workspace's catalog, view or
   assignment, even named.
@@ -105,5 +89,5 @@ uv run pytest libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/graph --im
 
 `graph_authorization_test.py` proves who may read and write which graph on a real
 kernel (real IAM and triple store); `access_test.py` the workspace's view;
-`graph_routes_authorization_test.py` the routes; `adapters/secondary/graph_grants_test.py`
-the projected statements.
+`graph_routes_authorization_test.py` the routes; `graph_offer_test.py` what a
+workspace's offer gives (grouped workspaces, levels, Settings › Graphs).

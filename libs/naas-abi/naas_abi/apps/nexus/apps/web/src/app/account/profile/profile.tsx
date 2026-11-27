@@ -217,7 +217,10 @@ export default function ProfilePage() {
         subtitle="Manage your personal information"
         actions={
           <button
+            type="button"
             onClick={handleSave}
+            // Faded until something changes, as Organization › General's Save.
+            disabled={draft.dirty.length === 0}
             className={
               saved
                 ? 'account-profile-save-button account-profile-save-button-saved'

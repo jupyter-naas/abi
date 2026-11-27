@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
-import { Building2, Mail, MapPin, Plus } from 'lucide-react';
+import { AlertCircle, Mail, MapPin, Plus } from 'lucide-react';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '@/app/organizations/[orgId]/settings/components/org-settings-section-card';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import {
   ADDRESS_FIELDS,
   CONTACT_FIELDS,
@@ -21,6 +23,7 @@ import { PLATFORM_ORGANIZATIONS_PATH, slugFromName } from './organizations-model
 import { organizationSettingsHref } from './organizations';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 import '@/app/organizations/[orgId]/settings/general/general.css';
+import '@/app/organizations/[orgId]/settings/users/users.css';
 import './organizations.css';
 
 /** The slug the API takes: lowercase letters, digits and dashes, not at either end. */
@@ -104,7 +107,7 @@ export function NewOrganization({
         subtitle="Its name and general information; branding, members and workspaces follow in its settings"
         actions={
           <span className="platform-orgs-new-actions">
-            <Link href={PLATFORM_ORGANIZATIONS_PATH} className="platform-orgs-new-cancel" data-action="cancel">
+            <Link href={PLATFORM_ORGANIZATIONS_PATH} className="org-settings-users-secondary-button" data-action="cancel">
               Cancel
             </Link>
             <button type="submit" className="org-settings-primary-button" data-action="create" disabled={!ready}>
@@ -116,66 +119,72 @@ export function NewOrganization({
       />
 
       {error && (
-        <p className="platform-orgs-new-error" role="alert">
-          {error}
-        </p>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
+          <span role="alert">{error}</span>
+        </Notice>
       )}
 
+      {/* As Organization › General: its first block has no heading; Name and Slug side by side
+          (as Workspace › General's), then the rest of its identity. */}
       <OrgSettingsSectionCard padded>
-        <div className="org-settings-card-heading">
-          <Building2 size={20} />
-          <h3 className="org-settings-card-heading-title">Organization</h3>
-        </div>
         <div className="org-settings-section-card-stack">
-          {renderField(ORGANIZATION_FIELDS[0])}
-          <div className="org-settings-field">
-            <label className="org-settings-field-label" htmlFor="new-org-slug">
-              Slug *
-            </label>
-            <input
-              id="new-org-slug"
-              data-field="slug"
-              type="text"
-              value={slug}
-              onChange={(event) => {
-                setSlug(event.target.value);
-                setSlugEdited(true);
-              }}
-              placeholder="acme"
-              autoComplete="off"
-              required
-              className="org-settings-input org-settings-general-mono"
-            />
-            <p className="org-settings-field-hint platform-orgs-slug-hint">
-              {slug && !slugValid
-                ? 'Lowercase letters, digits and dashes, starting and ending with a letter or digit.'
-                : 'Names the organization in its sign-in address. It cannot be reused.'}
-            </p>
+          <div className="org-settings-general-grid">
+            {renderField(ORGANIZATION_FIELDS[0])}
+            <div className="org-settings-field">
+              <label className="org-settings-field-label" htmlFor="new-org-slug">
+                Slug *
+              </label>
+              <input
+                id="new-org-slug"
+                data-field="slug"
+                type="text"
+                value={slug}
+                onChange={(event) => {
+                  setSlug(event.target.value);
+                  setSlugEdited(true);
+                }}
+                placeholder="acme"
+                autoComplete="off"
+                required
+                className="org-settings-input org-settings-general-mono"
+              />
+              <p className="org-settings-field-hint platform-orgs-slug-hint">
+                {slug && !slugValid
+                  ? 'Lowercase letters, digits and dashes, starting and ending with a letter or digit.'
+                  : 'Names the organization in its sign-in address. It cannot be reused.'}
+              </p>
+            </div>
           </div>
           <div className="org-settings-general-grid">{ORGANIZATION_FIELDS.slice(1).map(renderField)}</div>
         </div>
       </OrgSettingsSectionCard>
 
-      <OrgSettingsSectionCard padded>
-        <div className="org-settings-card-heading">
-          <Mail size={20} />
-          <h3 className="org-settings-card-heading-title">Contact</h3>
-        </div>
+      <Card
+        title={
+          <span className="flex items-center gap-2">
+            <Mail size={16} className="text-muted-foreground" />
+            Contact
+          </span>
+        }
+      >
         <div className="org-settings-general-grid">{CONTACT_FIELDS.map(renderField)}</div>
-      </OrgSettingsSectionCard>
+      </Card>
 
-      <OrgSettingsSectionCard padded>
-        <div className="org-settings-card-heading">
-          <MapPin size={20} />
-          <h3 className="org-settings-card-heading-title">Address</h3>
-        </div>
+      <Card
+        title={
+          <span className="flex items-center gap-2">
+            <MapPin size={16} className="text-muted-foreground" />
+            Address
+          </span>
+        }
+      >
         <div className="org-settings-section-card-stack">
           {ADDRESS_FIELDS.slice(0, 2).map(renderField)}
           <div className="org-settings-general-grid org-settings-general-grid-3">
             {ADDRESS_FIELDS.slice(2).map(renderField)}
           </div>
         </div>
-      </OrgSettingsSectionCard>
+      </Card>
     </form>
   );
 }

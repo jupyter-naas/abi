@@ -1,36 +1,39 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { invalidateGraphExplorer } from '@/stores/graph-explorer';
 import { useOntologyStore } from '@/stores/ontology';
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { SettingsPageHeader, SettingsFilterSelect, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
-import { Notice } from '@/components/ui/notice';
+import { SettingsPageHeader, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
 import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
 import { Card } from '@/components/ui/card';
+import {
+  SettingsTableClear,
+  SettingsTableHead,
+  SettingsTableNoMatch,
+  useSettingsTable,
+} from '@/components/settings/users-table/settings-table';
+import { TablePager } from '@/components/settings/users-table/table-pager';
+import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
+import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
+import {
+  resourceCellValues,
+  resourceColumns,
+  resourceExportHeaders,
+  resourceExportRow,
+  resourceRows,
+  resourceSearchTexts,
+  type ResourceEntry as Entry,
+  type ResourceKind as Kind,
+  type ResourcePolicy as Policy,
+} from './resource-access-model';
 
-type Kind = 'ontologies' | 'graphs';
-type Policy = {
-  enabled?: string[];
-  read?: string[];
-  write?: string[];
-  read_all?: boolean;
-  include_owned?: boolean;
-  allow_create?: boolean;
-};
-type Entry = {
-  id: string;
-  name: string;
-  description: string;
-  available: boolean;
-  owned?: boolean;
-  read_only?: boolean;
-};
 type Snapshot = {
   data: Policy;
   revision: number;
@@ -58,9 +61,6 @@ export function ResourceAccessEditor({
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [draft, setDraft] = useState<Policy>({});
-  const [search, setSearch] = useState('');
-  const [accessFilter, setAccessFilter] = useState('all');
-  const [availabilityFilter, setAvailabilityFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -180,38 +180,45 @@ export function ResourceAccessEditor({
       return { ...current, read: [...read], write: [...write] };
     });
   }
-  const catalog = snapshot?.catalog || [];
-  // Effective access of a row under the current (unsaved) draft.
-  const accessOf = (item: Entry): 'enabled' | 'disabled' | 'edit' | 'read' | 'none' => {
-    if (kind === 'ontologies') return draft.enabled?.includes(item.id) ? 'enabled' : 'disabled';
-    const owned = !!draft.include_owned && !!item.owned;
-    if (!item.read_only && (owned || draft.write?.includes(item.id))) return 'edit';
-    if (draft.read_all || owned || draft.read?.includes(item.id)) return 'read';
-    return 'none';
-  };
-  const rows = catalog.filter((item) => {
-    if (accessFilter !== 'all' && accessOf(item) !== accessFilter) return false;
-    if (availabilityFilter === 'available' && !item.available) return false;
-    if (availabilityFilter === 'unavailable' && item.available) return false;
-    return `${item.name} ${item.description}`.toLowerCase().includes(search.toLowerCase());
+  const catalog = useMemo(() => snapshot?.catalog || [], [snapshot]);
+  // Each row under the current (unsaved) draft: the filters read what the checkboxes show.
+  const rows = useMemo(() => resourceRows(kind, catalog, draft), [kind, catalog, draft]);
+  const columns = resourceColumns(kind);
+  // 20 a page: the search and the filters reach every row, and a change of them goes back to
+  // the first page (a checkbox ticked under a filter does not).
+  const table = useSettingsTable({
+    rows,
+    columns,
+    cellValues: resourceCellValues,
+    searchTexts: resourceSearchTexts,
+    initialSort: 'name',
   });
+  const shown = table.shown;
   const enabledCount =
     kind === 'ontologies'
       ? (draft.enabled || []).length
-      : catalog.filter((item) => accessOf(item) !== 'none').length;
-  const editableCount = kind === 'graphs' ? catalog.filter((item) => accessOf(item) === 'edit').length : 0;
+      : rows.filter((row) => row.access !== 'none').length;
+  const editableCount = kind === 'graphs' ? rows.filter((row) => row.access === 'edit').length : 0;
   const unavailableCount = catalog.filter((item) => !item.available).length;
   const noun = kind === 'ontologies' ? 'ontology' : 'graph';
   const meta = [
-    countLabel(rows.length, catalog.length, noun, kind === 'ontologies' ? 'ontologies' : 'graphs'),
+    countLabel(shown.length, catalog.length, noun, kind === 'ontologies' ? 'ontologies' : 'graphs'),
     kind === 'ontologies' ? `${enabledCount} enabled` : `${enabledCount} readable · ${editableCount} editable`,
     unavailableCount ? `${unavailableCount} unavailable` : null,
   ]
     .filter(Boolean)
     .join(' · ');
 
-  const th = settingsTable.th;
-  const checkCol = 'w-20 text-center';
+  const exportShown = (format: UsersExportFormat) => {
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTableExport(
+      resourceExportHeaders(kind),
+      shown.map((row) => resourceExportRow(kind, row)),
+      format,
+      `${kind}_${date}`,
+      title,
+    );
+  };
 
   return (
     <section className="space-y-4" aria-busy={loading || saving}>
@@ -220,11 +227,12 @@ export function ResourceAccessEditor({
         badge={snapshot ? (kind === 'ontologies' ? `${enabledCount} enabled` : `${enabledCount} readable`) : undefined}
         description={
           kind === 'ontologies'
-            ? 'Choose the ontologies available in this workspace.'
-            : 'Choose the named graphs this workspace can read and edit.'
+            ? WORKSPACE_PAGE_DESCRIPTIONS['/settings/ontologies']
+            : WORKSPACE_PAGE_DESCRIPTIONS['/settings/graphs']
         }
         actions={
           <>
+            <UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />
             <Button onClick={() => void save()} disabled={!dirty || saving || loading}>
               {saving ? 'Saving…' : 'Save changes'}
             </Button>
@@ -274,64 +282,34 @@ export function ResourceAccessEditor({
               </Card>
             )}
             <SettingsTableToolbar
-              search={search}
-              onSearchChange={setSearch}
+              search={table.search}
+              onSearchChange={table.setSearch}
               searchPlaceholder={`Search ${title.toLowerCase()}…`}
-              filters={
+              meta={
                 <>
-                  <SettingsFilterSelect
-                    label={kind === 'ontologies' ? 'Status' : 'Access'}
-                    value={accessFilter}
-                    onChange={setAccessFilter}
-                    options={
-                      kind === 'ontologies'
-                        ? [
-                            { value: 'all', label: 'All statuses' },
-                            { value: 'enabled', label: 'Enabled' },
-                            { value: 'disabled', label: 'Disabled' },
-                          ]
-                        : [
-                            { value: 'all', label: 'All access' },
-                            { value: 'edit', label: 'Read & edit' },
-                            { value: 'read', label: 'Read only' },
-                            { value: 'none', label: 'No access' },
-                          ]
-                    }
-                  />
-                  <SettingsFilterSelect
-                    label="Availability"
-                    value={availabilityFilter}
-                    onChange={setAvailabilityFilter}
-                    options={[
-                      { value: 'all', label: 'All availability' },
-                      { value: 'available', label: 'Available' },
-                      { value: 'unavailable', label: 'Unavailable' },
-                    ]}
-                  />
+                  {meta}
+                  <SettingsTableClear table={table} />
                 </>
               }
-              meta={meta}
             />
-            <div className={settingsTable.wrapper}>
-              <table className={settingsTable.table}>
-                <thead>
-                  <tr className={settingsTable.headRow}>
-                    <th className={th}>{kind === 'ontologies' ? 'Ontology' : 'Named graph'}</th>
-                    <th className={cn(th, checkCol)}>{kind === 'ontologies' ? 'Enabled' : 'Read'}</th>
-                    {kind === 'graphs' && <th className={cn(th, checkCol)}>Edit</th>}
-                  </tr>
-                </thead>
+            <div className="org-settings-users-table-wrap">
+              <table className="org-settings-users-table">
+                <SettingsTableHead table={table} />
                 <tbody>
-                  {rows.map((item) => {
-                    const owned = !!draft.include_owned && !!item.owned;
-                    const readable =
-                      !!draft.read_all ||
-                      owned ||
-                      !!draft.read?.includes(item.id) ||
-                      !!draft.write?.includes(item.id);
+                  {catalog.length === 0 ? (
+                    <tr>
+                      <td colSpan={columns.length} className="org-settings-users-no-match">
+                        No resources available.
+                      </td>
+                    </tr>
+                  ) : (
+                    shown.length === 0 && <SettingsTableNoMatch colSpan={columns.length} noun={title.toLowerCase()} />
+                  )}
+                  {table.paged.pageRows.map((item) => {
+                    const owned = item.ownedIncluded;
                     return (
-                      <tr key={item.id} className={settingsTable.row}>
-                        <td className={settingsTable.td}>
+                      <tr key={item.id} data-resource={item.id}>
+                        <td>
                           <p className="break-words font-medium">{item.name}</p>
                           <p className="break-words text-xs text-muted-foreground">{item.description}</p>
                           {!item.available && (
@@ -341,17 +319,17 @@ export function ResourceAccessEditor({
                           )}
                         </td>
                         {kind === 'ontologies' ? (
-                          <td className={cn(settingsTable.td, checkCol)}>
+                          <td>
                             <Checkbox
                               aria-label={`Enable ${item.name}`}
-                              checked={!!draft.enabled?.includes(item.id)}
+                              checked={item.enabled}
                               disabled={saving}
                               onCheckedChange={(checked) => toggleOntology(item.id, checked)}
                             />
                           </td>
                         ) : (
                           <>
-                            <td className={cn(settingsTable.td, checkCol)}>
+                            <td>
                               <Checkbox
                                 aria-label={`Read ${item.name}`}
                                 title={
@@ -361,12 +339,12 @@ export function ResourceAccessEditor({
                                       ? 'Included as a workspace-owned graph'
                                       : undefined
                                 }
-                                checked={readable}
+                                checked={item.readable}
                                 disabled={saving || !!draft.read_all || owned}
                                 onCheckedChange={(checked) => toggleGraph(item.id, 'read', checked)}
                               />
                             </td>
-                            <td className={cn(settingsTable.td, checkCol)}>
+                            <td>
                               <Checkbox
                                 aria-label={`Edit ${item.name}`}
                                 title={
@@ -376,24 +354,23 @@ export function ResourceAccessEditor({
                                       ? 'Included as a workspace-owned graph'
                                       : undefined
                                 }
-                                checked={!item.read_only && (owned || !!draft.write?.includes(item.id))}
+                                checked={item.editable}
                                 disabled={saving || item.read_only || owned}
                                 onCheckedChange={(checked) => toggleGraph(item.id, 'write', checked)}
                               />
                             </td>
                           </>
                         )}
+                        <td className={item.available ? 'text-muted-foreground' : 'text-amber-600 dark:text-amber-400'}>
+                          {item.available ? 'Available' : 'Unavailable'}
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              {rows.length === 0 && (
-                <p className="p-6 text-center text-sm text-muted-foreground">
-                  {catalog.length ? 'No resources match the current search and filters.' : 'No resources available.'}
-                </p>
-              )}
             </div>
+            <TablePager total={shown.length} paged={table.paged} />
             <p className="text-xs leading-relaxed text-muted-foreground">
               {snapshot.updated_by
                 ? 'Admin changes are saved for this workspace.'

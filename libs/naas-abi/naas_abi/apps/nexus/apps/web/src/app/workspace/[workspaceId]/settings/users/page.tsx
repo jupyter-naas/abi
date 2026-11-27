@@ -1,5 +1,6 @@
 'use client';
 
+import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { Suspense, useCallback, useState, useEffect, useMemo } from 'react';
 import { Plus, Pencil, Trash2, AlertCircle, Mail, ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import { authFetch, useAuthStore } from '@/stores/auth';
@@ -227,7 +228,6 @@ function Members() {
     const date = new Date().toISOString().slice(0, 10);
     downloadTableExport(MEMBER_EXPORT_HEADERS, filteredMembers.map(memberExportRow), format, `users_${date}`, 'Users');
   };
-  const adminCount = members.filter((m) => m.admin).length;
   const invitedCount = members.filter((m) => m.status === 'invited').length;
 
   return (
@@ -239,7 +239,7 @@ function Members() {
             ? `${members.length - invitedCount} active · ${invitedCount} invited`
             : `${members.length} active`
         }
-        description="Manage who has access to this workspace"
+        description={WORKSPACE_PAGE_DESCRIPTIONS['/settings/users']}
         actions={
           <>
             <UsersExportMenu
@@ -303,10 +303,12 @@ function Members() {
           search={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search name, email, level, admin, invited…"
+          // As the organization's and the platform's Users: nothing above the search but, while
+          // it narrows the table, how many it keeps and Clear.
           meta={
-            <>
-              {`${countLabel(filteredMembers.length, members.length, 'member')} · ${adminCount} admin${adminCount === 1 ? '' : 's'}`}
-              {filtered && (
+            filtered ? (
+              <>
+                {countLabel(filteredMembers.length, members.length, 'member')}
                 <button
                   type="button"
                   className="org-settings-users-filter-clear ml-3"
@@ -318,8 +320,8 @@ function Members() {
                 >
                   Clear search and filters
                 </button>
-              )}
-            </>
+              </>
+            ) : null
           }
         />
         <RolesLoadingNote roles={roles} />

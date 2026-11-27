@@ -9,30 +9,44 @@ export interface WorkflowSetting {
   description: string;
 }
 
-export type WorkflowFilters = { query: string; type: string };
-
 export function workflowKey(item: Pick<WorkflowSetting, 'type' | 'module_id' | 'name'>): string {
   return `${item.type}/${item.module_id}/${item.name}`;
 }
 
-/** The rows a search and the type filter keep, by module then name. */
-export function filterWorkflows(items: WorkflowSetting[], filters: WorkflowFilters): WorkflowSetting[] {
-  const q = filters.query.trim().toLowerCase();
-  return items
-    .filter((item) => {
-      if (filters.type !== 'all' && item.type !== filters.type) return false;
-      return (
-        !q ||
-        [item.display_name, item.name, item.module_id, item.description].some((text) =>
-          text.toLowerCase().includes(q)
-        )
-      );
-    })
-    .sort(
-      (a, b) =>
-        a.module_id.localeCompare(b.module_id) ||
-        a.display_name.toLowerCase().localeCompare(b.display_name.toLowerCase())
-    );
+/** The rows by module then name: the order rows that tie on the sorted column keep. */
+export function sortedWorkflows(items: WorkflowSetting[]): WorkflowSetting[] {
+  return [...items].sort(
+    (a, b) =>
+      a.module_id.localeCompare(b.module_id) ||
+      a.display_name.toLowerCase().localeCompare(b.display_name.toLowerCase())
+  );
+}
+
+/** The columns of the table: each sorts and filters, as Settings › Users. */
+export type WorkflowColumnId = 'name' | 'type' | 'module';
+export const WORKFLOW_COLUMNS: { id: WorkflowColumnId; label: string }[] = [
+  { id: 'name', label: 'Name' },
+  { id: 'type', label: 'Type' },
+  { id: 'module', label: 'Module' },
+];
+
+/** What a column filter sees of a row. */
+export function workflowCellValues(item: WorkflowSetting, column: WorkflowColumnId): string[] {
+  if (column === 'name') return [item.display_name];
+  if (column === 'type') return [item.type];
+  return [item.module_id];
+}
+
+/** What the search bar reads of a row: its names, module and description. */
+export function workflowSearchTexts(item: WorkflowSetting): string[] {
+  return [item.display_name, item.name, item.module_id, item.description];
+}
+
+export const WORKFLOW_EXPORT_HEADERS = ['Name', 'Key', 'Type', 'Module', 'Description'];
+
+/** A row of the CSV / Excel export. */
+export function workflowExportRow(item: WorkflowSetting): string[] {
+  return [item.display_name, item.name, item.type, item.module_id, item.description];
 }
 
 type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;

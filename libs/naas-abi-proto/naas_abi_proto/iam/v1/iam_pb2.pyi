@@ -155,7 +155,7 @@ class Container(_message.Message):
     def __init__(self, service: _Optional[str] = ..., type: _Optional[str] = ..., id: _Optional[str] = ..., parent: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
 
 class ResourceType(_message.Message):
-    __slots__ = ("name", "id", "placement", "id_prefix", "personal", "description", "module_scope", "policy_only", "container", "platform_companions", "parents")
+    __slots__ = ("name", "id", "placement", "id_prefix", "personal", "description", "module_scope", "policy_only", "container", "platform_companions", "parents", "no_membership_roles")
     NAME_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
     PLACEMENT_FIELD_NUMBER: _ClassVar[int]
@@ -167,6 +167,7 @@ class ResourceType(_message.Message):
     CONTAINER_FIELD_NUMBER: _ClassVar[int]
     PLATFORM_COMPANIONS_FIELD_NUMBER: _ClassVar[int]
     PARENTS_FIELD_NUMBER: _ClassVar[int]
+    NO_MEMBERSHIP_ROLES_FIELD_NUMBER: _ClassVar[int]
     name: str
     id: str
     placement: str
@@ -178,7 +179,8 @@ class ResourceType(_message.Message):
     container: bool
     platform_companions: bool
     parents: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, name: _Optional[str] = ..., id: _Optional[str] = ..., placement: _Optional[str] = ..., id_prefix: bool = ..., personal: bool = ..., description: _Optional[str] = ..., module_scope: bool = ..., policy_only: bool = ..., container: bool = ..., platform_companions: bool = ..., parents: _Optional[_Iterable[str]] = ...) -> None: ...
+    no_membership_roles: bool
+    def __init__(self, name: _Optional[str] = ..., id: _Optional[str] = ..., placement: _Optional[str] = ..., id_prefix: bool = ..., personal: bool = ..., description: _Optional[str] = ..., module_scope: bool = ..., policy_only: bool = ..., container: bool = ..., platform_companions: bool = ..., parents: _Optional[_Iterable[str]] = ..., no_membership_roles: bool = ...) -> None: ...
 
 class ActionSpec(_message.Message):
     __slots__ = ("name", "level", "resource_types", "creates", "subjects", "description", "owner_only", "deletes")

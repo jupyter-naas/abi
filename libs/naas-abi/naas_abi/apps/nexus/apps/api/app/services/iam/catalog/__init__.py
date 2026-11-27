@@ -64,7 +64,19 @@ SERVICE = "nexus"
 #     an organization ``DeletePlatformOrganization`` (on the platform-level
 #     ``organization_record``: no role's, the platform admin's); ``DeleteOrganization``
 #     deprecated (kept for ``delete_container``, which Nexus calls as ``api``).
-VERSION = 17
+# 18: search sources (``search_source``, ``UseSearchSource``): no role's, granted by the
+#     level policies and bounded by each workspace's offer; ``SetSearchScope`` deprecated.
+# 19: ontology files (``ontology_file``, ``UseOntology``): no role's, granted by the
+#     level policies and bounded by each workspace's offer (``OfferOntologies``).
+# 20: ``PutOrgFile`` and ``DeleteOrgFile`` are ``write``, not ``admin``: an organization's
+#     members write Organization Files, and a workspace's offer that gives them
+#     (``GivenOrgFiles``) lets its Members write them, its Viewers read them.
+# 21: the organization is ``no_membership_roles``: a built-in role attached at
+#     ``${my workspaces}`` gives nothing at an organization ("<O> people" holds
+#     "Organization view"; its admins their roles attached at it).
+# 22: chat models (``model``, ``UseModel``): no role's, granted by the level policies
+#     that chat and bounded by each workspace's offer (``OfferModels``).
+VERSION = 22
 
 _MODULES = (
     organizations,

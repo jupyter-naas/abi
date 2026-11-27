@@ -1,15 +1,18 @@
 import type { LucideIcon } from 'lucide-react';
 import {
+  ServerCog,
   BarChart3,
   Paintbrush,
   Users,
-  UsersRound,
+  Group,
   Globe,
   FolderKanban,
   CreditCard,
   KeyRound,
   Server,
   Boxes,
+  SlidersHorizontal,
+  Package,
 } from 'lucide-react';
 import { opensSection, type AccessSection } from '@/components/access/access-sections';
 import type { AccessView } from '@/lib/iam-admin/types';
@@ -35,11 +38,18 @@ export const orgSettingsNav: OrgSettingsNavItem[] = [
   { slug: 'branding', label: 'Branding', icon: Paintbrush, adminOnly: true },
   { slug: 'workspaces', label: 'Workspaces', icon: FolderKanban },
   { slug: 'users', label: 'Users', icon: Users, adminOnly: true },
-  // IAM decides (the access of the organization's scope), not the membership role.
+  // IAM decides (the access of the organization's scope), not the membership role. Groups of
+  // people sit with the people, outside the Access heading.
+  { slug: 'groups', label: 'Groups', icon: Group, needs: 'groups' },
   // The API decides (`ReadOrganizationAnalytics`, its owners and admins by default).
   { slug: 'analytics', label: 'Analytics', icon: BarChart3, needs: 'analytics' },
-  { slug: 'groups', label: 'Groups', icon: UsersRound, needs: 'groups', group: 'Access' },
+  // "<O> access", the ceiling of every workspace of the organization (or another of its
+  // policies, picked in the page): its features, core services and modules.
+  // The policies first: Features, Core Services and Modules edit one of them.
   { slug: 'policies', label: 'Policies', icon: KeyRound, needs: 'policies', group: 'Access' },
+  { slug: 'features', label: 'Features', icon: SlidersHorizontal, adminOnly: true, group: 'Access' },
+  { slug: 'core-services', label: 'Core Services', icon: ServerCog, adminOnly: true, group: 'Access' },
+  { slug: 'modules', label: 'Modules', icon: Package, adminOnly: true, group: 'Access' },
   { slug: 'domains', label: 'Domains', icon: Globe, adminOnly: true, hidden: true },
   { slug: 'servers', label: 'Servers', icon: Server, adminOnly: true, hidden: true },
   { slug: 'services', label: 'Services', icon: Boxes, adminOnly: true, hidden: true },

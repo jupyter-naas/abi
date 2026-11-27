@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Mail, UserPlus } from 'lucide-react';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '@/app/organizations/[orgId]/settings/components/org-settings-section-card';
+import { Notice } from '@/components/ui/notice';
 import { RoleEditor } from '@/components/people/role-editor';
 import {
   createMemberRolesApi,
@@ -133,7 +134,7 @@ export function NewUser({
         subtitle="Add someone to the platform: their account is made at the identity provider if it does not exist yet"
         actions={
           <span className="platform-users-new-actions">
-            <Link href={PLATFORM_USERS_PATH} className="platform-users-new-cancel" data-action="cancel">
+            <Link href={PLATFORM_USERS_PATH} className="org-settings-users-secondary-button" data-action="cancel">
               {said.length > 0 ? 'Back to users' : 'Cancel'}
             </Link>
             <button type="submit" className="org-settings-primary-button" data-action="create" disabled={!ready}>
@@ -145,10 +146,9 @@ export function NewUser({
       />
 
       {error && (
-        <div className="org-settings-users-alert" role="alert">
-          <AlertCircle size={16} />
-          <span>{error}</span>
-        </div>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
+          <span role="alert">{error}</span>
+        </Notice>
       )}
 
       {said.length > 0 && (
@@ -162,11 +162,8 @@ export function NewUser({
         </div>
       )}
 
+      {/* As the other creation pages: the first block has no heading. */}
       <OrgSettingsSectionCard padded>
-        <div className="org-settings-card-heading">
-          <UserPlus size={20} />
-          <h3 className="org-settings-card-heading-title">User</h3>
-        </div>
         <div className="org-settings-section-card-stack">
           <div className="org-settings-general-grid">
             <div className="org-settings-field">

@@ -10,6 +10,7 @@ import { Dialog, type DialogSize } from '@/components/ui/dialog';
 import { useConfirm, usePrompt } from '@/components/ui/dialogs';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Field } from '@/components/ui/field';
+import { useHoverTip } from '@/components/ui/hover-tip';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { Menu, MenuBar, type MenuEntry } from '@/components/ui/menu';
@@ -44,6 +45,19 @@ function Specimen({ id, entries, children }: { id: string; entries: KitEntry[]; 
     >
       {children}
     </Card>
+  );
+}
+
+/** A link with the Settings column's tip, after a short pause. */
+function HoverTipDemo() {
+  const tip = useHoverTip({ title: 'Agents', description: 'The agents you may use here, and those this workspace builds', delay: 300 });
+  return (
+    <>
+      <button type="button" ref={tip.ref} {...tip.anchorProps} className="border border-border px-3 py-2 text-sm">
+        Hover me
+      </button>
+      {tip.tip}
+    </>
   );
 }
 
@@ -174,6 +188,7 @@ export default function ThemePage() {
             <Textarea id="theme-description" rows={3} placeholder="What this workspace is for" />
           </Field>
           <Checkbox label="Send a weekly digest" defaultChecked />
+          <Checkbox label="Some rows selected" indeterminate />
         </div>
       </Specimen>
 
@@ -295,6 +310,12 @@ export default function ThemePage() {
             trigger={<Button size="icon" variant="ghost" aria-label="More actions"><MoreHorizontal size={14} /></Button>}
             items={[{ id: 'rename', label: 'Rename' }, { id: 'archive', label: 'Archive', destructive: true }]}
           />
+        </Row>
+      </Specimen>
+
+      <Specimen id="hover-tip" entries={sections['hover-tip']}>
+        <Row label="link">
+          <HoverTipDemo />
         </Row>
       </Specimen>
 

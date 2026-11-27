@@ -42,7 +42,7 @@ Administrators reason about people in two axes: **where** someone works (a works
    - **A Workspace Admin is a Member** with "<W> admins" for each workspace they administer.
    - **An Org Admin holds no level** (decided 2026-11-24): "<O> admins" reaches every workspace of O, so a level would give them nothing there. They hold one only when they also work where it does not reach (a workspace of another organization, or of none). The access move gives none otherwise, and takes out one a move of before left (said among the redundant groups).
    - **A person's level is one choice.** It can be changed by org admins, platform admins and the admins of any of the person's workspaces. It applies in all their workspaces and is audited. This is the one place where IAM allows a writer to change access beyond what they hold, and only for the generic level policies.
-   - **People with no workspace** are in "<O> people", a membership group of the organization that holds Viewer access at its own level.
+   - **People with no workspace** are in "<O> people", a membership group of the organization. So are its admins and whoever holds a role at the organization itself. What it holds there is decision 12.
 
 2. **Generic level policies, written once.**
 
@@ -113,6 +113,14 @@ Administrators reason about people in two axes: **where** someone works (a works
     - A workspace with no record, or whose access policy is not an allow-list yet, is not narrowed. The offer is read as `api` and remembered for 30 seconds in each process; a change of an offer made in that process forgets it at once.
     - Rejected: bounding org admins by the offer inside IAM ("<W> access" held by "<O> admins" at each W). Org admins could then no longer widen an offer, only the platform admins, unless Nexus wrote the offer for them, a second exception to "Grant only what you hold". It would add no protection either: an org admin may add any module of O to a workspace's offer and use it.
 
+12. **The organization's people see it, and nothing it holds** (decided 2026-11-26).
+    - Before: "<O> people" held `builtin.viewer` and "Viewer access" at `${my workspaces}`, which IAM fills with the organization itself. Its people listed the organization's secrets (masked) and read what it holds (Organization Files, its drive, its graphs, its datasets). A Member of the organization wrote its Organization Files through the built-in role of their level, which reached the organization the same way.
+    - Now Nexus's `organization` type is marked `no_membership_roles` (catalog 21; core IAM: a built-in role attached at `${my workspaces}` gives nothing at a container of a type so marked). "<O> people" holds "Organization view" (`GetOrganization`, `ListOrganizations` on `${scope}`) at `${my workspaces}`, which grants it, and at the organization, its bound, which keeps the level policies to it there.
+    - Org admins keep what `builtin.admin` attached at the organization and below it gives them ("<O> admins"). The people of a workspace are not "<O> people": unchanged.
+    - Someone who should read Organization Files gets them from a workspace's offer (`GivenOrgFiles`), or from a policy attached at the organization to them or to a group of theirs. That policy is not at `${my workspaces}`, so no bound narrows it. Seeing them in a workspace still takes that workspace's `files` feature.
+    - The move `org_people_view_v1` converts each organization once: "Organization view" attached first, then the two policies of before detached. The access move's report names the change `org_people_view` (intended).
+    - Rejected: a Deny on "<O> people", which would refuse the org admins too (they are in it); removing `builtin.viewer` alone, which leaves the level's built-in role reaching the organization.
+
 ## Consequences
 
 - **A person is a few group memberships and nothing attached to them directly.** On the audited deployment this means 491–651 memberships instead of 3,764 attachments, and 407 policies instead of 1,210. The higher figure counts a default admin assigned to the workspaces left empty.
@@ -124,4 +132,5 @@ Administrators reason about people in two axes: **where** someone works (a works
 - **Nexus keeps the Platform Files groups in step,** like a grant meant for every person of W: a platform group per workspace that has it. A membership changed straight in IAM, around Nexus, is followed at the next start. A SQLite deployment keeps no legacy drive flag: its platform admin sets each workspace's Platform Files again.
 - **The move's report comes after its start.** For a while after the upgrade, its record says which groups people joined and what was detached and retired, but not yet who gained or lost what. A restart in between compares again from the kept copy, which the comparison then drops.
 - **What a workspace shows is narrower than what IAM allows** for org and platform admins (decision 11). An org admin who calls the API for an item their workspace does not offer is still allowed: the separation of clients is what Nexus shows, and who may widen offers.
+- **An organization's people hold its view only** (decision 12). Organization Files reach someone through a workspace's offer or a policy attached at the organization; core IAM has one more mark on a container type, `no_membership_roles`.
 - **Deployment-specific choices are configuration,** not code: the member model set, a default admin for workspaces left empty, personal workspaces, and the features of the Viewer and Member levels (`feature_flags.level_features`: one deployment caps Viewers at apps and lets each workspace's offer decide its Members' features, another keeps the defaults).

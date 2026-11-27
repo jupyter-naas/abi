@@ -187,8 +187,9 @@ async def test_a_new_organization_and_workspace_get_their_access_and_groups(worl
             (roles.ADMIN, below),
         ]
     )
+    # "<O> people" sees O: "Organization view" there and as O's bound.
     assert sorted((a.policy_id, a.scope) for a in people_hold) == sorted(
-        [(roles.VIEWER, MY_CONTAINERS_SCOPE), (levels.viewer_access, MY_CONTAINERS_SCOPE)]
+        [(levels.org_view, MY_CONTAINERS_SCOPE), (levels.org_view, org_container("acme"))]
     )
     # W's bound: "<W> workspace" holds "<W> access" at W.
     assert [(a.policy_id, a.scope) for a in workspace_hold] == [(ws_access.id, ALPHA)]

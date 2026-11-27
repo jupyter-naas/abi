@@ -994,9 +994,32 @@ async def _enriched_workspace_agents(
 
     visible = await _visible_to_caller(await served_agents(agent_list), current_user, workspace_id)
     remote_by_class_name = await _remote_agents_by_key(visible)
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import (
+        models_in_workspace,
+    )
+
+    models = await models_in_workspace(workspace_id)
     return [
-        _enrich_agent(agent, class_name_to_agent_class, remote_by_class_name) for agent in visible
+        kept_to_models(
+            _enrich_agent(agent, class_name_to_agent_class, remote_by_class_name), models
+        )
+        for agent in visible
     ]
+
+
+def kept_to_models(agent: AgentRecord, models: Any) -> AgentRecord:
+    """``agent`` as the workspace using ``models`` shows it (``iam/workspace_models``):
+    the models its picker offers are those of the agent's the workspace uses, else the
+    default; the model it runs on is the default when its own is not offered."""
+    if not models.restricted:
+        return agent
+    model_ids = agent.model_ids
+    if model_ids:
+        model_ids = models.narrowed(model_ids) or ([models.default] if models.default else [])
+    resolved = agent.resolved_model_id
+    if not models.allows(resolved):
+        resolved = models.default
+    return replace(agent, model_ids=model_ids, resolved_model_id=resolved)
 
 
 async def seed_workspace_agents(

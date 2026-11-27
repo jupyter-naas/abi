@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Brush, Camera, Check, Palette, Save, Trash2, X } from 'lucide-react';
+import { Brush, Camera, Check, Palette, Save, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { Field } from '@/components/ui/field';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import { authFetch } from '@/stores/auth';
 import { readOrganization } from '@/lib/organization-resource';
 import { DEFAULT_THEME, PRESET_COLORS } from '@/stores/workspace';
@@ -24,9 +26,9 @@ import { slugify, WORKSPACE_SLUG } from './slug';
 import '@/app/account/profile/profile.css';
 import '@/app/workspace/[workspaceId]/settings/general/general.css';
 import '../workspaces.css';
-import { Notice } from '@/components/ui/notice';
-import { Field } from '@/components/ui/field';
-import { Card } from '@/components/ui/card';
+// The creation pages' buttons: Cancel (secondary) then Create (primary, faded until it may create).
+import '@/app/organizations/[orgId]/settings/users/users.css';
+import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
@@ -237,23 +239,23 @@ export default function OrgCreateWorkspacePage() {
           <div className="org-create-workspace-actions">
             <button
               type="button"
+              onClick={() => router.push(listHref)}
+              disabled={creating}
+              className="org-settings-users-secondary-button"
+              data-action="cancel"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
               onClick={() => void handleCreate()}
               disabled={!canCreate}
-              className="account-profile-save-button workspace-general-save"
+              className="org-settings-primary-button"
+              data-action="create"
             >
               <Save size={16} />
               {creating ? 'Creating...' : 'Create workspace'}
             </button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => router.push(listHref)}
-              disabled={creating}
-              title="Close without creating"
-              aria-label="Close without creating"
-            >
-              <X size={18} />
-            </Button>
           </div>
         }
       />
@@ -317,16 +319,17 @@ export default function OrgCreateWorkspacePage() {
 
       <AccountSectionCard padded stack>
         <div className="account-profile-form-grid">
+          {/* As Workspace › General: Name and Slug side by side, then Workspace Group. */}
           <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="create-workspace-name">
-              Workspace name
+              Name
             </label>
             <input
               id="create-workspace-name"
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Workspace name"
+              placeholder="Name"
               maxLength={200}
               disabled={creating}
               className="account-profile-field-input"
@@ -334,8 +337,32 @@ export default function OrgCreateWorkspacePage() {
             />
           </div>
           <div className="account-profile-field">
+            <label className="account-profile-field-label" htmlFor="create-workspace-slug">
+              Slug
+            </label>
+            <input
+              id="create-workspace-slug"
+              type="text"
+              value={effectiveSlug}
+              onChange={(event) => {
+                setSlugEdited(true);
+                setSlug(event.target.value.toLowerCase());
+              }}
+              placeholder="workspace-slug"
+              maxLength={100}
+              disabled={creating}
+              className="account-profile-field-input"
+            />
+            {effectiveSlug && !slugValid && (
+              <span className="account-profile-field-label org-create-workspace-hint">
+                Lowercase letters, digits and dashes; at least two characters, no dash at either
+                end.
+              </span>
+            )}
+          </div>
+          <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="create-workspace-group">
-              Group
+              Workspace Group
             </label>
             <WorkspaceGroupSelect
               id="create-workspace-group"
@@ -360,30 +387,6 @@ export default function OrgCreateWorkspacePage() {
             {adminError && (
               <span className="account-profile-field-label org-create-workspace-hint" role="alert" data-admin-error="">
                 {adminError}
-              </span>
-            )}
-          </div>
-          <div className="account-profile-field">
-            <label className="account-profile-field-label" htmlFor="create-workspace-slug">
-              Slug
-            </label>
-            <input
-              id="create-workspace-slug"
-              type="text"
-              value={effectiveSlug}
-              onChange={(event) => {
-                setSlugEdited(true);
-                setSlug(event.target.value.toLowerCase());
-              }}
-              placeholder="workspace-slug"
-              maxLength={100}
-              disabled={creating}
-              className="account-profile-field-input"
-            />
-            {effectiveSlug && !slugValid && (
-              <span className="account-profile-field-label org-create-workspace-hint">
-                Lowercase letters, digits and dashes; at least two characters, no dash at either
-                end.
               </span>
             )}
           </div>

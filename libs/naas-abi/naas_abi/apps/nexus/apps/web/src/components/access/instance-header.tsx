@@ -18,6 +18,7 @@ export function InstanceHeader({
   meta,
   image,
   imageAlt,
+  avatar,
   actions,
   actionsRef,
 }: {
@@ -31,6 +32,8 @@ export function InstanceHeader({
   meta?: ReactNode;
   image?: string | null;
   imageAlt?: string;
+  /** In place of `image`: a picture the page changes in place (a person's, with its upload button). */
+  avatar?: ReactNode;
   actions?: ReactNode;
   /** Where other parts of the page put their actions (a portal's target), after `actions`. */
   actionsRef?: Ref<HTMLSpanElement>;
@@ -39,7 +42,8 @@ export function InstanceHeader({
   return (
     <div className="access-instance-header" data-instance-header="">
       <div className="account-profile-avatar-section access-instance-identity">
-        {image && (
+        {avatar}
+        {!avatar && image && (
           <div className="account-profile-avatar-wrapper">
             {/* An uploaded picture or an external logo, as Settings shows them. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}

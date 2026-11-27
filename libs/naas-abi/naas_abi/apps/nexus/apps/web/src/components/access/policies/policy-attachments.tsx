@@ -112,8 +112,9 @@ export function PolicyAttachments({
     <div className="access-policy-attachments" role="region" aria-label="Who holds it" data-held-by="">
       {boundOf && (
         <p className="access-policy-muted" data-held-bound="">
-          Everyone in {boundOf} reaches what is offered here: this is the workspace&apos;s offer, changed in
-          Configuration. Read-only.
+          Everyone in {boundOf} reaches what is offered here: this is the workspace&apos;s offer, changed in the
+          workspace&apos;s settings (Features, Files, Agents, Apps, Workflows, Models, Search, Graphs, Maps,
+          Ontologies). Read-only.
         </p>
       )}
       {error && (

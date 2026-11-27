@@ -26,6 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.services.search.search__schema import (
     WebSearchResultData,
 )
 from naas_abi.apps.nexus.apps.api.app.services.search.service import SearchService
+from naas_abi.apps.nexus.apps.api.app.services.search.sources import FEATURE_SOURCES, web_source
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.adapters.primary.topics__primary_adapter__FastAPI import (  # noqa: E501
     router as topics_router,
 )
@@ -84,11 +85,19 @@ async def search(
     )
 
 
-@router.post("/web")
+@router.post("/web", dependencies=[declares("UseSearchSource")])
 async def web_search(
     request: WebSearchRequest,
+    current_user=Depends(get_current_user_required),
     search_service: SearchService = Depends(get_search_service),
 ) -> WebSearchResponse:
+    # The query leaves Nexus: only through an engine the workspace offers.
+    await authz.require(
+        "UseSearchSource",
+        user=current_user,
+        workspace=request.workspace_id,
+        id=web_source(request.engine),
+    )
     try:
         response = await search_service.web_search(
             WebSearchRequestData(
@@ -116,6 +125,13 @@ async def private_search(
     if request.workspace_id:
         # The workspace is in the body, so the check happens here, not in a guard.
         await authz.require("Search", user=current_user, workspace=request.workspace_id)
+        if request.source in FEATURE_SOURCES:
+            await authz.require(
+                "UseSearchSource",
+                user=current_user,
+                workspace=request.workspace_id,
+                id=request.source,
+            )
     if request.source == "ontology":
         if not request.workspace_id:
             raise HTTPException(
@@ -140,10 +156,16 @@ async def private_search(
     )
 
 
-@router.get("/suggestions")
+@router.get("/suggestions", dependencies=[declares("UseSearchSource")])
 async def get_suggestions(
     query: str = Query(..., min_length=1, max_length=200),
+    workspace_id: str = Query(..., min_length=1, max_length=100),
     limit: int = Query(default=5, ge=1, le=20),
+    current_user=Depends(get_current_user_required),
     search_service: SearchService = Depends(get_search_service),
 ) -> list[str]:
+    # Wikipedia's: where the workspace offers it.
+    await authz.require(
+        "UseSearchSource", user=current_user, workspace=workspace_id, id=web_source("wikipedia")
+    )
     return await search_service.get_suggestions(query=query, limit=limit)

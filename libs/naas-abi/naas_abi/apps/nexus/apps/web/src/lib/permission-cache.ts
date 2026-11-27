@@ -208,5 +208,5 @@ export function changesPermissions(url: string, method: string, apiBase: string)
   return path.startsWith('/api/iam/admin/') || path.startsWith('/api/admin/users/') ||
     path === '/api/settings-cache/refresh' ||
     /^\/api\/(?:organizations|workspaces)(?:\/[^/]+)?$/.test(path) ||
-    /^\/api\/(?:organizations|workspaces)\/[^/]+\/(?:members|roles|feature-access|platform-files|analytics)(?:\/|$)/.test(path);
+    /^\/api\/(?:organizations|workspaces)\/[^/]+\/(?:members|roles|feature-access|offer|analytics)(?:\/|$)/.test(path);
 }

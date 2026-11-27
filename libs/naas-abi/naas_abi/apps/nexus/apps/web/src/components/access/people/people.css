@@ -164,15 +164,66 @@
   margin-left: auto;
 }
 
-.access-view-as .access-button {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
+/* A View as that is not possible: a no-entry cursor, the button and its icon greyed, and the
+   reason in a tooltip as soon as the pointer (or the keyboard focus) is on it. The disabled
+   button lets the hover reach its box. */
+.access-view-as-unavailable {
+  position: relative;
+  cursor: not-allowed;
+  outline: none;
 }
 
-.access-view-as-picker {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--space-2);
+.access-view-as-unavailable button:disabled {
+  pointer-events: none;
+  opacity: 0.5;
+  color: var(--muted-foreground-hex);
+}
+
+.access-view-as-unavailable button:disabled svg {
+  color: var(--muted-foreground-hex);
+}
+
+.access-view-as-unavailable:focus-visible button {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 40%, transparent);
+}
+
+.access-view-as-tooltip {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 50;
+  width: max-content;
+  max-width: 340px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--background-hex);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--foreground-hex);
+  white-space: normal;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+}
+
+.access-view-as-unavailable:hover .access-view-as-tooltip,
+.access-view-as-unavailable:focus-visible .access-view-as-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.access-view-as-close {
+  display: inline-flex;
+  padding: var(--space-1);
+  border: none;
+  background: none;
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+}
+
+.access-view-as-close:hover:not(:disabled) {
+  color: var(--foreground-hex);
 }

@@ -156,10 +156,6 @@ OrgAccessOf = Callable[[str], Awaitable[str | None]]
 # organization's "Workflow runners", the platform's "Models · all".
 CAPABILITY_LEVELS: dict[str, str] = {"workflow_runners": "organization", "models_all": "platform"}
 
-# After a group's members changed here: what Nexus keeps in step with a person's
-# groups follows them (``platform_files.follow``, #1590). Given the principal id.
-MembershipFollower = Callable[[str], Awaitable[None]]
-
 # After a group's members changed here: what Nexus derives from who belongs to a
 # container (a workspace's shared graphs, ``MEMBERSHIPS.changed``) follows, wherever the
 # group gives a place (``runtime.follow_group``). Given the group id.
@@ -189,7 +185,6 @@ class IamAdminService:
         modules: ModuleTypes = _module_types,
         managed_from: ManagedFrom | None = None,
         org_access_of: OrgAccessOf | None = None,
-        follow_member: MembershipFollower | None = None,
         account_names: AccountNames | None = None,
         follow_group: GroupFollower | None = None,
     ) -> None:
@@ -199,7 +194,6 @@ class IamAdminService:
         self._clock = clock
         self._modules = modules
         self._managed_from = managed_from
-        self._follow_member = follow_member
         self._account_names = account_names
         self._follow_group = follow_group
 
@@ -233,16 +227,6 @@ class IamAdminService:
             await self._follow_group(group_id)
         except Exception:  # noqa: BLE001 - the membership change stands
             logger.warning(f"Could not follow the members of {group_id}", exc_info=True)
-
-    async def _followed(self, member_id: str) -> None:
-        """Let what follows a person's groups catch up; a failure is logged, the
-        change made stands (the next start puts it back in step)."""
-        if self._follow_member is None:
-            return
-        try:
-            await self._follow_member(member_id)
-        except Exception:  # noqa: BLE001 - the membership change stands
-            logger.warning(f"Could not follow the groups of {member_id}", exc_info=True)
 
     async def _mark_managed(self, policies: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Each policy view with ``managed_from``: ``general`` for one Workspace settings >
@@ -1046,7 +1030,6 @@ class IamAdminService:
             return self._group_view(session, group_id)
 
         view = await self._change(user, "add_group_member", f"{group_id}/{member_id}", add)
-        await self._followed(member_id)
         await self._group_followed(group_id)
         return await self._named(view)
 
@@ -1057,7 +1040,6 @@ class IamAdminService:
             return self._group_view(session, group_id)
 
         view = await self._change(user, "remove_group_member", f"{group_id}/{member_id}", remove)
-        await self._followed(member_id)
         await self._group_followed(group_id)
         return await self._named(view)
 
@@ -1330,7 +1312,7 @@ async def _none_of(actions: tuple[str, ...]) -> dict[str, bool]:
 
 
 # Names and descriptions Nexus gives the policies it makes itself: a workspace's graph
-# assignments (``graph_grants``) and what the sets' move made (``policy_tree.MADE``).
+# assignments of before (``graphs_offer``) and what the sets' move made (``policy_tree.MADE``).
 RESERVED_POLICY_PREFIX = "workspace."
 
 

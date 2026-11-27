@@ -9,6 +9,7 @@ import { ViewBanner } from '@/components/view-as/view-banner';
 import { TenantProvider } from '@/contexts/tenant-context';
 import { WebSocketProvider } from '@/contexts/websocket-context';
 import { VIEW_STORAGE_GUARD } from '@/lib/view-storage-guard';
+import { BRAND_COLOR_BOOT } from '@/lib/brand-color-cache';
 import './globals.css';
 
 const inter = localFont({
@@ -124,6 +125,13 @@ export default function RootLayout({
 
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+      <head>
+        {/* The workspace's or organization's colors this page last showed, before it paints: no
+            flash of the platform's colors on a hard refresh (lib/brand-color-cache.ts). A plain
+            inline script, run while the HTML is read: next/script's beforeInteractive waits for
+            Next's runtime, after the first paint. */}
+        <script id="nexus-brand-colors-boot" dangerouslySetInnerHTML={{ __html: BRAND_COLOR_BOOT }} />
+      </head>
       <body className={`${inter.className} antialiased`}>
         {/* During a view ("View as") the browser keeps nothing: before any store exists. */}
         <Script

@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FRAMING,
   MAX_BACKGROUND_ZOOM,
+  MIN_BACKGROUND_ZOOM,
   isApiBackgroundUrl,
   panFraming,
   parseBackgroundImageUrl,
+  wheelZoomStep,
 } from './home-background';
 
 describe('isApiBackgroundUrl', () => {
@@ -40,6 +42,12 @@ describe('parseBackgroundImageUrl', () => {
     });
   });
 
+  it('zooms out down to 50%, no further', () => {
+    expect(MIN_BACKGROUND_ZOOM).toBe(0.5);
+    expect(parseBackgroundImageUrl('/api/workspaces/ws-1/background-image?v=a.png&z=0.5').framing.zoom).toBe(0.5);
+    expect(parseBackgroundImageUrl('/api/workspaces/ws-1/background-image?v=a.png&z=0.2').framing.zoom).toBe(0.5);
+  });
+
   it('leaves external URLs untouched', () => {
     expect(parseBackgroundImageUrl('https://example.com/a.jpg?x=1')).toEqual({
       imageUrl: 'https://example.com/a.jpg?x=1',
@@ -71,5 +79,26 @@ describe('panFraming', () => {
 
   it('clamps to the image edges', () => {
     expect(panFraming({ x: 50, y: 50, zoom: 2 }, 10_000, -10_000, box, 2)).toEqual({ x: 0, y: 100, zoom: 2 });
+  });
+
+  it('lets an image zoomed out, smaller than the frame, follow the drag', () => {
+    // Fits at zoom 1; at zoom 0.5 each % moves the image frame·(1−z)/100 px the other way:
+    // the image goes with the pointer, from flush left (x 0) to flush right (x 100).
+    const next = panFraming({ x: 50, y: 50, zoom: 0.5 }, 40, -20, box, 2);
+    expect(next.x).toBeCloseTo(70);
+    expect(next.y).toBeCloseTo(30);
+    expect(panFraming({ x: 50, y: 50, zoom: 0.5 }, 10_000, -10_000, box, 2)).toEqual({ x: 100, y: 0, zoom: 0.5 });
+  });
+});
+
+describe('wheelZoomStep', () => {
+  it('zooms only with Ctrl held: in when scrolling up, out when scrolling down', () => {
+    expect(wheelZoomStep({ ctrlKey: true, deltaY: -100 }, 0.25)).toBe(0.25);
+    expect(wheelZoomStep({ ctrlKey: true, deltaY: 100 }, 0.25)).toBe(-0.25);
+  });
+
+  it('leaves a plain scroll to the page', () => {
+    expect(wheelZoomStep({ ctrlKey: false, deltaY: -100 }, 0.25)).toBeNull();
+    expect(wheelZoomStep({ ctrlKey: true, deltaY: 0 }, 0.25)).toBeNull();
   });
 });
