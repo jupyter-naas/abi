@@ -237,36 +237,20 @@ export function FeatureAccess({
         description={
           !offer && edited ? (
             <>
-              What{' '}
-              {editedHref ? <Link href={editedHref}>{edited.name}</Link> : edited.name} grants whoever holds it,
-              within the workspace&apos;s offer{access ? ` (${access.name})` : ''}. The files given from outside the
-              workspace are in <Link href={`/workspace/${workspaceId}/settings/files`}>Files</Link>.
+              What {editedHref ? <Link href={editedHref}>{edited.name}</Link> : edited.name} grants whoever holds it,
+              within the workspace&apos;s offer.
             </>
-          ) : org ? (
-          <>
-            How far people go with each feature in the workspaces of this organization (Access; None takes it out):
-            a ceiling for every one of them, admins included
-            {offerHref && access ? (
-              <>
-                {' '}
-                (<Link href={offerHref}>{access.name}</Link>)
-              </>
-            ) : null}
-            . A workspace never offers what is None here.
-          </>
           ) : (
-          <>
-            How far people go with each feature in this workspace (Access); None takes it out of the workspace.
-            Each person&apos;s level decides what they may do with it, admins included. Part of what the workspace offers
-            {offerHref && access ? (
-              <>
-                {' '}
-                (<Link href={offerHref}>{access.name}</Link>)
-              </>
-            ) : null}
-            ; the files given from outside the workspace (Organization, Platform, System) are in{' '}
-            <Link href={`/workspace/${workspaceId}/settings/files`}>Files</Link>.
-          </>
+            <>
+              What {org ? 'the workspaces of this organization may offer' : 'this workspace offers'}
+              {offerHref && access ? (
+                <>
+                  {' '}
+                  (<Link href={offerHref}>{access.name}</Link>)
+                </>
+              ) : null}
+              : None takes a feature out.
+            </>
           )
         }
         actions={
