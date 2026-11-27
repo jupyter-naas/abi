@@ -1,0 +1,14 @@
+/* The select column of a settings table (batch changes): the square checkbox centred, in the
+   header as in each row, past the table's own cell rules. */
+.org-settings-users-table th.settings-select-cell,
+.org-settings-users-table td.settings-select-cell {
+  width: 40px;
+  padding-left: 8px;
+  padding-right: 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.settings-select-cell > span {
+  vertical-align: middle;
+}

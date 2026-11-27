@@ -81,6 +81,39 @@ describe('Settings › Access › Services', () => {
     ]);
   });
 
+  it('sets the access of the rows selected in one save, the filtered ones with select all', async () => {
+    const api = {
+      read: vi.fn().mockResolvedValue(state()),
+      save: vi.fn().mockResolvedValue(state({ rows: [ROWS[0], { ...ROWS[1], level: 'write' }] })),
+    };
+    const m = (mounted = await mount(CoreServices, { workspaceId: 'ws1', api: api as unknown as AccessLevelsApi }));
+    await m.flush();
+    // A column filter keeps Secrets (Read): select all takes it alone.
+    await pickColumnFilter(m, 'access', 'Read');
+    await m.click(m.host.querySelector('thead input[data-action="select-all"]'));
+    expect(m.host.querySelector('[data-bulk-bar]')?.textContent).toContain('1 service selected');
+    await m.click(m.host.querySelector('[data-bulk-bar] [data-bulk-action="write"]'));
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('[data-bulk-confirm] button')].find(
+      (b) => b.textContent === 'Set to Write',
+    )!;
+    await m.click(confirm);
+    await m.flush();
+    expect(api.save).toHaveBeenCalledWith('ws1', 'service', { 'service:secret': 'write' }, null);
+    expect(m.host.querySelector('[data-services-notice]')?.textContent).toBe('1 service: Write.');
+  });
+
+  it('says in the modal which selected rows a level does not fit', async () => {
+    const api = { read: vi.fn().mockResolvedValue(state()), save: vi.fn().mockResolvedValue(state()) };
+    const m = (mounted = await mount(CoreServices, { workspaceId: 'ws1', api: api as unknown as AccessLevelsApi }));
+    await m.flush();
+    await m.click(m.host.querySelector('thead input[data-action="select-all"]'));
+    await m.click(m.host.querySelector('[data-bulk-bar] [data-bulk-action="admin"]'));
+    // Secrets have no admin level.
+    expect(document.querySelector('[data-bulk-confirm]')?.textContent).toContain(
+      '1 of the 2 services cannot take this level and stays as it is.',
+    );
+  });
+
   it('edits what another policy grants, picked in the header, and is read-only when IAM says so', async () => {
     const granting = state({ mode: 'grant', policy: GRANTS, rows: ROWS.map((r) => ({ ...r, level: 'none' })) });
     const api = {

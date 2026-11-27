@@ -150,7 +150,9 @@ describe('FeatureAccess', () => {
       'marketplace',
       'search',
     ]);
+    // First the select-all checkbox (batch changes), then the columns.
     expect([...m.host.querySelectorAll('thead th')].map((th) => th.textContent)).toEqual([
+      '',
       'Feature',
       'Description',
       'Access',
@@ -338,6 +340,28 @@ describe('FeatureAccess', () => {
     expect(api.save).not.toHaveBeenCalled();
     expect(picked(m, 'maps')).toBe('read');
     expect(m.host.querySelector('.org-settings-general-draft')).toBeNull();
+  });
+
+  it('sets the access of the rows selected, the filtered ones with select all, after a modal', async () => {
+    const api = fakeApi();
+    const levelsApi = fakeLevels();
+    const m = await render(api, levelsApi);
+    // A search narrows the table: select all takes the rows it shows (Maps alone).
+    await m.type(m.host.querySelector('input[type="search"], input') as HTMLInputElement, 'feeds');
+    await m.click(m.host.querySelector('thead input[data-action="select-all"]'));
+    expect(m.host.querySelector('[data-bulk-bar]')?.textContent).toContain('1 feature selected');
+    await m.click(m.host.querySelector('[data-bulk-bar] [data-bulk-action="read"]'));
+    expect(document.querySelector('[data-bulk-confirm]')?.textContent).toContain('Set access to Read for 1 feature?');
+    expect(api.save).not.toHaveBeenCalled();
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('[data-bulk-confirm] button')].find(
+      (b) => b.textContent === 'Set to Read',
+    )!;
+    await m.click(confirm);
+    await m.flush();
+    // Maps was taken out (Nobody): Read puts it in at Read, in one save.
+    expect(api.save).toHaveBeenCalledWith('ws1', [{ feature: 'maps', choice: 'everyone' }], null);
+    expect(levelsApi.save).toHaveBeenCalledWith('ws1', 'feature', { 'feature:maps': 'read' }, null);
+    expect(m.host.querySelector('[data-bulk-bar]')).toBeNull();
   });
 
   it('says so, read-only, when the access levels cannot be read', async () => {

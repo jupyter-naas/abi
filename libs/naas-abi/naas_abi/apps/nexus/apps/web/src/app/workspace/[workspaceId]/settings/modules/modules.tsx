@@ -24,6 +24,7 @@ import { UsersExportMenu } from '@/components/settings/users-table/users-table-a
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import { reloadWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { PolicyPicker } from '@/components/settings/policy-picker';
+import { BulkBar, SelectAllCell, SelectRowCell, useRowSelection, type BulkAction } from '@/components/settings/bulk-access';
 import { isOrgTarget } from '@/lib/access-model/target';
 import { ownerHref } from '@/components/access/policies/policy-owners';
 import Link from 'next/link';
@@ -50,6 +51,25 @@ import {
   type ModuleGroup,
   type ModuleRow,
 } from './modules-model';
+
+/** The batch actions on modules: each one offered whole, or all of it taken back. */
+const BULK_ACTIONS: BulkAction[] = [
+  {
+    id: 'offer',
+    label: 'Offer',
+    question: (count, plural) => `Offer ${count} ${plural} whole?`,
+    detail: (count) =>
+      `Every kind of ${count === 1 ? 'it' : 'each'} is offered, what ${count === 1 ? 'it adds' : 'they add'} later too, in one save.`,
+    confirm: 'Offer',
+  },
+  {
+    id: 'take-back',
+    label: 'Take back',
+    question: (count, plural) => `Take back ${count} ${plural}?`,
+    detail: () => 'Every kind and every item offered one by one is taken back, in one save.',
+    confirm: 'Take back',
+  },
+];
 
 const DEFAULT_OFFER_API = createOfferApi();
 const DEFAULT_IAM_API = createIamAdminApi();
@@ -185,6 +205,19 @@ export function WorkspaceModules({
     }
   };
 
+  // Modules checked for a batch change (the rows shown: select all takes them).
+  const selection = useRowSelection(useMemo(() => table.shown.map((group) => group.key), [table.shown]));
+  /** The selected modules a batch action fits: offering needs the right to give it here. */
+  const bulkGroups = (id: string) =>
+    rows.filter((group) => selection.selected.has(group.key) && (id === 'take-back' || group.grantable || group.offer === 'whole'));
+  /** Offer every selected module whole, or take all of each back, in one write. */
+  const applyBulk = async (id: string) => {
+    const on = id === 'offer';
+    const groups = bulkGroups(id);
+    const drafts = Object.assign({}, ...groups.map((group) => moduleDrafts(group, on)));
+    await saveDrafts(drafts, `${groups.length} module${groups.length === 1 ? '' : 's'}`, on);
+  };
+
   const exportShown = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
     const kinds = table.shown.flatMap((group) => group.kinds);
@@ -202,7 +235,8 @@ export function WorkspaceModules({
     setPolicyId(next);
     onPolicyChange?.(next);
   };
-  const colSpan = MODULE_COLUMNS.length;
+  // The select column, then the table's own.
+  const colSpan = MODULE_COLUMNS.length + 1;
 
   return (
     <div className="space-y-6">
@@ -265,15 +299,41 @@ export function WorkspaceModules({
             searchPlaceholder="Search module, agents, apps, workflows, offered…"
             meta={<SettingsTableClear table={table} />}
           />
+          <BulkBar
+            selection={selection}
+            noun="module"
+            actions={BULK_ACTIONS}
+            onApply={applyBulk}
+            skippedFor={(id) => selection.selected.size - bulkGroups(id).length}
+            disabled={!editable || saving}
+          />
           <div className="org-settings-users-table-wrap">
             <table className="org-settings-users-table">
-              <SettingsTableHead table={table} />
+              <SettingsTableHead
+                table={table}
+                leading={
+                  <SelectAllCell
+                    selection={selection}
+                    keys={table.shown.map((group) => group.key)}
+                    noun="module"
+                    disabled={!editable || saving}
+                  />
+                }
+              />
               <tbody>
                 {table.shown.length === 0 && <SettingsTableNoMatch colSpan={colSpan} noun="modules" />}
                 {table.paged.pageRows.map((group) => (
                   <Fragment key={group.key}>
                     <ModuleLine
                       group={group}
+                      select={
+                        <SelectRowCell
+                          selection={selection}
+                          rowKey={group.key}
+                          label={group.module}
+                          disabled={!editable || saving}
+                        />
+                      }
                       unfolded={!!openModules[group.key]}
                       disabled={!editable || saving}
                       onUnfold={() => setOpenModules((current) => ({ ...current, [group.key]: !current[group.key] }))}
@@ -287,6 +347,7 @@ export function WorkspaceModules({
                         return (
                           <Fragment key={row.key}>
                             <tr data-module-kind={row.key} className="align-top access-offer-kind-row">
+                              <td />
                               <td className="access-offer-indent-1">
                                 <button
                                   type="button"
@@ -338,6 +399,7 @@ export function WorkspaceModules({
                                       data-offer-item={`${row.module}/${item.name}`}
                                       className="align-top"
                                     >
+                                      <td />
                                       <td className="access-offer-indent-2 text-sm text-foreground">{item.label}</td>
                                       <td />
                                       <td data-field="offer">
@@ -377,12 +439,15 @@ export function WorkspaceModules({
 /** A module's row: its name, its contents, its switch (the whole module) and the unfold button. */
 function ModuleLine({
   group,
+  select,
   unfolded,
   disabled,
   onUnfold,
   onSwitch,
 }: {
   group: ModuleGroup;
+  /** Its checkbox, for a batch change. */
+  select: ReactNode;
   unfolded: boolean;
   disabled: boolean;
   onUnfold: () => void;
@@ -391,6 +456,7 @@ function ModuleLine({
   const whole = group.offer === 'whole';
   return (
     <tr data-module={group.key} className="align-top">
+      {select}
       <td>
         <button
           type="button"

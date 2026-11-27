@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { ownerHref } from '@/components/access/policies/policy-owners';
 import { AccessLevelChoice } from '@/components/settings/access-level-choice';
+import { BulkAccessBar, SelectAllCell, SelectRowCell, useRowSelection } from '@/components/settings/bulk-access';
 import { PolicyPicker } from '@/components/settings/policy-picker';
 import { isOrgTarget } from '@/lib/access-model/target';
 import {
@@ -95,6 +96,31 @@ export function CoreServices({
     initialSort: 'service',
   });
 
+  // Rows checked for a batch change of access (the rows shown: select all takes them).
+  const selection = useRowSelection(useMemo(() => table.shown.map((row) => row.key), [table.shown]));
+  /** The selected rows `level` fits (a service has the levels its actions have). */
+  const bulkRows = (level: AccessLevel) =>
+    rows.filter((row) => selection.selected.has(row.key) && row.choices.includes(level));
+
+  /** Every selected row `level` fits, in one save. */
+  const applyBulk = async (level: AccessLevel) => {
+    const changes = Object.fromEntries(bulkRows(level).filter((row) => row.level !== level).map((row) => [row.key, level]));
+    if (Object.keys(changes).length === 0) return;
+    setSaving(true);
+    setNotice('');
+    try {
+      const next = await api.save(workspaceId, 'service', changes, policyId);
+      setState(next);
+      setError('');
+      const n = Object.keys(changes).length;
+      setNotice(`${n} service${n === 1 ? '' : 's'}: ${LEVEL_LABELS[level]}.`);
+    } catch (e) {
+      setError(message(e, 'Could not save.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const change = async (row: LevelRow, level: AccessLevel) => {
     setSaving(true);
     setNotice('');
@@ -179,13 +205,32 @@ export function CoreServices({
             searchPlaceholder="Search service, level, action…"
             meta={<SettingsTableClear table={table} />}
           />
+          <BulkAccessBar
+            selection={selection}
+            noun="service"
+            levels={['none', 'read', 'write', 'admin']}
+            onApply={applyBulk}
+            skippedFor={(level) => selection.selected.size - bulkRows(level).length}
+            disabled={saving || !state.editable}
+          />
           <div className="org-settings-users-table-wrap">
             <table className="org-settings-users-table">
-              <SettingsTableHead table={table} />
+              <SettingsTableHead
+                table={table}
+                leading={
+                  <SelectAllCell
+                    selection={selection}
+                    keys={table.shown.map((row) => row.key)}
+                    noun="service"
+                    disabled={saving || !state.editable}
+                  />
+                }
+              />
               <tbody>
-                {table.shown.length === 0 && <SettingsTableNoMatch colSpan={SERVICE_COLUMNS.length} noun="services" />}
+                {table.shown.length === 0 && <SettingsTableNoMatch colSpan={SERVICE_COLUMNS.length + 1} noun="services" />}
                 {table.paged.pageRows.map((row) => (
                   <tr key={row.key} data-service={row.name} className="align-top">
+                    <SelectRowCell selection={selection} rowKey={row.key} label={row.label} disabled={saving || !state.editable} />
                     <td>
                       <p className="font-medium text-foreground">{row.label}</p>
                       <p className="text-xs text-muted-foreground">{row.name}</p>

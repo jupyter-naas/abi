@@ -95,12 +95,12 @@ describe('Settings › Access › Modules', () => {
     await m.click(m.host.querySelector('tr[data-module="acme.sales"] [data-action="contents"]'));
     expect(kindSwitch(m, 'workflows|acme.sales')?.getAttribute('aria-checked')).toBe('false');
     // Its contents one step in, their items two.
-    expect(m.host.querySelector('tr[data-module-kind="workflows|acme.sales"] td')?.classList).toContain('access-offer-indent-1');
+    expect(m.host.querySelector('tr[data-module-kind="workflows|acme.sales"] td:nth-child(2)')?.classList).toContain('access-offer-indent-1');
     await m.click(m.host.querySelector('tr[data-module-kind="workflows|acme.sales"] [data-action="items"]'));
     await m.flush();
     // Each item a row: its name two steps in, its switch in the Offered column.
     const item = m.host.querySelector('tr[data-offer-item="acme.sales/Sync"]')!;
-    expect(item.querySelector('td')?.classList).toContain('access-offer-indent-2');
+    expect(item.querySelector('td:nth-child(2)')?.classList).toContain('access-offer-indent-2');
     expect(item.querySelector('td[data-field="offer"] [role="switch"]')).not.toBeNull();
     expect(parts.api.resources).toHaveBeenCalledWith({
       scope: WS,
@@ -144,6 +144,27 @@ describe('Settings › Access › Modules', () => {
       null,
     );
     expect(m.host.querySelector('[data-modules-notice]')?.textContent).toBe('acme.sales added to the offer.');
+  });
+
+  it('offers or takes back the modules selected in one write, the filtered ones with select all', async () => {
+    const parts = setup();
+    const m = await render(parts);
+    // The Offered filter keeps acme.sales (not offered): select all takes it alone.
+    await pickColumnFilter(m, 'offer', 'Not offered');
+    await m.click(m.host.querySelector('thead input[data-action="select-all"]'));
+    expect(m.host.querySelector('[data-bulk-bar]')?.textContent).toContain('1 module selected');
+    await m.click(m.host.querySelector('[data-bulk-bar] [data-bulk-action="offer"]'));
+    expect(document.querySelector('[data-bulk-confirm]')?.textContent).toContain('Offer 1 module whole?');
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('[data-bulk-confirm] button')].find(
+      (b) => b.textContent === 'Offer',
+    )!;
+    await m.click(confirm);
+    await m.flush();
+    expect(parts.offerApi.save).toHaveBeenCalledWith(
+      'ws-1',
+      [{ kind: 'workflows', module: 'acme.sales', name: '*', offered: true }],
+      null,
+    );
   });
 
   it('is read-only when IAM does not let the caller change "<W> access"', async () => {

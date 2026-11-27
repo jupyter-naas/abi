@@ -26,6 +26,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import '@/app/organizations/[orgId]/settings/general/general.css';
 import { reloadWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { PolicyPicker } from '@/components/settings/policy-picker';
+import { BulkAccessBar, SelectAllCell, SelectRowCell, useRowSelection } from '@/components/settings/bulk-access';
 import { isOrgTarget } from '@/lib/access-model/target';
 import { AccessLevelChoice } from '@/components/settings/access-level-choice';
 import {
@@ -160,8 +161,9 @@ export function FeatureAccess({
   });
   const shown = table.shown;
 
-  const plan = levelPlan(rows, accessDrafts, savedLevel);
   const unsavedCount = Object.keys(accessDrafts).length;
+  // Rows checked for a batch change of access (the rows shown: select all takes them).
+  const selection = useRowSelection(useMemo(() => shown.map((row) => row.key), [shown]));
 
   // A pick back to what the row holds is no change.
   const pickLevel = (row: FeatureRow, level: AccessLevel) =>
@@ -170,7 +172,28 @@ export function FeatureAccess({
       return level === shownLevel(row.choice, savedLevel(row.key)) ? rest : { ...rest, [row.key]: level };
     });
 
-  const save = async () => {
+  /** The selected rows `level` fits (a feature the ceiling does not offer only takes None). */
+  const bulkPicks = (level: AccessLevel): FeatureRow[] =>
+    rows.filter((row) => {
+      if (!selection.selected.has(row.key)) return false;
+      const lr = levelRow(row.key);
+      return !!lr && pickableLevels(row, lr.choices, offer).includes(level);
+    });
+
+  /** Set the selected rows to `level`, with the page's other picks, in one save. */
+  const applyBulk = async (level: AccessLevel) => {
+    const drafts = { ...accessDrafts };
+    for (const row of bulkPicks(level)) {
+      if (level === shownLevel(row.choice, savedLevel(row.key))) delete drafts[row.key];
+      else drafts[row.key] = level;
+    }
+    setAccessDrafts(drafts);
+    await save(drafts);
+  };
+
+  /** Save the picks (`drafts`, the page's by default): a batch change saves its own at once. */
+  const save = async (drafts: Record<string, AccessLevel> = accessDrafts) => {
+    const plan = levelPlan(rows, drafts, savedLevel);
     setSaving(true);
     try {
       // Whether each feature is in (None takes it out), then how far people go with it.
@@ -192,7 +215,7 @@ export function FeatureAccess({
       );
       if (Object.keys(wanted).length > 0) setLevels(await levelsApi.save(workspaceId, 'feature', wanted, policyId));
       // A refused row keeps its pick, beside why.
-      setAccessDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => refused[key])));
+      setAccessDrafts(Object.fromEntries(Object.entries(drafts).filter(([key]) => refused[key])));
       setError('');
     } catch (e) {
       setError(message(e, 'Could not save.'));
@@ -321,13 +344,38 @@ export function FeatureAccess({
             // No count nor unsaved line above the search: the bar says what is unsaved.
             meta={<SettingsTableClear table={table} />}
           />
+          <BulkAccessBar
+            selection={selection}
+            noun="feature"
+            levels={['none', 'read', 'write', 'admin']}
+            onApply={applyBulk}
+            skippedFor={(level) => selection.selected.size - bulkPicks(level).length}
+            disabled={saving || !levels?.editable}
+          />
           <div className="org-settings-users-table-wrap">
             <table className="org-settings-users-table">
-              <SettingsTableHead table={table} trailing={<th aria-label="Configure" />} />
+              <SettingsTableHead
+                table={table}
+                leading={
+                  <SelectAllCell
+                    selection={selection}
+                    keys={shown.map((row) => row.key)}
+                    noun="feature"
+                    disabled={saving || !levels?.editable}
+                  />
+                }
+                trailing={<th aria-label="Configure" />}
+              />
               <tbody>
-                {shown.length === 0 && <SettingsTableNoMatch colSpan={columns.length + 1} noun="features" />}
+                {shown.length === 0 && <SettingsTableNoMatch colSpan={columns.length + 2} noun="features" />}
                 {table.paged.pageRows.map((row) => (
                     <tr key={row.key} data-feature={row.key} className="align-top">
+                      <SelectRowCell
+                        selection={selection}
+                        rowKey={row.key}
+                        label={row.label}
+                        disabled={saving || !row.editable || !levelRow(row.key) || !levels?.editable}
+                      />
                       <td>
                         <p className="font-medium text-foreground">{row.label}</p>
                         <p className="text-xs text-muted-foreground">{row.key}</p>

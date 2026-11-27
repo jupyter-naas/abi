@@ -149,15 +149,19 @@ export function useSettingsTable<T, C extends string>({
  *  funnel; `trailing` adds header cells after them (an Actions column). */
 export function SettingsTableHead<T, C extends string>({
   table,
+  leading,
   trailing,
 }: {
   table: SettingsTable<T, C>;
+  /** A first header cell (a select-all checkbox), before the columns. */
+  leading?: ReactNode;
   trailing?: ReactNode;
 }) {
   const [open, setOpen] = useState<{ id: C; left: number; top: number } | null>(null);
   return (
     <thead>
       <tr>
+        {leading}
         {table.columns.map((column) => {
           if (column.sortable === false) {
             return (
