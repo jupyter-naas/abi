@@ -9,7 +9,7 @@ organization, "<O> access"): every shared namespace unless it closes it.
 
 | Section | Effect | Actions | Resources |
 |---|---|---|---|
-| ``OfferDatasetsDeny`` (parts ``OfferDatasetsDeny2``...) | Deny | ``ListDatasets``, ``GetDataset``, ``PreviewDataset``, ``QueryDataset`` | ``${scope}/nexus:dataset/<namespace>``: a namespace the workspace does not use |
+| ``OfferDatasetsDeny`` (parts ``OfferDatasetsDeny2``...) | Deny | ``ListDatasets``, ``GetDataset``, ``PreviewDataset``, ``QueryDataset`` | ``${scope}/nexus:dataset/<namespace>``: a namespace the workspace does not use; ``${scope}/nexus:dataset/<namespace>/<name>``: one dataset of a namespace it uses |
 
 A policy a container owns names only ``${scope}`` (``policy.check_owned_document``), and
 IAM decides a dataset on its platform name (``abi:nexus:dataset/<namespace>``): the Deny
@@ -37,7 +37,8 @@ ACTIONS = (
     f"{SERVICE}:PreviewDataset",
     f"{SERVICE}:QueryDataset",
 )
-# The ``Offer`` field: the namespaces closed.
+# The ``Offer`` field: what is closed, each a namespace (``hr``) or one of its datasets
+# (``hr/pay``), as Settings › Datasets offers a namespace whole or dataset by dataset.
 FIELDS = ("datasets_closed",)
 
 _PREFIX = "${scope}/" + f"{SERVICE}:dataset/"
@@ -55,9 +56,26 @@ def valid_namespace(namespace: str) -> bool:
     )
 
 
-def closed_name(namespace: str) -> str:
-    """A namespace the workspace closes, as its offer names it."""
-    return scoped_resource("dataset", namespace)
+def split_entry(entry: str) -> tuple[str, str | None]:
+    """A closure's namespace and dataset: ``("hr", "pay")`` for ``hr/pay``, ``("hr", None)``."""
+    namespace, _, name = entry.partition("/")
+    return namespace, (name or None) if "/" in entry else None
+
+
+def valid_entry(entry: str) -> bool:
+    """A closure: a namespace, or a namespace and one of its datasets (``hr/pay``)."""
+    if entry.count("/") > 1:
+        return False
+    namespace, name = split_entry(entry)
+    if "/" in entry and name is None:
+        return False
+    return valid_namespace(namespace) and (name is None or valid_namespace(name))
+
+
+def closed_name(entry: str) -> str:
+    """A namespace (or one of its datasets) the workspace closes, as its offer names it."""
+    namespace, name = split_entry(entry)
+    return scoped_resource("dataset", namespace if name is None else [namespace, name])
 
 
 def namespace_of(name: str) -> str | None:
@@ -82,9 +100,19 @@ def statements(closed: Iterable[str]) -> list[dict[str, Any]]:
     ]
 
 
+def entry_of(name: str) -> str | None:
+    """The closure a closed name stands for (``hr`` or ``hr/pay``); None for any other name."""
+    if not name.startswith(_PREFIX):
+        return None
+    parts = [unquote(part) for part in name[len(_PREFIX) :].split("/")]
+    if len(parts) > 2 or not all(valid_namespace(part) for part in parts):
+        return None
+    return "/".join(parts)
+
+
 def closed_of(resources: Iterable[str]) -> set[str]:
-    """The namespaces a Deny of the section names."""
-    return {ns for r in resources if (ns := namespace_of(r)) is not None}
+    """The namespaces, and the single datasets, a Deny of the section names."""
+    return {entry for r in resources if (entry := entry_of(r)) is not None}
 
 
 __all__ = [
@@ -96,7 +124,10 @@ __all__ = [
     "SIDS",
     "closed_name",
     "closed_of",
+    "entry_of",
     "namespace_of",
+    "split_entry",
     "statements",
+    "valid_entry",
     "valid_namespace",
 ]

@@ -86,6 +86,15 @@ The reason they are not in the offer is the bound rule (#1585). What a membershi
   `/api/organizations/{id}/offer/datasets`) writes the section as the caller. A workspace admin closes a namespace;
   reopening lifts a Deny of the bound, which only the platform admin does (IAM), as for the Maps items a workspace
   closes. What "<O> access" closes is read-only on a workspace's page (422 if asked).
+- **Whole or dataset by dataset (2026-11-27).** As a module its items, a namespace is offered whole or one dataset
+  at a time: the same Deny names `${scope}/nexus:dataset/<namespace>/<name>` for a single dataset (the name IAM
+  gives a dataset), and Nexus hides it the same way (listing, description, preview, a query whose SQL reads it).
+  Closing a namespace covers its datasets and keeps their own closures (taking one out lifts a Deny); reopening it,
+  the platform admin's, offers it whole. A dataset of a closed namespace is not reopened alone (422).
+- **Known limit.** IAM refuses a change to a Deny a policy already carries to whoever that policy restricts
+  (`_require_keeps_own_denies`), even one that only adds a name, because the closures share one statement. A
+  workspace admin who holds "<W> access" closes a first namespace or dataset, not a second; the platform admin
+  closes any. One statement per closure, with a stable sid, would lift this.
 
 ## Open question
 

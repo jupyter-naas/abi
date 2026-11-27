@@ -131,7 +131,7 @@ def nexus_resource(
     )
 
 
-def scoped_resource(type_name: str, id: str) -> str:
+def scoped_resource(type_name: str, id: str | Sequence[str]) -> str:
     """``${scope}/nexus:<type>/<id>``: a Nexus resource as a policy written at a
     scope names it, in whichever container the policy is attached at."""
     within = nexus_resource(type_name, container=PLATFORM, id=id).removeprefix(PLATFORM)

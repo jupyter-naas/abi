@@ -55,3 +55,27 @@ def test_merging_never_opens_what_either_closes():
     assert a.merged(b).datasets_closed == frozenset({"hr", "finance"})
     assert a.merged(b).without(b).datasets_closed == frozenset({"hr"})
     assert not a.is_empty()
+
+
+def test_a_closed_dataset_is_named_in_its_namespace_and_read_back():
+    # One dataset of a namespace, as IAM names it (``dataset/<namespace>/<name>``).
+    assert given_datasets.closed_name("finance/sales") == "${scope}/nexus:dataset/finance/sales"
+    assert given_datasets.entry_of("${scope}/nexus:dataset/finance/sales") == "finance/sales"
+    assert given_datasets.entry_of("${scope}/nexus:dataset/finance") == "finance"
+    assert given_datasets.entry_of("${scope}/nexus:dataset/finance/*") is None
+    assert given_datasets.entry_of("${scope}/nexus:dataset/a/b/c") is None
+    assert given_datasets.split_entry("finance/sales") == ("finance", "sales")
+    assert given_datasets.split_entry("finance") == ("finance", None)
+    assert given_datasets.valid_entry("finance/sales") and given_datasets.valid_entry("finance")
+    assert not given_datasets.valid_entry("finance/") and not given_datasets.valid_entry("a/b/c")
+
+
+def test_a_workspace_closes_whole_namespaces_and_single_datasets_in_one_deny():
+    offer = Offer.of(features=["datasets"], datasets_closed=["hr", "finance/sales"])
+    document = offer_document(offer)
+    deny = [s for s in document["statements"] if s["sid"] == given_datasets.DENY_SID]
+    assert deny[0]["resources"] == [
+        "${scope}/nexus:dataset/finance/sales",
+        "${scope}/nexus:dataset/hr",
+    ]
+    assert offer_of(document).datasets_closed == frozenset({"hr", "finance/sales"})

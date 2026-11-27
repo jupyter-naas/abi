@@ -116,3 +116,62 @@ async def test_the_closed_namespaces_are_the_workspace_s_and_its_organization_s(
 
     monkeypatch.setattr(access, "_offers_of", offers_of)
     assert await access.closed_namespaces("ws-1") == frozenset({"hr", "finance"})
+
+
+@pytest.fixture
+def http_one_dataset(tmp_path, monkeypatch):
+    """ws-1 closes one dataset, ``timesheets/hours``, not its namespace."""
+    nexus, datasets = shared_world(tmp_path)
+
+    async def offers_of(workspace_id: str):
+        if workspace_id == "ws-1":
+            return [Offer.of(features=["datasets"], datasets_closed=["timesheets/hours"]), None]
+        return [Offer.of(features=["datasets"])]
+
+    monkeypatch.setattr(access, "_offers_of", offers_of)
+    with nexus.installed():
+        populate(nexus, datasets)
+        app = FastAPI()
+
+        @app.middleware("http")
+        async def identity(request, call_next):
+            with use_call_context(NexusIam.context("member")):
+                return await call_next(request)
+
+        app.include_router(datasets_api.router, prefix="/datasets")
+        app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(id="member")
+        app.dependency_overrides[get_datasets_service] = lambda: DatasetsService(datasets)
+        yield TestClient(app)
+
+
+def test_a_closed_dataset_is_hidden_and_refused_its_namespace_kept(http_one_dataset) -> None:
+    http = http_one_dataset
+    listed = http.get("/datasets/", params={"workspace_id": "ws-1"}).json()["datasets"]
+    assert {(d["namespace"], d["name"]) for d in listed} == {("hr", "pay")}
+    for path in ("/datasets/timesheets/hours", "/datasets/TimeSheets/HOURS/preview"):
+        refused = http.get(path, params={"workspace_id": "ws-1"})
+        assert refused.status_code == 403, (path, refused.text)
+    for namespace, sql in (
+        ("timesheets", "SELECT * FROM hours"),
+        ("hr", "SELECT * FROM timesheets.hours"),
+    ):
+        assert _query(http, "ws-1", namespace, sql).status_code == 403, (namespace, sql)
+    assert _query(http, "ws-1", "hr", "SELECT * FROM pay").status_code == 200
+    # Another workspace still reads it.
+    assert _query(http, "ws-2", "timesheets", "SELECT * FROM hours").status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_the_closures_split_into_namespaces_and_datasets(monkeypatch):
+    async def offers_of(_workspace_id: str):
+        return [
+            Offer.of(datasets_closed=["HR", "Finance/Sales"]),
+            Offer.of(datasets_closed=["ops/Runs"]),
+            None,
+        ]
+
+    monkeypatch.setattr(access, "_offers_of", offers_of)
+    closed = await access.closed_datasets("ws-1")
+    assert closed.namespaces == frozenset({"hr"})
+    assert closed.datasets == frozenset({("finance", "sales"), ("ops", "runs")})
+    assert await access.closed_namespaces("ws-1") == frozenset({"hr"})

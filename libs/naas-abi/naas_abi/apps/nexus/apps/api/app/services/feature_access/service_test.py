@@ -640,9 +640,11 @@ class TestDatasets:
         assert [row["namespace"] for row in state["rows"]] == ["hr", "timesheets"]
         rows = _dataset_rows(state)
         assert (rows["timesheets"]["tables"], rows["hr"]["tables"]) == (2, 1)
-        # Each namespace names its datasets, A to Z (Settings › Datasets unfolds them).
-        assert rows["timesheets"]["datasets"] == ["days", "hours"]
-        assert rows["hr"]["datasets"] == ["pay"]
+        # Each namespace lists its datasets, A to Z, each offered or not (Settings › Datasets
+        # unfolds them, as a module its items).
+        assert [d["name"] for d in rows["timesheets"]["datasets"]] == ["days", "hours"]
+        assert all(d["offered"] and d["editable"] for d in rows["timesheets"]["datasets"])
+        assert [d["name"] for d in rows["hr"]["datasets"]] == ["pay"]
         assert all(row["offered"] and row["editable"] for row in rows.values())
 
         state = await datasets.set_datasets("olivia", "alpha", {"hr": False})
@@ -705,8 +707,49 @@ class TestDatasets:
         assert (row["tables"], row["available"], row["offered"]) == (0, False, False)
 
     @pytest.mark.asyncio
+    async def test_a_namespace_is_offered_whole_or_dataset_by_dataset(self, nexus, acme, datasets):
+        state = await datasets.set_datasets("olivia", "alpha", {"timesheets/hours": False})
+        row = _dataset_rows(state)["timesheets"]
+        assert row["offered"]  # the namespace stays, one of its datasets goes
+        assert {d["name"]: d["offered"] for d in row["datasets"]} == {"days": True, "hours": False}
+        assert offer_of(_access(nexus, acme).document).datasets_closed == {"timesheets/hours"}
+
+        # Closing the namespace covers its datasets, nothing to pick in it; the dataset's own
+        # closure stays (taking it out would lift a Deny). Changing a Deny "<W> access" already
+        # carries is refused to whoever it restricts (IAM), so the platform admin closes it here.
+        state = await datasets.set_datasets("root", "alpha", {"timesheets": False})
+        assert offer_of(_access(nexus, acme).document).datasets_closed == {
+            "timesheets",
+            "timesheets/hours",
+        }
+        row = _dataset_rows(state)["timesheets"]
+        assert not row["offered"]
+        assert not any(d["offered"] or d["editable"] for d in row["datasets"])
+        # A dataset of a closed namespace is not reopened alone.
+        with pytest.raises(ValueError, match="namespace"):
+            await datasets.set_datasets("olivia", "alpha", {"timesheets/days": True})
+
+        # Reopening the namespace offers it whole.
+        state = await datasets.set_datasets("root", "alpha", {"timesheets": True})
+        assert offer_of(_access(nexus, acme).document).datasets_closed == frozenset()
+        assert all(d["offered"] for d in _dataset_rows(state)["timesheets"]["datasets"])
+
+    @pytest.mark.asyncio
+    async def test_a_dataset_the_organization_closes_no_workspace_reopens(
+        self, nexus, acme, datasets
+    ):
+        org = org_container("acme")
+        await datasets.set_datasets("root", org, {"hr/pay": False})
+        row = _dataset_rows(await datasets.read_datasets("olivia", "alpha"))["hr"]
+        assert row["offered"] and not row["closed_above"]
+        (pay,) = row["datasets"]
+        assert not pay["offered"] and pay["closed_above"] and not pay["editable"]
+        with pytest.raises(ValueError, match="Acme access"):
+            await datasets.set_datasets("olivia", "alpha", {"hr/pay": True})
+
+    @pytest.mark.asyncio
     async def test_a_namespace_must_be_named_and_plain(self, nexus, acme, datasets):
-        for changes in ({}, {"a/b": False}, {"*": False}, {" hr": False}):
+        for changes in ({}, {"a/b/c": False}, {"a/": False}, {"*": False}, {" hr": False}):
             with pytest.raises(ValueError):
                 await datasets.set_datasets("olivia", "alpha", changes)
 

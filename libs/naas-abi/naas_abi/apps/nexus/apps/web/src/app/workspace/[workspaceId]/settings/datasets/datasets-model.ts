@@ -9,12 +9,22 @@
 
 export type PolicyRef = { id: string; name: string; owner_scope: string };
 
+/** One dataset of a namespace: offered with its namespace, or closed alone (`<namespace>/<name>`). */
+export type DatasetEntry = {
+  name: string;
+  offered: boolean;
+  closed_above: boolean;
+  /** Changeable here: its namespace offered, and not closed above. */
+  editable: boolean;
+  reason: string | null;
+};
+
 export type DatasetRow = {
   namespace: string;
   /** How many datasets the deployment holds in it (0: closed, then gone from the deployment). */
   tables: number;
-  /** Their names, A to Z: unfolded under the namespace. */
-  datasets?: string[];
+  /** Its datasets, A to Z, each offered or not: unfolded under the namespace, as a module's items. */
+  datasets?: DatasetEntry[];
   available: boolean;
   /** Used here: closed neither by this policy nor by the one above. */
   offered: boolean;
@@ -61,6 +71,20 @@ export function rowNote(row: DatasetRow): string | null {
   return null;
 }
 
+/** The key a change of one dataset is sent under (`{"hr/pay": false}`), as the offer names it. */
+export function datasetKey(namespace: string, name: string): string {
+  return `${namespace}/${name}`;
+}
+
+/** What the namespace's row says beside its switch: whole, how many of its datasets, or none. */
+export function namespaceSummary(row: DatasetRow): string {
+  if (!row.offered) return 'Not offered';
+  const datasets = row.datasets ?? [];
+  const offered = datasets.filter((dataset) => dataset.offered).length;
+  if (datasets.length === 0 || offered === datasets.length) return 'Whole namespace';
+  return `${offered} of ${datasets.length} datasets`;
+}
+
 /** The columns of the table: each sorts and filters, as Settings › Users. */
 export type DatasetColumnId = 'namespace' | 'tables' | 'offered';
 export const DATASET_COLUMNS: { id: DatasetColumnId; label: string }[] = [
@@ -85,7 +109,7 @@ export function datasetSortValue(row: DatasetRow, column: DatasetColumnId): stri
 export function datasetSearchTexts(row: DatasetRow): string[] {
   return [
     row.namespace,
-    ...(row.datasets ?? []),
+    ...(row.datasets ?? []).map((dataset) => dataset.name),
     row.offered ? 'offered' : 'not offered',
     row.closed_above ? 'closed by the organization' : '',
     row.available ? '' : 'gone',

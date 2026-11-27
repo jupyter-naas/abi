@@ -405,6 +405,29 @@ def check_source_changes(changes: Mapping[str, bool]) -> None:
 ASSIGNS_ONTOLOGY = "an administrator of its organization may (nexus:AssignOntology)"
 
 
+def _closures(entries: Iterable[str]) -> tuple[set[str], set[tuple[str, str]]]:
+    """Closures split, in lower case: whole namespaces, and single ``(namespace, name)``."""
+    namespaces: set[str] = set()
+    datasets: set[tuple[str, str]] = set()
+    for entry in entries:
+        namespace, name = given_datasets.split_entry(entry)
+        if name is None:
+            namespaces.add(namespace.lower())
+        else:
+            datasets.add((namespace.lower(), name.lower()))
+    return namespaces, datasets
+
+
+def _closes(entries: Iterable[str], entry: str) -> bool:
+    """Whether ``entries`` close ``entry`` (a namespace, or one of its datasets): its
+    namespace whole, or that very dataset."""
+    namespaces, datasets = _closures(entries)
+    namespace, name = given_datasets.split_entry(entry)
+    return namespace.lower() in namespaces or (
+        name is not None and (namespace.lower(), name.lower()) in datasets
+    )
+
+
 def dataset_rows(
     tables: Sequence[tuple[str, str]],
     closed: Iterable[str],
@@ -415,32 +438,53 @@ def dataset_rows(
 ) -> list[dict[str, Any]]:
     """The Datasets rows of an offer, by namespace (A to Z): its tables, whether the
     deployment still has it, whether it is offered (closed neither here nor above), and
-    whether the caller may change it (never what the ceiling above closes). ``datasets``:
-    the names of its tables, A to Z, which Settings › Datasets unfolds under it."""
+    whether the caller may change it (never what the ceiling above closes). A namespace is
+    offered whole or dataset by dataset (as a module its items): ``datasets`` lists its
+    tables A to Z, each offered or not, and changeable only while its namespace is offered."""
     counts = Counter(namespace for namespace, _name in tables)
-    here = {ns.lower() for ns in closed}
-    ceiling = {ns.lower() for ns in closed_above}
-    known = {ns.lower(): ns for ns in [*closed_above, *closed, *counts]}
+    here, here_datasets = _closures(closed)
+    ceiling, ceiling_datasets = _closures(closed_above)
+    closure_namespaces = [given_datasets.split_entry(e)[0] for e in [*closed_above, *closed]]
+    known = {ns.lower(): ns for ns in [*closure_namespaces, *counts]}
+    who_above = above or "the organization"
     rows: list[dict[str, Any]] = []
     for key in sorted(known):
         namespace = known[key]
         tables_here = sum(n for ns, n in counts.items() if ns.lower() == key)
         names_here = sorted({name for ns, name in tables if ns.lower() == key})
         is_above = key in ceiling
+        offered = key not in here and not is_above
+        row_editable = editable and not is_above
         reason = None
         if is_above:
-            reason = f"Not offered by {above or 'the organization'}: open it there first."
+            reason = f"Not offered by {who_above}: open it there first."
         elif not editable:
             reason = "Only who may change this access policy changes it."
+        datasets: list[dict[str, Any]] = []
+        for name in names_here:
+            one_above = (key, name.lower()) in ceiling_datasets
+            datasets.append(
+                {
+                    "name": name,
+                    "offered": offered
+                    and not one_above
+                    and (key, name.lower()) not in here_datasets,
+                    "closed_above": is_above or one_above,
+                    "editable": row_editable and offered and not one_above,
+                    "reason": f"Not offered by {who_above}: open it there first."
+                    if one_above and not is_above
+                    else None,
+                }
+            )
         rows.append(
             {
                 "namespace": namespace,
                 "tables": tables_here,
-                "datasets": names_here,
+                "datasets": datasets,
                 "available": tables_here > 0,
-                "offered": key not in here and not is_above,
+                "offered": offered,
                 "closed_above": is_above,
-                "editable": editable and not is_above,
+                "editable": row_editable,
                 "reason": reason,
             }
         )
@@ -1186,9 +1230,9 @@ class FeatureAccessService:
         after."""
         if not changes:
             raise ValueError("Name a dataset namespace to change")
-        bad = [ns for ns in changes if not given_datasets.valid_namespace(ns)]
+        bad = [ns for ns in changes if not given_datasets.valid_entry(ns)]
         if bad:
-            raise ValueError(f"Not a dataset namespace: {', '.join(sorted(bad))}")
+            raise ValueError(f"Not a dataset namespace or dataset: {', '.join(sorted(bad))}")
         container, record = await self._where(workspace_id)
         access_id = getattr(record, "access_policy_id", None)
         edited_id = await self._edited_id(container, record, policy_id)
@@ -1200,9 +1244,9 @@ class FeatureAccessService:
         if ceilings and any(changes.values()):
             for above_id in ceilings:
                 above = await run_in_threadpool(self._gateway.policy, above_id)
-                closed_above = {ns.lower() for ns in offer_of(above.document).datasets_closed}
+                closed_above = offer_of(above.document).datasets_closed
                 blocked = sorted(
-                    ns for ns, on in changes.items() if on and ns.lower() in closed_above
+                    entry for entry, on in changes.items() if on and _closes(closed_above, entry)
                 )
                 if blocked:
                     raise ValueError(
@@ -1211,10 +1255,31 @@ class FeatureAccessService:
 
         def change(offer: Offer) -> Offer:
             closed = set(offer.datasets_closed)
-            for namespace, on in changes.items():
-                closed = {ns for ns in closed if ns.lower() != namespace.lower()}
+            for entry, on in changes.items():
+                namespace, name = given_datasets.split_entry(entry)
+                in_namespace = {
+                    e
+                    for e in closed
+                    if given_datasets.split_entry(e)[0].lower() == namespace.lower()
+                }
+                if name is None:
+                    # The whole namespace. Closing covers its datasets and keeps their own
+                    # closures (taking one out lifts a Deny, the platform admin's alone);
+                    # reopening offers it whole.
+                    if on:
+                        closed -= in_namespace
+                    else:
+                        closed = {e for e in closed if e.lower() != namespace.lower()} | {namespace}
+                    continue
+                if any(given_datasets.split_entry(e)[1] is None for e in in_namespace):
+                    if on:
+                        raise ValueError(
+                            f"{entry}: its namespace {namespace} is not offered; offer it first."
+                        )
+                    continue  # closed already, with its namespace
+                closed = {e for e in closed if e.lower() != entry.lower()}
                 if not on:
-                    closed.add(namespace)
+                    closed.add(entry)
             return replace(offer, datasets_closed=frozenset(closed))
 
         await self._set_offer(

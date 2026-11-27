@@ -29,7 +29,9 @@ import {
   datasetCellValues,
   datasetExportRow,
   datasetSearchTexts,
+  datasetKey,
   datasetSortValue,
+  namespaceSummary,
   rowNote,
   type DatasetRow,
   type DatasetsState,
@@ -122,7 +124,10 @@ export function DatasetsOffer({
   };
 
   const toggle = (row: DatasetRow, on: boolean) =>
-    void save({ [row.namespace]: on }, `${row.namespace}: ${on ? 'offered' : 'not offered'}.`);
+    void save({ [row.namespace]: on }, `${row.namespace}: ${on ? 'offered whole' : 'not offered'}.`);
+  /** One dataset of an offered namespace, closed or reopened alone (as a module's item). */
+  const toggleDataset = (row: DatasetRow, name: string, on: boolean) =>
+    void save({ [datasetKey(row.namespace, name)]: on }, `${row.namespace}.${name}: ${on ? 'offered' : 'not offered'}.`);
 
   const applyBulk = async (id: string) => {
     const on = id === 'on';
@@ -254,23 +259,34 @@ export function DatasetsOffer({
                           <Checkbox
                             checked={on}
                             disabled={!row.editable || saving}
-                            aria-label={`Offer ${row.namespace}`}
+                            aria-label={`Offer all of ${row.namespace}`}
                             data-offered={row.namespace}
                             onCheckedChange={(checked) => toggle(row, checked)}
                           />
-                          <span className="text-xs text-muted-foreground">{on ? 'Offered' : 'Not offered'}</span>
+                          <span className="text-xs text-muted-foreground" data-namespace-summary="">
+                            {namespaceSummary(row)}
+                          </span>
                         </span>
                         {note ? <p className="workspace-features-note">{note}</p> : null}
                       </td>
                     </tr>
-                    {/* Its datasets, one step in: offered or not with their namespace. */}
+                    {/* Its datasets, one step in, each offered or not (while its namespace is). */}
                     {unfolded &&
-                      names.map((name) => (
-                        <tr key={name} data-namespace-dataset={`${row.namespace}.${name}`} className="align-top">
+                      names.map((dataset) => (
+                        <tr key={dataset.name} data-namespace-dataset={`${row.namespace}.${dataset.name}`} className="align-top">
                           <td />
-                          <td className="access-offer-indent-1 text-sm text-foreground">{name}</td>
+                          <td className="access-offer-indent-1 text-sm text-foreground">{dataset.name}</td>
                           <td />
-                          <td />
+                          <td>
+                            <Checkbox
+                              checked={dataset.offered}
+                              disabled={!dataset.editable || saving}
+                              aria-label={`Offer ${row.namespace}.${dataset.name}`}
+                              data-offered-dataset={datasetKey(row.namespace, dataset.name)}
+                              onCheckedChange={(checked) => toggleDataset(row, dataset.name, checked)}
+                            />
+                            {dataset.reason ? <p className="workspace-features-note">{dataset.reason}</p> : null}
+                          </td>
                         </tr>
                       ))}
                     </Fragment>

@@ -2,7 +2,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
 import type { DatasetsOfferApi } from './datasets-api';
-import { bulkChanges, changesFrom, datasetExportRow, type DatasetRow, type DatasetsState } from './datasets-model';
+import {
+  bulkChanges,
+  changesFrom,
+  datasetExportRow,
+  namespaceSummary,
+  type DatasetEntry,
+  type DatasetRow,
+  type DatasetsState,
+} from './datasets-model';
 import { DatasetsOffer } from './datasets';
 
 vi.mock('next/link', async () => {
@@ -19,6 +27,10 @@ function row(over: Partial<DatasetRow> & Pick<DatasetRow, 'namespace'>): Dataset
   return { tables: 1, available: true, offered: true, closed_above: false, editable: true, reason: null, ...over };
 }
 
+function entry(name: string, over: Partial<DatasetEntry> = {}): DatasetEntry {
+  return { name, offered: true, closed_above: false, editable: true, reason: null, ...over };
+}
+
 function state(rows: DatasetRow[], over: Partial<DatasetsState> = {}): DatasetsState {
   return {
     workspace_id: 'ws1',
@@ -33,7 +45,7 @@ function state(rows: DatasetRow[], over: Partial<DatasetsState> = {}): DatasetsS
 }
 
 const BEFORE = state([
-  row({ namespace: 'finance', tables: 12, datasets: ['budgets', 'invoices'] }),
+  row({ namespace: 'finance', tables: 12, datasets: [entry('budgets'), entry('invoices')] }),
   row({ namespace: 'hr', tables: 4, offered: false }),
   row({
     namespace: 'payroll',
@@ -205,5 +217,26 @@ describe('Settings › Datasets, a namespace unfolds its datasets', () => {
     await unfoldMounted.type(unfoldMounted.host.querySelector('input[type="search"]') as HTMLInputElement, 'invoices');
     expect(datasets()).toEqual(['budgets', 'invoices']);
     expect([...unfoldMounted.host.querySelectorAll('tr[data-namespace]')].map((r) => r.getAttribute('data-namespace'))).toEqual(['finance']);
+  });
+
+  it('offers a namespace whole or dataset by dataset, as a module its items', async () => {
+    const save = vi.fn(async () => BEFORE);
+    const api = { read: vi.fn(async () => BEFORE), save } as unknown as DatasetsOfferApi;
+    unfoldMounted = await mount(DatasetsOffer, { target: 'ws1', api });
+    await unfoldMounted.flush();
+    expect(unfoldMounted.host.querySelector('[data-namespace="finance"] [data-namespace-summary]')?.textContent).toBe('Whole namespace');
+    await unfoldMounted.click(unfoldMounted.host.querySelector('[data-namespace="finance"] button[data-action="datasets"]'));
+    await unfoldMounted.click(unfoldMounted.host.querySelector('[data-offered-dataset="finance/invoices"]'));
+    await unfoldMounted.flush();
+    expect(save).toHaveBeenCalledWith('ws1', { 'finance/invoices': false }, null);
+  });
+});
+
+describe('namespaceSummary', () => {
+  it('says whole, how many of its datasets, or not offered', () => {
+    const datasets = [entry('a'), entry('b', { offered: false }), entry('c')];
+    expect(namespaceSummary(row({ namespace: 'n', datasets }))).toBe('2 of 3 datasets');
+    expect(namespaceSummary(row({ namespace: 'n', datasets: [entry('a')] }))).toBe('Whole namespace');
+    expect(namespaceSummary(row({ namespace: 'n', offered: false, datasets }))).toBe('Not offered');
   });
 });
