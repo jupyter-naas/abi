@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ChevronRight, type LucideIcon } from 'lucide-react';
 import { applyBrandColorVariables, brandColorVariables } from '@/lib/color';
+import { rememberBrandColors } from '@/lib/brand-color-cache';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { workspaceReturnPath } from '@/lib/workspace-return-path';
 import { useSettingsScrollMemory } from './settings-scroll-memory';
@@ -45,14 +46,12 @@ export function SettingsLayoutRoot({
   const rootRef = useRef<HTMLDivElement>(null);
   useSettingsScrollMemory(rootRef, usePathname());
 
-  useEffect(
-    () =>
-      applyBrandColorVariables(
-        document.documentElement.style,
-        brandColorVariables(brandPrimary, brandAccent)
-      ),
-    [brandPrimary, brandAccent]
-  );
+  useEffect(() => {
+    const variables = brandColorVariables(brandPrimary, brandAccent);
+    // Kept for the next hard refresh of this page (none: the platform's colors, forgotten).
+    rememberBrandColors(window.location.pathname, variables);
+    return applyBrandColorVariables(document.documentElement.style, variables);
+  }, [brandPrimary, brandAccent]);
   const style = {
     ...(borderRadius !== undefined ? { '--org-border-radius': `${borderRadius}px` } : {}),
     ...brandVariables,
