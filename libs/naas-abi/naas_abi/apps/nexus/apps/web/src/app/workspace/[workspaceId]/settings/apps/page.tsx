@@ -2,7 +2,7 @@
 
 import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { AppWindow, Globe, Tag, ExternalLink } from 'lucide-react';
 import { useAppsStore, type AppItem } from '@/stores/apps';
 import { Badge } from '@/components/ui/badge';
@@ -19,15 +19,23 @@ import {
 import { TablePager } from '@/components/settings/users-table/table-pager';
 import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
+import { SelectAllCell, SelectRowCell, useRowSelection } from '@/components/settings/bulk-access';
+import { EnableBulkBar, EnabledCell, ModuleItemsStatus } from '@/components/settings/module-items';
+import { moduleItemKey } from '@/components/settings/module-items-model';
+import { policyOfSearch } from '@/components/settings/settings-policy';
+import { useModuleItems } from '@/components/settings/use-module-items';
+import type { OfferKind } from '@/lib/access-model/workspace-offer';
 import {
   APP_COLUMNS,
   APP_EXPORT_HEADERS,
   appCellValues,
   appExportRow,
+  appRows,
   appSearchTexts,
   appSource,
-  installedApps as installedOf,
 } from './apps-model';
+
+const APP_KINDS: OfferKind[] = ['apps'];
 
 const CATEGORY_BADGE: Record<string, 'primary' | 'warning' | 'neutral'> = {
   core: 'primary',
@@ -63,7 +71,10 @@ function AppLogo({ app }: { app: AppItem }) {
 
 /**
  * Settings › Apps, laid out as Settings › Users: a search, columns that sort and filter (the
- * category from its column), 20 rows a page, an export of the rows shown.
+ * category from its column), 20 rows a page, an export of the rows shown. Every app the
+ * workspace's modules bring is listed, enabled or not by the policy picked in the Settings column
+ * (`?policy=`): a table of switches, each change saved at once and said, the apps selected
+ * enabled or disabled together.
  */
 export default function AppsSettingsPage() {
   const params = useParams();
@@ -71,6 +82,16 @@ export default function AppsSettingsPage() {
   const [mounted, setMounted] = useState(false);
 
   const { apps, loading, fetchApps } = useAppsStore();
+  const policyId = policyOfSearch(useSearchParams());
+  const catalog = useModuleItems({
+    workspaceId,
+    policyId,
+    kinds: APP_KINDS,
+    // What the caller may open changed: the apps are read again.
+    onSaved: () => {
+      if (workspaceId) void fetchApps(workspaceId);
+    },
+  });
 
   useEffect(() => {
     setMounted(true);
@@ -81,15 +102,22 @@ export default function AppsSettingsPage() {
     void fetchApps(workspaceId);
   }, [workspaceId, fetchApps]);
 
-  const installedApps = useMemo(() => installedOf(apps), [apps]);
+  const rows = useMemo(() => appRows(apps, catalog.items), [apps, catalog.items]);
   const table = useSettingsTable({
-    rows: installedApps,
+    rows,
     columns: APP_COLUMNS,
     cellValues: appCellValues,
     searchTexts: appSearchTexts,
     initialSort: 'app',
   });
   const shown = table.shown;
+  // The module apps shown, checked for a batch change (select all takes the rows shown).
+  const selectable = useMemo(
+    () => shown.flatMap((row) => (row.item ? [moduleItemKey(row.item)] : [])),
+    [shown]
+  );
+  const selection = useRowSelection(selectable);
+  const locked = !catalog.editable || catalog.saving;
 
   const exportShown = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
@@ -104,14 +132,16 @@ export default function AppsSettingsPage() {
     <div className="space-y-6">
       <SettingsPageHeader
         title="Apps"
-        badge={`${installedApps.length} ${installedApps.length === 1 ? 'app' : 'apps'}`}
+        badge={`${rows.length} ${rows.length === 1 ? 'app' : 'apps'}`}
         description={WORKSPACE_PAGE_DESCRIPTIONS['/settings/apps']}
         actions={<UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />}
       />
 
-      {loading && installedApps.length === 0 ? (
+      <ModuleItemsStatus state={catalog} />
+
+      {loading && rows.length === 0 ? (
         <Loading label="Loading apps…" />
-      ) : installedApps.length === 0 ? (
+      ) : rows.length === 0 ? (
         <EmptyState framed
           icon={<AppWindow size={40} className="opacity-40" />}
           title="No apps in this workspace"
@@ -126,14 +156,24 @@ export default function AppsSettingsPage() {
             // No count above the search: the badge says how many, the pager how many are shown.
             meta={<SettingsTableClear table={table} />}
           />
+          <EnableBulkBar state={catalog} selection={selection} noun="app" />
 
           <div className="org-settings-users-table-wrap">
             <table className="org-settings-users-table">
-              <SettingsTableHead table={table} />
+              <SettingsTableHead
+                table={table}
+                leading={<SelectAllCell selection={selection} keys={selectable} noun="app" disabled={locked} />}
+              />
               <tbody>
-                {shown.length === 0 && <SettingsTableNoMatch colSpan={APP_COLUMNS.length} noun="apps" />}
+                {shown.length === 0 && <SettingsTableNoMatch colSpan={APP_COLUMNS.length + 1} noun="apps" />}
                 {table.paged.pageRows.map((app) => (
-                  <tr key={app.app_id} data-app={app.app_id}>
+                  <tr key={app.key ?? app.app_id} data-app={app.key ?? app.app_id}>
+                    <SelectRowCell
+                      selection={selection}
+                      rowKey={app.item ? moduleItemKey(app.item) : (app.key ?? app.app_id)}
+                      label={app.name}
+                      disabled={!app.item || locked}
+                    />
                     <td className="align-top">
                       <div className="flex min-h-[3.25rem] items-center gap-3">
                         <AppLogo app={app} />
@@ -162,10 +202,13 @@ export default function AppsSettingsPage() {
                       </div>
                     </td>
                     <td>
-                      <Badge variant={CATEGORY_BADGE[app.category] ?? 'neutral'}>
-                        <Tag size={9} />
-                        {app.category}
-                      </Badge>
+                      {/* An app the caller may not open: what the catalog says, no category. */}
+                      {app.category ? (
+                        <Badge variant={CATEGORY_BADGE[app.category] ?? 'neutral'}>
+                          <Tag size={9} />
+                          {app.category}
+                        </Badge>
+                      ) : null}
                     </td>
                     <td className="truncate text-muted-foreground">
                       {/* Its module links to its row in Access › Modules, where the workspace offers it. */}
@@ -182,6 +225,7 @@ export default function AppsSettingsPage() {
                         </>
                       )}
                     </td>
+                    <EnabledCell state={catalog} item={app.item ?? null} label={app.name} />
                   </tr>
                 ))}
               </tbody>

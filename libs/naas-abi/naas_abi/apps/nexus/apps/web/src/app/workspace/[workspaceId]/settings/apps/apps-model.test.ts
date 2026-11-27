@@ -5,9 +5,12 @@ import {
   appCellValues,
   appExportRow,
   appSearchTexts,
+  appRows,
+  appScope,
   appSource,
   installedApps,
 } from './apps-model';
+import type { ModuleItem } from '@/components/settings/module-items-model';
 
 const app = (over: Partial<AppItem>): AppItem => ({
   module_path: 'acme.apps',
@@ -42,7 +45,48 @@ describe('the apps table', () => {
   });
 
   it('exports a row as the table shows it, with its URL', () => {
-    expect(APP_EXPORT_HEADERS).toEqual(['App', 'Description', 'Category', 'Source', 'URL']);
-    expect(appExportRow(app({}))).toEqual(['CRM', 'Clients and deals', 'core', 'acme.apps', 'https://apps.example/crm']);
+    expect(APP_EXPORT_HEADERS).toEqual(['App', 'Description', 'Category', 'Source', 'URL', 'Enabled']);
+    expect(appExportRow(app({}))).toEqual([
+      'CRM',
+      'Clients and deals',
+      'core',
+      'acme.apps',
+      'https://apps.example/crm',
+      'Enabled',
+    ]);
+  });
+});
+
+describe('the apps table and the module items', () => {
+  const item = (module: string, name: string, offered: boolean): ModuleItem => ({
+    kind: 'apps',
+    module,
+    name,
+    label: name.toUpperCase(),
+    offered,
+    grantable: true,
+  });
+
+  it('reads the module item an app id names', () => {
+    expect(appScope('acme.apps:crm')).toEqual({ module: 'acme.apps', name: 'crm' });
+    expect(appScope('remote/acme.remote:board')).toEqual({ module: 'acme.remote', name: 'board' });
+    expect(appScope('crm')).toBeNull();
+  });
+
+  it('lists every module app: those the caller opens keep their row, the others get one', () => {
+    const rows = appRows(
+      [app({ app_id: 'acme.apps:crm' }), app({ app_id: 'acme.apps:wiki', installed: false })],
+      [item('acme.apps', 'crm', true), item('acme.apps', 'wiki', false)],
+    );
+    expect(rows.map((row) => [row.key, row.listed, row.item?.name])).toEqual([
+      ['acme.apps:crm', true, 'crm'],
+      ['apps|acme.apps|wiki', false, 'wiki'],
+    ]);
+    const wiki = rows[1];
+    expect(appCellValues(wiki, 'app')).toEqual(['WIKI']);
+    expect(appCellValues(wiki, 'category')).toEqual([]);
+    expect(appCellValues(wiki, 'source')).toEqual(['acme.apps']);
+    expect(appCellValues(wiki, 'enabled')).toEqual(['Disabled']);
+    expect(appCellValues(rows[0], 'enabled')).toEqual(['Enabled']);
   });
 });
