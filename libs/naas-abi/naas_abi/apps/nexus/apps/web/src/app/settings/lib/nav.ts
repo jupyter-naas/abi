@@ -11,6 +11,7 @@ import {
   Cable,
   ClipboardList,
   Cpu,
+  Database,
   FlaskConical,
   Gauge,
   GitBranch,
@@ -25,12 +26,14 @@ import {
   Mail,
   MessagesSquare,
   Network,
+  Package,
   PackageCheck,
   Radar,
   Radio,
   ScrollText,
   Server,
   Sheet,
+  SlidersHorizontal,
   Spline,
   Table2,
   TerminalSquare,
@@ -40,7 +43,7 @@ import {
   Workflow,
   Zap,
 } from 'lucide-react';
-import { platformAccessPath } from '@/components/access/access-paths';
+import { PLATFORM_ACCESS_PATH, platformAccessPath } from '@/components/access/access-paths';
 import { ACCESS_SECTIONS, type AccessSection } from '@/components/access/access-sections';
 import {
   INFRASTRUCTURE_DIAGRAMS_PATH,
@@ -84,8 +87,8 @@ export type PlatformSettingsNavItem = {
 };
 
 export type PlatformSettingsNavGroup = {
-  /** Shown above the items; every group has one. */
-  label: string;
+  /** Shown above the items; null: no heading (the first group, named by the Platform tab). */
+  label: string | null;
   items: PlatformSettingsNavItem[];
 };
 
@@ -210,6 +213,17 @@ export const ACCESS_ITEMS: PlatformSettingsNavItem[] = ACCESS_SECTIONS.map((sect
   needs: { anyOf: section.needs },
 }));
 
+/** Groups sits with the people, under Users, as in an organization's and a workspace's Settings. */
+export const GROUPS_ITEM = ACCESS_ITEMS.find((item) => item.id === 'access-groups') as PlatformSettingsNavItem;
+
+/** An organization's Features, Services and Modules (its "<O> access"), picked atop each page:
+ *  the platform has no offer of its own above the organizations. For the platform's admins. */
+export const ORGANIZATION_OFFER_ITEMS: PlatformSettingsNavItem[] = [
+  { id: 'access-features', label: 'Features', href: `${PLATFORM_ACCESS_PATH}/features`, icon: SlidersHorizontal, needs: READ_SYSTEM },
+  { id: 'access-core-services', label: 'Services', href: `${PLATFORM_ACCESS_PATH}/core-services`, icon: Database, needs: READ_SYSTEM },
+  { id: 'access-modules', label: 'Modules', href: `${PLATFORM_ACCESS_PATH}/modules`, icon: Package, needs: READ_SYSTEM },
+];
+
 /** Platform settings › Models: the model sets (who chats with which model directly), read from
  *  their platform policies: for whoever may list the policies. */
 export const PLATFORM_MODELS_PATH = '/settings/models';
@@ -252,6 +266,7 @@ const PADDED_ITEM_IDS: ReadonlySet<string> = new Set([
   DRIVES_ITEM.id,
   MODELS_ITEM.id,
   ...ACCESS_ITEMS.map((item) => item.id),
+  ...ORGANIZATION_OFFER_ITEMS.map((item) => item.id),
 ]);
 
 /** Whether a page lays out its own panes (its own padding, no shell padding). */
@@ -261,10 +276,19 @@ export function laysOutOwnPanes(item: Pick<PlatformSettingsNavItem, 'id'>): bool
 
 export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
   {
-    label: 'Administration',
-    items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM],
+    // No heading: the Platform tab names it, as an organization's first group.
+    label: null,
+    items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM, GROUPS_ITEM],
   },
-  { label: 'Access', items: [...ACCESS_ITEMS, MODELS_ITEM] },
+  {
+    label: 'Access',
+    items: [
+      // Features, Services and Modules above Policies, as in an organization's and a workspace's.
+      ...ORGANIZATION_OFFER_ITEMS,
+      ...ACCESS_ITEMS.filter((item) => item.id !== GROUPS_ITEM.id),
+      MODELS_ITEM,
+    ],
+  },
   {
     label: 'System',
     items: [

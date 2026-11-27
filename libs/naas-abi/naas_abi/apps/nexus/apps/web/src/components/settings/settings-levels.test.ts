@@ -62,11 +62,11 @@ describe('the levels of Settings', () => {
 
   it('keeps every group of the platform, each under its heading, Layers and Diagrams in System', () => {
     const platform = settingsLevels(all).find((level) => level.id === 'platform');
-    expect(platform?.groups.map((group) => group.label)).toEqual(['Administration', 'Access', 'System', 'Activity', 'Resources', 'Data']);
-    expect(platform?.groups[1].links.map((link) => link.label)).toEqual(['Audit']);
+    expect(platform?.groups.map((group) => group.label)).toEqual([null, 'Access', 'System', 'Activity', 'Resources', 'Data']);
+    expect(platform?.groups[1].links.map((link) => link.label)).toEqual(['Features', 'Services', 'Modules', 'Audit']);
     expect(platform?.groups[2].links.map((link) => link.label)).toEqual(expect.arrayContaining(['Layers', 'Diagrams']));
     const usersOnly = settingsLevels({ ...member, platform: visiblePlatformSettingsGroups({ 'nexus:ListUsers': true }) });
-    expect(usersOnly[0].groups).toMatchObject([{ label: 'Administration', links: [{ label: 'Users' }] }]);
+    expect(usersOnly[0].groups).toMatchObject([{ label: null, links: [{ label: 'Users' }] }]);
   });
 
   it('roots the workspace pages at the workspace, its later groups named under the level', () => {
