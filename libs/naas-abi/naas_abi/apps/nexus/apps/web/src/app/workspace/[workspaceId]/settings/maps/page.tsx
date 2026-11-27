@@ -12,6 +12,7 @@
  * or per feed from the Feed Layers table (built-in and graph layers are
  * one-layer feeds there).
  */
+import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Loader2, Map as MapIcon, Pencil, Plus, Trash2 } from 'lucide-react';
@@ -338,7 +339,7 @@ function MapsSettings() {
               description={
                 layer
                   ? `A view on the feed “${feed?.title ?? layer.feed_id}”.${layer.shared_from ? ' Shared from another workspace: read-only here.' : ''}`
-                  : 'A layer draws from a feed: every feature, or only the feature types you pick.'
+                  : 'Draws a feed: every feature, or the feature types you pick.'
               }
               actions={
                 layer ? (
@@ -395,7 +396,7 @@ function MapsSettings() {
         title="Maps"
         // One total: how many feeds (the Enabled column says which are shown).
         badge={`${feedEntries.length} feed${feedEntries.length === 1 ? '' : 's'}`}
-        description="Feeds are data sources; layers are what Maps lists and draws, each a view on one feed. Hidden layers disappear for every member of the workspace."
+        description={`${WORKSPACE_PAGE_DESCRIPTIONS['/settings/maps']}. A hidden layer is hidden for every member`}
         actions={
           <>
             <UsersExportMenu onExport={exportFeeds} disabled={feedTable.shown.length === 0} />
@@ -664,11 +665,11 @@ function FeedPage({
         badge={feed ? `${feed.system ? 'Seeded ' : ''}${feedTypeLabel(feed)}` : 'Draft'}
         description={
           isNew
-            ? 'A feed is a data source: SPARQL over the workspace graphs or a Nexus API path. It starts with one layer showing every feature; add layers for its feature types below. (GeoJSON makes a layer kept in this browser only.)'
+            ? 'A data source: SPARQL over the workspace graphs, or a Nexus API path. It starts with one layer of every feature (GeoJSON: kept in this browser only).'
             : shared
               ? 'Shared from another workspace: read-only here.'
               : feed!.system
-                ? 'Provided by this deployment: edit it and its layers; its availability is set in Access.'
+                ? 'Provided by this deployment: its availability is set in Access.'
                 : 'Shared with every member of this workspace.'
         }
         actions={

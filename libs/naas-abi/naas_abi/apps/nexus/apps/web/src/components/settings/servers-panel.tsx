@@ -305,7 +305,7 @@ export function ServersPanel({
       <SettingsPageHeader
         title="Servers"
         badge={`${enabledCount} enabled`}
-        description="Configure inference servers for running AI models"
+        description="The inference servers that run AI models"
         actions={
           <>
             {workspacePicker}

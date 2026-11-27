@@ -1,5 +1,6 @@
 'use client';
 
+import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { authFetch } from '@/stores/auth';
@@ -244,8 +245,8 @@ export function ResourceAccessEditor({
         badge={snapshot ? total : undefined}
         description={
           kind === 'ontologies'
-            ? 'Choose the ontologies available in this workspace.'
-            : 'Choose the named graphs this workspace can read and edit.'
+            ? WORKSPACE_PAGE_DESCRIPTIONS['/settings/ontologies']
+            : WORKSPACE_PAGE_DESCRIPTIONS['/settings/graphs']
         }
         actions={<UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />}
       />

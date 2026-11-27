@@ -8,6 +8,7 @@ import { applyBrandColorVariables, brandColorVariables } from '@/lib/color';
 import { rememberBrandColors } from '@/lib/brand-color-cache';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { workspaceReturnPath } from '@/lib/workspace-return-path';
+import { useHoverTip } from '@/components/ui/hover-tip';
 import { useSettingsScrollMemory } from './settings-scroll-memory';
 import './settings-shell.css';
 
@@ -84,6 +85,7 @@ export function SettingsNavItem({
   chevron = false,
   badge,
   badgeTitle,
+  description,
 }: {
   href: string;
   label: string;
@@ -93,17 +95,29 @@ export function SettingsNavItem({
   /** A count that wants attention (failed runs), after the label. */
   badge?: string | null;
   badgeTitle?: string;
+  /** What the page is for: its hover tip, with the label (none on a phone's list). */
+  description?: string;
 }) {
   const router = useRouter();
+  // The dock's tip: the page's name and what it is for.
+  const hover = useHoverTip({ title: label, description, disabled: chevron });
   // On intent only (#1609): a long column must not warm every page it lists.
   const prefetch = () => router.prefetch(href);
   return (
     <li>
       <Link
+        ref={hover.ref}
         href={href}
         prefetch={false}
-        onMouseEnter={prefetch}
-        onFocus={prefetch}
+        {...hover.anchorProps}
+        onMouseEnter={() => {
+          prefetch();
+          hover.anchorProps.onMouseEnter();
+        }}
+        onFocus={() => {
+          prefetch();
+          hover.anchorProps.onFocus();
+        }}
         onTouchStart={prefetch}
         className={active ? 'org-settings-nav-item org-settings-nav-item-active' : 'org-settings-nav-item'}
         aria-current={active ? 'page' : undefined}
@@ -117,6 +131,7 @@ export function SettingsNavItem({
         )}
         {chevron && <ChevronRight size={18} className="org-settings-nav-item-chevron" />}
       </Link>
+      {hover.tip}
     </li>
   );
 }

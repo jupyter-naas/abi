@@ -66,7 +66,7 @@ export function SettingsLayoutNav({
   return (
     <>
       {isDragging && <div className="fixed inset-0 z-50 cursor-col-resize" />}
-      <nav className="settings-layout-nav" aria-label={title} style={resizable ? { width } : undefined}>
+      <nav className="settings-layout-nav" data-hover-tip-edge="" aria-label={title} style={resizable ? { width } : undefined}>
         {children}
       </nav>
       {resizable && (

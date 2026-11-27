@@ -166,8 +166,7 @@ export default function SkillsSettingsPage() {
         badge={`${skills.length} skill${skills.length === 1 ? '' : 's'}`}
         description={
           <>
-            Reusable prompts invocable in the chat with /&lt;slug&gt; — or type /create-skill in the chat and the
-            Skills agent writes and saves one for you
+            Reusable prompts, run in the chat with /&lt;slug&gt;; /create-skill writes one for you
           </>
         }
         actions={

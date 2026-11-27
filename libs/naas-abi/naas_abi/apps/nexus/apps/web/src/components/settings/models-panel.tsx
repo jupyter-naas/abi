@@ -245,7 +245,7 @@ export function ModelsPanel() {
       <SettingsPageHeader
         title="Models"
         badge={`${configuredCount} configured`}
-        description="All AI models discovered from naas_abi_marketplace.ai modules"
+        description="The models of the marketplace AI modules"
         actions={<UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />}
       />
 

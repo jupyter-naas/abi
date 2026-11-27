@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { SettingsPageHeader } from '@/components/settings/settings-ui';
+import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { WorkspaceOfferPart } from '@/components/settings/workspace-offer-part';
 import { PLATFORM_MODELS_PATH } from '@/app/settings/lib/nav';
 import { createOfferApi, type ModelsPart } from '@/lib/access-model/workspace-offer';
@@ -45,7 +46,7 @@ export default function ModelsPage() {
       <SettingsPageHeader
         title="Models"
         badge={modelsBadge(part)}
-        description="The chat models used here, and the default one an agent built on another model runs on."
+        description={WORKSPACE_PAGE_DESCRIPTIONS['/settings/models']}
         actions={
           <Link
             href={PLATFORM_MODELS_PATH}

@@ -158,9 +158,9 @@ export function CoreServices({
         badge={state ? `${rows.length} service${rows.length === 1 ? '' : 's'}` : undefined}
         description={
           cap && isOrgTarget(workspaceId) ? (
-            'How far people go with each core service of the engine (its graphs, files, vectors, datasets, documents, secrets…) in every workspace of this organization, admins included: a cap above which nothing is done there. The Nexus features are Access › Features.'
+            'How far people go with each engine service in every workspace of this organization, admins included'
           ) : cap ? (
-            'How far everyone in this workspace goes with each core service of the engine (its graphs, files, vectors, datasets, documents, secrets…), admins included: a cap above which nothing is done here. Each person’s level still applies below it. The Nexus features are Access › Features.'
+            'How far everyone here goes with each engine service, admins included; each person’s level applies below'
           ) : (
             <>
               What {editedHref && edited ? <Link href={editedHref}>{edited.name}</Link> : edited?.name} grants whoever holds it

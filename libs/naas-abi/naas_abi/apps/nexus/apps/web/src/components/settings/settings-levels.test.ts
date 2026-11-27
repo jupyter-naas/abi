@@ -33,6 +33,31 @@ const all: SettingsLevelsInput = {
 };
 
 describe('the levels of Settings', () => {
+  it('says what every page is for, at every level: its link\'s hover tip, one short line', () => {
+    const everything: SettingsLevelsInput = {
+      ...all,
+      otherOrganizations: [{ id: 'globex', name: 'Globex' }],
+      platform: visiblePlatformSettingsGroups({
+        'nexus:ReadSystem': true,
+        'nexus:ListUsers': true,
+        'nexus:ListDrives': true,
+        'iam:ListPolicies': true,
+        'iam:ListGroups': true,
+        'iam:ListPrincipals': true,
+        'iam:ListManifests': true,
+        'iam:Explain': true,
+      }),
+    };
+    const links = settingsLevels(everything).flatMap((level) =>
+      level.groups.flatMap((group) => group.links.map((link) => ({ level: level.id, ...link })))
+    );
+    expect(links.filter((link) => !link.description).map((link) => `${link.level} › ${link.label}`)).toEqual([]);
+    for (const link of links) {
+      expect(link.description!.length, `${link.level} › ${link.label}`).toBeLessThanOrEqual(80);
+      expect(link.description!.endsWith('.'), `${link.level} › ${link.label}`).toBe(false);
+    }
+  });
+
   it('shows a member their account alone', () => {
     expect(titles(member)).toEqual(['Account']);
   });

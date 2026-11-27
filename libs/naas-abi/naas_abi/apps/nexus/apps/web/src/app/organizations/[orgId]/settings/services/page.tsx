@@ -101,7 +101,7 @@ export default function ServicesSettingsPage() {
       <SettingsPageHeader
         title="Services"
         badge={services.length}
-        description="Platform services set in config.yaml. Open a service with a web UI to manage it inside Nexus."
+        description="Platform services with a web UI, opened inside Nexus"
       />
 
       {state.status === 'error' && <SettingsNotice tone="error">{state.message}</SettingsNotice>}
