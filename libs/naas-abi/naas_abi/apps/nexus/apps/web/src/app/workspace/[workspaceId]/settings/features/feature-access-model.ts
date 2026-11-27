@@ -212,6 +212,7 @@ export const FEATURE_PAGES: Record<string, string> = {
   agents: '/settings/agents',
   apps: '/settings/apps',
   chat: '/settings/models',
+  datasets: '/settings/datasets',
   files: '/settings/files',
   graph: '/settings/graphs',
   maps: '/settings/maps',

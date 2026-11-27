@@ -35,7 +35,9 @@ absolute names) and ``OfferGraphsDeny`` (W's only Denies, within ``${scope}``). 
 the Maps items W uses without owning them (``given_maps``): ``GivenMaps`` and
 ``GivenBasemaps`` (the deployment's feeds and basemaps, every one or by id, and those
 another workspace shares with W) and ``OfferMapsDeny``, ``OfferBasemapsDeny`` (the
-deployment items W does not use, within ``${scope}``).
+deployment items W does not use, within ``${scope}``). And the dataset namespaces W does
+not use (``given_datasets``): ``OfferDatasetsDeny``, within ``${scope}``, which Nexus
+applies (IAM decides datasets on their platform names).
 
 An offer of nothing is ``container_defaults.nothing_document`` (an Allow no name
 matches). ``offer_of`` reads the sections back: what the Features and Agents/Apps
@@ -57,7 +59,12 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import unquote
 
-from naas_abi.apps.nexus.apps.api.app.services.iam import given_files, given_graphs, given_maps
+from naas_abi.apps.nexus.apps.api.app.services.iam import (
+    given_datasets,
+    given_files,
+    given_graphs,
+    given_maps,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.given_files import Mode
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import scoped_resource
 from naas_abi_core.services.iam import module_scopes
@@ -122,6 +129,7 @@ OFFER_SIDS = frozenset(
         *given_graphs.SIDS,
         DEFAULT_MODEL_SID,
         *given_maps.SIDS,
+        *given_datasets.SIDS,
     }
 )
 # The given sections' ``Offer`` fields (``given_files``).
@@ -136,8 +144,10 @@ _GRAPH_SID_FIELD = {
 }
 # The Maps part's ``Offer`` fields (``given_maps``): the given names, the closed ones.
 MAP_FIELDS = given_maps.FIELDS
+# The Datasets part's ``Offer`` field (``given_datasets``): the namespaces closed.
+DATASET_FIELDS = given_datasets.FIELDS
 # Sections whose statements are Denies: W's own, within ``${scope}``.
-DENY_SECTIONS = frozenset({given_graphs.DENY_SID, *given_maps.DENY_SIDS})
+DENY_SECTIONS = frozenset({given_graphs.DENY_SID, *given_maps.DENY_SIDS, *given_datasets.DENY_SIDS})
 
 Item = tuple[str, str]  # (module, name); name ``*`` is the whole module
 
@@ -228,6 +238,8 @@ class Offer:
     # the deployment items it closes, within ``${scope}``.
     maps: frozenset[str] = field(default_factory=frozenset)
     maps_closed: frozenset[str] = field(default_factory=frozenset)
+    # The dataset namespaces it does not use (``given_datasets``), within ``${scope}``.
+    datasets_closed: frozenset[str] = field(default_factory=frozenset)
 
     @classmethod
     def of(
@@ -253,6 +265,7 @@ class Offer:
         graphs_closed: Iterable[str] = (),
         maps: Iterable[str] = (),
         maps_closed: Iterable[str] = (),
+        datasets_closed: Iterable[str] = (),
     ) -> Offer:
         """An offer; each of ``modules`` adds every agent, app, workflow and
         pipeline of that module (a shared module offered whole)."""
@@ -277,6 +290,7 @@ class Offer:
             graphs_closed=frozenset(graphs_closed),
             maps=frozenset(maps),
             maps_closed=frozenset(maps_closed),
+            datasets_closed=frozenset(datasets_closed),
         )
 
     def items(self, kind: str) -> frozenset[Item]:
@@ -295,6 +309,7 @@ class Offer:
             or any(getattr(self, f) for f in GRAPH_FIELDS)
             or self.default_model is not None
             or any(getattr(self, f) for f in MAP_FIELDS)
+            or any(getattr(self, f) for f in DATASET_FIELDS)
         )
 
     def merged(self, other: Offer) -> Offer:
@@ -311,6 +326,7 @@ class Offer:
             **{f: getattr(self, f) | getattr(other, f) for f in GRAPH_NAME_FIELDS},
             graphs_no_create=self.graphs_no_create or other.graphs_no_create,
             **{f: getattr(self, f) | getattr(other, f) for f in MAP_FIELDS},
+            **{f: getattr(self, f) | getattr(other, f) for f in DATASET_FIELDS},
         )
 
     def without(self, other: Offer) -> Offer:
@@ -328,6 +344,7 @@ class Offer:
             **{f: getattr(self, f) - getattr(other, f) for f in GRAPH_NAME_FIELDS},
             graphs_no_create=self.graphs_no_create and not other.graphs_no_create,
             **{f: getattr(self, f) - getattr(other, f) for f in MAP_FIELDS},
+            **{f: getattr(self, f) - getattr(other, f) for f in DATASET_FIELDS},
         )
 
     def offers(self, kind: str, module: str, name: str) -> bool:
@@ -417,6 +434,7 @@ def offer_statements(offer: Offer) -> list[dict[str, Any]]:
         offer.graphs_closed,
     )
     statements += given_maps.statements(offer.maps, offer.maps_closed)
+    statements += given_datasets.statements(offer.datasets_closed)
     return statements
 
 
@@ -468,9 +486,14 @@ def offer_of(document: Any) -> Offer:
     no_create = False
     default_model: str | None = None
     maps: dict[str, set[str]] = {f: set() for f in MAP_FIELDS}
+    datasets_closed: set[str] = set()
     for statement in _statements_of(document):
         sid, effect, actions, resources = _statement_parts(statement)
         section = offer_section(sid)
+        if section in given_datasets.DENY_SIDS:
+            if effect == "Deny":
+                datasets_closed.update(given_datasets.closed_of(resources))
+            continue
         if section in given_maps.DENY_SIDS:
             if effect == "Deny":
                 maps["maps_closed"].update(resources)
@@ -517,6 +540,7 @@ def offer_of(document: Any) -> Offer:
         graphs_no_create=no_create,
         default_model=default_model,
         **{f: frozenset(v) for f, v in maps.items()},
+        datasets_closed=frozenset(datasets_closed),
     )
 
 
@@ -771,6 +795,7 @@ def instances_only(offer: Offer) -> Offer:
         system_files=None,
         **without_graphs_fields(),
         **without_maps_fields(),
+        datasets_closed=frozenset(),
     )
 
 

@@ -71,6 +71,22 @@ The reason they are not in the offer is the bound rule (#1585). What a membershi
   and the shared items by name. `maps_grants` stays for the workspaces whose access policy is no allow-list yet;
   a change one of them would need is refused (409) until it is converted.
 
+## Datasets (decided on implementation, 2026-11-27)
+
+- **What is used.** The dataset namespaces the deployment shares (`shared_dataset_namespaces`): platform-wide,
+  owned by no workspace (`abi:nexus:dataset/<namespace>`). A workspace uses every one unless its offer closes it,
+  and an organization's "<O> access" closes one for all its workspaces. No migration: an offer without the section
+  closes nothing, so nothing changes on deploy.
+- **Section.** `OfferDatasetsDeny` (parts past `MAX_PATTERNS`), a Deny of `ListDatasets`, `GetDataset`,
+  `PreviewDataset` and `QueryDataset` on `${scope}/nexus:dataset/<namespace>`. A container's policy names only
+  `${scope}` (`check_owned_document`), while IAM decides datasets on their platform names: the Deny records the
+  choice and **Nexus applies it** (`datasets/access.py` reads the offer of the workspace and of its organization,
+  any spelling), on every path: listing, description, preview, and a query sent to the namespace or whose SQL reads it.
+- **Who closes.** Settings › Datasets (`GET|PUT /api/workspaces/{id}/offer/datasets`; the organization's at
+  `/api/organizations/{id}/offer/datasets`) writes the section as the caller. A workspace admin closes a namespace;
+  reopening lifts a Deny of the bound, which only the platform admin does (IAM), as for the Maps items a workspace
+  closes. What "<O> access" closes is read-only on a workspace's page (422 if asked).
+
 ## Open question
 
 - **The core change** is one rule in the evaluation of a membership group's own bound (absolute names become grants to its members, capped by their level, decision 3), and one in the held check. It needs the core security tests: a given statement never reaches a non-member, never outlives the membership, never exceeds the person's level, and never beyond the writer's holdings.

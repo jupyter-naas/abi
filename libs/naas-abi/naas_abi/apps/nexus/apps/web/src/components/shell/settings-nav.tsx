@@ -4,6 +4,7 @@ import {
   Bot,
   BrainCircuit,
   Network,
+  Table2,
   Globe,
   HardDrive,
   SlidersHorizontal,
@@ -81,6 +82,8 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       // Agents the workspace builds itself (a model and a prompt) need no module.
       { href: '/settings/agents', label: 'Agents', icon: Bot, feature: 'agents' },
       { href: '/settings/apps', label: 'Apps', icon: AppWindow, feature: 'apps', kinds: ['apps'] },
+      // The dataset namespaces the workspace uses (its offer closes the others).
+      { href: '/settings/datasets', label: 'Datasets', icon: Table2, feature: 'datasets' },
       // Every kind of files: shown even when Workspace Files is off, which is turned on here.
       { href: '/settings/files', label: 'Files', icon: HardDrive },
       { href: '/settings/graphs', label: 'Graphs', icon: Network, feature: 'graph' },

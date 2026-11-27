@@ -13,7 +13,7 @@ import { describeModuleResources, type WorkspaceResources } from '@/lib/workspac
 function resources(over: Partial<WorkspaceResources> = {}): WorkspaceResources {
   return {
     organization_id: 'org-1',
-    features: ['agents', 'apps', 'files', 'graph', 'maps', 'ontology', 'search', 'skills', 'settings'],
+    features: ['agents', 'apps', 'datasets', 'files', 'graph', 'maps', 'ontology', 'search', 'skills', 'settings'],
     modules: [],
     totals: { agents: 2, apps: 1, workflows: 0, pipelines: 1 },
     ...over,

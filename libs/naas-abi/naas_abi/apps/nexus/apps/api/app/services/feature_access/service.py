@@ -35,6 +35,7 @@ wins.
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
@@ -47,6 +48,7 @@ from naas_abi.apps.nexus.apps.api.app.services.feature_access.port import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import (
     access_levels,
+    given_datasets,
     given_files,
     given_graphs,
     given_maps,
@@ -60,7 +62,12 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.given_files import (
     ORG_FILES,
     Mode,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import PLATFORM, nexus_resource, org_of
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    PLATFORM,
+    nexus_resource,
+    org_container,
+    org_of,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     GRAPH_FIELDS,
     SECTIONS,
@@ -109,6 +116,9 @@ Features = Callable[[], Sequence[str]]
 # (``AssignOntology`` in its organization); None where the deployment lists none.
 OntologyListing = tuple[list[dict[str, Any]], set[str]]
 OntologyCatalog = Callable[[Any, str], Awaitable[OntologyListing | None]]
+# The deployment's datasets as ``(namespace, name)``, as the caller lists them (Settings ›
+# Datasets): the namespaces an offer may close.
+DatasetCatalog = Callable[[], Awaitable[list[tuple[str, str]]]]
 
 
 def is_container(target: str) -> bool:
@@ -395,6 +405,45 @@ def check_source_changes(changes: Mapping[str, bool]) -> None:
 ASSIGNS_ONTOLOGY = "an administrator of its organization may (nexus:AssignOntology)"
 
 
+def dataset_rows(
+    tables: Sequence[tuple[str, str]],
+    closed: Iterable[str],
+    closed_above: Iterable[str],
+    *,
+    editable: bool,
+    above: str | None,
+) -> list[dict[str, Any]]:
+    """The Datasets rows of an offer, by namespace (A to Z): its tables, whether the
+    deployment still has it, whether it is offered (closed neither here nor above), and
+    whether the caller may change it (never what the ceiling above closes)."""
+    counts = Counter(namespace for namespace, _name in tables)
+    here = {ns.lower() for ns in closed}
+    ceiling = {ns.lower() for ns in closed_above}
+    known = {ns.lower(): ns for ns in [*closed_above, *closed, *counts]}
+    rows: list[dict[str, Any]] = []
+    for key in sorted(known):
+        namespace = known[key]
+        tables_here = sum(n for ns, n in counts.items() if ns.lower() == key)
+        is_above = key in ceiling
+        reason = None
+        if is_above:
+            reason = f"Not offered by {above or 'the organization'}: open it there first."
+        elif not editable:
+            reason = "Only who may change this access policy changes it."
+        rows.append(
+            {
+                "namespace": namespace,
+                "tables": tables_here,
+                "available": tables_here > 0,
+                "offered": key not in here and not is_above,
+                "closed_above": is_above,
+                "editable": editable and not is_above,
+                "reason": reason,
+            }
+        )
+    return rows
+
+
 def _refs_naming(entry: Mapping[str, Any] | None, ref: str, refs: Iterable[str]) -> set[str]:
     """The ``refs`` that name ``ref`` (a catalog id): itself, or any alias of its file."""
     return {
@@ -474,6 +523,7 @@ class FeatureAccessService:
         defaults_of: DefaultsOf,
         features: Features,
         ontology_catalog: OntologyCatalog | None = None,
+        dataset_catalog: DatasetCatalog | None = None,
     ) -> None:
         self._gateway = gateway
         self._store = store
@@ -482,6 +532,7 @@ class FeatureAccessService:
         self._defaults_of = defaults_of
         self._features = features
         self._ontology_catalog = ontology_catalog
+        self._dataset_catalog = dataset_catalog
 
     # -- reading --------------------------------------------------------------------
 
@@ -1007,6 +1058,113 @@ class FeatureAccessService:
         _log.info(f"Ontologies of {workspace_id}: {len(wanted)} offered")
         policy = await run_in_threadpool(self._gateway.policy, access_id)
         return offer_of(policy.document)
+
+    # -- datasets ----------------------------------------------------------------------
+
+    async def _ceiling_id(self, container: str, workspace_id: str) -> str | None:
+        """The access policy above a workspace's: its organization's "<O> access"; none
+        for an organization's own page or a workspace in no organization."""
+        if is_container(workspace_id):
+            return None
+        org = org_of(container)
+        if org is None:
+            return None
+        record = await self._defaults_of(org_container(org))
+        return getattr(record, "access_policy_id", None)
+
+    async def read_datasets(self, user: Any, workspace_id: str) -> dict[str, Any]:
+        """The dataset namespaces of the deployment and whether the workspace (or the
+        organization: ``workspace_id`` its container) uses each: every one unless "<W>
+        access" (or "<O> access" above it) closes it; and whether the caller may change
+        them."""
+        container, record = await self._where(workspace_id)
+        access_id = getattr(record, "access_policy_id", None)
+        ceiling_id = await self._ceiling_id(container, workspace_id)
+        session = self._gateway.bind(user)
+        tables: list[tuple[str, str]] = []
+        error: str | None = None
+        if self._dataset_catalog is None:
+            error = "This deployment lists no dataset."
+        else:
+            try:
+                tables = list(await self._dataset_catalog())
+            except Exception:  # noqa: BLE001 - said on the page, the closures still read
+                _log.warning(f"Datasets of {workspace_id} not listed", exc_info=True)
+                error = "The datasets could not be listed."
+
+        def snapshot() -> dict[str, Any]:
+            access = self._gateway.policy(access_id) if access_id else None
+            above = self._gateway.policy(ceiling_id) if ceiling_id else None
+            offer = offer_of(access.document) if access is not None else Offer()
+            above_closed = offer_of(above.document).datasets_closed if above else frozenset()
+            editable = (
+                access is not None
+                and session.authorize(
+                    "iam:UpdatePolicy", policy_resource(access.id, container)
+                ).allowed
+            )
+            return {
+                "workspace_id": workspace_id,
+                "scope": container,
+                "access_policy": _ref(access) if access is not None else None,
+                "ceiling": _ref(above) if above is not None else None,
+                "editable": editable,
+                "rows": dataset_rows(
+                    tables,
+                    offer.datasets_closed,
+                    above_closed,
+                    editable=editable,
+                    above=above.name if above is not None else None,
+                ),
+                "error": error,
+            }
+
+        return await run_in_threadpool(snapshot)
+
+    async def set_datasets(
+        self, user: Any, workspace_id: str, changes: Mapping[str, bool]
+    ) -> dict[str, Any]:
+        """Use (or stop using) dataset namespaces (``{namespace: offered}``), in one write
+        of "<W> access" (or "<O> access") as the caller: closing writes the namespace in
+        ``OfferDatasetsDeny``, reopening takes it out (any spelling). A namespace the
+        organization closes is not reopened here (``ValueError``: 422); IAM's own rules
+        apply to the write. Answers the datasets after."""
+        if not changes:
+            raise ValueError("Name a dataset namespace to change")
+        bad = [ns for ns in changes if not given_datasets.valid_namespace(ns)]
+        if bad:
+            raise ValueError(f"Not a dataset namespace: {', '.join(sorted(bad))}")
+        container, record = await self._where(workspace_id)
+        access_id = getattr(record, "access_policy_id", None)
+        ceiling_id = await self._ceiling_id(container, workspace_id)
+        if ceiling_id and any(changes.values()):
+            above = await run_in_threadpool(self._gateway.policy, ceiling_id)
+            closed_above = {ns.lower() for ns in offer_of(above.document).datasets_closed}
+            blocked = sorted(ns for ns, on in changes.items() if on and ns.lower() in closed_above)
+            if blocked:
+                raise ValueError(
+                    f"{', '.join(blocked)}: not offered by {above.name}; open it there first."
+                )
+
+        def change(offer: Offer) -> Offer:
+            closed = set(offer.datasets_closed)
+            for namespace, on in changes.items():
+                closed = {ns for ns in closed if ns.lower() != namespace.lower()}
+                if not on:
+                    closed.add(namespace)
+            return replace(offer, datasets_closed=frozenset(closed))
+
+        await self._set_offer(
+            user,
+            workspace_id,
+            access_id,
+            "workspace-offer.datasets",
+            workspace_id,
+            change,
+            detail=",".join(f"{'+' if on else '-'}{ns}" for ns, on in sorted(changes.items())),
+        )
+        _log.info(f"Datasets of {workspace_id}: {dict(changes)}")
+        return await self.read_datasets(user, workspace_id)
 
     async def _ontology_listing(self, user: Any, workspace_id: str) -> OntologyListing | str | None:
         """The deployment's ontology files and those the caller may assign; None where

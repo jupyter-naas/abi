@@ -604,6 +604,100 @@ async def test_the_offer_has_no_ontologies_where_the_deployment_lists_none(nexus
     assert (await service.read_offer("olivia", "alpha"))["ontologies"] is None
 
 
+# -- the dataset namespaces a workspace (or an organization) does not use --------------
+
+DATASET_TABLES = [("timesheets", "hours"), ("timesheets", "days"), ("hr", "pay")]
+
+
+@pytest.fixture
+def datasets(nexus_db, audit) -> FeatureAccessService:
+    async def dataset_catalog() -> list[tuple[str, str]]:
+        return list(DATASET_TABLES)
+
+    return FeatureAccessService(
+        EngineIamGateway(),
+        SqlFeaturePolicyStore(nexus_db),
+        audit,
+        container_of=AUTHZ.container_of,
+        defaults_of=CONTAINER_DEFAULTS.record_of,
+        features=lambda: FEATURES,
+        dataset_catalog=dataset_catalog,
+    )
+
+
+def _dataset_rows(state: dict) -> dict[str, dict]:
+    return {row["namespace"]: row for row in state["rows"]}
+
+
+class TestDatasets:
+    @pytest.mark.asyncio
+    async def test_every_shared_namespace_is_offered_until_the_workspace_closes_it(
+        self, nexus, acme, datasets, audit
+    ):
+        state = await datasets.read_datasets("olivia", "alpha")
+        assert state["editable"] and state["error"] is None
+        assert state["access_policy"]["id"] == acme.access_policy_id
+        assert [row["namespace"] for row in state["rows"]] == ["hr", "timesheets"]
+        rows = _dataset_rows(state)
+        assert (rows["timesheets"]["tables"], rows["hr"]["tables"]) == (2, 1)
+        assert all(row["offered"] and row["editable"] for row in rows.values())
+
+        state = await datasets.set_datasets("olivia", "alpha", {"hr": False})
+        assert not _dataset_rows(state)["hr"]["offered"]
+        assert offer_of(_access(nexus, acme).document).datasets_closed == {"hr"}
+        # One policy, sections apart: the features are kept.
+        assert offer_of(_access(nexus, acme).document).features == {"chat", "files"}
+        assert audit.phases("workspace-offer.datasets") == ["requested", "succeeded"]
+
+        # Reopening lifts a Deny of the workspace's bound: the platform admin's alone (IAM),
+        # as for the Maps items a workspace closes.
+        with pytest.raises(PermissionDeniedError):
+            await datasets.set_datasets("olivia", "alpha", {"hr": True})
+        state = await datasets.set_datasets("root", "alpha", {"HR": True})
+        assert _dataset_rows(state)["hr"]["offered"]
+        assert offer_of(_access(nexus, acme).document).datasets_closed == frozenset()
+
+    @pytest.mark.asyncio
+    async def test_what_the_organization_closes_no_workspace_reopens(self, nexus, acme, datasets):
+        # "<O> access" is the platform's: its admin closes a namespace for every workspace.
+        org = org_container("acme")
+        state = await datasets.set_datasets("root", org, {"timesheets": False})
+        assert not _dataset_rows(state)["timesheets"]["offered"]
+
+        row = _dataset_rows(await datasets.read_datasets("olivia", "alpha"))["timesheets"]
+        assert not row["offered"] and row["closed_above"] and not row["editable"]
+        assert "Acme access" in row["reason"]
+        with pytest.raises(ValueError, match="Acme access"):
+            await datasets.set_datasets("olivia", "alpha", {"timesheets": True})
+
+    @pytest.mark.asyncio
+    async def test_a_closed_namespace_gone_from_the_deployment_is_still_listed(
+        self, nexus, acme, datasets
+    ):
+        await datasets.set_datasets("olivia", "alpha", {"archive": False})
+        row = _dataset_rows(await datasets.read_datasets("olivia", "alpha"))["archive"]
+        assert (row["tables"], row["available"], row["offered"]) == (0, False, False)
+
+    @pytest.mark.asyncio
+    async def test_a_namespace_must_be_named_and_plain(self, nexus, acme, datasets):
+        for changes in ({}, {"a/b": False}, {"*": False}, {" hr": False}):
+            with pytest.raises(ValueError):
+                await datasets.set_datasets("olivia", "alpha", changes)
+
+    @pytest.mark.asyncio
+    async def test_a_member_cannot_close_a_namespace(self, nexus, acme, datasets):
+        assert not (await datasets.read_datasets("dave", "alpha"))["editable"]
+        with pytest.raises((PermissionDeniedError, IAMNotFoundError)):
+            await datasets.set_datasets("dave", "alpha", {"hr": False})
+        assert offer_of(_access(nexus, acme).document).datasets_closed == frozenset()
+
+
+@pytest.mark.asyncio
+async def test_the_datasets_say_so_where_the_deployment_lists_none(nexus, acme, service):
+    state = await service.read_datasets("olivia", "alpha")
+    assert state["rows"] == [] and "no dataset" in state["error"]
+
+
 # -- another policy of the workspace, edited as Features and Modules edit "<W> access" ----
 
 

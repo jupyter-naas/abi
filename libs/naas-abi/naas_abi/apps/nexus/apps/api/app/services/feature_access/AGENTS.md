@@ -12,10 +12,10 @@ written as the caller, and IAM decides every call.
 | File | Role |
 |---|---|
 | `port.py` | `FeatureChange`, `CHOICES`, `FeaturePolicyStore` (the "Feature · X" policies an older version wrote, for the marks on Access › Policies) |
-| `service.py` | `FeatureAccessService.read / save / read_offer / save_offer / save_search_sources / set_files / set_ontologies / save_ontologies / set_graphs / managed_among`; the pure checks `offered`, `holds`, `names_feature`, `check_changes`, `check_offer_changes`; the offer's rows `file_rows`, `ontology_rows` |
+| `service.py` | `FeatureAccessService.read / save / read_offer / save_offer / save_search_sources / set_files / set_ontologies / save_ontologies / set_graphs / read_datasets / set_datasets / managed_among`; the pure checks `offered`, `holds`, `names_feature`, `check_changes`, `check_offer_changes`; the offer's rows `file_rows`, `ontology_rows`, `dataset_rows` |
 | `adapters/secondary/postgres.py` | `SqlFeaturePolicyStore`, table `workspace_feature_policies` (migration `0074_workspace_feature_policies.sql`): read only now |
-| `adapters/primary/feature_access__primary_adapter__FastAPI.py` | `GET` / `PUT /api/workspaces/{workspace_id}/feature-access`, `GET` / `PUT /api/workspaces/{workspace_id}/offer`, `PUT .../offer/search-sources`, `PUT .../offer/files`, `PUT .../offer/ontologies` |
-| `runtime.py` | The service on the engine's IAM (`iam_admin`'s `EngineIamGateway`), `AUTHZ.container_of`, `CONTAINER_DEFAULTS.record_of`, the audit log, the ontology catalog (`workspaces/.../resource_access.offer_ontology_catalog`, Settings › Ontologies' own); `configure` for tests |
+| `adapters/primary/feature_access__primary_adapter__FastAPI.py` | `GET` / `PUT /api/workspaces/{workspace_id}/feature-access`, `GET` / `PUT /api/workspaces/{workspace_id}/offer`, `PUT .../offer/search-sources`, `PUT .../offer/files`, `PUT .../offer/ontologies`, `GET` / `PUT .../offer/datasets` (and the organization's) |
+| `runtime.py` | The service on the engine's IAM (`iam_admin`'s `EngineIamGateway`), `AUTHZ.container_of`, `CONTAINER_DEFAULTS.record_of`, the audit log, the ontology catalog (`workspaces/.../resource_access.offer_ontology_catalog`, Settings › Ontologies' own), the dataset catalog (the engine's datasets as the caller lists them); `configure` for tests |
 
 ## Rules
 
@@ -42,6 +42,13 @@ written as the caller, and IAM decides every call.
   offered}}`) adds a file only for whoever may assign it (`PermissionDeniedError`, 403), refuses an id of no
   file (422), takes a file back by every ref naming it, then writes through `set_ontologies`, as Settings ›
   Ontologies does: an organization's admins add, a workspace admin removes.
+- **Datasets** (`OfferDatasetsDeny`, `iam/given_datasets.py`, ADR `20261125_offer_gives_outside_resources`,
+  "Datasets"): `read_datasets` answers every namespace of the deployment (and any closed one it lost), its
+  number of datasets, `offered` (closed neither here nor in "<O> access"), `closed_above`, `editable`, `reason`;
+  `set_datasets` (`PUT .../offer/datasets`, `{changes: {namespace: offered}}`) closes (adds to the Deny) or
+  reopens (takes out, any spelling) as the caller: reopening lifts a Deny of the bound, the platform admin's
+  alone (IAM, 403); a namespace "<O> access" closes is refused on a workspace (422). Nexus applies the closure
+  (`datasets/access.py`), since IAM decides datasets on their platform names.
 
 ## Tests
 

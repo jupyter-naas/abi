@@ -296,6 +296,46 @@ async def save_workspace_ontologies(
     return await _call(service.save_ontologies(user, workspace_id, body.changes))
 
 
+class DatasetsBody(BaseModel):
+    # ``{namespace: offered}``: False closes a namespace for the workspace, True reopens it.
+    changes: dict[str, bool] = Field(min_length=1, max_length=200)
+
+
+@router.get(
+    "/{workspace_id}/offer/datasets",
+    dependencies=[
+        guard(
+            "GetWorkspaceConfiguration",
+            denied="Only admins can view the workspace configuration",
+        )
+    ],
+)
+async def read_workspace_datasets(
+    workspace_id: str,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+) -> dict[str, Any]:
+    """The deployment's dataset namespaces and whether the workspace uses each (every one
+    unless "<W> access", or "<O> access" above it, closes it)."""
+    return await _call(service.read_datasets(user, workspace_id))
+
+
+@router.put(
+    "/{workspace_id}/offer/datasets",
+    dependencies=[declares(action) for action in WRITES],
+)
+async def save_workspace_datasets(
+    workspace_id: str,
+    body: DatasetsBody,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+) -> dict[str, Any]:
+    """Close or reopen dataset namespaces, in one write of "<W> access" as the caller (422
+    for a namespace the organization closes; 403 from IAM, for instance reopening a
+    namespace, which lifts a Deny: the platform admin's). Answers the datasets after."""
+    return await _call(service.set_datasets(user, workspace_id, body.changes))
+
+
 @router.put(
     "/{workspace_id}/offer",
     dependencies=[declares(action) for action in WRITES],
@@ -376,6 +416,26 @@ async def save_org_offer(
 ) -> dict[str, Any]:
     changes = [OfferChange(c.kind, c.module, c.name, c.offered) for c in body.changes]
     return await _call(service.save_offer(user, _org(org_id), changes, policy_id))
+
+
+@org_router.get("/{org_id}/offer/datasets", dependencies=[READ_ORG])
+async def read_org_datasets(
+    org_id: str,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+) -> dict[str, Any]:
+    """The dataset namespaces "<O> access" closes for every workspace of the organization."""
+    return await _call(service.read_datasets(user, _org(org_id)))
+
+
+@org_router.put("/{org_id}/offer/datasets", dependencies=[declares(action) for action in WRITES])
+async def save_org_datasets(
+    org_id: str,
+    body: DatasetsBody,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+) -> dict[str, Any]:
+    return await _call(service.set_datasets(user, _org(org_id), body.changes))
 
 
 @org_router.get("/{org_id}/access-levels", dependencies=[READ_ORG])
