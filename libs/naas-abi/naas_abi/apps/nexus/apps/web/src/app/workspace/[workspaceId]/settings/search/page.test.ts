@@ -13,15 +13,33 @@ const TOPICS = vi.hoisted(() =>
       icon: 'search',
       enabled: true,
       source: 'custom',
+      // What a topic's page edits.
+      label: `Topic ${n}`,
+      detail_label: '',
+      description: '',
+      class_iri: '',
+      order: i,
+      graphs: [],
+      results_query: '',
+      image_query: '',
+      header_query: '',
+      result_rows: [],
+      detail_facts: [],
+      sections: [],
     };
   }),
 );
 
-const NAV = vi.hoisted(() => ({ policy: null as string | null }));
+const NAV = vi.hoisted(() => {
+  const nav = { policy: null as string | null, topic: null as string | null, pushed: [] as string[], replaced: [] as string[] };
+  // One router, as Next's: effects that depend on it do not run again.
+  const router = { push: (to: string) => nav.pushed.push(to), replace: (to: string) => nav.replaced.push(to) };
+  return Object.assign(nav, { router });
+});
 vi.mock('next/navigation', () => ({
   useParams: () => ({ workspaceId: 'ws-1' }),
-  useRouter: () => ({ push: () => undefined }),
-  useSearchParams: () => ({ get: (key: string) => (key === 'policy' ? NAV.policy : null) }),
+  useRouter: () => NAV.router,
+  useSearchParams: () => ({ get: (key: string) => (key === 'policy' ? NAV.policy : key === 'topic' ? NAV.topic : null) }),
   usePathname: () => '/workspace/ws-1/settings/search',
 }));
 vi.mock('@/stores/search-topics', () => ({
@@ -54,6 +72,7 @@ vi.mock('@/lib/search-topics-api', () => ({
 }));
 
 import SearchSettingsPage from './page';
+import { SearchSettingsView } from './search-settings';
 import { pickColumnFilter as filterColumn } from '@/lib/testing/column-filter';
 
 let mounted: Mounted | null = null;
@@ -145,5 +164,42 @@ describe('Workspace settings › Search', () => {
     await filterColumn(mounted, 'group', 'Workspace');
     const feature = mounted.host.querySelector(`[data-select-row="${FEATURE_SCOPES[0].id}"]`) as HTMLInputElement;
     expect(feature.disabled).toBe(true);
+  });
+
+  it('opens a topic on its page, with the instance header, Save faded until something changes, the unsaved bar', async () => {
+    mounted = await mount(SearchSettingsPage, {});
+    await mounted.flush();
+    await mounted.click(mounted.host.querySelector('tr[data-entry="topic-01"] td:nth-child(2)'));
+    expect(NAV.pushed.at(-1)).toBe('/workspace/ws-1/settings/search/topics/topic-01');
+    await mounted.unmount();
+
+    API.save.mockClear();
+    mounted = await mount(SearchSettingsView, { topicId: 'topic-01' });
+    await mounted.flush();
+    const m = mounted;
+    const save = () => m.host.querySelector('[data-action="save"]') as HTMLButtonElement;
+    expect(m.host.querySelector('[data-instance-name]')?.textContent).toContain('Topics 01');
+    expect(m.host.querySelector('[data-instance-ids]')?.textContent).toBe('topic-01');
+    expect(m.host.querySelector('a[data-action="back"]')?.getAttribute('href')).toBe('/workspace/ws-1/settings/search');
+    expect(save().disabled).toBe(true);
+    const label = [...m.host.querySelectorAll('label')].find((l) => l.textContent?.startsWith('Label (plural'))!.querySelector('input');
+    await m.type(label, 'Projects');
+    expect(save().disabled).toBe(false);
+    expect(m.host.querySelector('[data-unsaved-bar]')).not.toBeNull();
+    await m.click(save());
+    await m.flush();
+    expect(API.save.mock.calls[0][1]).toMatchObject({ id: 'topic-01', plural_label: 'Projects' });
+  });
+
+  it('sends a former ?topic= link to the topic’s page', async () => {
+    NAV.topic = 'topic-02';
+    try {
+      mounted = await mount(SearchSettingsPage, {});
+      await mounted.flush();
+      expect(NAV.replaced).toEqual(['/workspace/ws-1/settings/search/topics/topic-02']);
+    } finally {
+      NAV.topic = null;
+      NAV.replaced = [];
+    }
   });
 });

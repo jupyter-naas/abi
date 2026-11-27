@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
 
 const PERMISSIONS = vi.hoisted(() => ({ data: null, error: null, find: () => undefined, names: new Map() }));
-const NAV = vi.hoisted(() => ({ feed: null as string | null }));
+const NAV = vi.hoisted(() => ({ feed: null as string | null, pushed: [] as string[], replaced: [] as string[] }));
 const FEEDS = vi.hoisted(() =>
   Array.from({ length: 45 }, (_, i) => {
     const n = String(i + 1).padStart(2, '0');
@@ -32,7 +32,7 @@ const LAYERS = vi.hoisted(() =>
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ workspaceId: 'ws-1' }),
-  useRouter: () => ({ push: () => undefined }),
+  useRouter: () => ({ push: (to: string) => NAV.pushed.push(to), replace: (to: string) => NAV.replaced.push(to) }),
   useSearchParams: () => ({ get: (key: string) => (key === 'feed' ? NAV.feed : null) }),
   usePathname: () => '/workspace/ws-1/settings/maps',
 }));
@@ -79,6 +79,7 @@ vi.mock('@/app/workspace/[workspaceId]/maps/components/maps-settings-basemaps-se
 }));
 
 import MapsSettingsPage from './page';
+import { MapsSettingsView } from './maps-settings';
 import { pickColumnFilter as filterColumn } from '@/lib/testing/column-filter';
 
 let mounted: Mounted | null = null;
@@ -95,6 +96,8 @@ const confirmButton = (label: string) =>
 describe('Workspace settings › Maps', () => {
   afterEach(() => {
     NAV.feed = null;
+    NAV.pushed = [];
+    NAV.replaced = [];
   });
 
   it('shows 20 feeds a page, by group, and searches all of them', async () => {
@@ -139,8 +142,7 @@ describe('Workspace settings › Maps', () => {
   });
 
   it("a feed's Layers table: by order, filtered from its columns", async () => {
-    NAV.feed = 'feed-01';
-    mounted = await mount(MapsSettingsPage, {});
+    mounted = await mount(MapsSettingsView, { feed: 'feed-01' });
     await mounted.flush();
     expect(attr('data-layer')).toEqual(['feed-01-ports', 'feed-01-bridges', 'feed-01-roads']);
     expect(mounted.host.textContent).toContain('Every feature');
@@ -154,9 +156,8 @@ describe('Workspace settings › Maps', () => {
   });
 
   it("a feed's layers selected are hidden in one step, asked first", async () => {
-    NAV.feed = 'feed-01';
     LAYOUTS.setHidden.mockClear();
-    mounted = await mount(MapsSettingsPage, {});
+    mounted = await mount(MapsSettingsView, { feed: 'feed-01' });
     await mounted.flush();
     await mounted.click(mounted.host.querySelector('thead input[data-action="select-all"]'));
     await mounted.click(mounted.host.querySelector('[data-bulk-action="off"]'));
@@ -168,5 +169,21 @@ describe('Workspace settings › Maps', () => {
       ['ws-1', 'feed-01-bridges', true],
       ['ws-1', 'feed-01-ports', true],
     ]);
+  });
+
+  it("a feed is a page of its own, with the instance header, and a former ?feed= link opens it", async () => {
+    mounted = await mount(MapsSettingsView, { feed: 'feed-01' });
+    await mounted.flush();
+    expect(mounted.host.querySelector('[data-instance-name]')?.textContent).toBe('Feed 01');
+    expect(mounted.host.querySelector('[data-instance-ids]')?.textContent).toBe('feed-01');
+    expect(mounted.host.querySelector('a[data-action="back"]')?.getAttribute('href')).toBe('/workspace/ws-1/settings/maps');
+    await mounted.click(mounted.host.querySelector('tr[data-layer="feed-01-roads"] td:nth-child(2)'));
+    expect(NAV.pushed).toEqual(['/workspace/ws-1/settings/maps/layers/feed-01-roads']);
+    await mounted.unmount();
+
+    NAV.feed = 'feed-02';
+    mounted = await mount(MapsSettingsPage, {});
+    await mounted.flush();
+    expect(NAV.replaced).toEqual(['/workspace/ws-1/settings/maps/feeds/feed-02']);
   });
 });
