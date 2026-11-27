@@ -306,14 +306,28 @@ def _parsed_seed(raw: Any) -> dict[str, Any] | None:
 def enabled_features() -> list[str]:
     """The deployment's enabled features: what a new workspace offers until its
     Features setting turns one off."""
-    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import enabled_feature_catalog
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import deployment_catalog
     from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
 
     try:
-        return list(enabled_feature_catalog(live_settings().feature_flags))
+        return list(deployment_catalog(live_settings().feature_flags))
     except Exception:  # noqa: BLE001 - no settings: no feature offered
         logger.exception("The enabled features could not be read: a new workspace offers none")
         return []
+
+
+def ensure_platform_offer(iam: Any) -> str:
+    """ "Platform access", made from the deployment's ``enabled_features`` (Settings
+    aside: no offer switches it) when there is none. As ``api``."""
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+        PINNED_FEATURES,
+        enabled_feature_catalog,
+    )
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+    from naas_abi.apps.nexus.apps.api.app.services.iam import platform_offer
+
+    configured = enabled_feature_catalog(live_settings().feature_flags)
+    return platform_offer.ensure(iam, [key for key in configured if key not in PINNED_FEATURES])
 
 
 def new_workspace_offer(slug: str | None, catalog_seed: dict[str, Any] | None) -> Offer:
@@ -1369,6 +1383,12 @@ async def migrate(db: AsyncSession, defaults: ContainerDefaults = CONTAINER_DEFA
             report = Report()
             report.notes.append(f"Waits for {move}: nothing made")
             return report
+    # What the platform offers its organizations, made once from ``enabled_features``
+    # (``platform_offer``): until it is made, those decide alone, as before.
+    try:
+        await run_in_threadpool(lambda: _as_api(ensure_platform_offer))
+    except Exception:  # noqa: BLE001 - made at the next start; enabled_features decide meanwhile
+        logger.exception("Platform access not made: the deployment's enabled_features decide")
     orgs, workspaces = await read_nexus(db)
     known = {record.container: record for record in await store.all()}
     offers = await configured_offers(db)

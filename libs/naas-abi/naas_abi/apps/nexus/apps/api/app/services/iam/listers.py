@@ -204,10 +204,10 @@ async def ontologies(query: ListingQuery) -> list[ListedResource]:
 
 
 def enabled_features() -> list[str]:
-    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import enabled_feature_catalog
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import deployment_catalog
     from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
 
-    return enabled_feature_catalog(live_settings().feature_flags)
+    return deployment_catalog(live_settings().feature_flags)
 
 
 def feature_items(container: str, enabled: list[str]) -> list[ListedResource]:

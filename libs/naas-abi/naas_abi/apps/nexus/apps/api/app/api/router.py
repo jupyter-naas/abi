@@ -44,6 +44,9 @@ from naas_abi.apps.nexus.apps.api.app.services.feature_access.handlers import (
     org_router as org_feature_access_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.feature_access.handlers import (
+    platform_router as platform_feature_access_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.feature_access.handlers import (
     router as feature_access_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
@@ -117,6 +120,7 @@ api_router.include_router(
 api_router.include_router(workspaces_router, prefix="/workspaces", tags=["workspaces"])
 # Workspace settings › Features and › Files, and the offer ("<W> access") of the policy page.
 api_router.include_router(feature_access_router, prefix="/workspaces", tags=["workspaces"])
+api_router.include_router(platform_feature_access_router, prefix="/platform", tags=["platform"])
 # Organization › Access › Features, Services and Modules: the same on "<O> access".
 api_router.include_router(
     org_feature_access_router, prefix="/organizations", tags=["organizations"]

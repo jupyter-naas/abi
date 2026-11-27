@@ -26,7 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     KNOWN_FEATURE_KEYS,
-    enabled_feature_catalog,
+    deployment_catalog,
     offered_features,
 )
 from naas_abi.apps.nexus.apps.api.app.core.workspace_config_seeds import workspace_seed_rows
@@ -377,7 +377,7 @@ async def _feature_flags(
     return await user_features.user_feature_flags(
         user,
         [(r.organization_id, r.id) for r in records],
-        enabled_feature_catalog(settings.feature_flags),
+        deployment_catalog(settings.feature_flags),
     )
 
 
@@ -739,9 +739,7 @@ async def get_workspace_resources(
     flags = (await _feature_flags(current_user, [record]) or {}).get(record.id, {})
     return {
         "organization_id": record.organization_id,
-        "features": [
-            key for key in enabled_feature_catalog(settings.feature_flags) if flags.get(key)
-        ],
+        "features": [key for key in deployment_catalog(settings.feature_flags) if flags.get(key)],
         "modules": modules,
         "totals": {
             plural: sum(entry[plural] for entry in modules)

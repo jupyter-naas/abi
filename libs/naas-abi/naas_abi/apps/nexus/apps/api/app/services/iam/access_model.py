@@ -1817,9 +1817,9 @@ async def read_inputs(
     member_models = tuple(getattr(models, "member_set", None) or ()) if models else ()
     flags = getattr(settings, "feature_flags", None)
     if flags is not None:
-        from naas_abi.apps.nexus.apps.api.app.core.feature_flags import enabled_feature_catalog
+        from naas_abi.apps.nexus.apps.api.app.core.feature_flags import deployment_catalog
 
-        features = tuple(enabled_feature_catalog(flags))
+        features = tuple(deployment_catalog(flags))
     else:
         features = tuple(enabled_features())
     inputs = Inputs(

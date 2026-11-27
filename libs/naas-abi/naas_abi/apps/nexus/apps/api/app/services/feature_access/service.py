@@ -40,6 +40,7 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
+from naas_abi.apps.nexus.apps.api.app.core.feature_flags import KNOWN_FEATURE_KEYS, PINNED_FEATURES
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import ontology_matches_seed
 from naas_abi.apps.nexus.apps.api.app.services.feature_access.port import (
     CHOICES,
@@ -52,6 +53,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam import (
     given_files,
     given_graphs,
     given_maps,
+    platform_offer,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.given_files import (
@@ -559,6 +561,15 @@ def ontology_rows(
     return sorted(rows, key=lambda row: (str(row["label"]).lower(), row["id"]))
 
 
+@dataclass(frozen=True)
+class _PlatformRecord:
+    """The platform's defaults, as a container's: "Platform access", no groups."""
+
+    access_policy_id: str
+    members_group_id: str | None = None
+    admins_group_id: str | None = None
+
+
 class FeatureAccessService:
     def __init__(
         self,
@@ -585,8 +596,15 @@ class FeatureAccessService:
 
     async def _where(self, workspace_id: str) -> tuple[str, Any]:
         """The container and its defaults (its access policy). ``workspace_id`` is a
-        workspace's id, or an organization's container (``abi:...``, ``org_container``):
-        Organization › Access edits "<O> access" as a workspace's pages edit "<W> access"."""
+        workspace's id, an organization's container (``abi:...``, ``org_container``):
+        Organization › Access edits "<O> access" as a workspace's pages edit "<W> access";
+        or the platform (``PLATFORM``): Platform › Access › Features edits "Platform
+        access", what the platform offers its organizations (``platform_offer``)."""
+        if workspace_id == PLATFORM:
+            policy_id = await run_in_threadpool(platform_offer.policy_id)
+            if policy_id is None:
+                raise IAMNotFoundError("Platform access is not made yet: the next start makes it")
+            return PLATFORM, _PlatformRecord(policy_id)
         if is_container(workspace_id):
             record = await self._defaults_of(workspace_id)
             if record is None:
@@ -606,7 +624,7 @@ class FeatureAccessService:
         the caller may change it."""
         container, record = await self._where(workspace_id)
         session = self._gateway.bind(user)
-        features = list(self._features())
+        features = self._feature_keys(container)
         return await run_in_threadpool(
             self._snapshot, session, workspace_id, container, record, features, policy_id
         )
@@ -723,9 +741,16 @@ class FeatureAccessService:
         offer = offer_of(target.document) if target is not None else Offer()
         grantable = session.grantable(container)
         target_id = target.id if target is not None else access_id
-        others = [
-            p for p in self._policies_at(session, container) if not p.managed and p.id != target_id
-        ]
+        # At the platform, "Platform access" alone: the organizations' own are their pages'.
+        others = (
+            []
+            if container == PLATFORM
+            else [
+                p
+                for p in self._policies_at(session, container)
+                if not p.managed and p.id != target_id
+            ]
+        )
         attached: dict[str, bool] = {}
 
         def is_attached(policy_id: str) -> bool:
@@ -777,7 +802,11 @@ class FeatureAccessService:
             "access_policy": _ref(access) if access is not None else None,
             # The policy edited, and those that may be ("<W> access" first).
             "policy": _ref(target) if target is not None else None,
-            "policies": self._choices(session, container, access),
+            "policies": (
+                [_ref(access)]
+                if container == PLATFORM and access is not None
+                else self._choices(session, container, access)
+            ),
             "members_group": self._principal(members_id) if members_id else None,
             "can": can,
             "features": rows,
@@ -838,7 +867,7 @@ class FeatureAccessService:
         (``policy_id``, "<W> access" by default); a refused one is named in ``errors``
         and the others still apply. Answers the state after."""
         container, record = await self._where(workspace_id)
-        features = list(self._features())
+        features = self._feature_keys(container)
         check_changes(changes, features)
         before = await self.read(user, workspace_id, policy_id)
         target_id = (before.get("policy") or {}).get("id")
@@ -866,8 +895,18 @@ class FeatureAccessService:
                 )
             except (PermissionDeniedError, IAMNotFoundError, IAMConflictError, ValueError) as exc:
                 errors[change.feature] = str(exc)
+        if container == PLATFORM:
+            # What every organization may offer changed: read at the next question.
+            platform_offer.forget()
         after = await self.read(user, workspace_id, policy_id)
         return {**after, "errors": errors}
+
+    def _feature_keys(self, container: str) -> list[str]:
+        """The features a page lists: at the platform, every known one but the pinned
+        (Platform access switches them); elsewhere, those the platform offers."""
+        if container == PLATFORM:
+            return [key for key in KNOWN_FEATURE_KEYS if key not in PINNED_FEATURES]
+        return list(self._features())
 
     @staticmethod
     def _refusal(row: dict[str, Any], change: FeatureChange, state: dict[str, Any]) -> str | None:

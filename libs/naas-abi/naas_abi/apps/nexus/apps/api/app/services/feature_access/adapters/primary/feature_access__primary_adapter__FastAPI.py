@@ -30,7 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.services.feature_access.service import (
     OfferChange,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import PLATFORM, org_container
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.port import IamUnavailableError
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
 from naas_abi_core.services.iam.IAMPorts import (
@@ -359,6 +359,41 @@ async def save_workspace_offer(
     organization's offer: nothing changes). Answers the offer after."""
     changes = [OfferChange(c.kind, c.module, c.name, c.offered) for c in body.changes]
     return await _call(service.save_offer(user, workspace_id, changes, policy_id))
+
+
+# -- Platform settings › Access › Features: "Platform access" --------------------------------
+
+platform_router = APIRouter()
+
+READ_PLATFORM = guard(
+    "ReadSystem",
+    workspace=None,
+    denied="Only platform administrators can view what the platform offers",
+)
+
+
+@platform_router.get("/feature-access", dependencies=[READ_PLATFORM])
+async def read_platform_feature_access(
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+) -> dict[str, Any]:
+    """Every known feature, and whether the platform offers it to its organizations
+    ("Platform access", ``platform_offer``)."""
+    return await _call(service.read(user, PLATFORM))
+
+
+@platform_router.put("/feature-access", dependencies=[declares(action) for action in WRITES])
+async def save_platform_feature_access(
+    body: SaveBody,
+    user: User = Signed,
+    service: FeatureAccessService = Service,
+) -> dict[str, Any]:
+    """Offer features to every organization (Everyone) or take them back (Nobody), in
+    "Platform access", as the caller."""
+    changes = [
+        FeatureChange(c.feature, c.choice, tuple(dict.fromkeys(c.principals))) for c in body.changes
+    ]
+    return await _call(service.save(user, PLATFORM, changes))
 
 
 # -- Organization › Access: the same pages on "<O> access" ---------------------------------
