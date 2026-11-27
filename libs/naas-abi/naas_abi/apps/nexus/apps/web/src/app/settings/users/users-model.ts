@@ -94,6 +94,10 @@ export const USER_ACTIONS = {
 export type UserAccess = {
   user_id: string;
   principal_id: string;
+  /** Who it is, from their account (their IAM principal may carry no name or email). */
+  name?: string | null;
+  email?: string | null;
+  avatar?: string | null;
   level: 'member' | 'viewer' | null;
   platform_admin: boolean;
   organizations: { id: string; name: string; org_admin: boolean }[];

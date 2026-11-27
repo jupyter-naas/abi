@@ -150,6 +150,11 @@ class AdminUserAccess(BaseModel):
 
     user_id: str
     principal_id: str
+    # Who it is, from the account: the person's page names them with it when their IAM
+    # principal carries no name or email (a principal made before they signed in).
+    name: str | None = None
+    email: str | None = None
+    avatar: str | None = None
     level: str | None
     platform_admin: bool
     organizations: list[AccessOrganization]
@@ -430,9 +435,13 @@ async def user_access(account_id: str, db: AsyncSession = Depends(get_db)) -> Ad
             await db.execute(select(WorkspaceModel).where(WorkspaceModel.id.in_(ws_ids)))
         ).scalars()
     }
+    account = await db.get(UserModel, summary.user_id)
     return AdminUserAccess(
         user_id=summary.user_id,
         principal_id=summary.principal_id,
+        name=(account.name or None) if account else None,
+        email=(account.email or None) if account else None,
+        avatar=(account.avatar or None) if account else None,
         level=summary.level,
         platform_admin=summary.platform_admin,
         organizations=[
