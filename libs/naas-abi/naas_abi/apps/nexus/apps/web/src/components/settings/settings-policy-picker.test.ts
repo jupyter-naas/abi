@@ -57,7 +57,7 @@ const LEVEL: SettingsLevel = {
   label: 'Workspace',
   index: '/workspace/ws-1/settings',
   groups: [
-    { label: null, links: [link('users', 'Users', Users)] },
+    { label: null, links: [{ ...link('users', 'Users', Users), description: 'The members of this workspace and their role' }] },
     { label: 'Access', links: [link('features', 'Features', SlidersHorizontal), link('modules', 'Modules', Package)] },
     {
       label: 'Features',
@@ -154,5 +154,31 @@ describe('the Policy picker of a workspace’s Settings column', () => {
     expect(read).toHaveBeenCalledWith('ws-2', null);
     usePolicyViewStore.getState().forget('ws-2');
     expect(usePolicyViewStore.getState().views['ws-2|']).toBeUndefined();
+  });
+});
+
+describe('the search of a Settings column', () => {
+  const search = (m: Mounted) => m.host.querySelector<HTMLInputElement>('[data-settings-search] input')!;
+
+  it('sits under the pickers and finds a page by its name or what it is for', async () => {
+    NAV.path = '/workspace/ws-1/settings/users';
+    usePolicyViewStore.setState({ views: { 'ws-1|': { status: 'ready', state: state(ACCESS, []) } } });
+    mounted = await mount(SettingsLevelsNav, { level: LEVEL });
+    await mounted.flush();
+    expect(search(mounted).placeholder).toBe('Search settings…');
+    // By what it is for.
+    await mounted.type(search(mounted), 'role');
+    expect(hrefs(mounted)).toEqual(['/workspace/ws-1/settings/users']);
+    // A page of the Features sub-group: Access › Features stays above it, unfolded.
+    await mounted.type(search(mounted), 'data');
+    expect(hrefs(mounted)).toEqual(['/workspace/ws-1/settings/features', '/workspace/ws-1/settings/datasets']);
+    await mounted.type(search(mounted), 'nothing like it');
+    expect(mounted.host.textContent).toContain('No page matches.');
+    await mounted.type(search(mounted), '');
+    expect(hrefs(mounted)).toEqual([
+      '/workspace/ws-1/settings/users',
+      '/workspace/ws-1/settings/features',
+      '/workspace/ws-1/settings/modules',
+    ]);
   });
 });

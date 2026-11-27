@@ -196,10 +196,47 @@
 /* Atop the column of an organization's or a workspace's Settings: the level, picked as Files
    picks a drive (its picker), in the pages' text size. */
 .settings-scope {
-  margin-bottom: var(--space-4);
-  padding: 0 var(--space-1) var(--space-4);
-  /* A rule under the pickers sets them apart from the pages listed below. */
-  border-bottom: 1px solid var(--border-hex);
+  margin-bottom: var(--space-2);
+  padding: 0 var(--space-1);
+}
+
+/* The search under the pickers (a page's name and what it is for): the platform's search field
+   (Ontology's), at the pickers' size and text, square as the settings are. */
+.settings-nav-search {
+  position: relative;
+  display: block;
+  margin: 0 var(--space-1) var(--space-4);
+}
+
+.settings-nav-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  color: var(--muted-foreground-hex);
+  pointer-events: none;
+}
+
+.settings-nav-search input {
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 10px 4px 30px;
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background: var(--background-hex, transparent);
+  color: var(--foreground-hex);
+  font-size: var(--font-size-sm);
+}
+
+.settings-nav-search input::placeholder {
+  color: var(--muted-foreground-hex);
+}
+
+.settings-nav-search-empty {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
 }
 
 .settings-scope.search-picker-stack {
@@ -239,26 +276,15 @@
   padding-right: 36px;
 }
 
+/* The Features pages and their policy, 12px in behind a rule: the pages' highlight and the
+   filter's tint span the same width, from the rule to the column's edge. */
 .settings-nav-subgroup {
-  padding: var(--space-1) 0;
+  margin: var(--space-1) 0 var(--space-1) 12px;
+  border-left: 1px solid var(--border-hex);
 }
 
-/* The Features pages, slightly in from Access › Features: their icon and text one step right. */
-.settings-nav-subgroup .org-settings-nav-item {
-  padding-left: calc(var(--space-3) + 12px);
-}
-
-/* The policy those pages set, at the same step, tinted so it reads as the filter it is. */
+/* The policy those pages set, first under the rule. */
 .settings-nav-subgroup .settings-policy-picker {
-  padding-left: 12px;
+  padding: 0 0 var(--space-1);
 }
 
-.settings-nav-subgroup .settings-policy-picker .search-picker-trigger {
-  background: color-mix(in srgb, var(--workspace-accent, var(--color-primary)) 10%, transparent);
-  color: var(--workspace-accent, var(--color-primary));
-  font-weight: var(--font-weight-medium);
-}
-
-.settings-nav-subgroup .settings-policy-picker .search-picker-trigger:hover {
-  background: color-mix(in srgb, var(--workspace-accent, var(--color-primary)) 16%, transparent);
-}
