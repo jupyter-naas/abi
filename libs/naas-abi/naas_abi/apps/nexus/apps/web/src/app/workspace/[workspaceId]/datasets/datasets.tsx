@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Database, Table2 } from 'lucide-react';
 import { Header } from '@/components/shell/header';
 import { DatasetsMenuBar } from './components/datasets-menu-bar';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDatasetsStore, type DatasetInfo } from '@/stores/datasets';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { datasetsTablePath } from './lib/datasets-route';
+import { datasetsTablePath, parseDatasetsRoute } from './lib/datasets-route';
 import './datasets.css';
 
 function groupByNamespace(datasets: DatasetInfo[]): [string, DatasetInfo[]][] {
@@ -31,14 +31,19 @@ export default function DatasetsCatalog() {
     void fetchDatasets(currentWorkspaceId);
   }, [currentWorkspaceId, fetchDatasets]);
 
-  const groups = useMemo(() => groupByNamespace(datasets), [datasets]);
+  // `/datasets/<namespace>`: that namespace's gallery alone (picked in the sidebar).
+  const { namespace: only } = parseDatasetsRoute(usePathname());
+  const groups = useMemo(
+    () => groupByNamespace(only ? datasets.filter((table) => table.namespace === only) : datasets),
+    [datasets, only]
+  );
 
   if (isMobile) return null;
 
   return (
     <div className="datasets-root">
       <div className="datasets-header-gap">
-        <Header title="Datasets" subtitle="SQL tables published by modules" nav={<DatasetsMenuBar />} />
+        <Header title="Datasets" subtitle={only ? `The tables of ${only}` : 'SQL tables published by modules'} nav={<DatasetsMenuBar />} />
       </div>
       <div className="datasets-body">
         {error ? <p className="datasets-banner datasets-banner--error">{error}</p> : null}

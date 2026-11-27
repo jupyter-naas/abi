@@ -2,6 +2,7 @@
  * The datasets URL drives the mobile list-then-detail shell.
  *
  *   /workspace/{id}/datasets                      → catalog (mobile list / desktop catalog)
+ *   /workspace/{id}/datasets/{namespace}          → the namespace's gallery
  *   /workspace/{id}/datasets/{namespace}/{name}   → table detail (mobile detail)
  */
 
@@ -34,6 +35,11 @@ export function parseDatasetsRoute(
 
 export function datasetsCatalogPath(workspaceId: string | null): string {
   return workspaceId ? `/workspace/${workspaceId}/datasets` : '/datasets';
+}
+
+/** A namespace's gallery: its tables alone. */
+export function datasetsNamespacePath(workspaceId: string | null, namespace: string): string {
+  return workspaceId ? `/workspace/${workspaceId}/datasets/${namespace}` : `/datasets/${namespace}`;
 }
 
 export function datasetsTablePath(
