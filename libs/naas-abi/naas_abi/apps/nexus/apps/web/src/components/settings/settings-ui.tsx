@@ -63,8 +63,7 @@ export function SettingsFilterSelect({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={cn(
-        'h-9 rounded-none border border-input bg-background px-3 text-sm text-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
-        value !== options[0]?.value && 'border-primary text-primary',
+        'h-9 rounded-none border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none',
         className
       )}
     >
