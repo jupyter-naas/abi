@@ -72,7 +72,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       // pages under Features then show what is offered.
       { href: '/settings/features', label: 'Features', icon: SlidersHorizontal },
       // How far people go with each core service of the engine (graphs, files, vectors...).
-      { href: '/settings/core-services', label: 'Services', icon: ServerCog },
+      { href: '/settings/core-services', label: 'Core Services', icon: ServerCog },
       { href: '/settings/modules', label: 'Modules', icon: Package },
       { href: '/settings/policies', label: 'Policies', icon: KeyRound, needs: 'policies' },
     ],

@@ -36,7 +36,7 @@ describe('org settings nav', () => {
     expect(slugs('owner', BOTH)).not.toContain('access');
     const access = orgSettingsNavForRole('owner', { access: BOTH }).filter((item) => item.group === 'Access');
     // Its offer's pages follow, for its owners and admins.
-    expect(access.map((item) => item.label)).toEqual(['Features', 'Services', 'Modules', 'Policies']);
+    expect(access.map((item) => item.label)).toEqual(['Features', 'Core Services', 'Modules', 'Policies']);
   });
 
   it('shows branding to admins and hides domains, servers, services, and billing', () => {

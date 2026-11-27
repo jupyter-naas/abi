@@ -64,7 +64,7 @@ describe('platformSettingsGroups', () => {
     // Features, Services and Modules open an organization's, picked atop each page.
     expect(items('Access')).toEqual([
       ['Features', '/settings/access/features'],
-      ['Services', '/settings/access/core-services'],
+      ['Core Services', '/settings/access/core-services'],
       ['Modules', '/settings/access/modules'],
       ['Policies', '/settings/access/policies'],
       ['Service accounts', '/settings/access/service-accounts'],
@@ -188,7 +188,7 @@ describe('what the caller sees', () => {
     const groups = visiblePlatformSettingsGroups(systemReader);
     expect(groups.map((group) => group.label)).toEqual(GROUPS);
     expect(groups[0].items.map((item) => item.label)).toEqual(['General', 'Organizations']);
-    expect(groups[1].items.map((item) => item.label)).toEqual(['Features', 'Services', 'Modules', 'Audit']);
+    expect(groups[1].items.map((item) => item.label)).toEqual(['Features', 'Core Services', 'Modules', 'Audit']);
   });
 
   it('shows Users to whoever IAM lets list the users, and nothing else to them', () => {

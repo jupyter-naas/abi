@@ -220,7 +220,7 @@ export const GROUPS_ITEM = ACCESS_ITEMS.find((item) => item.id === 'access-group
  *  the platform has no offer of its own above the organizations. For the platform's admins. */
 export const ORGANIZATION_OFFER_ITEMS: PlatformSettingsNavItem[] = [
   { id: 'access-features', label: 'Features', href: `${PLATFORM_ACCESS_PATH}/features`, icon: SlidersHorizontal, needs: READ_SYSTEM },
-  { id: 'access-core-services', label: 'Services', href: `${PLATFORM_ACCESS_PATH}/core-services`, icon: ServerCog, needs: READ_SYSTEM },
+  { id: 'access-core-services', label: 'Core Services', href: `${PLATFORM_ACCESS_PATH}/core-services`, icon: ServerCog, needs: READ_SYSTEM },
   { id: 'access-modules', label: 'Modules', href: `${PLATFORM_ACCESS_PATH}/modules`, icon: Package, needs: READ_SYSTEM },
 ];
 

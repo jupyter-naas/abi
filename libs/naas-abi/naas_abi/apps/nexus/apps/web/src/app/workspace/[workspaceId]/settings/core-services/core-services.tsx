@@ -13,7 +13,6 @@ import {
   SettingsNotice,
   SettingsPageHeader,
   SettingsTableToolbar,
-  countLabel,
 } from '@/components/settings/settings-ui';
 import {
   SettingsTableClear,
@@ -125,14 +124,12 @@ export function CoreServices({
     setPolicyId(next);
     onPolicyChange?.(next);
   };
-  const capped = rows.filter((row) => row.level !== row.choices[row.choices.length - 1]).length;
-  const granted = rows.filter((row) => row.level !== 'none').length;
 
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="Services"
-        badge={state ? (cap ? `${capped} capped · ${rows.length - capped} open` : `${granted} granted · ${rows.length - granted} none`) : undefined}
+        title="Core Services"
+        badge={state ? `${rows.length} service${rows.length === 1 ? '' : 's'}` : undefined}
         description={
           cap && isOrgTarget(workspaceId) ? (
             'How far people go with each core service of the engine (its graphs, files, vectors, datasets, documents, secrets…) in every workspace of this organization, admins included: a cap above which nothing is done there. The Nexus features are Access › Features.'
@@ -180,12 +177,7 @@ export function CoreServices({
             search={table.search}
             onSearchChange={table.setSearch}
             searchPlaceholder="Search service, level, action…"
-            meta={
-              <>
-                {countLabel(table.shown.length, rows.length, 'service')}
-                <SettingsTableClear table={table} />
-              </>
-            }
+            meta={<SettingsTableClear table={table} />}
           />
           <div className="org-settings-users-table-wrap">
             <table className="org-settings-users-table">

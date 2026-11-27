@@ -62,7 +62,7 @@ describe('Settings › Access › Services', () => {
     const m = (mounted = await mount(CoreServices, { workspaceId: 'ws1', api: api as unknown as AccessLevelsApi }));
     await m.flush();
     expect(api.read).toHaveBeenCalledWith('ws1', 'service', null);
-    expect(m.host.textContent).toContain('1 capped · 1 open');
+    expect(m.host.textContent).toContain('2 services');
     expect(m.host.textContent).toContain('Access › Features');
     expect(level(m, 'triple_store', 'admin')?.getAttribute('aria-checked')).toBe('true');
     // Secrets have no admin level.
@@ -98,7 +98,7 @@ describe('Settings › Access › Services', () => {
     await m.flush();
     expect(api.read).toHaveBeenLastCalledWith('ws1', 'service', 'pol_grants');
     expect(onPolicyChange).toHaveBeenCalledWith('pol_grants');
-    expect(m.host.textContent).toContain('0 granted · 2 none');
+    expect(m.host.textContent).toContain('2 services');
     expect(m.host.textContent).toContain('grants whoever holds it');
 
     await m.unmount();

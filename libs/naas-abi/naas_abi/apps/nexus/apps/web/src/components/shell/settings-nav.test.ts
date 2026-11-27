@@ -54,7 +54,7 @@ describe('workspace settings nav', () => {
     const access = visibleSettingsGroups(null, undefined, SETTINGS_GROUPS, { access: IAM }).find((g) => g.label === 'Access');
     expect(access?.items.map((item) => [item.label, item.href])).toEqual([
       ['Features', '/settings/features'],
-      ['Services', '/settings/core-services'],
+      ['Core Services', '/settings/core-services'],
       ['Modules', '/settings/modules'],
       ['Policies', '/settings/policies'],
     ]);

@@ -46,7 +46,7 @@ export const orgSettingsNav: OrgSettingsNavItem[] = [
   // "<O> access", the ceiling of every workspace of the organization (or another of its
   // policies, picked in the page): its features, core services and modules.
   { slug: 'features', label: 'Features', icon: SlidersHorizontal, adminOnly: true, group: 'Access' },
-  { slug: 'core-services', label: 'Services', icon: ServerCog, adminOnly: true, group: 'Access' },
+  { slug: 'core-services', label: 'Core Services', icon: ServerCog, adminOnly: true, group: 'Access' },
   { slug: 'modules', label: 'Modules', icon: Package, adminOnly: true, group: 'Access' },
   { slug: 'policies', label: 'Policies', icon: KeyRound, needs: 'policies', group: 'Access' },
   { slug: 'domains', label: 'Domains', icon: Globe, adminOnly: true, hidden: true },

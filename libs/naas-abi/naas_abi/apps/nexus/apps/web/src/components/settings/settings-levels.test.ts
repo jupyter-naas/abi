@@ -51,7 +51,7 @@ describe('the levels of Settings', () => {
     expect(organization?.groups.map((group) => group.label)).toEqual([null, 'Access']);
     expect(organization?.groups[1].links.map((link) => [link.label, link.href])).toEqual([
       ['Features', '/organizations/acme/settings/features'],
-      ['Services', '/organizations/acme/settings/core-services'],
+      ['Core Services', '/organizations/acme/settings/core-services'],
       ['Modules', '/organizations/acme/settings/modules'],
       ['Policies', '/organizations/acme/settings/policies'],
     ]);
@@ -63,7 +63,7 @@ describe('the levels of Settings', () => {
   it('keeps every group of the platform, each under its heading, Layers and Diagrams in System', () => {
     const platform = settingsLevels(all).find((level) => level.id === 'platform');
     expect(platform?.groups.map((group) => group.label)).toEqual([null, 'Access', 'System', 'Activity', 'Resources', 'Data']);
-    expect(platform?.groups[1].links.map((link) => link.label)).toEqual(['Features', 'Services', 'Modules', 'Audit']);
+    expect(platform?.groups[1].links.map((link) => link.label)).toEqual(['Features', 'Core Services', 'Modules', 'Audit']);
     expect(platform?.groups[2].links.map((link) => link.label)).toEqual(expect.arrayContaining(['Layers', 'Diagrams']));
     const usersOnly = settingsLevels({ ...member, platform: visiblePlatformSettingsGroups({ 'nexus:ListUsers': true }) });
     expect(usersOnly[0].groups).toMatchObject([{ label: null, links: [{ label: 'Users' }] }]);
