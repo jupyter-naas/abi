@@ -13,7 +13,7 @@ import { describeModuleResources, type WorkspaceResources } from '@/lib/workspac
 function resources(over: Partial<WorkspaceResources> = {}): WorkspaceResources {
   return {
     organization_id: 'org-1',
-    features: ['agents', 'apps', 'datasets', 'files', 'graph', 'maps', 'ontology', 'search', 'skills', 'settings'],
+    features: ['agents', 'apps', 'chat', 'datasets', 'files', 'graph', 'maps', 'ontology', 'search', 'skills', 'settings'],
     modules: [],
     totals: { agents: 2, apps: 1, workflows: 0, pipelines: 1 },
     ...over,
@@ -108,8 +108,10 @@ describe('workspace settings nav', () => {
     expect(shown).toContain('Apps');
     expect(shown).not.toContain('Agents');
     expect(shown).not.toContain('Maps');
+    // Models configures the chat: gone with it.
+    expect(shown).not.toContain('Models');
+    expect(labels(visibleSettingsGroups(resources({ features: ['chat'] })))).toContain('Models');
     // No feature: always there.
-    expect(shown).toContain('Models');
     expect(shown).toContain('General');
     // Features (General) and Files (Features): Files is where Workspace Files is turned on.
     expect(shown).toContain('Features');

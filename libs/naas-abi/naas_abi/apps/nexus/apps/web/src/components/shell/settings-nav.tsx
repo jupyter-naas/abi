@@ -18,6 +18,7 @@ import {
   type LucideIcon,
   Package,
   Database,
+  ServerCog,
 } from 'lucide-react';
 import { opensSection, type AccessSection } from '@/components/access/access-sections';
 import type { AccessView } from '@/lib/iam-admin/types';
@@ -71,7 +72,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       // pages under Features then show what is offered.
       { href: '/settings/features', label: 'Features', icon: SlidersHorizontal },
       // How far people go with each core service of the engine (graphs, files, vectors...).
-      { href: '/settings/core-services', label: 'Services', icon: Database },
+      { href: '/settings/core-services', label: 'Services', icon: ServerCog },
       { href: '/settings/modules', label: 'Modules', icon: Package },
       { href: '/settings/policies', label: 'Policies', icon: KeyRound, needs: 'policies' },
     ],
@@ -88,7 +89,8 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       { href: '/settings/files', label: 'Files', icon: Files },
       { href: '/settings/graphs', label: 'Graphs', icon: Waypoints, feature: 'graph' },
       { href: '/settings/maps', label: 'Maps', icon: Map, feature: 'maps' },
-      { href: '/settings/models', label: 'Models', icon: Cpu },
+      // The chat's models: gone with the chat (Access None).
+      { href: '/settings/models', label: 'Models', icon: Cpu, feature: 'chat' },
       { href: '/settings/ontologies', label: 'Ontologies', icon: BrainCircuit, feature: 'ontology' },
       { href: '/settings/search', label: 'Search', icon: Search, feature: 'search' },
       { href: '/settings/skills', label: 'Skills', icon: Zap, feature: 'skills' },
