@@ -9,6 +9,7 @@
  * query is checked against its role's contract on save, and can be run on the
  * workspace graphs from here before it is.
  */
+import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Play, Plus, RotateCcw, Save, Search, Trash2 } from 'lucide-react';
@@ -167,7 +168,7 @@ function SearchSettings() {
       <SettingsPageHeader
         title="Search"
         badge={`${enabledRows} enabled · ${entries.length - enabledRows} disabled`}
-        description="What the search page of this workspace can look into. A disabled entry disappears from search for every member. Topics read every graph this workspace can read, unless a topic is limited to some of them."
+        description={`${WORKSPACE_PAGE_DESCRIPTIONS['/settings/search']}. A disabled entry is gone from search for every member`}
         actions={
           <>
             <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />

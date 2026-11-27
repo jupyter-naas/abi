@@ -252,8 +252,8 @@ export function WorkspaceModules({
             </>
           ) : (
             isOrgTarget(workspaceId)
-              ? 'What the workspaces of this organization may offer of each module: its agents, apps, workflows and pipelines, whole (what the module adds later too) or item by item. A workspace never offers what is not offered here.'
-              : "What this workspace offers of each module: its agents, apps, workflows and pipelines, whole (what the module adds later too) or item by item. The pages under Features then show what is offered; each person's level decides what they do with it."
+              ? 'What the workspaces of this organization may offer of each module, whole or item by item'
+              : 'What this workspace offers of each module, whole or item by item'
           )
         }
         actions={

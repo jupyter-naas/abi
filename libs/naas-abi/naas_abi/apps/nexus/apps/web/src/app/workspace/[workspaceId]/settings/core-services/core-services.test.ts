@@ -63,7 +63,7 @@ describe('Settings › Access › Services', () => {
     await m.flush();
     expect(api.read).toHaveBeenCalledWith('ws1', 'service', null);
     expect(m.host.textContent).toContain('2 services');
-    expect(m.host.textContent).toContain('Access › Features');
+    expect(m.host.textContent).toContain('How far everyone here goes with each engine service, admins included');
     expect(level(m, 'triple_store', 'admin')?.getAttribute('aria-checked')).toBe('true');
     // Secrets have no admin level.
     expect(level(m, 'secret', 'admin')).toBeNull();

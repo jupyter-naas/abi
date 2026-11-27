@@ -1,5 +1,6 @@
 'use client';
 
+import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { Suspense, useCallback, useState, useEffect, useMemo } from 'react';
 import { Plus, Pencil, Trash2, AlertCircle, Mail, ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import { authFetch, useAuthStore } from '@/stores/auth';
@@ -242,7 +243,7 @@ function Members() {
             ? `${members.length - invitedCount} active · ${invitedCount} invited`
             : `${members.length} active`
         }
-        description="Manage who has access to this workspace"
+        description={WORKSPACE_PAGE_DESCRIPTIONS['/settings/users']}
         actions={
           <>
             <UsersExportMenu

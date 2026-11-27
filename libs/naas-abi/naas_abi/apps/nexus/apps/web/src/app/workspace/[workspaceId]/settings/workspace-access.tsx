@@ -31,7 +31,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { authFetch, useAuthStore } from '@/stores/auth';
 
 const SUBTITLES: Record<ContainerAccessPage, string> = {
-  policies: 'Where rights come from in this workspace: each policy, and who holds it here',
+  policies: 'The policies of this workspace, and who holds each',
   groups: 'Groups of people of this workspace, and what each holds',
 };
 

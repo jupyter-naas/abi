@@ -1,5 +1,6 @@
 'use client';
 
+import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Workflow } from 'lucide-react';
@@ -87,7 +88,7 @@ export default function WorkflowsSettingsPage() {
       <SettingsPageHeader
         title="Workflows"
         badge={items ? countLabel(all.length, all.length, 'item') : undefined}
-        description="The workflows and pipelines of this workspace's modules. Who runs each is decided by policies, on Roles & permissions."
+        description={WORKSPACE_PAGE_DESCRIPTIONS['/settings/workflows']}
         actions={<UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />}
       />
 

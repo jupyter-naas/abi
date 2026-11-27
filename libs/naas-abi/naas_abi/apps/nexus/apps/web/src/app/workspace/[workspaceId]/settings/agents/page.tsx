@@ -1,5 +1,6 @@
 'use client';
 
+import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Search, CheckCircle, XCircle, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -218,7 +219,7 @@ export default function AgentsPage() {
       <SettingsPageHeader
         title="Agents"
         badge={`${rows.length} ${rows.length === 1 ? 'agent' : 'agents'}`}
-        description="The agents of this workspace you may use, from its modules and those it builds. Who uses each is decided by policies, on Roles & permissions."
+        description={WORKSPACE_PAGE_DESCRIPTIONS['/settings/agents']}
         actions={
           <>
             <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />

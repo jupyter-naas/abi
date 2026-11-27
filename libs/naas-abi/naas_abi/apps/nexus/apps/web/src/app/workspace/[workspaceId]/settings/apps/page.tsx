@@ -1,5 +1,6 @@
 'use client';
 
+import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { AppWindow, Globe, Tag, ExternalLink } from 'lucide-react';
@@ -107,7 +108,7 @@ export default function AppsSettingsPage() {
       <SettingsPageHeader
         title="Apps"
         badge={`${installedApps.length} ${installedApps.length === 1 ? 'app' : 'apps'}`}
-        description="The apps of this workspace you may open. Who opens each app is decided by policies, on Roles & permissions."
+        description={WORKSPACE_PAGE_DESCRIPTIONS['/settings/apps']}
         actions={<UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />}
       />
 
