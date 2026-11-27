@@ -93,6 +93,11 @@ class ProvisioningFailed(ServiceError):
     """The identity provider's admin API refused or failed a provisioning call."""
 
 
+class EmailDeliveryFailed(ServiceError):
+    """The mail did not leave: no sender, or the provider refused it. The
+    message is the cause (the provider's answer, never a credential)."""
+
+
 class Unimplemented(ServiceError, NotImplementedError):
     """The provider's users are managed in the provider (``provisioning: none``)."""
 
@@ -118,6 +123,7 @@ ERRORS = {
     "UNAVAILABLE": ProviderUnavailable,
     "PROVISIONING_FAILED": ProvisioningFailed,
     "UNIMPLEMENTED": Unimplemented,
+    "EMAIL_DELIVERY_FAILED": EmailDeliveryFailed,
 }
 
 

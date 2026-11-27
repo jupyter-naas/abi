@@ -19,6 +19,7 @@ from naas_abi_core.services.email.EmailPorts import (
     SentEmail,
     SentEmailNotFound,
     SentEmailSummary,
+    resolve_sender,
 )
 
 # ``<epoch ms>-<uuid4 hex>``: sorts by send time, and is a safe file name.
@@ -53,8 +54,13 @@ def _snippet(message: EmailMessage) -> str:
 class FilesystemAdapter(IEmailAdapter):
     """Writes every message to ``<directory>/<message id>.eml`` and keeps it."""
 
-    def __init__(self, *, directory: str) -> None:
+    def __init__(
+        self, *, directory: str, from_email: str = "no-reply@localhost"
+    ) -> None:
         self._directory = Path(directory).expanduser()
+        # The sender of a send that names none: the mail is kept, not sent, so
+        # any address reads well in the .eml.
+        self._default_from_email = from_email
         self._last_millis = 0
         self._lock = threading.Lock()
 
@@ -85,7 +91,7 @@ class FilesystemAdapter(IEmailAdapter):
             subject=subject,
             text_body=text_body,
             html_body=html_body,
-            from_email=from_email,
+            from_email=resolve_sender(from_email, self._default_from_email),
             from_name=from_name,
             reply_to=reply_to,
             attachments=attachments,

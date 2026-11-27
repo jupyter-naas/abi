@@ -42,6 +42,7 @@ from naas_abi_core.services.email.adapters.email_nats_contract import (
 )
 from naas_abi_core.services.email.EmailPorts import (
     EmailAttachment,
+    EmailDeliveryError,
     IEmailAdapter,
     SentEmail,
     SentEmailNotFound,
@@ -235,6 +236,18 @@ class EmailPrimaryAdapterNATS(ServicePrimary):
         except SentEmailNotFound as exc:
             await self._respond_error(
                 request, response_cls, "SENT_EMAIL_NOT_FOUND", str(exc), retryable=False
+            )
+            return
+        except EmailDeliveryError as exc:
+            # The cause (no sender, the provider's refusal) goes back to the
+            # caller: a module that sends mail can then log why it failed.
+            logger.warning(f"EmailPrimaryAdapterNATS: mail not sent: {exc}")
+            await self._respond_error(
+                request,
+                response_cls,
+                "EMAIL_DELIVERY_FAILED",
+                str(exc),
+                retryable=False,
             )
             return
         except Exception:  # noqa: BLE001 - a handler must never crash the service

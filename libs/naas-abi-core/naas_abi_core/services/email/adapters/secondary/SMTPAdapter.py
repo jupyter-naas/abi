@@ -3,7 +3,12 @@ from __future__ import annotations
 import smtplib
 
 from naas_abi_core.services.email.EmailMessageBuilder import build_email_message
-from naas_abi_core.services.email.EmailPorts import EmailAttachment, IEmailAdapter
+from naas_abi_core.services.email.EmailPorts import (
+    EmailAttachment,
+    EmailDeliveryError,
+    IEmailAdapter,
+    resolve_sender,
+)
 
 
 class SMTPAdapter(IEmailAdapter):
@@ -17,6 +22,7 @@ class SMTPAdapter(IEmailAdapter):
         use_tls: bool = False,
         use_ssl: bool = False,
         timeout: int = 10,
+        from_email: str | None = None,
     ) -> None:
         if use_tls and use_ssl:
             raise ValueError("SMTPAdapter cannot use TLS and SSL at the same time")
@@ -27,6 +33,8 @@ class SMTPAdapter(IEmailAdapter):
         self._use_tls = use_tls
         self._use_ssl = use_ssl
         self._timeout = timeout
+        # The sender of a send that names none (``from_email=""``).
+        self._default_from_email = from_email
 
     def send(
         self,
@@ -42,12 +50,13 @@ class SMTPAdapter(IEmailAdapter):
         to_emails: list[str] | str | None = None,
         cc_emails: list[str] | str | None = None,
     ) -> None:
+        sender = resolve_sender(from_email, self._default_from_email)
         msg = build_email_message(
             to_email=to_email,
             subject=subject,
             text_body=text_body,
             html_body=html_body,
-            from_email=from_email,
+            from_email=sender,
             from_name=from_name,
             reply_to=reply_to,
             attachments=attachments,
@@ -56,13 +65,19 @@ class SMTPAdapter(IEmailAdapter):
         )
 
         smtp_cls = smtplib.SMTP_SSL if self._use_ssl else smtplib.SMTP
-        with smtp_cls(self._host, self._port, timeout=self._timeout) as client:
-            client.ehlo()
-            if self._use_tls:
-                client.starttls()
+        try:
+            with smtp_cls(self._host, self._port, timeout=self._timeout) as client:
                 client.ehlo()
+                if self._use_tls:
+                    client.starttls()
+                    client.ehlo()
 
-            if self._username and self._password:
-                client.login(self._username, self._password)
+                if self._username and self._password:
+                    client.login(self._username, self._password)
 
-            client.send_message(msg)
+                client.send_message(msg)
+        except smtplib.SMTPException as exc:
+            # The relay's answer (a refused sender, say), never the password.
+            raise EmailDeliveryError(
+                f"SMTP relay {self._host}:{self._port} refused the mail: {exc}"
+            ) from exc

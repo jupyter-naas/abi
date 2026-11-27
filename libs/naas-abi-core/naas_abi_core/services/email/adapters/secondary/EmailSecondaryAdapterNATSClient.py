@@ -31,6 +31,7 @@ from naas_abi_core.services.email.adapters.email_nats_contract import (
 )
 from naas_abi_core.services.email.EmailPorts import (
     EmailAttachment,
+    EmailDeliveryError,
     IEmailAdapter,
     SentEmail,
     SentEmailNotFound,
@@ -86,8 +87,8 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
 
     Must stay exactly symmetric with how ``EmailPrimaryAdapterNATS`` encodes
     errors: ``PERMISSION_DENIED`` and ``NOT_FOUND`` map back to IAM's errors,
-    ``SENT_EMAILS_NOT_KEPT`` and ``SENT_EMAIL_NOT_FOUND`` to their
-    ``EmailPorts`` exceptions; every other failure the server can report --
+    ``SENT_EMAILS_NOT_KEPT``, ``SENT_EMAIL_NOT_FOUND`` and
+    ``EMAIL_DELIVERY_FAILED`` to their ``EmailPorts`` exceptions; every other failure the server can report --
     including its own catch-all -- falls through to ``RuntimeError``.
     """
     raise_authorization_error(error.code, error.message)
@@ -95,6 +96,8 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
         raise SentEmailsNotKept(error.message)
     if error.code == "SENT_EMAIL_NOT_FOUND":
         raise SentEmailNotFound(error.message)
+    if error.code == "EMAIL_DELIVERY_FAILED":
+        raise EmailDeliveryError(error.message)
     raise RuntimeError(f"email NATS RPC failed ({error.code}): {error.message}")
 
 

@@ -88,15 +88,26 @@ def test_to_list_passes_through_a_list_unchanged():
 
 
 # ---------------------------------------------------------------------------
-# Error mapping: EmailPorts.py declares no domain exceptions, so every
-# error code the server can report -- including its own INTERNAL catch-all
-# and UNAUTHENTICATED -- falls through to the generic RuntimeError.
+# Error mapping: EMAIL_DELIVERY_FAILED maps to EmailDeliveryError; every
+# other error code the server can report -- including its own INTERNAL
+# catch-all and UNAUTHENTICATED -- falls through to the generic RuntimeError.
 # ---------------------------------------------------------------------------
 
 
 def test_raise_for_error_maps_internal_to_runtime_error():
     with pytest.raises(RuntimeError, match="INTERNAL"):
         _raise_for_error(common_pb2.CallError(code="INTERNAL", message="boom"))
+
+
+def test_raise_for_error_maps_email_delivery_failed_to_its_error():
+    from naas_abi_core.services.email.EmailPorts import EmailDeliveryError
+
+    with pytest.raises(EmailDeliveryError, match="ErrorInvalidUser"):
+        _raise_for_error(
+            common_pb2.CallError(
+                code="EMAIL_DELIVERY_FAILED", message="(404): ErrorInvalidUser"
+            )
+        )
 
 
 def test_raise_for_error_maps_unauthenticated_to_runtime_error():
@@ -229,7 +240,9 @@ def nats_url(tmp_path_factory):
         # pattern in NATSJetStreamAdapter_test.py / ObjectStorageSecondaryAdapterNATSClient_test.py.
         from testcontainers.core.container import DockerContainer
 
-        with DockerContainer("nats:2.14.7-alpine").with_exposed_ports(4222) as container:
+        with DockerContainer("nats:2.14.7-alpine").with_exposed_ports(
+            4222
+        ) as container:
             host = container.get_container_host_ip()
             port = container.get_exposed_port(4222)
             url = f"nats://{host}:{port}"
