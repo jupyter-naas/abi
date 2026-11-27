@@ -125,3 +125,12 @@ export const SEARCH_EXPORT_HEADERS = ['Name', 'Id', 'Group', 'Type', 'Enabled'];
 export function searchExportRow(entry: SearchEntry): string[] {
   return [entry.name, entry.id, entry.group, entry.type, entry.on ? 'Yes' : 'No'];
 }
+
+/** Whether a row's switch may change: the caller edits search, a feature is on in the workspace,
+ *  a topic is saved (a draft is not). */
+export function entrySwitchable(entry: SearchEntry, { canEdit, drafts }: { canEdit: boolean; drafts: ReadonlySet<string> }): boolean {
+  if (!canEdit) return false;
+  if (entry.kind === 'feature') return entry.available;
+  if (entry.kind === 'topic') return !drafts.has(entry.id);
+  return true;
+}

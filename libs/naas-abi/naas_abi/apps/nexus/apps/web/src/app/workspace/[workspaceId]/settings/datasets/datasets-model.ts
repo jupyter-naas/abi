@@ -42,6 +42,14 @@ export function changesFrom(rows: DatasetRow[], drafts: Record<string, boolean>)
   );
 }
 
+/** What a batch change sends: each editable row of `keys` not yet `on` (`{namespace: on}`). */
+export function bulkChanges(rows: DatasetRow[], keys: Iterable<string>, on: boolean): Record<string, boolean> {
+  const picked = new Set(keys);
+  return Object.fromEntries(
+    rows.filter((row) => picked.has(row.namespace) && row.editable && row.offered !== on).map((row) => [row.namespace, on])
+  );
+}
+
 /** What a row says under its switch: why it cannot change, or that the deployment lost it. */
 export function rowNote(row: DatasetRow): string | null {
   if (row.reason) return row.reason;

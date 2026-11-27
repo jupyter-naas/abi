@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
 import type { DatasetsOfferApi } from './datasets-api';
-import { changesFrom, datasetExportRow, type DatasetRow, type DatasetsState } from './datasets-model';
+import { bulkChanges, changesFrom, datasetExportRow, type DatasetRow, type DatasetsState } from './datasets-model';
 import { DatasetsOffer } from './datasets';
 
 vi.mock('next/link', async () => {
@@ -63,12 +63,16 @@ async function render(api: ReturnType<typeof fakeApi>, target = 'ws1') {
 
 const box = (m: Mounted, namespace: string) =>
   m.host.querySelector(`tr[data-namespace="${namespace}"] input[data-offered]`) as HTMLInputElement | null;
-const saveButton = (m: Mounted) => m.host.querySelector('[data-action="save"]') as HTMLButtonElement;
+const notice = (m: Mounted) => m.host.querySelector('[data-datasets-notice]')?.textContent ?? null;
+const confirmButton = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>('[data-bulk-confirm] button')].find((b) => b.textContent === label)!;
 
 describe('DatasetsOffer', () => {
   it('lists each namespace, its datasets and whether the workspace uses it', async () => {
     const m = await render(fakeApi());
+    // The select column first (batch changes), then the table's own.
     expect([...m.host.querySelectorAll('thead th')].map((th) => th.textContent)).toEqual([
+      '',
       'Namespace',
       'Datasets',
       'Offered',
@@ -87,7 +91,9 @@ describe('DatasetsOffer', () => {
     expect(m.host.querySelector('a[href*="pol_access"]')?.textContent).toBe('Alpha access');
     // Reopening is the platform admin's: the legend says so.
     expect(m.host.querySelector('[data-datasets-legend]')?.textContent).toContain('platform admin');
-    expect(saveButton(m).disabled).toBe(true);
+    // A table of switches: each change is saved at once, no Save nor Discard.
+    expect(m.host.querySelector('[data-action="save"]')).toBeNull();
+    expect(m.host.querySelector('[data-action="discard"]')).toBeNull();
   });
 
   it('keeps what the organization closes read-only, with why', async () => {
@@ -96,30 +102,40 @@ describe('DatasetsOffer', () => {
     expect(m.host.querySelector('tr[data-namespace="payroll"]')?.textContent).toContain('Not offered by Acme access');
   });
 
-  it('closes and reopens namespaces in one save', async () => {
+  it('closes a namespace at once, and says so', async () => {
     const after = state([row({ namespace: 'finance', tables: 12, offered: false }), ...BEFORE.rows.slice(1)]);
     const api = fakeApi(after);
     const m = await render(api);
     await m.click(box(m, 'finance'));
-    await m.click(box(m, 'hr'));
-    expect(saveButton(m).disabled).toBe(false);
-    await m.click(saveButton(m));
     await m.flush();
-    expect(api.save).toHaveBeenCalledWith('ws1', { finance: false, hr: true });
+    expect(api.save).toHaveBeenCalledWith('ws1', { finance: false });
     expect(box(m, 'finance')?.checked).toBe(false);
-    expect(saveButton(m).disabled).toBe(true);
+    expect(notice(m)).toBe('finance: not offered.');
   });
 
-  it('says what IAM refused and keeps the drafts', async () => {
+  it('offers or takes back the namespaces selected in one save, the read-only ones counted', async () => {
+    const api = fakeApi();
+    const m = await render(api);
+    await m.click(m.host.querySelector('thead input[data-action="select-all"]'));
+    // payroll is closed above: it cannot be selected.
+    expect(m.host.querySelector('[data-bulk-bar]')?.textContent).toContain('2 namespaces selected');
+    await m.click(m.host.querySelector('[data-bulk-bar] [data-bulk-action="off"]'));
+    expect(document.querySelector('[data-bulk-confirm]')?.textContent).toContain('Take back 2 namespaces?');
+    await m.click(confirmButton('Take back'));
+    await m.flush();
+    // hr is already not offered: one change only.
+    expect(api.save).toHaveBeenCalledWith('ws1', { finance: false });
+    expect(notice(m)).toBe('1 namespace taken back.');
+  });
+
+  it('says what IAM refused, and the switch stays as it was', async () => {
     const api = fakeApi();
     api.save.mockRejectedValue(new Error('only the platform admin lifts its Denies'));
     const m = await render(api);
     await m.click(box(m, 'hr'));
-    await m.click(saveButton(m));
     await m.flush();
     expect(m.host.textContent).toContain('only the platform admin lifts its Denies');
-    expect(box(m, 'hr')?.checked).toBe(true);
-    expect(saveButton(m).disabled).toBe(false);
+    expect(box(m, 'hr')?.checked).toBe(false);
   });
 
   it('says so when the deployment lists no dataset', async () => {
@@ -142,5 +158,10 @@ describe('the datasets model', () => {
   it('sends only what changed, and exports as the table shows', () => {
     expect(changesFrom(BEFORE.rows, { finance: true, hr: true })).toEqual({ hr: true });
     expect(datasetExportRow(BEFORE.rows[2])).toEqual(['payroll', '2', 'No', 'Yes']);
+  });
+
+  it('a batch change names the editable rows it changes', () => {
+    expect(bulkChanges(BEFORE.rows, ['finance', 'hr', 'payroll'], true)).toEqual({ hr: true });
+    expect(bulkChanges(BEFORE.rows, ['finance', 'hr', 'payroll'], false)).toEqual({ finance: false });
   });
 });

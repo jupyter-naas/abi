@@ -22,17 +22,25 @@ vi.mock('next/navigation', () => ({
   useParams: () => ({ workspaceId: 'ws-1' }),
   usePathname: () => '/workspace/ws-1/settings/ontologies',
 }));
+// Each write: its body kept, answered with the policy it sends at the next revision.
+const PUTS = vi.hoisted(() => [] as { revision: number; policy: Record<string, unknown> }[]);
 vi.mock('@/stores/auth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/stores/auth')>()),
-  authFetch: async (url: string) =>
-    new Response(
+  authFetch: async (url: string, init?: RequestInit) => {
+    if (init?.method === 'PUT') {
+      const body = JSON.parse(String(init.body));
+      PUTS.push(body);
+      return new Response(JSON.stringify({ ...SNAPSHOT, data: body.policy, revision: body.revision + 1 }), { status: 200 });
+    }
+    return new Response(
       JSON.stringify(
         url.endsWith('/graphs')
           ? { ...SNAPSHOT, data: { read: ['onto-03'], write: ['onto-04'] } }
           : SNAPSHOT,
       ),
       { status: 200 },
-    ),
+    );
+  },
 }));
 vi.mock('@/stores/graph-explorer', () => ({ invalidateGraphExplorer: () => undefined }));
 vi.mock('@/stores/ontology', () => ({ useOntologyStore: { setState: () => undefined } }));
@@ -44,7 +52,11 @@ let mounted: Mounted | null = null;
 afterEach(async () => {
   await mounted?.unmount();
   mounted = null;
+  PUTS.length = 0;
 });
+const confirmButton = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>('[data-bulk-confirm] button')].find((b) => b.textContent === label)!;
+const notice = () => mounted!.host.querySelector('[data-resource-notice]')?.textContent ?? null;
 
 const rows = () => [...mounted!.host.querySelectorAll('[data-resource]')].map((r) => r.getAttribute('data-resource'));
 const shown = () => mounted!.host.querySelector('[data-field="rows-shown"]')?.textContent;
@@ -81,10 +93,33 @@ describe('Workspace settings › Ontologies (resource access)', () => {
     await mounted.click(mounted.host.querySelector('[data-action="clear-filters"]'));
     await filterColumn(mounted, 'enabled', 'Enabled');
     expect(rows()).toEqual(['onto-02']);
-    // The filter reads the draft: a row unticked under it leaves the table.
+    // Each change is saved at once: a row unticked under the filter leaves the table.
     await mounted.click(mounted.host.querySelector('[aria-label="Enable Ontology 02"]'));
+    await mounted.flush();
+    expect(PUTS).toEqual([{ revision: 1, policy: { enabled: [] } }]);
+    expect(notice()).toBe('Ontology 02 disabled.');
     expect(rows()).toEqual([]);
     expect(mounted.host.textContent).toContain('No ontologies match the current search and filters');
+    // No Save button: a table of switches.
+    expect([...mounted.host.querySelectorAll('button')].map((b) => b.textContent)).not.toContain('Save changes');
+  });
+
+  it('enables the ontologies selected in one save, asked first', async () => {
+    mounted = await mount(ResourceAccessEditor, { workspaceId: 'ws-1', kind: 'ontologies' });
+    await mounted.flush();
+    await mounted.type(mounted.host.querySelector('input[placeholder="Search ontologies…"]'), 'Ontology 0');
+    await mounted.click(mounted.host.querySelector('thead input[data-action="select-all"]'));
+    // The search reads each word: "0" keeps 01 to 09, 10, 20, 30 and 40.
+    expect(mounted.host.querySelector('[data-bulk-bar]')?.textContent).toContain('13 ontologies selected');
+    await mounted.click(mounted.host.querySelector('[data-bulk-action="on"]'));
+    expect(document.querySelector('[data-bulk-confirm]')?.textContent).toContain('Enable 13 ontologies?');
+    await mounted.click(confirmButton('Enable'));
+    await mounted.flush();
+    expect(PUTS).toHaveLength(1);
+    expect([...(PUTS[0].policy.enabled as string[])].sort()).toEqual(
+      ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '20', '30', '40'].map((n) => `onto-${n}`),
+    );
+    expect(notice()).toBe('12 ontologies enabled.');
   });
 });
 
@@ -107,5 +142,25 @@ describe('Workspace settings › Graphs (resource access)', () => {
     // Its options in a section of their own, under the page's title.
     expect([...mounted.host.querySelectorAll('h3')].map((h) => h.textContent)).toContain('Options');
     expect(mounted.host.textContent).not.toContain('Workspace access');
+  });
+
+  it('gives the graphs selected Read and edit in one save, and an option at once', async () => {
+    mounted = await mount(ResourceAccessEditor, { workspaceId: 'ws-1', kind: 'graphs' });
+    await mounted.flush();
+    await mounted.click(mounted.host.querySelector('[data-select-row="onto-01"]'));
+    await mounted.click(mounted.host.querySelector('[data-select-row="onto-03"]'));
+    await mounted.click(mounted.host.querySelector('[data-bulk-action="edit"]'));
+    expect(document.querySelector('[data-bulk-confirm]')?.textContent).toContain('Give Read and edit to 2 graphs?');
+    await mounted.click(confirmButton('Read and edit'));
+    await mounted.flush();
+    expect(PUTS[0].policy).toEqual({ read: ['onto-03', 'onto-01'], write: ['onto-04', 'onto-01', 'onto-03'] });
+    expect(notice()).toBe('2 graphs: Read and edit.');
+
+    await mounted.click(
+      [...mounted.host.querySelectorAll('label')].find((l) => l.textContent === 'Read all graphs, including future graphs')!
+        .querySelector('input'),
+    );
+    await mounted.flush();
+    expect(PUTS[1]).toMatchObject({ revision: 2, policy: { read_all: true } });
   });
 });

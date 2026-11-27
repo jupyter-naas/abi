@@ -66,6 +66,14 @@ vi.mock('@/app/workspace/[workspaceId]/maps/components/maps-feed-layer-form', ()
   slugifyLayerId: (id: string) => id,
   useFeedTypes: () => ({ types: [] }),
 }));
+const LAYOUTS = vi.hoisted(() => ({
+  setFeedsHidden: vi.fn(async () => ({ hidden_feeds: [] })),
+  setHidden: vi.fn(async () => ({ hidden: [] })),
+}));
+vi.mock('@/app/workspace/[workspaceId]/maps/lib/layouts-api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/app/workspace/[workspaceId]/maps/lib/layouts-api')>();
+  return { ...actual, layoutsApi: { ...actual.layoutsApi, ...LAYOUTS } };
+});
 vi.mock('@/app/workspace/[workspaceId]/maps/components/maps-settings-basemaps-section', () => ({
   MapsSettingsBasemapsSection: () => null,
 }));
@@ -81,6 +89,8 @@ afterEach(async () => {
 
 const attr = (name: string) => [...mounted!.host.querySelectorAll(`[${name}]`)].map((r) => r.getAttribute(name));
 const shown = () => mounted!.host.querySelector('[data-field="rows-shown"]')?.textContent;
+const confirmButton = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>('[data-bulk-confirm] button')].find((b) => b.textContent === label)!;
 
 describe('Workspace settings › Maps', () => {
   afterEach(() => {
@@ -117,8 +127,15 @@ describe('Workspace settings › Maps', () => {
 
     await filterColumn(mounted, 'enabled', 'Disabled');
     expect(attr('data-feed')).toEqual(['feed-02']);
-    expect(mounted.host.textContent).toContain('Enable (1)');
-    expect(mounted.host.textContent).not.toContain('Disable (');
+    // Select all takes the feeds shown; the batch bar enables them, asked first, in one write.
+    await mounted.click(mounted.host.querySelector('thead input[data-action="select-all"]'));
+    expect(mounted.host.querySelector('[data-bulk-bar]')?.textContent).toContain('1 feed selected');
+    await mounted.click(mounted.host.querySelector('[data-bulk-action="on"]'));
+    expect(document.querySelector('[data-bulk-confirm]')?.textContent).toContain('Enable 1 feed?');
+    await mounted.click(confirmButton('Enable'));
+    await mounted.flush();
+    expect(LAYOUTS.setFeedsHidden).toHaveBeenCalledWith('ws-1', ['feed-02'], false);
+    expect(mounted.host.querySelector('[data-maps-notice]')?.textContent).toBe('1 feed enabled.');
   });
 
   it("a feed's Layers table: by order, filtered from its columns", async () => {
@@ -134,5 +151,22 @@ describe('Workspace settings › Maps', () => {
     await mounted.type(mounted.host.querySelector('input[placeholder="Search layers…"]'), 'bridges');
     expect(attr('data-layer')).toEqual(['feed-01-bridges']);
     expect(mounted.host.textContent).not.toContain('1 of 3 layers');
+  });
+
+  it("a feed's layers selected are hidden in one step, asked first", async () => {
+    NAV.feed = 'feed-01';
+    LAYOUTS.setHidden.mockClear();
+    mounted = await mount(MapsSettingsPage, {});
+    await mounted.flush();
+    await mounted.click(mounted.host.querySelector('thead input[data-action="select-all"]'));
+    await mounted.click(mounted.host.querySelector('[data-bulk-action="off"]'));
+    expect(document.querySelector('[data-bulk-confirm]')?.textContent).toContain('Hide 3 layers?');
+    await mounted.click(confirmButton('Hide'));
+    await mounted.flush();
+    // Roads is hidden already: the two others only.
+    expect(LAYOUTS.setHidden.mock.calls).toEqual([
+      ['ws-1', 'feed-01-bridges', true],
+      ['ws-1', 'feed-01-ports', true],
+    ]);
   });
 });

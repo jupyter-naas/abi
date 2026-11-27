@@ -43,9 +43,13 @@ vi.mock('@/stores/auth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/stores/auth')>()),
   authFetch: async () => new Response('[]', { status: 200 }),
 }));
+const API = vi.hoisted(() => ({
+  save: vi.fn(async (_ws: string, topic: Record<string, unknown>) => topic),
+  setScopeEnabled: vi.fn(async () => ({ disabled_scopes: [] })),
+}));
 vi.mock('@/lib/search-topics-api', () => ({
   TopicApiError: class extends Error {},
-  topicsApi: { contract: async () => ({}) },
+  topicsApi: { contract: async () => ({}), ...API },
 }));
 
 import SearchSettingsPage from './page';
@@ -99,5 +103,28 @@ describe('Workspace settings › Search', () => {
     // Features of a workspace that is not loaded are off: Disabled lists them.
     await filterColumn(mounted, 'enabled', 'Disabled');
     expect(rows()).toEqual(FEATURE_SCOPES.map((scope) => scope.id));
+  });
+
+  it('disables the entries selected in one step, asked first; a feature not available here is not selected', async () => {
+    mounted = await mount(SearchSettingsPage, {});
+    await mounted.flush();
+    await mounted.click(mounted.host.querySelector('[data-select-row="topic-01"]'));
+    await mounted.click(mounted.host.querySelector('[data-select-row="topic-02"]'));
+    await mounted.click(mounted.host.querySelector('[data-bulk-action="off"]'));
+    expect(document.querySelector('[data-bulk-confirm]')?.textContent).toContain('Disable 2 entries?');
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('[data-bulk-confirm] button')].find(
+      (b) => b.textContent === 'Disable',
+    )!;
+    await mounted.click(confirm);
+    await mounted.flush();
+    expect(API.save.mock.calls.map(([, topic]) => [topic.id, topic.enabled])).toEqual([
+      ['topic-01', false],
+      ['topic-02', false],
+    ]);
+    expect(mounted.host.querySelector('[data-search-notice]')?.textContent).toBe('2 entries disabled.');
+    // Features of a workspace that is not loaded are off: their boxes are disabled.
+    await filterColumn(mounted, 'group', 'Workspace');
+    const feature = mounted.host.querySelector(`[data-select-row="${FEATURE_SCOPES[0].id}"]`) as HTMLInputElement;
+    expect(feature.disabled).toBe(true);
   });
 });

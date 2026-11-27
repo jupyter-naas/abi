@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { BulkBar, SelectAllCell, SelectRowCell, onOffActions, useRowSelection } from '@/components/settings/bulk-access';
 import { useParams, useRouter } from 'next/navigation';
 import { Plus, Trash2, XCircle, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +38,9 @@ import {
   skillSortValue,
 } from './skills-model';
 
+/** The batch actions: enable or disable the skills selected. */
+const BULK_ACTIONS = onOffActions({ on: 'Enable', off: 'Disable' });
+
 export default function SkillsSettingsPage() {
   const params = useParams();
   const router = useRouter();
@@ -49,6 +53,8 @@ export default function SkillsSettingsPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+  const [switching, setSwitching] = useState(false);
   const { confirm: confirmDelete, dialog: confirmDialog } = useConfirm();
   const [newSkill, setNewSkill] = useState({
     name: '',
@@ -102,12 +108,42 @@ export default function SkillsSettingsPage() {
     }
   };
 
+  // A table of switches: each change saved at once, and said.
   const handleToggleEnabled = async (id: string, enabled: boolean) => {
     setActionError(null);
+    setNotice('');
     try {
       await updateSkill(id, { enabled });
+      const skill = skills.find((s) => s.id === id);
+      setNotice(`/${skill?.slug ?? id} ${enabled ? 'enabled' : 'disabled'}.`);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to update skill');
+    }
+  };
+
+  // The skills checked for a batch change (the rows shown: select all takes them).
+  const selection = useRowSelection(useMemo(() => table.shown.map((skill) => skill.id), [table.shown]));
+  const canModifySkill = (skill: (typeof skills)[number]) => skill.scope !== 'user' || skill.userId === currentUserId;
+  /** Enable or disable every selected skill the caller may change, one after the other. */
+  const applyBulk = async (id: string) => {
+    const enabled = id === 'on';
+    const picked = skills.filter((s) => selection.selected.has(s.id) && canModifySkill(s) && s.enabled !== enabled);
+    setActionError(null);
+    setNotice('');
+    setSwitching(true);
+    let done = 0;
+    try {
+      for (const skill of picked) {
+        await updateSkill(skill.id, { enabled });
+        done += 1;
+      }
+      setNotice(`${done} skill${done === 1 ? '' : 's'} ${enabled ? 'enabled' : 'disabled'}.`);
+    } catch (err) {
+      setActionError(
+        `${err instanceof Error ? err.message : 'Failed to update skill'} (${done} of ${picked.length} changed)`
+      );
+    } finally {
+      setSwitching(false);
     }
   };
 
@@ -216,6 +252,11 @@ export default function SkillsSettingsPage() {
           {actionError}
         </SettingsNotice>
       )}
+      {notice && (
+        <p className="text-xs text-muted-foreground" role="status" data-skills-notice="">
+          {notice}
+        </p>
+      )}
 
       <SettingsTableToolbar
         search={table.search}
@@ -224,19 +265,39 @@ export default function SkillsSettingsPage() {
         // No count above the search: the badge says how many, the pager how many are shown.
         meta={<SettingsTableClear table={table} />}
       />
+      <BulkBar
+        selection={selection}
+        noun="skill"
+        actions={BULK_ACTIONS}
+        onApply={applyBulk}
+        skippedFor={() => skills.filter((s) => selection.selected.has(s.id) && !canModifySkill(s)).length}
+        change="this change"
+        disabled={switching}
+      />
 
       <div className="org-settings-users-table-wrap">
         <table className="org-settings-users-table">
-          <SettingsTableHead table={table} trailing={<th aria-label="Actions" className="w-24" />} />
+          <SettingsTableHead
+            table={table}
+            leading={
+              <SelectAllCell
+                selection={selection}
+                keys={table.shown.filter(canModifySkill).map((skill) => skill.id)}
+                noun="skill"
+                disabled={switching}
+              />
+            }
+            trailing={<th aria-label="Actions" className="w-24" />}
+          />
           <tbody>
             {skills.length === 0 ? (
               <tr>
-                <td colSpan={SKILL_COLUMNS.length + 1} className="org-settings-users-no-match">
+                <td colSpan={SKILL_COLUMNS.length + 2} className="org-settings-users-no-match">
                   No skills yet. Type /create-skill in the chat, or create one here.
                 </td>
               </tr>
             ) : (
-              table.shown.length === 0 && <SettingsTableNoMatch colSpan={SKILL_COLUMNS.length + 1} noun="skills" />
+              table.shown.length === 0 && <SettingsTableNoMatch colSpan={SKILL_COLUMNS.length + 2} noun="skills" />
             )}
             {table.paged.pageRows.map((skill) => {
               const canModify = skill.scope !== 'user' || skill.userId === currentUserId;
@@ -247,6 +308,12 @@ export default function SkillsSettingsPage() {
                   onClick={() => router.push(`/workspace/${workspaceId}/settings/skills/${skill.id}`)}
                   className="cursor-pointer"
                 >
+                  <SelectRowCell
+                    selection={selection}
+                    rowKey={skill.id}
+                    label={skill.name}
+                    disabled={switching || !canModify}
+                  />
                   <td>
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-muted">

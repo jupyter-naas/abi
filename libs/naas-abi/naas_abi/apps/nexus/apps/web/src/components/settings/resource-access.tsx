@@ -6,7 +6,6 @@ import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { invalidateGraphExplorer } from '@/stores/graph-explorer';
 import { useOntologyStore } from '@/stores/ontology';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   SettingsLoading,
@@ -25,16 +24,40 @@ import { TablePager } from '@/components/settings/users-table/table-pager';
 import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import {
+  BulkBar,
+  SelectAllCell,
+  SelectRowCell,
+  onOffActions,
+  useRowSelection,
+  type BulkAction,
+} from '@/components/settings/bulk-access';
+import {
+  GRAPH_LEVEL_LABELS,
+  graphLevelFits,
   resourceCellValues,
   resourceColumns,
   resourceExportHeaders,
   resourceExportRow,
   resourceRows,
   resourceSearchTexts,
+  withGraphLevel,
+  withOntologies,
+  type GraphLevel,
   type ResourceEntry as Entry,
   type ResourceKind as Kind,
   type ResourcePolicy as Policy,
 } from './resource-access-model';
+
+/** The batch actions on ontologies: enable or disable the rows selected. */
+const ONTOLOGY_ACTIONS = onOffActions({ on: 'Enable', off: 'Disable' });
+/** The batch actions on graphs: one level for the rows selected. */
+const GRAPH_ACTIONS: BulkAction[] = (['read', 'edit', 'none'] as const).map((level) => ({
+  id: level,
+  label: GRAPH_LEVEL_LABELS[level],
+  question: (count, plural) => `Give ${GRAPH_LEVEL_LABELS[level]} to ${count} ${plural}?`,
+  detail: () => 'Their access changes in one save.',
+  confirm: GRAPH_LEVEL_LABELS[level],
+}));
 
 type Snapshot = {
   data: Policy;
@@ -54,6 +77,11 @@ export function ResourceAccessPage({ kind }: { kind: Kind }) {
   );
 }
 
+/**
+ * Settings › Ontologies and Settings › Graphs: what the workspace is given, a table of switches.
+ * Each change (a row, an option) is saved at once with the revision read, and said; the rows
+ * selected change together, asked first.
+ */
 export function ResourceAccessEditor({
   workspaceId,
   kind,
@@ -62,17 +90,15 @@ export function ResourceAccessEditor({
   kind: Kind;
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [draft, setDraft] = useState<Policy>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
+  const [notice, setNotice] = useState('');
   const pending = useRef<AbortController | undefined>(undefined);
   const title = kind === 'ontologies' ? 'Ontologies' : 'Graphs';
+  const noun = kind === 'ontologies' ? 'ontology' : 'graph';
+  const plural = (count: number) => (count === 1 ? noun : kind === 'ontologies' ? 'ontologies' : 'graphs');
   const endpoint = `${getApiUrl()}/api/workspaces/${encodeURIComponent(workspaceId)}/resource-access/${kind}`;
-  const dirty =
-    snapshot !== null &&
-    JSON.stringify(draft) !== JSON.stringify(snapshot.data);
 
   const request = useCallback(
     async (method: 'GET' | 'PUT', body?: object) => {
@@ -101,7 +127,6 @@ export function ResourceAccessEditor({
       if (controller.signal.aborted)
         throw new DOMException('Aborted', 'AbortError');
       setSnapshot(data);
-      setDraft(data.data);
     },
     [endpoint],
   );
@@ -109,7 +134,7 @@ export function ResourceAccessEditor({
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
-    setSaved(false);
+    setNotice('');
     try {
       await request('GET');
     } catch (e) {
@@ -126,20 +151,23 @@ export function ResourceAccessEditor({
     return () => pending.current?.abort();
   }, [load]);
 
-  async function save() {
+  const policy: Policy = useMemo(() => snapshot?.data ?? {}, [snapshot]);
+
+  /** One write of `next` at the revision read, then what it did said in `done`. */
+  async function commit(next: Policy, done: string) {
     if (!snapshot) return;
     setSaving(true);
     setError('');
-    setSaved(false);
+    setNotice('');
     try {
-      await request('PUT', { revision: snapshot.revision, policy: draft });
+      await request('PUT', { revision: snapshot.revision, policy: next });
       invalidateGraphExplorer();
       window.dispatchEvent(new Event('graph-list-update'));
       useOntologyStore.setState((state) => ({
         items: [],
         graphRefreshTrigger: state.graphRefreshTrigger + 1,
       }));
-      setSaved(true);
+      setNotice(done);
     } catch (e) {
       if (!(e instanceof DOMException && e.name === 'AbortError'))
         setError(
@@ -150,41 +178,17 @@ export function ResourceAccessEditor({
     }
   }
 
-  function changeOptions(changes: Partial<Policy>) {
-    setSaved(false);
-    setDraft((current) => ({ ...current, ...changes }));
-  }
-
-  function toggleOntology(id: string, checked: boolean) {
-    setSaved(false);
-    setDraft((current) => ({
-      ...current,
-      enabled: checked
-        ? [...(current.enabled || []), id]
-        : (current.enabled || []).filter((ref) => ref !== id),
-    }));
-  }
-  function toggleGraph(id: string, access: 'read' | 'write', checked: boolean) {
-    setSaved(false);
-    setDraft((current) => {
-      const read = new Set(current.read),
-        write = new Set(current.write);
-      if (access === 'read') {
-        if (checked) read.add(id);
-        else {
-          read.delete(id);
-          write.delete(id);
-        }
-      } else if (checked) {
-        read.add(id);
-        write.add(id);
-      } else write.delete(id);
-      return { ...current, read: [...read], write: [...write] };
-    });
-  }
+  const changeOption = (changes: Partial<Policy>, done: string) => void commit({ ...policy, ...changes }, done);
   const catalog = useMemo(() => snapshot?.catalog || [], [snapshot]);
-  // Each row under the current (unsaved) draft: the filters read what the checkboxes show.
-  const rows = useMemo(() => resourceRows(kind, catalog, draft), [kind, catalog, draft]);
+  const rows = useMemo(() => resourceRows(kind, catalog, policy), [kind, catalog, policy]);
+  const nameOf = (id: string) => catalog.find((item) => item.id === id)?.name ?? id;
+  const toggleOntology = (id: string, checked: boolean) =>
+    void commit(withOntologies(policy, [id], checked), `${nameOf(id)} ${checked ? 'enabled' : 'disabled'}.`);
+  /** Read unticked: no access; Edit ticked: read and edit; Edit unticked: read only. */
+  const toggleGraph = (id: string, access: 'read' | 'write', checked: boolean) => {
+    const level: GraphLevel = access === 'read' ? (checked ? 'read' : 'none') : checked ? 'edit' : 'read';
+    void commit(withGraphLevel(policy, [id], level), `${nameOf(id)}: ${GRAPH_LEVEL_LABELS[level]}.`);
+  };
   const columns = resourceColumns(kind);
   // 20 a page: the search and the filters reach every row, and a change of them goes back to
   // the first page (a checkbox ticked under a filter does not).
@@ -197,9 +201,30 @@ export function ResourceAccessEditor({
   });
   const shown = table.shown;
   // One total: how many ontologies or graphs (the columns say which are enabled, read, edited).
-  const total = `${catalog.length} ${
-    kind === 'ontologies' ? (catalog.length === 1 ? 'ontology' : 'ontologies') : catalog.length === 1 ? 'graph' : 'graphs'
-  }`;
+  const total = `${catalog.length} ${plural(catalog.length)}`;
+  // The rows checked for a batch change (the rows shown: select all takes them).
+  const selection = useRowSelection(useMemo(() => shown.map((row) => row.id), [shown]));
+  const selectedRows = () => rows.filter((row) => selection.selected.has(row.id));
+  /** The selected rows an action fits (a graph read through "every graph" or owned: none). */
+  const fitting = (id: string) =>
+    kind === 'ontologies' ? selectedRows() : selectedRows().filter((row) => graphLevelFits(row, id as GraphLevel, policy));
+  const applyBulk = async (id: string) => {
+    const picked = fitting(id);
+    if (kind === 'ontologies') {
+      const on = id === 'on';
+      const changed = picked.filter((row) => row.enabled !== on).length;
+      await commit(
+        withOntologies(policy, picked.map((row) => row.id), on),
+        `${changed} ${plural(changed)} ${on ? 'enabled' : 'disabled'}.`,
+      );
+      return;
+    }
+    const level = id as GraphLevel;
+    await commit(
+      withGraphLevel(policy, picked.map((row) => row.id), level),
+      `${picked.length} ${plural(picked.length)}: ${GRAPH_LEVEL_LABELS[level]}.`,
+    );
+  };
 
   const exportShown = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
@@ -222,24 +247,17 @@ export function ResourceAccessEditor({
             ? 'Choose the ontologies available in this workspace.'
             : 'Choose the named graphs this workspace can read and edit.'
         }
-        actions={
-          <>
-            <UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />
-            <Button onClick={() => void save()} disabled={!dirty || saving || loading}>
-              {saving ? 'Saving…' : 'Save changes'}
-            </Button>
-          </>
-        }
+        actions={<UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />}
       />
       {error && (
         <SettingsNotice tone="error">
           <span role="alert">{error}</span>
         </SettingsNotice>
       )}
-      {saved && (
-        <SettingsNotice tone="success">
-          <span role="status">Assignments saved.</span>
-        </SettingsNotice>
+      {notice && (
+        <p className="text-xs text-muted-foreground" role="status" data-resource-notice="">
+          {notice}
+        </p>
       )}
       {loading ? (
         <SettingsLoading label={`Loading ${title.toLowerCase()}…`} />
@@ -250,24 +268,28 @@ export function ResourceAccessEditor({
               <SettingsSection title="Options">
                 <fieldset className="flex flex-col gap-2.5" disabled={saving}>
                   <Checkbox
-                    checked={!!draft.read_all}
-                    onCheckedChange={(checked) => changeOptions({ read_all: checked })}
+                    checked={!!policy.read_all}
+                    onCheckedChange={(checked) =>
+                      changeOption({ read_all: checked }, `Read all graphs: ${checked ? 'on' : 'off'}.`)
+                    }
                     label="Read all graphs, including future graphs"
                   />
                   <Checkbox
-                    checked={!!draft.include_owned}
+                    checked={!!policy.include_owned}
                     onCheckedChange={(checked) =>
-                      changeOptions({
-                        include_owned: checked,
-                        allow_create: checked && draft.allow_create,
-                      })
+                      changeOption(
+                        { include_owned: checked, allow_create: checked && policy.allow_create },
+                        `Graphs created in this workspace: ${checked ? 'included' : 'excluded'}.`,
+                      )
                     }
                     label="Include graphs created in this workspace"
                   />
                   <Checkbox
-                    checked={!!draft.allow_create && !!draft.include_owned}
-                    disabled={!draft.include_owned}
-                    onCheckedChange={(checked) => changeOptions({ allow_create: checked })}
+                    checked={!!policy.allow_create && !!policy.include_owned}
+                    disabled={!policy.include_owned}
+                    onCheckedChange={(checked) =>
+                      changeOption({ allow_create: checked }, `Members ${checked ? 'may' : 'may not'} create graphs.`)
+                    }
                     label="Allow members to create graphs"
                   />
                 </fieldset>
@@ -280,23 +302,44 @@ export function ResourceAccessEditor({
               // No count above the search: the badge says how many, the pager how many are shown.
               meta={<SettingsTableClear table={table} />}
             />
+            <BulkBar
+              selection={selection}
+              noun={noun}
+              plural={plural(2)}
+              actions={kind === 'ontologies' ? ONTOLOGY_ACTIONS : GRAPH_ACTIONS}
+              onApply={applyBulk}
+              skippedFor={(id) => selection.selected.size - fitting(id).length}
+              change="this change"
+              disabled={saving}
+            />
             <div className="org-settings-users-table-wrap">
               <table className="org-settings-users-table">
-                <SettingsTableHead table={table} />
+                <SettingsTableHead
+                  table={table}
+                  leading={
+                    <SelectAllCell
+                      selection={selection}
+                      keys={shown.map((row) => row.id)}
+                      noun={noun}
+                      disabled={saving}
+                    />
+                  }
+                />
                 <tbody>
                   {catalog.length === 0 ? (
                     <tr>
-                      <td colSpan={columns.length} className="org-settings-users-no-match">
+                      <td colSpan={columns.length + 1} className="org-settings-users-no-match">
                         No resources available.
                       </td>
                     </tr>
                   ) : (
-                    shown.length === 0 && <SettingsTableNoMatch colSpan={columns.length} noun={title.toLowerCase()} />
+                    shown.length === 0 && <SettingsTableNoMatch colSpan={columns.length + 1} noun={title.toLowerCase()} />
                   )}
                   {table.paged.pageRows.map((item) => {
                     const owned = item.ownedIncluded;
                     return (
                       <tr key={item.id} data-resource={item.id}>
+                        <SelectRowCell selection={selection} rowKey={item.id} label={item.name} disabled={saving} />
                         <td>
                           <p className="break-words font-medium">{item.name}</p>
                           <p className="break-words text-xs text-muted-foreground">{item.description}</p>
@@ -321,14 +364,14 @@ export function ResourceAccessEditor({
                               <Checkbox
                                 aria-label={`Read ${item.name}`}
                                 title={
-                                  draft.read_all
+                                  policy.read_all
                                     ? 'Included by Read all graphs'
                                     : owned
                                       ? 'Included as a workspace-owned graph'
                                       : undefined
                                 }
                                 checked={item.readable}
-                                disabled={saving || !!draft.read_all || owned}
+                                disabled={saving || !!policy.read_all || owned}
                                 onCheckedChange={(checked) => toggleGraph(item.id, 'read', checked)}
                               />
                             </td>
@@ -363,7 +406,7 @@ export function ResourceAccessEditor({
               {snapshot.updated_by
                 ? 'Admin changes are saved for this workspace.'
                 : 'Initial assignments come from configuration.'}{' '}
-              Changes apply when saved. Configuration changes do not overwrite saved assignments.
+              Each change is saved at once. Configuration changes do not overwrite saved assignments.
               {kind === 'graphs' && ' Viewers retain read-only access.'}
             </p>
           </>

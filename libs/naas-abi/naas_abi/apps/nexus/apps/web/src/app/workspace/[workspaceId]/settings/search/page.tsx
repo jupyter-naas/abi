@@ -27,6 +27,7 @@ import {
   SettingsTableClear, SettingsTableHead, SettingsTableNoMatch, useSettingsTable,
 } from '@/components/settings/users-table/settings-table';
 import { TablePager } from '@/components/settings/users-table/table-pager';
+import { BulkBar, SelectAllCell, SelectRowCell, onOffActions, useRowSelection, type RowSelection } from '@/components/settings/bulk-access';
 import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import {
@@ -40,10 +41,13 @@ import { isFeatureEnabled } from '@/lib/feature-access';
 import { useSearchTopicsStore } from '@/stores/search-topics';
 import { useWorkspaceStore } from '@/stores/workspace';
 import {
-  SEARCH_COLUMNS, SEARCH_EXPORT_HEADERS, SOURCE_LABEL, searchCellValues, searchEntries, searchExportRow, searchSearchTexts,
+  SEARCH_COLUMNS, SEARCH_EXPORT_HEADERS, SOURCE_LABEL, entrySwitchable, searchCellValues, searchEntries, searchExportRow, searchSearchTexts,
   searchSortValue, type SearchEntry, type SearchGroup,
 } from './search-settings-model';
 
+
+/** The batch actions: enable or disable the entries selected. */
+const BULK_ACTIONS = onOffActions({ on: 'Enable', off: 'Disable' });
 
 export default function SearchSettingsPage() {
   return <Suspense fallback={null}><SearchSettings /></Suspense>;
@@ -70,22 +74,22 @@ function SearchSettings() {
 
   const [toggling, setToggling] = useState<string | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);
-  // Features and web engines: one switch each for the whole workspace.
-  const toggleScope = async (scopeId: string, enabled: boolean) => {
-    setToggling(scopeId); setTableError(null);
-    try {
-      setDisabledScopes((await topicsApi.setScopeEnabled(workspaceId, scopeId, enabled)).disabled_scopes);
-    } catch (e) {
-      setTableError(e instanceof Error ? e.message : 'Could not change the scope');
-    } finally { setToggling(null); }
+  const [notice, setNotice] = useState('');
+  const failure = (e: unknown, fallback: string) =>
+    e instanceof TopicApiError && e.errors.length ? e.errors.join('\n') : e instanceof Error ? e.message : fallback;
+  /** One row switched: a feature or web engine (one switch each for the whole workspace), or a topic. */
+  const switchEntry = async (entry: SearchEntry, enabled: boolean) => {
+    if (entry.kind === 'topic') replace(await topicsApi.save(workspaceId, { ...entry.topic, enabled }));
+    else setDisabledScopes((await topicsApi.setScopeEnabled(workspaceId, entry.id, enabled)).disabled_scopes);
   };
-
-  const toggleEnabled = async (topic: SearchTopic) => {
-    setToggling(topic.id); setTableError(null);
+  // A table of switches: each change saved at once, and said.
+  const toggle = async (entry: SearchEntry, enabled: boolean) => {
+    setToggling(entry.id); setTableError(null); setNotice('');
     try {
-      replace(await topicsApi.save(workspaceId, { ...topic, enabled: !topic.enabled }));
+      await switchEntry(entry, enabled);
+      setNotice(`${entry.name} ${enabled ? 'enabled' : 'disabled'}.`);
     } catch (e) {
-      setTableError(e instanceof TopicApiError && e.errors.length ? e.errors.join('\n') : e instanceof Error ? e.message : 'Could not change the topic');
+      setTableError(failure(e, 'Could not change the entry'));
     } finally { setToggling(null); }
   };
 
@@ -125,6 +129,22 @@ function SearchSettings() {
   const exportShown = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
     downloadTableExport(SEARCH_EXPORT_HEADERS, table.shown.map(searchExportRow), format, `search_${date}`, 'Search');
+  };
+  // The entries checked for a batch change (the rows shown: select all takes them).
+  const selection = useRowSelection(useMemo(() => table.shown.map(entry => entry.id), [table.shown]));
+  const switchable = (entry: SearchEntry) => entrySwitchable(entry, { canEdit, drafts });
+  /** Enable or disable every selected entry that may change, one after the other. */
+  const applyBulk = async (id: string) => {
+    const enabled = id === 'on';
+    const picked = entries.filter(entry => selection.selected.has(entry.id) && switchable(entry) && entry.on !== enabled);
+    setToggling('bulk'); setTableError(null); setNotice('');
+    let done = 0;
+    try {
+      for (const entry of picked) { await switchEntry(entry, enabled); done += 1; }
+      setNotice(`${done} ${done === 1 ? 'entry' : 'entries'} ${enabled ? 'enabled' : 'disabled'}.`);
+    } catch (e) {
+      setTableError(`${failure(e, 'Could not change the entries')} (${done} of ${picked.length} changed)`);
+    } finally { setToggling(null); }
   };
 
   if (selectedId) {
@@ -183,6 +203,7 @@ function SearchSettings() {
       {error && <SettingsNotice tone="error"><span role="alert">{error}</span></SettingsNotice>}
       {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
       {!canEdit && !loading && <SettingsNotice>Only workspace owners and admins can change search topics.</SettingsNotice>}
+      {notice && <p className="text-xs text-muted-foreground" role="status" data-search-notice="">{notice}</p>}
 
       <SettingsTableToolbar
         search={table.search}
@@ -191,37 +212,59 @@ function SearchSettings() {
         // No count above the search: the badge says how many, the pager how many are shown.
         meta={<SettingsTableClear table={table} />}
       />
+      <BulkBar
+        selection={selection}
+        noun="entry"
+        plural="entries"
+        actions={BULK_ACTIONS}
+        onApply={applyBulk}
+        skippedFor={() => entries.filter(entry => selection.selected.has(entry.id) && !switchable(entry)).length}
+        change="this change"
+        disabled={toggling !== null}
+      />
 
       <div className="org-settings-users-table-wrap">
         <table className="org-settings-users-table">
-          <SettingsTableHead table={table} />
+          <SettingsTableHead
+            table={table}
+            leading={
+              <SelectAllCell
+                selection={selection}
+                keys={table.shown.filter(switchable).map(entry => entry.id)}
+                noun="entry"
+                disabled={toggling !== null}
+              />
+            }
+          />
           <tbody>
             {loading && !topics.length && (
-              <tr><td colSpan={SEARCH_COLUMNS.length} className="text-muted-foreground"><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
+              <tr><td colSpan={SEARCH_COLUMNS.length + 1} className="text-muted-foreground"><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
             )}
-            {!loading && table.shown.length === 0 && <SettingsTableNoMatch colSpan={SEARCH_COLUMNS.length} noun="entries" />}
+            {!loading && table.shown.length === 0 && <SettingsTableNoMatch colSpan={SEARCH_COLUMNS.length + 1} noun="entries" />}
             {table.paged.pageRows.map(entry => {
+              const box = <SelectCell selection={selection} entry={entry} disabled={toggling !== null || !switchable(entry)} />;
               if (entry.kind === 'feature') {
                 const { scope, available, on } = entry;
                 return (
-                  <ScopeRow key={entry.id} entry={entry}>
+                  <ScopeRow key={entry.id} entry={entry} select={box}>
                     <EnabledSwitch label={scope.label} on={on} busy={toggling === scope.id}
-                      disabled={!canEdit || !available} onChange={() => void toggleScope(scope.id, !on)} />
+                      disabled={!canEdit || !available || toggling === 'bulk'} onChange={() => void toggle(entry, !on)} />
                   </ScopeRow>
                 );
               }
               if (entry.kind === 'engine') {
                 const { engine, id, on } = entry;
                 return (
-                  <ScopeRow key={id} entry={entry}>
+                  <ScopeRow key={id} entry={entry} select={box}>
                     <EnabledSwitch label={engine.label} on={on} busy={toggling === id}
-                      disabled={!canEdit} onChange={() => void toggleScope(id, !on)} />
+                      disabled={!canEdit || toggling === 'bulk'} onChange={() => void toggle(entry, !on)} />
                   </ScopeRow>
                 );
               }
               const t = entry.topic;
               return (
                 <tr key={t.id} data-entry={t.id} onClick={() => select(t.id)} className="cursor-pointer">
+                  {box}
                   <td>
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted"><TopicIcon name={t.icon} /></div>
@@ -238,8 +281,8 @@ function SearchSettings() {
                       label={t.plural_label}
                       on={t.enabled}
                       busy={toggling === t.id}
-                      disabled={!canEdit || drafts.has(t.id)}
-                      onChange={() => void toggleEnabled(t)}
+                      disabled={!canEdit || drafts.has(t.id) || toggling === 'bulk'}
+                      onChange={() => void toggle(entry, !t.enabled)}
                     />
                   </td>
                 </tr>
@@ -257,11 +300,17 @@ function GroupBadge({ group }: { group: SearchGroup }) {
   return <Badge variant="outline">{group}</Badge>;
 }
 
+/** A row's box for a batch change. */
+function SelectCell({ selection, entry, disabled }: { selection: RowSelection; entry: SearchEntry; disabled: boolean }) {
+  return <SelectRowCell selection={selection} rowKey={entry.id} label={entry.name} disabled={disabled} />;
+}
+
 /** A feature or web-engine row: nothing to edit but whether search may use it. */
-function ScopeRow({ entry, children }: { entry: Exclude<SearchEntry, { kind: 'topic' }>; children: React.ReactNode }) {
+function ScopeRow({ entry, select, children }: { entry: Exclude<SearchEntry, { kind: 'topic' }>; select: React.ReactNode; children: React.ReactNode }) {
   const icon = entry.kind === 'feature' ? entry.scope.icon : entry.engine.icon;
   return (
     <tr data-entry={entry.id}>
+      {select}
       <td>
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted"><TopicIcon name={icon} /></div>

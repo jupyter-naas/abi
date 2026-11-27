@@ -63,9 +63,9 @@ async function render(parts: ReturnType<typeof setup>) {
 
 const rowKeys = (m: Mounted) => [...m.host.querySelectorAll('tr[data-module]')].map((r) => r.getAttribute('data-module'));
 const moduleSwitch = (m: Mounted, module: string) =>
-  m.host.querySelector(`tr[data-module="${module}"] [role="switch"]`) as HTMLButtonElement | null;
+  m.host.querySelector(`tr[data-module="${module}"] input[data-offer-switch]`) as HTMLInputElement | null;
 const kindSwitch = (m: Mounted, key: string) =>
-  m.host.querySelector(`tr[data-module-kind="${key}"] [role="switch"]`) as HTMLButtonElement | null;
+  m.host.querySelector(`tr[data-module-kind="${key}"] input[data-offer-switch]`) as HTMLInputElement | null;
 
 describe('Settings › Access › Modules', () => {
   it('lists one row per module, offered whole, in part or not, with a count and a filter', async () => {
@@ -73,8 +73,8 @@ describe('Settings › Access › Modules', () => {
     const m = await render(parts);
     expect(parts.api.publishers).toHaveBeenCalledWith(WS);
     expect(rowKeys(m)).toEqual(['acme.people', 'acme.sales']);
-    expect(moduleSwitch(m, 'acme.people')?.getAttribute('aria-checked')).toBe('true');
-    expect(moduleSwitch(m, 'acme.sales')?.getAttribute('aria-checked')).toBe('false');
+    expect(moduleSwitch(m, 'acme.people')?.checked).toBe(true);
+    expect(moduleSwitch(m, 'acme.sales')?.checked).toBe(false);
     expect(m.host.querySelector('tr[data-module="acme.people"]')?.textContent).toContain('Agents');
     // Its contents are folded until asked.
     expect(m.host.querySelector('tr[data-module-kind]')).toBeNull();
@@ -93,7 +93,7 @@ describe('Settings › Access › Modules', () => {
     const m = await render(parts);
 
     await m.click(m.host.querySelector('tr[data-module="acme.sales"] [data-action="contents"]'));
-    expect(kindSwitch(m, 'workflows|acme.sales')?.getAttribute('aria-checked')).toBe('false');
+    expect(kindSwitch(m, 'workflows|acme.sales')?.checked).toBe(false);
     // Its contents one step in, their items two.
     expect(m.host.querySelector('tr[data-module-kind="workflows|acme.sales"] td:nth-child(2)')?.classList).toContain('access-offer-indent-1');
     await m.click(m.host.querySelector('tr[data-module-kind="workflows|acme.sales"] [data-action="items"]'));
@@ -101,7 +101,7 @@ describe('Settings › Access › Modules', () => {
     // Each item a row: its name two steps in, its switch in the Offered column.
     const item = m.host.querySelector('tr[data-offer-item="acme.sales/Sync"]')!;
     expect(item.querySelector('td:nth-child(2)')?.classList).toContain('access-offer-indent-2');
-    expect(item.querySelector('td[data-field="offer"] [role="switch"]')).not.toBeNull();
+    expect(item.querySelector('td[data-field="offer"] input[data-offer-switch]')).not.toBeNull();
     expect(parts.api.resources).toHaveBeenCalledWith({
       scope: WS,
       service: 'module',
@@ -109,7 +109,7 @@ describe('Settings › Access › Modules', () => {
       module: 'acme.sales',
       limit: 200,
     });
-    await m.click(m.host.querySelector('[data-offer-item="acme.sales/Sync"] [role="switch"]'));
+    await m.click(m.host.querySelector('[data-offer-item="acme.sales/Sync"] input[data-offer-switch]'));
     await m.flush();
     expect(parts.offerApi.save).toHaveBeenCalledWith(
       'ws-1',

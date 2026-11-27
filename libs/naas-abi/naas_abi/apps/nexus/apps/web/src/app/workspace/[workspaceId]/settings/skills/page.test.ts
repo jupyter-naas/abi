@@ -24,6 +24,8 @@ const SKILLS = vi.hoisted(() =>
   }),
 );
 
+const UPDATE = vi.hoisted(() => vi.fn(async (_id: string, _patch: Record<string, unknown>) => undefined));
+
 vi.mock('next/navigation', () => ({
   useParams: () => ({ workspaceId: 'ws-1' }),
   useRouter: () => ({ push: () => undefined }),
@@ -34,7 +36,7 @@ vi.mock('@/stores/skills', () => ({
     skillsByWorkspace: { 'ws-1': SKILLS },
     fetchSkills: async () => undefined,
     createSkill: async () => undefined,
-    updateSkill: async () => undefined,
+    updateSkill: UPDATE,
     deleteSkill: async () => undefined,
   }),
 }));
@@ -105,5 +107,25 @@ describe('Workspace settings › Skills', () => {
     expect(mounted.host.textContent).toContain('No skills match the current search and filters');
     expect(mounted.host.querySelector('[data-action="export"]')).not.toBeNull();
     expect([...mounted.host.querySelectorAll('button')].map((b) => b.textContent)).toContain('Create skill');
+  });
+
+  it('enables the skills selected in one step, asked first, and says so', async () => {
+    UPDATE.mockClear();
+    mounted = await mount(SkillsSettingsPage, {});
+    await filterColumn(mounted, 'enabled', 'Disabled');
+    await mounted.click(mounted.host.querySelector('[data-select-row="skill-42"]'));
+    await mounted.click(mounted.host.querySelector('[data-select-row="skill-43"]'));
+    await mounted.click(mounted.host.querySelector('[data-bulk-action="on"]'));
+    expect(document.querySelector('[data-bulk-confirm]')?.textContent).toContain('Enable 2 skills?');
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('[data-bulk-confirm] button')].find(
+      (b) => b.textContent === 'Enable',
+    )!;
+    await mounted.click(confirm);
+    await mounted.flush();
+    expect(UPDATE.mock.calls).toEqual([
+      ['skill-42', { enabled: true }],
+      ['skill-43', { enabled: true }],
+    ]);
+    expect(mounted.host.querySelector('[data-skills-notice]')?.textContent).toBe('2 skills enabled.');
   });
 });

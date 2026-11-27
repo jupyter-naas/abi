@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
-import { OfferSwitch } from '@/components/access/offer/offer-editor';
+import { Checkbox } from '@/components/ui/checkbox';
 import { draftKey, isOffered, itemName, itemsWithOffered, offerChanges } from '@/components/access/offer/offer-model';
 import '@/components/access/offer/offer.css';
 import {
@@ -374,7 +374,7 @@ export function WorkspaceModules({
                               <td />
                               <td data-field="offer">
                                 <div className="flex items-center gap-2">
-                                  <OfferSwitch
+                                  <OfferBox
                                     label={`Offer every ${single} of ${row.module}`}
                                     on={whole}
                                     disabled={!editable || saving || (!row.grantable && !whole)}
@@ -413,7 +413,7 @@ export function WorkspaceModules({
                                       <td className="access-offer-indent-2 text-sm text-foreground">{item.label}</td>
                                       <td />
                                       <td data-field="offer">
-                                        <OfferSwitch
+                                        <OfferBox
                                           label={`Offer ${item.label}`}
                                           on={isOffered(offer.offered, row.kind, row.module, item.name)}
                                           disabled={!editable || saving || whole}
@@ -483,7 +483,7 @@ function ModuleLine({
       <td className="text-muted-foreground">{group.kinds.map((k) => k.kindLabel).join(', ')}</td>
       <td data-field="offer">
         <div className="flex items-center gap-2">
-          <OfferSwitch
+          <OfferBox
             label={`Offer all of ${group.module}`}
             on={whole}
             disabled={disabled || (!group.grantable && !whole)}
@@ -493,5 +493,29 @@ function ModuleLine({
         </div>
       </td>
     </tr>
+  );
+}
+
+/** The on/off control of Settings, the square checkbox (Access › Modules' sliders are gone). */
+function OfferBox({
+  label,
+  on,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  on: boolean;
+  disabled?: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <Checkbox
+      aria-label={label}
+      title={label}
+      checked={on}
+      disabled={disabled}
+      data-offer-switch=""
+      onCheckedChange={onChange}
+    />
   );
 }

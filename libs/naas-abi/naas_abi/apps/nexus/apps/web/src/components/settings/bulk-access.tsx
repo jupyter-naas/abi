@@ -91,8 +91,9 @@ export function SelectRowCell({
   label: string;
   disabled?: boolean;
 }) {
+  // A click on it selects the row, never opens it (a row that opens its page).
   return (
-    <td className="settings-select-cell">
+    <td className="settings-select-cell" onClick={(event) => event.stopPropagation()}>
       <Checkbox
         aria-label={`Select ${label}`}
         checked={selection.selected.has(rowKey)}
@@ -105,9 +106,15 @@ export function SelectRowCell({
 }
 
 /** "1 of the 3 features cannot take this level and stays as it is.", or null when all can. */
-export function bulkSkipped(total: number, skipped: number, noun: string): string | null {
+export function bulkSkipped(
+  total: number,
+  skipped: number,
+  noun: string,
+  change = 'this level',
+  plural = `${noun}s`
+): string | null {
   if (skipped === 0) return null;
-  return `${skipped} of the ${total} ${noun}${total === 1 ? '' : 's'} cannot take this level and ${
+  return `${skipped} of the ${total} ${total === 1 ? noun : plural} cannot take ${change} and ${
     skipped === 1 ? 'stays' : 'stay'
   } as ${skipped === 1 ? 'it is' : 'they are'}.`;
 }
@@ -126,6 +133,23 @@ export type BulkAction = {
 };
 
 /**
+ * The two actions of a batch bar on an on/off column (Enabled, Offered, Shown...), in the page's
+ * words: `on` (Enable, Offer, Show) and `off` (Disable, Take back, Hide). Ids `on` and `off`.
+ */
+export function onOffActions(words: { on: string; off: string }, detail?: (on: boolean, count: number) => string): BulkAction[] {
+  return (['on', 'off'] as const).map((id) => {
+    const word = id === 'on' ? words.on : words.off;
+    return {
+      id,
+      label: word,
+      question: (count, plural) => `${word} ${count} ${plural}?`,
+      detail: detail ? (count) => detail(id === 'on', count) : undefined,
+      confirm: word,
+    };
+  });
+}
+
+/**
  * While rows are selected: how many, the actions on them (`intro` before them), and Clear. An
  * action opens a modal that names the change; Confirm applies it (`onApply`) and clears the
  * selection.
@@ -138,22 +162,28 @@ export function BulkBar({
   onApply,
   skippedFor,
   disabled = false,
+  change,
+  plural: pluralNoun,
 }: {
   selection: RowSelection;
   /** Singular: "feature", "service", "module". */
   noun: string;
+  /** Its plural when not `noun` + s ("ontologies", "entries"). */
+  plural?: string;
   intro?: string;
   actions: readonly BulkAction[];
   onApply: (id: string) => void | Promise<void>;
   /** How many of the selected rows the action does not fit (left as they are). */
   skippedFor?: (id: string) => number;
   disabled?: boolean;
+  /** What a skipped row cannot take, in the modal: "this level" by default, "this change"... */
+  change?: string;
 }) {
   const [asked, setAsked] = useState<BulkAction | null>(null);
   const count = selection.selected.size;
   if (count === 0) return null;
-  const plural = `${noun}${count === 1 ? '' : 's'}`;
-  const skipped = asked && skippedFor ? bulkSkipped(count, skippedFor(asked.id), noun) : null;
+  const plural = count === 1 ? noun : (pluralNoun ?? `${noun}s`);
+  const skipped = asked && skippedFor ? bulkSkipped(count, skippedFor(asked.id), noun, change, pluralNoun) : null;
   return (
     <div className="org-settings-general-draft" role="status" data-bulk-bar="">
       <p className="org-settings-general-draft-text">

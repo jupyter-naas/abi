@@ -53,12 +53,22 @@ import { feedVisibilityRows, type FeedSource } from '@/app/workspace/[workspaceI
 import { resolveMapsPinImageUrl } from '@/app/workspace/[workspaceId]/maps/lib/maps-pin-image-url';
 import { MapsSettingsBasemapsSection } from '@/app/workspace/[workspaceId]/maps/components/maps-settings-basemaps-section';
 import { TablePager } from '@/components/settings/users-table/table-pager';
+import { BulkBar, SelectAllCell, SelectRowCell, onOffActions, useRowSelection } from '@/components/settings/bulk-access';
 import {
   EVERY_FEATURE, FEED_COLUMNS, FEED_EXPORT_HEADERS, LAYER_COLUMNS, feedCellValues, feedExportRow, feedSearchTexts,
   feedSortValue, layerCellValues, layerSearchTexts, layerSortValue, mapsFeedEntries, mapsLayerEntries,
 } from './maps-settings-model';
 
 const NEW = 'new';
+/** The batch actions of the feeds table, and of a feed's layers. */
+const FEED_ACTIONS = onOffActions({ on: 'Enable', off: 'Disable' }, (on, count) =>
+  on
+    ? `Their layers come back in Maps for every member of this workspace, in one save.`
+    : `Their layers disappear from Maps for every member of this workspace (${count === 1 ? 'it' : 'they'} can be enabled again here), in one save.`
+);
+const LAYER_ACTIONS = onOffActions({ on: 'Show', off: 'Hide' }, (on) =>
+  on ? 'They come back in Maps for every member of this workspace.' : 'They disappear from Maps for every member of this workspace.'
+);
 const SEEDED_FEED_HINT = 'Provided by the deployment: hide its layers, or narrow its Access, instead of deleting it';
 const SEEDED_LAYER_HINT = 'Provided by the deployment: hide it instead of deleting it';
 const LAST_LAYER_HINT = 'A feed needs at least one layer: delete the feed instead';
@@ -99,6 +109,7 @@ function MapsSettings() {
   const loadLayouts = useMapsStore((s) => s.loadLayouts);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
   const permissions = useMapsPermissions(workspaceId, canEdit);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -117,41 +128,36 @@ function MapsSettings() {
   const layerRecord = (id: string) => feedLayers.find((layer) => layer.id === id) ?? null;
   const takenLayerIds = useMemo(() => new Set(all.map((e) => e.id)), [all]);
 
-  const run = async (id: string, action: () => Promise<unknown>, failure: string) => {
-    setBusyId(id); setTableError(null);
+  // A table of switches: each change saved at once, and said (`done`).
+  const run = async (id: string, action: () => Promise<unknown>, failure: string, done?: string) => {
+    setBusyId(id); setTableError(null); setNotice('');
     try {
       await action();
+      if (done) setNotice(done);
     } catch (e) {
       setTableError(errorText(e, failure));
     } finally { setBusyId(null); }
   };
 
-  const toggleShown = (layerId: string) => run(layerId, async () => {
-    const result = await layoutsApi.setHidden(workspaceId, layerId, !hidden.includes(layerId));
+  const toggleShown = (layer: WorkspaceFeedLayer) => run(layer.id, async () => {
+    const result = await layoutsApi.setHidden(workspaceId, layer.id, !hidden.includes(layer.id));
     applyLayouts(workspaceId, { hidden: result.hidden });
-  }, 'Could not change the layer');
+  }, 'Could not change the layer', `${layer.title} ${hidden.includes(layer.id) ? 'shown' : 'hidden'}.`);
 
-  const toggleFeedShown = (feedId: string) => run(`feed:${feedId}`, async () => {
+  const toggleFeedShown = (feedId: string, title: string) => run(`feed:${feedId}`, async () => {
     const result = await layoutsApi.setFeedHidden(workspaceId, feedId, !hiddenFeeds.includes(feedId));
     applyLayouts(workspaceId, { hiddenFeeds: result.hidden_feeds });
-  }, 'Could not change the feed');
+  }, 'Could not change the feed', `${title} ${hiddenFeeds.includes(feedId) ? 'enabled' : 'disabled'}.`);
 
-  /** Enable or disable every feed the search and filters list. */
-  const setListedFeedsShown = async (ids: string[], shown: boolean) => {
-    if (!ids.length) return;
-    const ok = await confirm({
-      title: `${shown ? 'Enable' : 'Disable'} ${ids.length} feed${ids.length === 1 ? '' : 's'}?`,
-      description: shown
-        ? 'Their layers come back in Maps for every member of this workspace.'
-        : 'Their layers disappear from Maps for every member of this workspace. You can enable them again here.',
-      confirmLabel: shown ? 'Enable' : 'Disable',
-      destructive: !shown,
-    });
-    if (!ok) return;
-    await run('feed:bulk', async () => {
-      const result = await layoutsApi.setFeedsHidden(workspaceId, ids, !shown);
-      applyLayouts(workspaceId, { hiddenFeeds: result.hidden_feeds });
-    }, `Could not ${shown ? 'enable' : 'disable'} the feeds`);
+  /** Show or hide `layers` (a feed's, selected), those that would change, one after the other. */
+  const setLayersShown = (layers: WorkspaceFeedLayer[], shown: boolean) => {
+    const changing = layers.filter((layer) => hidden.includes(layer.id) === shown);
+    return run('layer:bulk', async () => {
+      for (const layer of changing) {
+        const result = await layoutsApi.setHidden(workspaceId, layer.id, !shown);
+        applyLayouts(workspaceId, { hidden: result.hidden });
+      }
+    }, `Could not ${shown ? 'show' : 'hide'} the layers`, `${changing.length} layer${changing.length === 1 ? '' : 's'} ${shown ? 'shown' : 'hidden'}.`);
   };
 
   const setLayerColor = (layer: WorkspaceFeedLayer, color: string) => run(layer.id, async () => {
@@ -243,11 +249,21 @@ function MapsSettings() {
     sortValue: feedSortValue,
     initialSort: 'group',
   });
-  const listedFeeds = feedTable.shown.filter((entry) => entry.row);
-  // Bulk actions apply to the listed feeds that would change.
-  const listedOff = listedFeeds.filter((entry) => !entry.shown).map((entry) => entry.id);
-  const listedOn = listedFeeds.filter((entry) => entry.shown).map((entry) => entry.id);
+  // The feeds checked for a batch change (the rows shown: select all takes those that switch).
+  const feedSelection = useRowSelection(useMemo(() => feedTable.shown.map((entry) => entry.id), [feedTable.shown]));
   const bulkBusy = busyId === 'feed:bulk';
+  /** The selected feeds an action fits: a feed of the workspace (not one it may not use). */
+  const selectedFeeds = () => feedEntries.filter((entry) => feedSelection.selected.has(entry.id) && entry.row);
+  /** Enable or disable every selected feed that would change, in one write. */
+  const applyFeedsBulk = async (id: string) => {
+    const on = id === 'on';
+    const ids = selectedFeeds().filter((entry) => entry.shown !== on).map((entry) => entry.id);
+    await run('feed:bulk', async () => {
+      if (ids.length === 0) return;
+      const result = await layoutsApi.setFeedsHidden(workspaceId, ids, !on);
+      applyLayouts(workspaceId, { hiddenFeeds: result.hidden_feeds });
+    }, `Could not ${on ? 'enable' : 'disable'} the feeds`, `${ids.length} feed${ids.length === 1 ? '' : 's'} ${on ? 'enabled' : 'disabled'}.`);
+  };
   const exportFeeds = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
     downloadTableExport(FEED_EXPORT_HEADERS, feedTable.shown.map(feedExportRow), format, `map_feeds_${date}`, 'Feeds');
@@ -263,6 +279,7 @@ function MapsSettings() {
         {confirmDialog}
         {backBar}
         {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
+        {notice && <p className="text-xs text-muted-foreground" role="status" data-maps-notice="">{notice}</p>}
         {loading && !creating && !feed ? (
           <SettingsLoading />
         ) : !creating && !feed ? (
@@ -288,7 +305,8 @@ function MapsSettings() {
             onDeleteLayer={(layer) => void deleteLayer(layer)}
             onLayersChanged={reload}
             hidden={hidden}
-            onToggleShown={(layer) => void toggleShown(layer.id)}
+            onToggleShown={(layer) => void toggleShown(layer)}
+            onSetShown={setLayersShown}
             onColor={(layer, color) => void setLayerColor(layer, color)}
           />
         )}
@@ -398,6 +416,7 @@ function MapsSettings() {
       {error && <SettingsNotice tone="error"><span role="alert">{error}</span></SettingsNotice>}
       {permissions.error && <SettingsNotice tone="error"><span role="alert">{permissions.error}</span></SettingsNotice>}
       {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
+      {notice && <p className="text-xs text-muted-foreground" role="status" data-maps-notice="">{notice}</p>}
       {!canEdit && !loading && <SettingsNotice>Only workspace owners and admins can change feeds and layers.</SettingsNotice>}
 
       <SettingsSection
@@ -409,49 +428,51 @@ function MapsSettings() {
           search={feedTable.search}
           onSearchChange={feedTable.setSearch}
           searchPlaceholder="Search feeds…"
-          filters={
-            canEdit && (
-              <>
-                <Button
-                  variant="secondary"
-                  disabled={bulkBusy || listedOff.length === 0}
-                  onClick={() => void setListedFeedsShown(listedOff, true)}
-                  title="Enable every listed feed that is disabled"
-                >
-                  {bulkBusy ? <Loader2 size={14} className="animate-spin" /> : null}
-                  Enable{listedOff.length ? ` (${listedOff.length})` : ''}
-                </Button>
-                <Button
-                  variant="secondary"
-                  disabled={bulkBusy || listedOn.length === 0}
-                  onClick={() => void setListedFeedsShown(listedOn, false)}
-                  title="Disable every listed feed that is enabled"
-                >
-                  Disable{listedOn.length ? ` (${listedOn.length})` : ''}
-                </Button>
-              </>
-            )
-          }
           // No count above the search: the badge says how many, the pager how many are shown.
           meta={<SettingsTableClear table={feedTable} />}
         />
+        {canEdit && (
+          <div className="mb-3">
+            <BulkBar
+              selection={feedSelection}
+              noun="feed"
+              actions={FEED_ACTIONS}
+              onApply={applyFeedsBulk}
+              skippedFor={() => feedSelection.selected.size - selectedFeeds().length}
+              change="this change"
+              disabled={bulkBusy}
+            />
+          </div>
+        )}
         <div className="org-settings-users-table-wrap">
           <table className="org-settings-users-table table-fixed">
-            <SettingsTableHead table={feedTable} trailing={<th className="w-24" aria-label="Actions" />} />
+            <SettingsTableHead
+              table={feedTable}
+              leading={
+                <SelectAllCell
+                  selection={feedSelection}
+                  keys={feedTable.shown.filter((entry) => entry.row).map((entry) => entry.id)}
+                  noun="feed"
+                  disabled={!canEdit || bulkBusy}
+                />
+              }
+              trailing={<th className="w-24" aria-label="Actions" />}
+            />
             <tbody>
               {loading && !feedEntries.length && (
-                <tr><td colSpan={FEED_COLUMNS.length + 1} className="text-muted-foreground"><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
+                <tr><td colSpan={FEED_COLUMNS.length + 2} className="text-muted-foreground"><Loader2 size={14} className="mr-2 inline animate-spin" />Loading…</td></tr>
               )}
               {!loading && feedEntries.length === 0 && (
-                <tr><td colSpan={FEED_COLUMNS.length + 1} className="org-settings-users-no-match">No feeds yet</td></tr>
+                <tr><td colSpan={FEED_COLUMNS.length + 2} className="org-settings-users-no-match">No feeds yet</td></tr>
               )}
               {!loading && feedEntries.length > 0 && feedTable.shown.length === 0 && (
-                <SettingsTableNoMatch colSpan={FEED_COLUMNS.length + 1} noun="feeds" />
+                <SettingsTableNoMatch colSpan={FEED_COLUMNS.length + 2} noun="feeds" />
               )}
               {feedTable.paged.pageRows.map(({ row, unavailable: item }) => {
                 if (item) {
                   return (
                     <tr key={`unavailable:${item.item_id}`} data-feed={item.item_id}>
+                      <SelectRowCell selection={feedSelection} rowKey={item.item_id} label={item.title} disabled />
                       <td className="max-w-0">
                         <div className="truncate font-medium text-muted-foreground" title={item.title}>{item.title}</div>
                         <div className="truncate text-xs text-muted-foreground">
@@ -480,6 +501,7 @@ function MapsSettings() {
                     onClick={feed ? () => go({ feed: feed.id }) : undefined}
                     className={cn(feed && 'cursor-pointer')}
                   >
+                    <SelectRowCell selection={feedSelection} rowKey={row.id} label={row.title} disabled={!canEdit || bulkBusy} />
                     <td className="max-w-0">
                       <div className={cn('flex min-w-0 items-center gap-2', !row.shown && 'text-muted-foreground')}>
                         {logo ? (
@@ -510,7 +532,7 @@ function MapsSettings() {
                         <Checkbox
                           checked={row.shown}
                           disabled={!canEdit || busy}
-                          onCheckedChange={() => void toggleFeedShown(row.id)}
+                          onCheckedChange={() => void toggleFeedShown(row.id, row.title)}
                           aria-label={`${row.title} enabled`}
                         />
                         {busy && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
@@ -566,6 +588,7 @@ function FeedPage({
   onLayersChanged,
   hidden,
   onToggleShown,
+  onSetShown,
   onColor,
 }: {
   workspaceId: string;
@@ -584,6 +607,8 @@ function FeedPage({
   onLayersChanged: () => Promise<void>;
   hidden: string[];
   onToggleShown: (layer: WorkspaceFeedLayer) => void;
+  /** Show or hide the layers selected, asked first. */
+  onSetShown: (layers: WorkspaceFeedLayer[], shown: boolean) => Promise<void>;
   onColor: (layer: WorkspaceFeedLayer, color: string) => void;
 }) {
   const isNew = feed === null;
@@ -600,6 +625,9 @@ function FeedPage({
     sortValue: layerSortValue,
     initialSort: 'order',
   });
+  // The layers checked for a batch change (the rows shown: select all takes them).
+  const layerSelection = useRowSelection(useMemo(() => layerTable.shown.map((layer) => layer.id), [layerTable.shown]));
+  const layerBusy = busyId === 'layer:bulk';
 
   // Feature types no layer of this feed lists yet (a layer with no types already shows them all).
   const covered = new Set(layers.flatMap((layer) => layer.class_labels));
@@ -698,21 +726,42 @@ function FeedPage({
             searchPlaceholder="Search layers…"
             meta={<SettingsTableClear table={layerTable} />}
           />
+          {canEdit && (
+            <div className="mb-3">
+              <BulkBar
+                selection={layerSelection}
+                noun="layer"
+                actions={LAYER_ACTIONS}
+                onApply={(id) => onSetShown(layers.filter((layer) => layerSelection.selected.has(layer.id)), id === 'on')}
+                change="this change"
+                disabled={layerBusy}
+              />
+            </div>
+          )}
           <div className="org-settings-users-table-wrap">
             <table className="org-settings-users-table table-fixed">
               <SettingsTableHead
                 table={layerTable}
+                leading={
+                  <SelectAllCell
+                    selection={layerSelection}
+                    keys={layerTable.shown.map((layer) => layer.id)}
+                    noun="layer"
+                    disabled={!canEdit || layerBusy}
+                  />
+                }
                 trailing={canEdit ? <th className="w-24" aria-label="Actions" /> : undefined}
               />
               <tbody>
                 {layerRows.length > 0 && layerTable.shown.length === 0 && (
-                  <SettingsTableNoMatch colSpan={LAYER_COLUMNS.length + (canEdit ? 1 : 0)} noun="layers" />
+                  <SettingsTableNoMatch colSpan={LAYER_COLUMNS.length + (canEdit ? 2 : 1)} noun="layers" />
                 )}
                 {layerTable.paged.pageRows.map((layer) => {
                   const Icon = mapsIconMap[layer.icon] ?? null;
                   const block = layerDeleteBlock(layer, layers.length);
                   return (
                     <tr key={layer.id} data-layer={layer.id} onClick={() => onEditLayer(layer.id)} className="cursor-pointer">
+                      <SelectRowCell selection={layerSelection} rowKey={layer.id} label={layer.title} disabled={!canEdit || layerBusy} />
                       <td className="max-w-0">
                         <span className="inline-flex min-w-0 items-center gap-2">
                           <span className="flex h-6 w-6 shrink-0 items-center justify-center text-white" style={{ background: layer.color }}>
