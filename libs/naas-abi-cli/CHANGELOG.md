@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v5.2.2 (2026-11-27)
+
+### Bug Fixes
+
+- **idp**: The engine readies the built-in IdP at boot, no step after start
+  ([`00303fb`](https://github.com/jupyter-naas/abi/commit/00303fb04d54916e2d0c8bed9e9695d6feb38bf0))
+
+
 ## v5.2.1 (2026-11-27)
 
 ### Bug Fixes
