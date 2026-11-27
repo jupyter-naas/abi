@@ -80,10 +80,10 @@
 
 .dataset-table-run {
   padding: 6px 12px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid hsl(var(--primary));
   border-radius: var(--org-border-radius, 0px);
-  background: var(--color-primary);
-  color: var(--color-primary-foreground);
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
   font-size: var(--font-size-sm, 14px);
   cursor: pointer;
 }

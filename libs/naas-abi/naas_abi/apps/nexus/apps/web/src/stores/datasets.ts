@@ -36,7 +36,8 @@ interface DatasetsState {
   datasets: DatasetInfo[];
   loading: boolean;
   error: string | null;
-  expandedNamespaces: string[];
+  /** The namespaces folded in the sidebar: every other one is open (new ones too). */
+  collapsedNamespaces: string[];
   fetchDatasets: (workspaceId?: string | null) => Promise<void>;
   toggleNamespace: (namespace: string) => void;
   describe: (namespace: string, name: string, workspaceId?: string | null) => Promise<DatasetInfo>;
@@ -82,7 +83,7 @@ export const useDatasetsStore = create<DatasetsState>()(
       datasets: [],
       loading: false,
       error: null,
-      expandedNamespaces: [],
+      collapsedNamespaces: [],
 
       fetchDatasets: async (workspaceId) => {
         const id = requireWorkspaceId(workspaceId);
@@ -96,13 +97,7 @@ export const useDatasetsStore = create<DatasetsState>()(
           }
           const payload = (await response.json()) as { datasets: DatasetInfo[] };
           const datasets = payload.datasets ?? [];
-          const namespaces = [...new Set(datasets.map((item) => item.namespace))];
-          const expanded = get().expandedNamespaces;
-          set({
-            datasets,
-            loading: false,
-            expandedNamespaces: expanded.length > 0 ? expanded : namespaces,
-          });
+          set({ datasets, loading: false });
         } catch (error) {
           set({
             loading: false,
@@ -113,9 +108,9 @@ export const useDatasetsStore = create<DatasetsState>()(
 
       toggleNamespace: (namespace) =>
         set({
-          expandedNamespaces: get().expandedNamespaces.includes(namespace)
-            ? get().expandedNamespaces.filter((item) => item !== namespace)
-            : [...get().expandedNamespaces, namespace],
+          collapsedNamespaces: get().collapsedNamespaces.includes(namespace)
+            ? get().collapsedNamespaces.filter((item) => item !== namespace)
+            : [...get().collapsedNamespaces, namespace],
         }),
 
       describe: async (namespace, name, workspaceId) => {
@@ -164,6 +159,6 @@ export const useDatasetsStore = create<DatasetsState>()(
         return (await response.json()) as DatasetQueryResult;
       },
     }),
-    { name: 'nexus-datasets', partialize: (state) => ({ expandedNamespaces: state.expandedNamespaces }) },
+    { name: 'nexus-datasets', partialize: (state) => ({ collapsedNamespaces: state.collapsedNamespaces }) },
   ),
 );
