@@ -173,4 +173,20 @@ describe('WorkspaceFiles', () => {
     expect(choice(m, 'workspace', 'nobody')?.getAttribute('aria-checked')).toBe('true');
     expect(bar(m)).not.toBeNull();
   });
+
+  it('is a table as the other pages: Files and Access columns, in the page\'s order, searched', async () => {
+    const m = await render(
+      { read: vi.fn().mockResolvedValue(offer(FILES)) },
+      { read: vi.fn().mockResolvedValue(features([featureRow()])) },
+    );
+    expect([...m.host.querySelectorAll('table.org-settings-users-table thead th')].map((th) => th.textContent?.trim())).toEqual([
+      expect.stringContaining('Files'),
+      expect.stringContaining('Access'),
+    ]);
+    const order = () => [...m.host.querySelectorAll('tbody tr[data-files]')].map((row) => row.getAttribute('data-files'));
+    expect(order()[0]).toBe('workspace');
+    expect(order().at(-1)).toBe('my_files');
+    await m.type(m.host.querySelector('input[type="search"]') as HTMLInputElement, 'my files');
+    expect(order()).toEqual(['my_files']);
+  });
 });

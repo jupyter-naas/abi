@@ -3,9 +3,28 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Save } from 'lucide-react';
 import { usePageDraft } from '@/hooks/use-page-state';
-import { SettingsPageHeader } from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
 import { Notice } from '@/components/ui/notice';
-import { Card } from '@/components/ui/card';
+import { Loading } from '@/components/ui/spinner';
+import {
+  SettingsTableClear,
+  SettingsTableHead,
+  SettingsTableNoMatch,
+  useSettingsTable,
+} from '@/components/settings/users-table/settings-table';
+import { TablePager } from '@/components/settings/users-table/table-pager';
+import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
+import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
+import {
+  FILES_COLUMNS,
+  FILES_EXPORT_HEADERS,
+  filesCellValues,
+  filesExportRow,
+  filesSearchTexts,
+  filesSortValue,
+  FILES_DESCRIPTIONS,
+  type FilesRow,
+} from './files-model';
 import {
   createOfferApi,
   type FileMode,
@@ -16,8 +35,9 @@ import {
 import { createFeatureAccessApi, type FeatureAccessApi } from '../features/feature-access-api';
 import type { FeatureAccessState, FeatureRow } from '../features/feature-access-model';
 
-// The unsaved-changes bar of the General pages, and their Save button.
+// The unsaved-changes bar of the General pages, and their Save button; the Users table.
 import '@/app/organizations/[orgId]/settings/general/general.css';
+import '@/app/organizations/[orgId]/settings/users/users.css';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 import { usePolicyViewStore } from '@/components/settings/settings-policy-picker';
 
@@ -101,7 +121,7 @@ export function WorkspaceFiles({
     workspaceId ? { scope: `workspace:${workspaceId}`, page: 'files', detail: policyId ?? undefined } : null,
     server
   );
-  const values = draft.values ?? server ?? {};
+  const values = useMemo(() => draft.values ?? server ?? {}, [draft.values, server]);
   const changed = Object.keys(values).filter((key) => server && values[key] !== server[key]);
   const dirty = changed.length > 0;
   const workspaceFilesOn = values.workspace === 'everyone';
@@ -142,8 +162,72 @@ export function WorkspaceFiles({
     }
   };
 
+  // One row per kind of files, in the page's order: Workspace, the sections of the offer, My Files.
+  const rows: FilesRow[] = useMemo(() => {
+    if (!offer) return [];
+    const list: FilesRow[] = [
+      {
+        key: 'workspace',
+        label: 'Workspace Files',
+        description: workspaceFiles ? "The workspace's own files" : 'The Files feature is not enabled on this deployment',
+        value: workspaceFiles ? (values.workspace ?? null) : null,
+        choices: workspaceFiles
+          ? [
+              { value: 'everyone', label: 'Everyone' },
+              { value: 'nobody', label: 'Nobody' },
+            ]
+          : [],
+        editable: !!workspaceFiles?.editable,
+        reason: workspaceFiles && !workspaceFiles.editable ? workspaceFiles.reason : null,
+        order: 0,
+      },
+      ...(offer.files ?? []).map((row, index) => ({
+        key: row.key,
+        label: row.label,
+        description: FILES_DESCRIPTIONS[row.key] ?? `${row.label}, given to this workspace`,
+        value: values[row.key] ?? null,
+        choices: row.modes.map((mode) => ({
+          value: mode,
+          label: MODE_LABELS[mode],
+          hint: MODE_HINTS[mode],
+          disabled: !row.choices.includes(mode),
+        })),
+        editable: row.editable,
+        reason: row.editable ? null : row.reason,
+        order: index + 1,
+      })),
+    ];
+    if (offer.my_files) {
+      list.push({
+        key: 'my_files',
+        label: 'My Files',
+        description: `Every Member writes theirs; Viewers ${
+          offer.my_files.viewers === 'read' ? 'read theirs' : 'have none'
+        }. A setting of the deployment, not of the workspace`,
+        value: null,
+        choices: [],
+        editable: false,
+        reason: null,
+        order: list.length,
+      });
+    }
+    return list;
+  }, [offer, workspaceFiles, values]);
+  const table = useSettingsTable({
+    rows,
+    columns: FILES_COLUMNS,
+    cellValues: filesCellValues,
+    sortValue: filesSortValue,
+    searchTexts: filesSearchTexts,
+    initialSort: 'files',
+  });
+  const exportShown = (format: UsersExportFormat) => {
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTableExport(FILES_EXPORT_HEADERS, table.shown.map(filesExportRow), format, `files_${date}`, 'Files');
+  };
+
   // One total: the kinds of files listed (Workspace, Organization, Platform, System, My Files).
-  const kinds = offer ? 1 + (offer.files ?? []).length + (offer.my_files ? 1 : 0) : null;
+  const kinds = offer ? rows.length : null;
 
   return (
     <>
@@ -152,7 +236,9 @@ export function WorkspaceFiles({
       badge={kinds === null ? undefined : `${kinds} kind${kinds === 1 ? '' : 's'} of files`}
       description={description}
       actions={
-        // The button of the General pages: faded until something changes.
+        <>
+        <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
+        {/* The button of the General pages: faded until something changes. */}
         <button
           type="button"
           onClick={() => void save()}
@@ -163,6 +249,7 @@ export function WorkspaceFiles({
           <Save size={16} />
           {saved ? 'Saved!' : saving ? 'Saving...' : 'Save changes'}
         </button>
+        </>
       }
     />
     {error && <Notice tone="error">{error}</Notice>}
@@ -184,92 +271,61 @@ export function WorkspaceFiles({
         </button>
       </div>
     ) : null}
-    <Card>
-      {!offer ? (
-        !error && <p className="text-sm text-muted-foreground">Loading files...</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="workspace-features-table w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-muted-foreground">
-                <th className="py-2 pr-3 font-medium">Files</th>
-                <th className="py-2 font-medium">Given here</th>
-              </tr>
-            </thead>
+    {!offer ? (
+      !error && <Loading label="Loading files…" />
+    ) : (
+      <div className="space-y-4">
+        <SettingsTableToolbar
+          search={table.search}
+          onSearchChange={table.setSearch}
+          searchPlaceholder="Search files, access…"
+          meta={<SettingsTableClear table={table} />}
+        />
+        <div className="org-settings-users-table-wrap">
+          <table className="org-settings-users-table">
+            <SettingsTableHead table={table} />
             <tbody>
-              <tr data-files="workspace" className="border-t border-border align-top">
-                <td className="whitespace-nowrap py-2 pr-3 font-medium text-foreground">Workspace Files</td>
-                <td className="py-2">
-                  {workspaceFiles ? (
-                    <>
-                      <div className="workspace-features-choices" role="radiogroup" aria-label="Workspace Files">
-                        {([true, false] as const).map((on) => (
-                          <button
-                            key={String(on)}
-                            type="button"
-                            role="radio"
-                            aria-checked={workspaceFilesOn === on}
-                            data-choice={on ? 'everyone' : 'nobody'}
-                            disabled={!workspaceFiles.editable || saving}
-                            className="workspace-features-choice"
-                            onClick={() => choose('workspace', on ? 'everyone' : 'nobody')}
-                          >
-                            {on ? 'Everyone' : 'Nobody'}
-                          </button>
-                        ))}
-                      </div>
-                      <p className="workspace-features-note">The workspace&apos;s own files.</p>
-                      {!workspaceFiles.editable && workspaceFiles.reason && (
-                        <p className="workspace-features-note">{workspaceFiles.reason}</p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="workspace-features-note">The Files feature is not enabled on this deployment.</p>
-                  )}
-                </td>
-              </tr>
-              {(offer.files ?? []).map((row) => (
-                <tr key={row.key} data-files={row.key} className="border-t border-border align-top">
-                  <td className="whitespace-nowrap py-2 pr-3 font-medium text-foreground">{row.label}</td>
-                  <td className="py-2">
-                    <div className="workspace-features-choices" role="radiogroup" aria-label={row.label}>
-                      {row.modes.map((mode) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          role="radio"
-                          aria-checked={values[row.key] === mode}
-                          data-choice={mode}
-                          title={MODE_HINTS[mode]}
-                          disabled={!row.editable || !row.choices.includes(mode) || saving}
-                          className="workspace-features-choice"
-                          onClick={() => choose(row.key, mode)}
-                        >
-                          {MODE_LABELS[mode]}
-                        </button>
-                      ))}
-                    </div>
-                    {!row.editable && row.reason && <p className="workspace-features-note">{row.reason}</p>}
+              {table.shown.length === 0 && <SettingsTableNoMatch colSpan={FILES_COLUMNS.length} noun="files" />}
+              {table.paged.pageRows.map((row) => (
+                <tr key={row.key} data-files={row.key} className="align-top">
+                  <td>
+                    <p className="font-medium text-foreground">{row.label}</p>
+                    <p className="text-xs text-muted-foreground">{row.description}</p>
+                  </td>
+                  <td data-field="access">
+                    {row.choices.length > 0 ? (
+                      <>
+                        <div className="workspace-features-choices" role="radiogroup" aria-label={row.label}>
+                          {row.choices.map((choice) => (
+                            <button
+                              key={choice.value}
+                              type="button"
+                              role="radio"
+                              aria-checked={row.value === choice.value}
+                              data-choice={choice.value}
+                              title={choice.hint}
+                              disabled={!row.editable || choice.disabled || saving}
+                              className="workspace-features-choice"
+                              onClick={() => choose(row.key, choice.value)}
+                            >
+                              {choice.label}
+                            </button>
+                          ))}
+                        </div>
+                        {row.reason && <p className="workspace-features-note">{row.reason}</p>}
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Set by the deployment</span>
+                    )}
                   </td>
                 </tr>
               ))}
-              {offer.my_files && (
-                <tr data-files="my_files" className="border-t border-border align-top">
-                  <td className="whitespace-nowrap py-2 pr-3 font-medium text-foreground">My Files</td>
-                  <td className="py-2">
-                    <p className="workspace-features-note">
-                      {`Every Member writes theirs; Viewers ${
-                        offer.my_files.viewers === 'read' ? 'read theirs' : 'have none'
-                      }. A setting of the deployment, not of the workspace.`}
-                    </p>
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
-      )}
-    </Card>
+        <TablePager total={table.shown.length} paged={table.paged} />
+      </div>
+    )}
     </>
   );
 }
