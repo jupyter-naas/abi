@@ -62,24 +62,29 @@ async function render(parts: ReturnType<typeof setup>) {
 }
 
 const rowKeys = (m: Mounted) => [...m.host.querySelectorAll('tr[data-module]')].map((r) => r.getAttribute('data-module'));
-const wholeSwitch = (m: Mounted, key: string) =>
-  m.host.querySelector(`tr[data-module="${key}"] [role="switch"]`) as HTMLButtonElement | null;
+const moduleSwitch = (m: Mounted, module: string) =>
+  m.host.querySelector(`tr[data-module="${module}"] [role="switch"]`) as HTMLButtonElement | null;
+const kindSwitch = (m: Mounted, key: string) =>
+  m.host.querySelector(`tr[data-module-kind="${key}"] [role="switch"]`) as HTMLButtonElement | null;
 
 describe('Settings › Access › Modules', () => {
-  it('lists each module and kind as Users does, whole or not, with a count and a filter', async () => {
+  it('lists one row per module, offered whole, in part or not, with a count and a filter', async () => {
     const parts = setup();
     const m = await render(parts);
     expect(parts.api.publishers).toHaveBeenCalledWith(WS);
-    expect(rowKeys(m)).toEqual(['agents|acme.people', 'workflows|acme.sales']);
-    expect(wholeSwitch(m, 'agents|acme.people')?.getAttribute('aria-checked')).toBe('true');
-    expect(wholeSwitch(m, 'workflows|acme.sales')?.getAttribute('aria-checked')).toBe('false');
+    expect(rowKeys(m)).toEqual(['acme.people', 'acme.sales']);
+    expect(moduleSwitch(m, 'acme.people')?.getAttribute('aria-checked')).toBe('true');
+    expect(moduleSwitch(m, 'acme.sales')?.getAttribute('aria-checked')).toBe('false');
+    expect(m.host.querySelector('tr[data-module="acme.people"]')?.textContent).toContain('Agents');
+    // Its contents are folded until asked.
+    expect(m.host.querySelector('tr[data-module-kind]')).toBeNull();
     expect(m.host.textContent).toContain('2 modules');
 
     await pickColumnFilter(m, 'offer', 'Not offered');
-    expect(rowKeys(m)).toEqual(['workflows|acme.sales']);
+    expect(rowKeys(m)).toEqual(['acme.sales']);
   });
 
-  it('offers a module whole, or unfolds it to offer item by item, each saved at once', async () => {
+  it('unfolds a module by its contents, then a kind item by item, each level switched at once', async () => {
     const after = {
       ...OFFER,
       offered: { ...OFFER.offered, workflows: [{ module: 'acme.sales', name: 'Sync' }] },
@@ -87,8 +92,16 @@ describe('Settings › Access › Modules', () => {
     const parts = setup(after);
     const m = await render(parts);
 
-    await m.click(m.host.querySelector('tr[data-module="workflows|acme.sales"] [data-action="items"]'));
+    await m.click(m.host.querySelector('tr[data-module="acme.sales"] [data-action="contents"]'));
+    expect(kindSwitch(m, 'workflows|acme.sales')?.getAttribute('aria-checked')).toBe('false');
+    // Its contents one step in, their items two.
+    expect(m.host.querySelector('tr[data-module-kind="workflows|acme.sales"] td')?.classList).toContain('access-offer-indent-1');
+    await m.click(m.host.querySelector('tr[data-module-kind="workflows|acme.sales"] [data-action="items"]'));
     await m.flush();
+    // Each item a row: its name two steps in, its switch in the Offered column.
+    const item = m.host.querySelector('tr[data-offer-item="acme.sales/Sync"]')!;
+    expect(item.querySelector('td')?.classList).toContain('access-offer-indent-2');
+    expect(item.querySelector('td[data-field="offer"] [role="switch"]')).not.toBeNull();
     expect(parts.api.resources).toHaveBeenCalledWith({
       scope: WS,
       service: 'module',
@@ -104,24 +117,40 @@ describe('Settings › Access › Modules', () => {
       null,
     );
     expect(m.host.querySelector('[data-modules-notice]')?.textContent).toBe('Sync added to the offer.');
-    expect(m.host.querySelector('tr[data-module="workflows|acme.sales"] [data-field="offer"]')?.textContent).toContain(
+    expect(m.host.querySelector('tr[data-module-kind="workflows|acme.sales"] [data-field="offer"]')?.textContent).toContain(
       '1 item: Sync',
     );
+    // The module, offered in part now: its row says which part.
+    expect(m.host.querySelector('tr[data-module="acme.sales"] [data-field="offer"]')?.textContent).toContain(
+      'Workflows: 1 item',
+    );
+  });
 
-    await m.click(wholeSwitch(m, 'agents|acme.people'));
+  it('offers or takes back a whole module at once, every kind of it', async () => {
+    const parts = setup();
+    const m = await render(parts);
+    await m.click(moduleSwitch(m, 'acme.people'));
     await m.flush();
     expect(parts.offerApi.save).toHaveBeenLastCalledWith(
       'ws-1',
       [{ kind: 'agents', module: 'acme.people', name: '*', offered: false }],
       null,
     );
+    await m.click(moduleSwitch(m, 'acme.sales'));
+    await m.flush();
+    expect(parts.offerApi.save).toHaveBeenLastCalledWith(
+      'ws-1',
+      [{ kind: 'workflows', module: 'acme.sales', name: '*', offered: true }],
+      null,
+    );
+    expect(m.host.querySelector('[data-modules-notice]')?.textContent).toBe('acme.sales added to the offer.');
   });
 
   it('is read-only when IAM does not let the caller change "<W> access"', async () => {
     const parts = setup();
     parts.offerApi.read.mockResolvedValue({ ...OFFER, editable: false });
     const m = await render(parts);
-    expect(wholeSwitch(m, 'agents|acme.people')?.disabled).toBe(true);
+    expect(moduleSwitch(m, 'acme.people')?.disabled).toBe(true);
     expect(m.host.textContent).toContain('Read-only: IAM does not let you change Sales access.');
   });
 
@@ -152,15 +181,13 @@ describe('Settings › Access › Modules', () => {
     expect(onPolicyChange).toHaveBeenCalledWith('pol_grants');
     expect(mounted.host.textContent).toContain('2 modules');
 
-    await mounted.click(wholeSwitch(mounted, 'agents|acme.people'));
+    await mounted.click(moduleSwitch(mounted, 'acme.people'));
     await mounted.flush();
     expect(parts.offerApi.save).toHaveBeenLastCalledWith(
       'ws-1',
       [{ kind: 'agents', module: 'acme.people', name: '*', offered: true }],
       'pol_grants',
     );
-    expect(mounted.host.querySelector('[data-modules-notice]')?.textContent).toBe(
-      'Every agent of acme.people added to Analysts grants.',
-    );
+    expect(mounted.host.querySelector('[data-modules-notice]')?.textContent).toBe('acme.people added to Analysts grants.');
   });
 });

@@ -1,10 +1,11 @@
 /**
- * Settings › Access › Modules: what the workspace offers of each module, one row per module and
- * kind (its agents, apps, workflows or pipelines), as the Users table shows it. Pure: the view is
+ * Settings › Access › Modules: what the workspace offers of each module, one row per module (its
+ * contents, agents, apps, workflows or pipelines, unfolded under it, each kind then item by item),
+ * as the Users table shows it. Pure: the view is
  * `modules.tsx`; the offer is "<W> access" (`GET /api/workspaces/{id}/offer`), each change one
  * write of it as the caller (`PUT …/offer`).
  */
-import { modulesOf } from '@/components/access/offer/offer-model';
+import { draftKey, modulesOf } from '@/components/access/offer/offer-model';
 import {
   OFFER_KINDS,
   WHOLE_MODULE,
@@ -81,4 +82,72 @@ export function offerSummary(row: ModuleRow): string {
 export const MODULE_EXPORT_HEADERS = ['Module', 'Contents', 'Offered', 'Items'];
 export function moduleExportRow(row: ModuleRow): string[] {
   return [row.module, row.kindLabel, MODULE_OFFER_LABELS[row.offer], row.items.join('; ')];
+}
+
+// -- one row per module ----------------------------------------------------------------------
+
+export type ModuleGroupOffer = 'whole' | 'partial' | 'none';
+export const MODULE_GROUP_LABELS: Record<ModuleGroupOffer, string> = {
+  whole: 'Whole module',
+  partial: 'In part',
+  none: 'Not offered',
+};
+
+/** A module and its contents: one row of the table, its kinds unfolded under it. */
+export type ModuleGroup = {
+  /** The module. */
+  key: string;
+  module: string;
+  kinds: ModuleRow[];
+  /** Every kind offered whole, some of it, or nothing. */
+  offer: ModuleGroupOffer;
+  /** IAM lets the caller give something of it here. */
+  grantable: boolean;
+};
+
+export function moduleGroups(publishers: PublishersView | null, offered: OfferState['offered']): ModuleGroup[] {
+  const groups = new Map<string, ModuleGroup>();
+  for (const row of moduleRows(publishers, offered)) {
+    const group = groups.get(row.module) ?? { key: row.module, module: row.module, kinds: [], offer: 'none', grantable: false };
+    group.kinds.push(row);
+    group.grantable = group.grantable || row.grantable;
+    groups.set(row.module, group);
+  }
+  for (const group of groups.values()) {
+    group.offer = group.kinds.every((k) => k.offer === 'whole')
+      ? 'whole'
+      : group.kinds.some((k) => k.offer !== 'none')
+        ? 'partial'
+        : 'none';
+  }
+  return [...groups.values()];
+}
+
+/** "Whole module", "Agents: whole · Apps: 2 items", "Not offered". */
+export function groupSummary(group: ModuleGroup): string {
+  if (group.offer !== 'partial') return MODULE_GROUP_LABELS[group.offer];
+  return group.kinds
+    .filter((k) => k.offer !== 'none')
+    .map((k) => `${k.kindLabel}: ${k.offer === 'whole' ? 'whole' : `${k.items.length} item${k.items.length === 1 ? '' : 's'}`}`)
+    .join(' · ');
+}
+
+/** What the module's switch writes: every kind whole (on), or nothing of it left (off). */
+export function moduleDrafts(group: ModuleGroup, on: boolean): Record<string, boolean> {
+  const drafts: Record<string, boolean> = {};
+  for (const kind of group.kinds) {
+    drafts[draftKey(kind.kind, group.module, WHOLE_MODULE)] = on;
+    if (!on) for (const item of kind.items) drafts[draftKey(kind.kind, group.module, item)] = false;
+  }
+  return drafts;
+}
+
+export function groupCellValues(group: ModuleGroup, column: ModuleColumnId): string[] {
+  if (column === 'module') return [group.module];
+  if (column === 'kind') return group.kinds.map((k) => k.kindLabel);
+  return [MODULE_GROUP_LABELS[group.offer]];
+}
+
+export function groupSearchTexts(group: ModuleGroup): string[] {
+  return [group.module, MODULE_GROUP_LABELS[group.offer], ...group.kinds.flatMap(moduleSearchTexts)];
 }

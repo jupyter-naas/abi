@@ -40,11 +40,14 @@ import type { PublishersView } from '@/lib/iam-admin/types';
 import {
   MODULE_COLUMNS,
   MODULE_EXPORT_HEADERS,
-  moduleCellValues,
+  groupCellValues,
+  groupSearchTexts,
+  groupSummary,
+  moduleDrafts,
   moduleExportRow,
-  moduleRows,
-  moduleSearchTexts,
+  moduleGroups,
   offerSummary,
+  type ModuleGroup,
   type ModuleRow,
 } from './modules-model';
 
@@ -65,8 +68,9 @@ const editsOffer = (state: OfferState | null) =>
 
 /**
  * Settings › Access › Modules: what the workspace offers of each module, laid out as Users. A row
- * is a module's agents, apps, workflows or pipelines: offered whole (what the module adds later
- * too), item by item (unfold it), or not. Each switch is one write of "<W> access" as the caller;
+ * is a module, switched whole (every kind of it, what it adds later too) or unfolded by its
+ * contents: each kind (agents, apps, workflows, pipelines) switched whole, or unfolded again to
+ * switch it item by item. Each switch is one write of "<W> access" as the caller;
  * IAM says what may change. The pages under Features then show what is offered.
  */
 export function WorkspaceModules({
@@ -93,6 +97,8 @@ export function WorkspaceModules({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
+  // The modules unfolded by their contents, and the kinds unfolded item by item.
+  const [openModules, setOpenModules] = useState<Record<string, boolean>>({});
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [items, setItems] = useState<Record<string, Items>>({});
 
@@ -110,18 +116,19 @@ export function WorkspaceModules({
   useEffect(() => {
     setOffer(null);
     setPublishers(null);
+    setOpenModules({});
     setOpen({});
     setItems({});
     setNotice('');
     void load();
   }, [load]);
 
-  const rows = useMemo(() => (offer ? moduleRows(publishers, offer.offered) : []), [offer, publishers]);
+  const rows = useMemo(() => (offer ? moduleGroups(publishers, offer.offered) : []), [offer, publishers]);
   const table = useSettingsTable({
     rows,
     columns: MODULE_COLUMNS,
-    cellValues: moduleCellValues,
-    searchTexts: moduleSearchTexts,
+    cellValues: groupCellValues,
+    searchTexts: groupSearchTexts,
     initialSort: 'module',
   });
 
@@ -153,9 +160,13 @@ export function WorkspaceModules({
     if (next && !items[row.key]) void loadItems(row);
   };
 
-  const toggle = async (kind: OfferKind, module: string, name: string, label: string, on: boolean) => {
+  const toggle = (kind: OfferKind, module: string, name: string, label: string, on: boolean) =>
+    saveDrafts({ [draftKey(kind, module, name)]: on }, label, on);
+
+  /** One write of the policy for every switch a change makes (a whole module: each kind of it). */
+  const saveDrafts = async (drafts: Record<string, boolean>, label: string, on: boolean) => {
     if (!offer) return;
-    const changes = offerChanges(offer.offered, { [draftKey(kind, module, name)]: on });
+    const changes = offerChanges(offer.offered, drafts);
     if (changes.length === 0) return;
     setSaving(true);
     setNotice('');
@@ -176,11 +187,12 @@ export function WorkspaceModules({
 
   const exportShown = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
-    downloadTableExport(MODULE_EXPORT_HEADERS, table.shown.map(moduleExportRow), format, `modules_${date}`, 'Modules');
+    const kinds = table.shown.flatMap((group) => group.kinds);
+    downloadTableExport(MODULE_EXPORT_HEADERS, kinds.map(moduleExportRow), format, `modules_${date}`, 'Modules');
   };
 
   const editable = offer?.editable ?? false;
-  const moduleCount = new Set(rows.map((row) => row.module)).size;
+  const moduleCount = rows.length;
   const onOffer = editsOffer(offer);
   const access = offer?.access_policy ?? null;
   const edited = offer?.policy ?? access;
@@ -190,13 +202,13 @@ export function WorkspaceModules({
     setPolicyId(next);
     onPolicyChange?.(next);
   };
-  const colSpan = MODULE_COLUMNS.length + 1;
+  const colSpan = MODULE_COLUMNS.length;
 
   return (
     <div className="space-y-6">
       <SettingsPageHeader
         title="Modules"
-        // One value: how many modules (a row is a module's kind: agents, apps…).
+        // One value: how many modules (one row each).
         badge={offer ? `${moduleCount} module${moduleCount === 1 ? '' : 's'}` : undefined}
         description={
           !onOffer && edited ? (
@@ -255,81 +267,103 @@ export function WorkspaceModules({
           />
           <div className="org-settings-users-table-wrap">
             <table className="org-settings-users-table">
-              <SettingsTableHead table={table} trailing={<th aria-label="Items" />} />
+              <SettingsTableHead table={table} />
               <tbody>
                 {table.shown.length === 0 && <SettingsTableNoMatch colSpan={colSpan} noun="modules" />}
-                {table.paged.pageRows.map((row) => {
-                  const whole = row.offer === 'whole';
-                  const shown = items[row.key];
-                  const single = row.kindLabel.toLowerCase().replace(/s$/, '');
-                  return (
-                    <Fragment key={row.key}>
-                      <tr data-module={row.key} className="align-top">
-                        <td className="font-medium text-foreground">{row.module}</td>
-                        <td className="text-muted-foreground">{row.kindLabel}</td>
-                        <td data-field="offer">
-                          <div className="flex items-center gap-2">
-                            <OfferSwitch
-                              label={`Offer every ${single} of ${row.module}`}
-                              on={whole}
-                              disabled={!editable || saving || (!row.grantable && !whole)}
-                              onChange={(next) =>
-                                void toggle(row.kind, row.module, WHOLE_MODULE, `Every ${single} of ${row.module}`, next)
-                              }
-                            />
-                            <span className="text-xs text-muted-foreground">{offerSummary(row)}</span>
-                          </div>
-                        </td>
-                        <td className="whitespace-nowrap text-right">
-                          <button
-                            type="button"
-                            className="access-offer-expand"
-                            aria-expanded={!!open[row.key]}
-                            data-action="items"
-                            onClick={() => toggleOpen(row)}
-                          >
-                            {open[row.key] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                            {row.kindLabel}
-                          </button>
-                        </td>
-                      </tr>
-                      {open[row.key] && (
-                        <tr data-module-items={row.key}>
-                          <td colSpan={colSpan}>
-                            <ul className="access-offer-items" aria-label={`${row.kindLabel} of ${row.module}`}>
-                              {!shown || shown.status === 'loading' ? (
-                                <li className="access-policy-muted">Loading…</li>
+                {table.paged.pageRows.map((group) => (
+                  <Fragment key={group.key}>
+                    <ModuleLine
+                      group={group}
+                      unfolded={!!openModules[group.key]}
+                      disabled={!editable || saving}
+                      onUnfold={() => setOpenModules((current) => ({ ...current, [group.key]: !current[group.key] }))}
+                      onSwitch={(on) => void saveDrafts(moduleDrafts(group, on), group.module, on)}
+                    />
+                    {openModules[group.key] &&
+                      group.kinds.map((row) => {
+                        const whole = row.offer === 'whole';
+                        const shown = items[row.key];
+                        const single = row.kindLabel.toLowerCase().replace(/s$/, '');
+                        return (
+                          <Fragment key={row.key}>
+                            <tr data-module-kind={row.key} className="align-top access-offer-kind-row">
+                              <td className="access-offer-indent-1">
+                                <button
+                                  type="button"
+                                  className="access-offer-expand access-offer-expand-label text-muted-foreground"
+                                  aria-expanded={!!open[row.key]}
+                                  aria-label={`${open[row.key] ? 'Fold' : 'Unfold'} the ${row.kindLabel.toLowerCase()} of ${row.module}`}
+                                  data-action="items"
+                                  onClick={() => toggleOpen(row)}
+                                >
+                                  {open[row.key] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                  {row.kindLabel}
+                                </button>
+                              </td>
+                              <td />
+                              <td data-field="offer">
+                                <div className="flex items-center gap-2">
+                                  <OfferSwitch
+                                    label={`Offer every ${single} of ${row.module}`}
+                                    on={whole}
+                                    disabled={!editable || saving || (!row.grantable && !whole)}
+                                    onChange={(next) =>
+                                      void toggle(row.kind, row.module, WHOLE_MODULE, `Every ${single} of ${row.module}`, next)
+                                    }
+                                  />
+                                  <span className="text-xs text-muted-foreground">{offerSummary(row)}</span>
+                                </div>
+                              </td>
+                            </tr>
+                            {open[row.key] &&
+                              (!shown || shown.status === 'loading' ? (
+                                <tr data-module-items={row.key}>
+                                  <td colSpan={colSpan} className="access-offer-indent-2 access-policy-muted">
+                                    Loading…
+                                  </td>
+                                </tr>
                               ) : shown.status === 'failed' ? (
-                                <li className="access-policy-error">{shown.error}</li>
+                                <tr data-module-items={row.key}>
+                                  <td colSpan={colSpan} className="access-offer-indent-2 access-policy-error">
+                                    {shown.error}
+                                  </td>
+                                </tr>
                               ) : (
                                 <>
+                                  {/* One row per item: its name two steps in, its switch in Offered. */}
                                   {itemsWithOffered(shown.items, offer.offered[row.kind], row.module).map((item) => (
-                                    <li
+                                    <tr
                                       key={item.name}
-                                      className="access-offer-row"
+                                      data-module-items={row.key}
                                       data-offer-item={`${row.module}/${item.name}`}
+                                      className="align-top"
                                     >
-                                      <OfferSwitch
-                                        label={`Offer ${item.label}`}
-                                        on={isOffered(offer.offered, row.kind, row.module, item.name)}
-                                        disabled={!editable || saving || whole}
-                                        onChange={(next) => void toggle(row.kind, row.module, item.name, item.label, next)}
-                                      />
-                                      <span className="access-offer-name">{item.label}</span>
-                                    </li>
+                                      <td className="access-offer-indent-2 text-sm text-foreground">{item.label}</td>
+                                      <td />
+                                      <td data-field="offer">
+                                        <OfferSwitch
+                                          label={`Offer ${item.label}`}
+                                          on={isOffered(offer.offered, row.kind, row.module, item.name)}
+                                          disabled={!editable || saving || whole}
+                                          onChange={(next) => void toggle(row.kind, row.module, item.name, item.label, next)}
+                                        />
+                                      </td>
+                                    </tr>
                                   ))}
                                   {!shown.listed && (
-                                    <li className="access-policy-muted">Its items are not listed: offer the whole module.</li>
+                                    <tr data-module-items={row.key}>
+                                      <td colSpan={colSpan} className="access-offer-indent-2 access-policy-muted">
+                                        Its items are not listed: offer them all.
+                                      </td>
+                                    </tr>
                                   )}
                                 </>
-                              )}
-                            </ul>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
+                              ))}
+                          </Fragment>
+                        );
+                      })}
+                  </Fragment>
+                ))}
               </tbody>
             </table>
           </div>
@@ -337,5 +371,51 @@ export function WorkspaceModules({
       )}
       <TablePager total={table.shown.length} paged={table.paged} />
     </div>
+  );
+}
+
+/** A module's row: its name, its contents, its switch (the whole module) and the unfold button. */
+function ModuleLine({
+  group,
+  unfolded,
+  disabled,
+  onUnfold,
+  onSwitch,
+}: {
+  group: ModuleGroup;
+  unfolded: boolean;
+  disabled: boolean;
+  onUnfold: () => void;
+  onSwitch: (on: boolean) => void;
+}) {
+  const whole = group.offer === 'whole';
+  return (
+    <tr data-module={group.key} className="align-top">
+      <td>
+        <button
+          type="button"
+          className="access-offer-expand access-offer-expand-label font-medium text-foreground"
+          aria-expanded={unfolded}
+          aria-label={`${unfolded ? 'Fold' : 'Unfold'} the contents of ${group.module}`}
+          data-action="contents"
+          onClick={onUnfold}
+        >
+          {unfolded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {group.module}
+        </button>
+      </td>
+      <td className="text-muted-foreground">{group.kinds.map((k) => k.kindLabel).join(', ')}</td>
+      <td data-field="offer">
+        <div className="flex items-center gap-2">
+          <OfferSwitch
+            label={`Offer all of ${group.module}`}
+            on={whole}
+            disabled={disabled || (!group.grantable && !whole)}
+            onChange={onSwitch}
+          />
+          <span className="text-xs text-muted-foreground">{groupSummary(group)}</span>
+        </div>
+      </td>
+    </tr>
   );
 }

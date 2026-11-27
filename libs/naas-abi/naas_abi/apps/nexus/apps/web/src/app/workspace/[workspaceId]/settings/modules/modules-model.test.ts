@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { WS, publishedType } from '@/components/access/access-fixtures';
 import {
+  groupCellValues,
+  groupSearchTexts,
+  groupSummary,
   moduleCellValues,
+  moduleDrafts,
   moduleExportRow,
+  moduleGroups,
   moduleRows,
   moduleSearchTexts,
   offerSummary,
@@ -56,5 +61,37 @@ describe('the modules of the offer', () => {
   it('says Not offered for a module that may be given but is not', () => {
     const none = moduleRows(PUBLISHERS, { agents: [], apps: [], workflows: [], pipelines: [] });
     expect(none.map((r) => r.offer)).toEqual(['none', 'none']);
+  });
+});
+
+describe('one row per module, its contents unfolded under it', () => {
+  it('groups a module\'s kinds, offered whole, in part or not', () => {
+    const [people] = moduleGroups(PUBLISHERS, OFFERED);
+    expect(people.module).toBe('acme.people');
+    expect(people.kinds.map((k) => k.kind)).toEqual(['agents', 'apps']);
+    // Agents whole, apps item by item: the module is offered in part.
+    expect(people.offer).toBe('partial');
+    expect(groupSummary(people)).toBe('Agents: whole · Apps: 2 items');
+    expect(groupCellValues(people, 'kind')).toEqual(['Agents', 'Apps']);
+    expect(groupCellValues(people, 'offer')).toEqual(['In part']);
+    expect(groupSearchTexts(people)).toEqual(expect.arrayContaining(['acme.people', 'Agents', 'Apps', 'Roster', 'Hiring']));
+
+    const whole = moduleGroups(PUBLISHERS, { ...OFFERED, apps: [{ module: 'acme.people', name: '*' }] })[0];
+    expect(whole.offer).toBe('whole');
+    expect(groupSummary(whole)).toBe('Whole module');
+    const none = moduleGroups(PUBLISHERS, { agents: [], apps: [], workflows: [], pipelines: [] })[0];
+    expect(none.offer).toBe('none');
+    expect(groupSummary(none)).toBe('Not offered');
+  });
+
+  it('offers a whole module (every kind) or takes all of it back, its items included', () => {
+    const [people] = moduleGroups(PUBLISHERS, OFFERED);
+    expect(moduleDrafts(people, true)).toEqual({ 'agents|acme.people|*': true, 'apps|acme.people|*': true });
+    expect(moduleDrafts(people, false)).toEqual({
+      'agents|acme.people|*': false,
+      'apps|acme.people|*': false,
+      'apps|acme.people|Hiring': false,
+      'apps|acme.people|Roster': false,
+    });
   });
 });

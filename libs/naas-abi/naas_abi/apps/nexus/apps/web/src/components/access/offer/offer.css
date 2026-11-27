@@ -72,6 +72,13 @@
   color: var(--foreground-hex);
 }
 
+/* On a row's label (Access › Modules: a module, a kind): the label's size, at the left. */
+.access-offer-expand.access-offer-expand-label {
+  margin-left: 0;
+  font-size: var(--font-size-sm);
+  text-align: left;
+}
+
 /* A square switch, as the search scopes'. */
 .access-offer-switch {
   position: relative;
@@ -125,4 +132,14 @@
   border-radius: 4px;
   background: transparent;
   color: inherit;
+}
+
+/* Access › Modules: a module's contents one step in, a kind's items two (past the table's own
+   cell padding, which a utility class would not override). */
+.org-settings-users-table td.access-offer-indent-1 {
+  padding-left: 40px;
+}
+
+.org-settings-users-table td.access-offer-indent-2 {
+  padding-left: 68px;
 }
