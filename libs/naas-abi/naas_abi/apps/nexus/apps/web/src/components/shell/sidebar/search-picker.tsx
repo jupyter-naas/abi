@@ -39,7 +39,8 @@ export function SearchPicker({ items, value, onToggle, onClear, loading, error, 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
-  const [box, setBox] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  // Below its trigger by its top; above it by its bottom, so a short list hugs the trigger.
+  const [box, setBox] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
@@ -71,7 +72,8 @@ export function SearchPicker({ items, value, onToggle, onClear, loading, error, 
       const below = roomBelow >= 220 || roomBelow >= roomAbove;
       const maxHeight = Math.max(80, Math.min(448, below ? roomBelow : roomAbove));
       const width = Math.min(rect.width, window.innerWidth - 16);
-      setBox({ top: below ? rect.bottom + 4 : rect.top - maxHeight - 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)), width, maxHeight });
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+      setBox(below ? { top: rect.bottom + 4, left, width, maxHeight } : { bottom: window.innerHeight - rect.top + 4, left, width, maxHeight });
     }
     position();
     const observer = new ResizeObserver(position);
