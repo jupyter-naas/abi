@@ -121,6 +121,289 @@
 
 <!-- version list -->
 
+## v7.7.0 (2026-11-27)
+
+### Bug Fixes
+
+- **iam**: An organization's people see it, and nothing it holds
+  ([`a4b93eb`](https://github.com/jupyter-naas/abi/commit/a4b93eba8d7553aadb4a5955136991bc658a2d35))
+
+- **nexus**: A hard refresh paints the workspace's or organization's colors at once
+  ([`82ded78`](https://github.com/jupyter-naas/abi/commit/82ded78c4a58c6411cbfb6c75414e55b3e797b60))
+
+- **nexus**: A picker's list opening above hugs its trigger
+  ([`9b9c5c4`](https://github.com/jupyter-naas/abi/commit/9b9c5c4ac1d760bf4307973e3e7d31519c89374c))
+
+- **nexus**: A Viewer is not shown a chat they cannot use
+  ([`c9f5cb2`](https://github.com/jupyter-naas/abi/commit/c9f5cb265f0ff0a8db273181a41eaefbfc1af8a0))
+
+- **nexus**: A workspace lists its own policies, and a person's page takes them out of the workspace
+  ([`89e15b2`](https://github.com/jupyter-naas/abi/commit/89e15b29dafa50c954ece9cbb5f7e27fff785d75))
+
+- **nexus**: Access lists Groups and Policies first, then Features and Modules
+  ([`e2aa244`](https://github.com/jupyter-naas/abi/commit/e2aa244670194764a3259a87ced9929545a95d2f))
+
+- **nexus**: Account settings' Save buttons stay faded until something changes
+  ([`b4f6553`](https://github.com/jupyter-naas/abi/commit/b4f6553fdae66fd0bb535b8b63c036f6dcc74bef))
+
+- **nexus**: Features lists the Nexus Files feature, Access orders Services before Modules, the
+  Policy dropdown always shows
+  ([`1a29f94`](https://github.com/jupyter-naas/abi/commit/1a29f94ceaef045fe374dce646d520c28f8563b8))
+
+- **nexus**: Features' badge reads one value, as Core Services and Modules
+  ([`e49c036`](https://github.com/jupyter-naas/abi/commit/e49c0361f98780400980159fe3c908986a27d625))
+
+- **nexus**: Fields and dropdowns keep their border on focus; a toast when a graph is created
+  ([`6866044`](https://github.com/jupyter-naas/abi/commit/68660449aec57f144d6283666641b17ac4697870))
+
+- **nexus**: Kit dialogs and menus behave under the keyboard; audit findings
+  ([#1513](https://github.com/jupyter-naas/abi/pull/1513),
+  [`36b0a49`](https://github.com/jupyter-naas/abi/commit/36b0a49c11c0135b01e3037adec56b1a36669905))
+
+- **nexus**: Links keep the policy picked; the model catalog has a page again
+  ([`302ffdf`](https://github.com/jupyter-naas/abi/commit/302ffdfeec71281437b2c06369c78965f1ba6b63))
+
+- **nexus**: No Configure link for a feature at Access None
+  ([`01cdb6e`](https://github.com/jupyter-naas/abi/commit/01cdb6e40f673baae11f0b2426287738315a8839))
+
+- **nexus**: Platform settings' Organization picker sits before Policy, in its row
+  ([`40974f2`](https://github.com/jupyter-naas/abi/commit/40974f2d673e8a690eb6bfe03be3f8af608a48a0))
+
+- **nexus**: Platform › Users › a person is named from their account
+  ([`0674286`](https://github.com/jupyter-naas/abi/commit/06742868c2c2721c6131b29cfc1e3d4a3f3bae65))
+
+- **nexus**: Settings › Files without the section header under the page's own
+  ([`bbd80af`](https://github.com/jupyter-naas/abi/commit/bbd80af324f2f5a339438d2aca44542f39eae2c1))
+
+- **nexus**: The Features page says what it edits in one line
+  ([`00b5174`](https://github.com/jupyter-naas/abi/commit/00b51745577ce2c224f862a4b04bba33e6925695))
+
+- **nexus**: The offer editor's Models, Maps and Ontologies sections merged as three
+  ([`e0910fc`](https://github.com/jupyter-naas/abi/commit/e0910fcb62301bc5fa73584525e39d0816d0077a))
+
+- **nexus**: The Policy dropdown sits under the page's words, at its left (Features, Services,
+  Modules)
+  ([`c3fb8e3`](https://github.com/jupyter-naas/abi/commit/c3fb8e3f5d19533df4df91d7977ec3d7a56fa424))
+
+### Features
+
+- **iam**: A bound gives its container's people what it names outside it
+  ([`3ceb2d8`](https://github.com/jupyter-naas/abi/commit/3ceb2d84abf39658df492e4eb9451c4f2bbdfadd))
+
+- **nexus**: A dataset namespace is offered whole or dataset by dataset
+  ([`fddd452`](https://github.com/jupyter-naas/abi/commit/fddd45224c5ec221c07ccda02cb2a7d09edf0d36))
+
+- **nexus**: A feature given brings its Naas Abi agent; Agents brings Abi
+  ([`e15e3db`](https://github.com/jupyter-naas/abi/commit/e15e3db3ef2e3fa6cd0fabe872c3bc30a2d73b42))
+
+- **nexus**: A page each for Maps feeds and layers and Search topics
+  ([`11dfb80`](https://github.com/jupyter-naas/abi/commit/11dfb801f3599bfef741d05568f2136c1fde4101))
+
+- **nexus**: A workspace's Features pages hang under Access › Features
+  ([`02e68a9`](https://github.com/jupyter-naas/abi/commit/02e68a96084823465aa97f75fd3b81dee800823e))
+
+- **nexus**: A workspace's offer gives its files: Organization, Platform, System
+  ([`5f0f1c9`](https://github.com/jupyter-naas/abi/commit/5f0f1c94af4818de3d4f44f17353758b74b5711f))
+
+- **nexus**: A workspace's offer gives its shared graphs
+  ([`58b54dd`](https://github.com/jupyter-naas/abi/commit/58b54dd0591586c836160e84745673b699e1d583))
+
+- **nexus**: A workspace's offer gives the maps it uses without owning them
+  ([`d19c700`](https://github.com/jupyter-naas/abi/commit/d19c70021f3c5807ddb6edb188737e98e524e99b))
+
+- **nexus**: A workspace's offer names the chat models it uses, and its default
+  ([`a1f6bc8`](https://github.com/jupyter-naas/abi/commit/a1f6bc8ff71aaadf52279654710092a6b6f77152))
+
+- **nexus**: A workspace's ontologies are its offer
+  ([`56b865b`](https://github.com/jupyter-naas/abi/commit/56b865b4afec608d325ad3398d20ae3a67f0ae6d))
+
+- **nexus**: A workspace's search sources are its offer, checked by the API
+  ([`4459e56`](https://github.com/jupyter-naas/abi/commit/4459e562582230784ef17afc386e0a559d7f11e8))
+
+- **nexus**: Access levels of Nexus features and core services, a cap in the offer or a grant
+  ([`899a735`](https://github.com/jupyter-naas/abi/commit/899a735561e658caed71cc29c62bb7d86392893a))
+
+- **nexus**: Access › Features and Access › Modules choose what a workspace offers
+  ([`57c959d`](https://github.com/jupyter-naas/abi/commit/57c959dbe6e3c375c8ebf611686f5de37bf1a2d1))
+
+- **nexus**: Access › Features and Modules edit a policy picked from a dropdown
+  ([`eed084f`](https://github.com/jupyter-naas/abi/commit/eed084f53053a220c9eb313e1e91ba2a06de827b))
+
+- **nexus**: Account › Appearance offers Light and Dark, in a settings section
+  ([`476282c`](https://github.com/jupyter-naas/abi/commit/476282cf468d830d0bca706b2194a11fd901423e))
+
+- **nexus**: Agents and Skills open an instance page to create and edit
+  ([`b3bd107`](https://github.com/jupyter-naas/abi/commit/b3bd1070fb6c01d551ef00434e08ec580b0d58c7))
+
+- **nexus**: Batch changes on Features, Core Services and Modules
+  ([`ee81259`](https://github.com/jupyter-naas/abi/commit/ee812599fedbb75df702697c6e4ca4f377d432ed))
+
+- **nexus**: Components settings tables page by 20
+  ([`37ac763`](https://github.com/jupyter-naas/abi/commit/37ac7636b5b6d27ede9816ae6c56543c80f7509a))
+
+- **nexus**: Core Services; no count line above the search on Users and Core Services
+  ([`1a3c107`](https://github.com/jupyter-naas/abi/commit/1a3c107149e49788e1e016a82fd89ae110d1af9b))
+
+- **nexus**: Datasets sidebar as Ontology's; fields keep their border on focus
+  ([`47df254`](https://github.com/jupyter-naas/abi/commit/47df2548e03f83a4f57d8464afaee66479e50e2c))
+
+- **nexus**: Enable or disable module items on Agents, Apps and Workflows
+  ([`591fc01`](https://github.com/jupyter-naas/abi/commit/591fc01395893ad26945ce344bd26fe5ffa5c958))
+
+- **nexus**: Every workspace settings list laid out as Users: columns that sort and filter
+  ([`166e5a7`](https://github.com/jupyter-naas/abi/commit/166e5a77b49c9bc4b0225382557d08e509f166f3))
+
+- **nexus**: Features keeps one Access column; None takes a feature out
+  ([`168568e`](https://github.com/jupyter-naas/abi/commit/168568ecdedd98dd77d635a59722aa01b630a89f))
+
+- **nexus**: Features table: description, access explained, an Enabled checkbox, a link to each
+  feature's page
+  ([`11ffecc`](https://github.com/jupyter-naas/abi/commit/11ffeccc6689c5e056306828547f2e6e7b015d8d))
+
+- **nexus**: Features: no legend, an unsaved-changes bar, the nav follows at once
+  ([`4e9b6fa`](https://github.com/jupyter-naas/abi/commit/4e9b6fa626ba452ba7d1e59974107ac5441ea634))
+
+- **nexus**: Groups sits under Users; Access lists Features, Services, Modules, Policies
+  ([`00a900f`](https://github.com/jupyter-naas/abi/commit/00a900f3458ce4683309eaae370facc8fc8b6961))
+
+- **nexus**: Modules: one row per module, its contents and items unfolded under it
+  ([`5a6868d`](https://github.com/jupyter-naas/abi/commit/5a6868d8603e58a0285fb46f66716a734b6c4d57))
+
+- **nexus**: Modules: one value in the badge, no count line above the search
+  ([`5e7dbee`](https://github.com/jupyter-naas/abi/commit/5e7dbee33c9c1280b13eee13323c6e0848edac95))
+
+- **nexus**: One design kit in components/ui, and a Theme page that shows it
+  ([#1513](https://github.com/jupyter-naas/abi/pull/1513),
+  [`a352481`](https://github.com/jupyter-naas/abi/commit/a35248185d32ead2f9469f2a0076e51e14497553))
+
+- **nexus**: Organization › Access › Features, Services and Modules on "<O> access"; None denies a
+  feature itself
+  ([`d39650e`](https://github.com/jupyter-naas/abi/commit/d39650e0e5d38f7a21e822cbbca2a59e03bba257))
+
+- **nexus**: Organization › Branding in the platform's sections, two logo blocks
+  ([`35916e2`](https://github.com/jupyter-naas/abi/commit/35916e2f25761d79aca30d175acba3ad1c125c3c))
+
+- **nexus**: Person pages: picture in the header, one profile section, View as first
+  ([`3999104`](https://github.com/jupyter-naas/abi/commit/3999104b7f3ebdb2a746ee1b2827a23cd9734bb9))
+
+- **nexus**: Pick the policy of the Features and Access pages in the Settings column
+  ([`94b704f`](https://github.com/jupyter-naas/abi/commit/94b704f91301689d8d5f849331b9154b0f04a3ad))
+
+- **nexus**: Platform access, what the platform offers its organizations
+  ([`63aa0d2`](https://github.com/jupyter-naas/abi/commit/63aa0d252fa11032c0ccff662e3f9c61dcd7a2c7))
+
+- **nexus**: Platform settings: Groups under Users, Features/Services/Modules in Access
+  ([`bcbe4ac`](https://github.com/jupyter-naas/abi/commit/bcbe4aca5e6b8d0dd06cdd1659ec385e13f6eda5))
+
+- **nexus**: Policies first in Access
+  ([`1a0c828`](https://github.com/jupyter-naas/abi/commit/1a0c828caef1ecd353f6a3205df577e5cbd892bb))
+
+- **nexus**: Search the Settings column; the Features sub-group behind a rule
+  ([`3ea8136`](https://github.com/jupyter-naas/abi/commit/3ea81366701004507668a4d259adfc9799ad8167))
+
+- **nexus**: Services gets its own icon; Models leaves the nav with the chat
+  ([`f3d93a0`](https://github.com/jupyter-naas/abi/commit/f3d93a0a625209a40054503c8731d482b2ca88c6))
+
+- **nexus**: Settings column hover tips and shorter page descriptions
+  ([`d48f35a`](https://github.com/jupyter-naas/abi/commit/d48f35a10909d4682c8e30699f6a94587d07b420))
+
+- **nexus**: Settings column: the sidebar's icons, level pickers at page size
+  ([`59f94d9`](https://github.com/jupyter-naas/abi/commit/59f94d93a3fad0df6e4ee782cb0c2883acd871dc))
+
+- **nexus**: Settings › Datasets selects datasets of an unfolded namespace
+  ([`a777865`](https://github.com/jupyter-naas/abi/commit/a777865407764b3d3695b578efb15f2e8cb9d4f9))
+
+- **nexus**: Settings › Datasets unfolds each namespace's datasets
+  ([`9ece275`](https://github.com/jupyter-naas/abi/commit/9ece2750b78688bb1b1c129728c0bbf232945dcc))
+
+- **nexus**: Settings › Datasets: the dataset namespaces a workspace uses, in its offer
+  ([`5a62dbc`](https://github.com/jupyter-naas/abi/commit/5a62dbc10af05ef5d505b44b6e8bd7cc42bf3f29))
+
+- **nexus**: Settings › Features laid out as Users: search, columns that sort and filter, pages,
+  export
+  ([`b6c3d6b`](https://github.com/jupyter-naas/abi/commit/b6c3d6b3e9581803d3c7af2f0882db76be2355d0))
+
+- **nexus**: Settings › Files is a table, as the other pages
+  ([`50a6195`](https://github.com/jupyter-naas/abi/commit/50a6195f56b86d1912adedee089f1cb3c6ac131d))
+
+- **nexus**: The Configuration tab shows and changes a workspace's ontologies
+  ([`6ff76ee`](https://github.com/jupyter-naas/abi/commit/6ff76ee8acfc2e617ad5e60d6c6cd658b03949f3))
+
+- **nexus**: The creation pages share one layout
+  ([`4be3bd9`](https://github.com/jupyter-naas/abi/commit/4be3bd9481ada6696dcbcde04eae1d3b882defa5))
+
+- **nexus**: The desk wallpaper zooms out to 50%; the wheel zooms only with Ctrl
+  ([`c0de7a6`](https://github.com/jupyter-naas/abi/commit/c0de7a683b402c82ebf8ecfca75b50c8f99ae1d1))
+
+- **nexus**: The three General pages share one layout
+  ([`8a69004`](https://github.com/jupyter-naas/abi/commit/8a69004b1b1afb4b6ba1241962b8f97b1da237a1))
+
+- **nexus**: The workspace offer is edited from its settings pages, not the policy's Configuration
+  tab
+  ([`4bf07d5`](https://github.com/jupyter-naas/abi/commit/4bf07d5c07627ed8a8c7cfd0ce2d97725102a330))
+
+- **nexus**: View as opens a modal, and says why when it is not possible
+  ([`7b58cfc`](https://github.com/jupyter-naas/abi/commit/7b58cfc4c1e1d107468902dbaae3a571f3ee3ad4))
+
+- **nexus**: Workspace Settings has a Features page and a Files page
+  ([`2e4c21a`](https://github.com/jupyter-naas/abi/commit/2e4c21a4cfd930ce025cc28c89d55bb184b70497))
+
+- **nexus**: Workspace › General saves everything with one Save, kept until then
+  ([`655a8b1`](https://github.com/jupyter-naas/abi/commit/655a8b18a65a62a4a2679eaaf38c02329c0ec09c))
+
+- **view-as**: Say why no workspace may be viewed (GET /api/iam/view-as/eligibility)
+  ([`0b364a0`](https://github.com/jupyter-naas/abi/commit/0b364a00083561638f6ac1f5f8792ca5b41f020d))
+
+- **workspaces**: Read a member's profile at the workspace (GET …/members/{user_id}/profile)
+  ([`81f03d6`](https://github.com/jupyter-naas/abi/commit/81f03d65e0ebeafcd3a5339e30f0eea31a2630a0))
+
+### Refactoring
+
+- **nexus**: An organization skill is no longer switched per workspace
+  ([`3c82bb7`](https://github.com/jupyter-naas/abi/commit/3c82bb728444f25af34c1a0340af31d3ab482b3a))
+
+- **nexus**: Documents, Sheets and Slides share one tree, gallery, project menu and status bar
+  ([#1513](https://github.com/jupyter-naas/abi/pull/1513),
+  [`9e2b3e8`](https://github.com/jupyter-naas/abi/commit/9e2b3e87c268bcc5b442517e9c230b4336b8f490))
+
+- **nexus**: Every app menu bar uses the kit menu
+  ([#1513](https://github.com/jupyter-naas/abi/pull/1513),
+  [`856eb7f`](https://github.com/jupyter-naas/abi/commit/856eb7f62aff805878fbe224f1e61e34e1a9414a))
+
+- **nexus**: Graph and Ontology toasts use the kit toast
+  ([#1513](https://github.com/jupyter-naas/abi/pull/1513),
+  [`13abc84`](https://github.com/jupyter-naas/abi/commit/13abc84754e4d17320bfa95d59aa57664235156b))
+
+- **nexus**: One dialog for every modal, no browser alert or confirm
+  ([#1513](https://github.com/jupyter-naas/abi/pull/1513),
+  [`549a4d8`](https://github.com/jupyter-naas/abi/commit/549a4d8b8ab4d1c9c15c4735991173ed2896adf3))
+
+- **nexus**: One saving rule and batch changes on the Features pages
+  ([`b9df5f2`](https://github.com/jupyter-naas/abi/commit/b9df5f2333f8933918d4a603e3f9fe2e34655db5))
+
+- **nexus**: One skeleton for the Workspace settings › Features pages
+  ([`420cf36`](https://github.com/jupyter-naas/abi/commit/420cf3688815c7f4fcac463454ec1a04b2e605d8))
+
+- **nexus**: Retire /api/workspaces/{id}/platform-files, Settings › Files writes the offer
+  ([`0a45735`](https://github.com/jupyter-naas/abi/commit/0a457354bc4f14da6adf6b12eb4b7fe82f1ce610))
+
+- **nexus**: The Data explorer and System pages use the kit
+  ([#1513](https://github.com/jupyter-naas/abi/pull/1513),
+  [`cb2a2b9`](https://github.com/jupyter-naas/abi/commit/cb2a2b96757a84ae8050de775102eca79dd0fe30))
+
+- **nexus**: The table of Settings › Users as a shared settings table
+  ([`2ae842a`](https://github.com/jupyter-naas/abi/commit/2ae842aa3c0b93d35cb659e152ba69beccfd607c))
+
+### Testing
+
+- **nexus**: The Theme page renders every section of the kit
+  ([#1513](https://github.com/jupyter-naas/abi/pull/1513),
+  [`f18ff7a`](https://github.com/jupyter-naas/abi/commit/f18ff7ad4e329c1b8d4fe2261255fc9982de5d89))
+
+- **nexus**: Web search is a read by POST in a view
+  ([`5acc912`](https://github.com/jupyter-naas/abi/commit/5acc9122c7bf8555df45ddd4db472e9323aaf578))
+
+
 ## v7.6.0 (2026-11-26)
 
 
