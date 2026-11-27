@@ -1,5 +1,5 @@
 # Build stage
-FROM ubuntu:24.04 AS builder
+FROM ubuntu:26.04 AS builder
 
 # Create a non-root user. Set home at /app
 RUN useradd -m -s /bin/bash -G sudo -u 1001 abi -d /app
@@ -40,7 +40,7 @@ RUN --mount=type=cache,target=/app/.cache/ chmod -R 777 /app/.cache/ && su abi /
 
 
 # Final stage
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
