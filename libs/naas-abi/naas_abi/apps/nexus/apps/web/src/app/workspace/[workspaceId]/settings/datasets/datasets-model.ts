@@ -13,6 +13,8 @@ export type DatasetRow = {
   namespace: string;
   /** How many datasets the deployment holds in it (0: closed, then gone from the deployment). */
   tables: number;
+  /** Their names, A to Z: unfolded under the namespace. */
+  datasets?: string[];
   available: boolean;
   /** Used here: closed neither by this policy nor by the one above. */
   offered: boolean;
@@ -83,6 +85,7 @@ export function datasetSortValue(row: DatasetRow, column: DatasetColumnId): stri
 export function datasetSearchTexts(row: DatasetRow): string[] {
   return [
     row.namespace,
+    ...(row.datasets ?? []),
     row.offered ? 'offered' : 'not offered',
     row.closed_above ? 'closed by the organization' : '',
     row.available ? '' : 'gone',

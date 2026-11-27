@@ -640,6 +640,9 @@ class TestDatasets:
         assert [row["namespace"] for row in state["rows"]] == ["hr", "timesheets"]
         rows = _dataset_rows(state)
         assert (rows["timesheets"]["tables"], rows["hr"]["tables"]) == (2, 1)
+        # Each namespace names its datasets, A to Z (Settings › Datasets unfolds them).
+        assert rows["timesheets"]["datasets"] == ["days", "hours"]
+        assert rows["hr"]["datasets"] == ["pay"]
         assert all(row["offered"] and row["editable"] for row in rows.values())
 
         state = await datasets.set_datasets("olivia", "alpha", {"hr": False})

@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import '@/components/access/offer/offer.css';
 import { ownerHref } from '@/components/access/policies/policy-owners';
 import { Checkbox } from '@/components/ui/checkbox';
 import { BulkBar, SelectAllCell, SelectRowCell, onOffActions, useRowSelection } from '@/components/settings/bulk-access';
@@ -46,8 +47,9 @@ const BULK_ACTIONS = onOffActions({ on: 'Offer', off: 'Take back' }, (on) =>
 );
 
 /**
- * Settings › Datasets: the dataset namespaces a workspace uses (or, on an organization, that its
- * workspaces may use), laid out as Settings › Users. Unchecking closes a namespace in "<W> access"
+ * Settings › Datasets: the datasets a workspace uses (or, on an organization, that its workspaces
+ * may use), by namespace, laid out as Settings › Users; a namespace unfolds its datasets, as a
+ * module its items in Access › Modules. Unchecking closes a namespace in "<W> access"
  * ("<O> access"); a namespace closed above stays read-only. A table of switches: each change is
  * saved at once, and said; the namespaces selected change together, asked first.
  */
@@ -65,6 +67,8 @@ export function DatasetsOffer({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
+  // The namespaces unfolded (their datasets shown under them), as Access › Modules' modules.
+  const [open, setOpen] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     try {
@@ -142,7 +146,7 @@ export function DatasetsOffer({
         badge={state ? `${rows.length} namespace${rows.length === 1 ? '' : 's'}` : undefined}
         description={
           <>
-            The dataset namespaces {org ? 'the workspaces of this organization may use' : 'this workspace uses'}
+            The datasets {org ? 'the workspaces of this organization may use' : 'this workspace uses'}, by namespace
             {accessHref && access ? (
               <>
                 {' '}
@@ -188,10 +192,6 @@ export function DatasetsOffer({
             // No count above the search: the badge says how many, the pager how many are shown.
             meta={<SettingsTableClear table={table} />}
           />
-          <p className="text-xs text-muted-foreground" data-datasets-legend="">
-            Unchecking a namespace hides its datasets {org ? 'in every workspace of the organization' : 'in this workspace'},
-            agents included. Only the platform admin reopens a namespace closed here.
-          </p>
           <BulkBar
             selection={selection}
             noun="namespace"
@@ -219,15 +219,35 @@ export function DatasetsOffer({
                 {table.paged.pageRows.map((row) => {
                   const on = row.offered;
                   const note = rowNote(row);
+                  const names = row.datasets ?? [];
+                  // A search opens the namespaces it finds (their datasets match it too).
+                  const unfolded = names.length > 0 && (!!open[row.namespace] || table.search.trim().length > 0);
                   return (
-                    <tr key={row.namespace} data-namespace={row.namespace} className="align-top">
+                    <Fragment key={row.namespace}>
+                    <tr data-namespace={row.namespace} className="align-top">
                       <SelectRowCell
                         selection={selection}
                         rowKey={row.namespace}
                         label={row.namespace}
                         disabled={saving || !row.editable}
                       />
-                      <td className="font-medium text-foreground">{row.namespace}</td>
+                      <td>
+                        {names.length > 0 ? (
+                          <button
+                            type="button"
+                            className="access-offer-expand access-offer-expand-label font-medium text-foreground"
+                            aria-expanded={unfolded}
+                            aria-label={`${unfolded ? 'Fold' : 'Unfold'} the datasets of ${row.namespace}`}
+                            data-action="datasets"
+                            onClick={() => setOpen((current) => ({ ...current, [row.namespace]: !unfolded }))}
+                          >
+                            {unfolded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            {row.namespace}
+                          </button>
+                        ) : (
+                          <span className="font-medium text-foreground">{row.namespace}</span>
+                        )}
+                      </td>
                       <td className="tabular-nums text-muted-foreground">{row.tables}</td>
                       <td>
                         <span className="inline-flex items-center gap-2">
@@ -243,6 +263,17 @@ export function DatasetsOffer({
                         {note ? <p className="workspace-features-note">{note}</p> : null}
                       </td>
                     </tr>
+                    {/* Its datasets, one step in: offered or not with their namespace. */}
+                    {unfolded &&
+                      names.map((name) => (
+                        <tr key={name} data-namespace-dataset={`${row.namespace}.${name}`} className="align-top">
+                          <td />
+                          <td className="access-offer-indent-1 text-sm text-foreground">{name}</td>
+                          <td />
+                          <td />
+                        </tr>
+                      ))}
+                    </Fragment>
                   );
                 })}
               </tbody>

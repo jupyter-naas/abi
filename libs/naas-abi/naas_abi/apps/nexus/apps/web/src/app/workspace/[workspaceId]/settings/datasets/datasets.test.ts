@@ -33,7 +33,7 @@ function state(rows: DatasetRow[], over: Partial<DatasetsState> = {}): DatasetsS
 }
 
 const BEFORE = state([
-  row({ namespace: 'finance', tables: 12 }),
+  row({ namespace: 'finance', tables: 12, datasets: ['budgets', 'invoices'] }),
   row({ namespace: 'hr', tables: 4, offered: false }),
   row({
     namespace: 'payroll',
@@ -89,8 +89,8 @@ describe('DatasetsOffer', () => {
     expect(m.host.textContent).not.toContain('not offered ·');
     // The description fits one line and links "<W> access".
     expect(m.host.querySelector('a[href*="pol_access"]')?.textContent).toBe('Alpha access');
-    // Reopening is the platform admin's: the legend says so.
-    expect(m.host.querySelector('[data-datasets-legend]')?.textContent).toContain('platform admin');
+    // No legend above the table: the page's description says what it is.
+    expect(m.host.querySelector('[data-datasets-legend]')).toBeNull();
     // A table of switches: each change is saved at once, no Save nor Discard.
     expect(m.host.querySelector('[data-action="save"]')).toBeNull();
     expect(m.host.querySelector('[data-action="discard"]')).toBeNull();
@@ -177,5 +177,33 @@ describe('the datasets model', () => {
   it('a batch change names the editable rows it changes', () => {
     expect(bulkChanges(BEFORE.rows, ['finance', 'hr', 'payroll'], true)).toEqual({ hr: true });
     expect(bulkChanges(BEFORE.rows, ['finance', 'hr', 'payroll'], false)).toEqual({ finance: false });
+  });
+});
+
+let unfoldMounted: Mounted | null = null;
+
+describe('Settings › Datasets, a namespace unfolds its datasets', () => {
+  afterEach(async () => {
+    await unfoldMounted?.unmount();
+    unfoldMounted = null;
+  });
+
+  it('as a module its items: folded at first, unfolded from its name, a search opens what it finds', async () => {
+    const api = { read: vi.fn(async () => BEFORE), save: vi.fn() } as unknown as DatasetsOfferApi;
+    unfoldMounted = await mount(DatasetsOffer, { target: 'ws1', api });
+    await unfoldMounted.flush();
+    const datasets = () => [...unfoldMounted!.host.querySelectorAll('[data-namespace-dataset]')].map((r) => r.textContent);
+    expect(datasets()).toEqual([]);
+    const name = unfoldMounted.host.querySelector('[data-namespace="finance"] button[data-action="datasets"]')!;
+    expect(name.getAttribute('aria-expanded')).toBe('false');
+    await unfoldMounted.click(name);
+    expect(datasets()).toEqual(['budgets', 'invoices']);
+    // A namespace without datasets named has nothing to unfold.
+    expect(unfoldMounted.host.querySelector('[data-namespace="hr"] button[data-action="datasets"]')).toBeNull();
+    await unfoldMounted.click(name);
+    expect(datasets()).toEqual([]);
+    await unfoldMounted.type(unfoldMounted.host.querySelector('input[type="search"]') as HTMLInputElement, 'invoices');
+    expect(datasets()).toEqual(['budgets', 'invoices']);
+    expect([...unfoldMounted.host.querySelectorAll('tr[data-namespace]')].map((r) => r.getAttribute('data-namespace'))).toEqual(['finance']);
   });
 });

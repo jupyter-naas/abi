@@ -18,7 +18,7 @@ export const WORKSPACE_PAGE_DESCRIPTIONS: Record<string, string> = {
   '/settings/modules': 'What a policy grants of each module: its agents, apps and workflows',
   '/settings/agents': 'The agents you may use here, and those this workspace builds',
   '/settings/apps': 'The module apps you may open here',
-  '/settings/datasets': 'The dataset namespaces this workspace uses',
+  '/settings/datasets': 'The datasets this workspace uses, by namespace',
   '/settings/files': 'The files and drives this workspace uses',
   '/settings/graphs': 'The knowledge graphs this workspace reads and writes',
   '/settings/maps': 'The feeds and layers drawn on Maps',

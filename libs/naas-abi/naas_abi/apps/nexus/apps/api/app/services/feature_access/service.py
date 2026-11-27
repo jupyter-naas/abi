@@ -415,7 +415,8 @@ def dataset_rows(
 ) -> list[dict[str, Any]]:
     """The Datasets rows of an offer, by namespace (A to Z): its tables, whether the
     deployment still has it, whether it is offered (closed neither here nor above), and
-    whether the caller may change it (never what the ceiling above closes)."""
+    whether the caller may change it (never what the ceiling above closes). ``datasets``:
+    the names of its tables, A to Z, which Settings › Datasets unfolds under it."""
     counts = Counter(namespace for namespace, _name in tables)
     here = {ns.lower() for ns in closed}
     ceiling = {ns.lower() for ns in closed_above}
@@ -424,6 +425,7 @@ def dataset_rows(
     for key in sorted(known):
         namespace = known[key]
         tables_here = sum(n for ns, n in counts.items() if ns.lower() == key)
+        names_here = sorted({name for ns, name in tables if ns.lower() == key})
         is_above = key in ceiling
         reason = None
         if is_above:
@@ -434,6 +436,7 @@ def dataset_rows(
             {
                 "namespace": namespace,
                 "tables": tables_here,
+                "datasets": names_here,
                 "available": tables_here > 0,
                 "offered": key not in here and not is_above,
                 "closed_above": is_above,
