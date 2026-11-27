@@ -291,6 +291,11 @@ ENGINE_KEY_SECRET = "iam/service-keys/engine"
 TRIGGER_SEAL_SECRET = "iam/job-trigger-seal"
 TRIGGER_SEAL_VERSION = "v1"
 ENGINE_KEY_DESCRIPTION = "client-role engines"
+# A first-party module's key the deployment generated, registered at boot
+# (``provision_first_party_module``); replaced when .env holds a new one.
+SEEDED_KEY_DESCRIPTION = "deployment key (registered at engine boot)"
+# Who approved a first-party module's own manifest.
+FIRST_PARTY_DECIDER = "engine (first-party module)"
 _LAST_USED_RESOLUTION = timedelta(minutes=1)
 _CI_KEY_EXPIRY = timedelta(days=90)
 
@@ -4824,6 +4829,123 @@ class IAMService(IIAMService, PolicySource):
         self.secrets.put(ENGINE_KEY_SECRET, created.value)
         return created.value
 
+    def provision_first_party_module(
+        self,
+        project: str,
+        module_id: str,
+        *,
+        key: str | None = None,
+        manifest: Mapping[str, Any] | str | None = None,
+    ) -> PrincipalRecord:
+        """Ready a module that ships with the engine (the built-in IdP), at boot.
+
+        In process only, unchecked like ``bootstrap`` (the root of trust); no
+        NATS endpoint reaches it.
+
+        * The account ``module/<project>/<module_id>`` is created when missing,
+          with the module bootstrap every module account holds.
+        * ``key``: a service key the deployment generated (``abi deploy``
+          writes it to ``.env``). Its hash is stored for the account when IAM
+          does not know it yet; a key seeded earlier is revoked then, so a new
+          value in ``.env`` replaces the old one. A key of another principal,
+          a revoked one or one whose secret does not match is refused.
+        * ``manifest``: the manifest this engine's own copy of the module
+          submits, computed from the installed package, never received from
+          the module. That exact version is approved; anything else the
+          module submits waits for review as usual. A version an operator
+          rejected stays rejected.
+        """
+        modules.check_module(project, module_id)
+        name = modules.account_name(project, module_id)
+        account = self.store.find_service_account(name)
+        if account is None:
+            account = self.store.create_principal(
+                PrincipalRecord(id=new_id("sa"), kind="service_account", name=name)
+            )
+            self.store.attach(
+                Attachment(new_id("att"), roles.MODULE_BOOTSTRAP, account.id)
+            )
+            logger.info(f"Service account {name} created for a first-party module")
+        refused = self._module_id_refused(account)
+        if refused is not None:
+            raise IAMConflictError(refused)
+        if not account.active:
+            raise IAMConflictError(f"{name} is {account.status}")
+        if key:
+            self._seed_service_key(account, key)
+        if manifest is not None:
+            self._approve_first_party_manifest(account, project, module_id, manifest)
+        self._changed()
+        return account
+
+    def _seed_service_key(self, account: PrincipalRecord, value: str) -> None:
+        presented = keys.parse(value)
+        if presented.kind != "service":
+            raise ValueError(f"The key of {account.name} is not a service key")
+        try:
+            known: KeyRecord | None = self.store.get_key(presented.key_id)
+        except IAMNotFoundError:
+            known = None
+        if known is not None:
+            if known.principal_id != account.id or not presented.matches(
+                known.secret_hash
+            ):
+                raise IAMConflictError(
+                    f"The key given for {account.name} is another principal's, "
+                    "or its secret does not match: generate a new one"
+                )
+            if not known.usable(datetime.now(UTC)):
+                raise IAMConflictError(
+                    f"The key given for {account.name} is revoked or expired: "
+                    "generate a new one"
+                )
+            return
+        now = datetime.now(UTC)
+        for earlier in self.store.list_keys(account.id):
+            if earlier.description == SEEDED_KEY_DESCRIPTION and earlier.usable(now):
+                self.store.revoke_key(earlier.key_id, now)
+        spec = _key_spec(account.kind, None, None, None, None, None)
+        self._store_key(
+            account,
+            keys.NewKey(presented.key_id, keys.hash_secret(presented.secret), value),
+            spec,
+            SEEDED_KEY_DESCRIPTION,
+            None,
+        )
+        logger.info(f"Service key {presented.key_id} of {account.name} registered")
+
+    def _approve_first_party_manifest(
+        self,
+        account: PrincipalRecord,
+        project: str,
+        module_id: str,
+        manifest: Mapping[str, Any] | str,
+    ) -> None:
+        parsed, raw, sha256 = self._normalized_manifest(project, module_id, manifest)
+        try:
+            record: ManifestRecord | None = self.store.get_manifest(account.id, sha256)
+        except IAMNotFoundError:
+            record = None
+        if record is not None and record.status == "approved":
+            return
+        if record is not None and record.status == "rejected":
+            logger.warning(
+                f"Manifest {sha256[:12]} of {account.name} was rejected: "
+                "the engine leaves it so"
+            )
+            return
+        if record is None:
+            record = self.store.put_manifest(
+                ManifestRecord(
+                    principal_id=account.id,
+                    sha256=sha256,
+                    module_id=module_id,
+                    project=project,
+                    document=raw,
+                )
+            )
+        self._approve(record, parsed, decided_by=FIRST_PARTY_DECIDER)
+
     # =========================================================================
     # Keys
     # =========================================================================
@@ -5008,12 +5130,7 @@ class IAMService(IIAMService, PolicySource):
             manifest_resource(account.id),
             not_found=lambda: IAMNotFoundError(f"Manifest of {account.id} not found"),
         )
-        policy, declared = modules.split_manifest(document)
-        parsed = parse_policy_document(policy)
-        _refuse_reserved_topics(modules.bind(parsed, project, module_id))
-        catalog = self._manifest_catalog(declared, module_id, project)
-        raw = modules.manifest_document(parsed, catalog)
-        sha256 = modules.manifest_sha256(raw)
+        parsed, raw, sha256 = self._normalized_manifest(project, module_id, document)
         try:
             existing: ManifestRecord | None = self.store.get_manifest(
                 account.id, sha256
@@ -5055,6 +5172,21 @@ class IAMService(IIAMService, PolicySource):
             return ManifestSubmission(record, in_force=in_force)
         approved = self._approve(record, parsed, decided_by="auto_approve")
         return ManifestSubmission(approved, approved_now=True, in_force=True)
+
+    def _normalized_manifest(
+        self,
+        project: str,
+        module_id: str,
+        document: Mapping[str, Any] | str | PolicyDocument,
+    ) -> tuple[PolicyDocument, dict[str, Any], str]:
+        """A manifest as IAM records it: its policy, the stored document and its
+        sha256. The same for a module's submission and a first-party one."""
+        policy, declared = modules.split_manifest(document)
+        parsed = parse_policy_document(policy)
+        _refuse_reserved_topics(modules.bind(parsed, project, module_id))
+        catalog = self._manifest_catalog(declared, module_id, project)
+        raw = modules.manifest_document(parsed, catalog)
+        return parsed, raw, modules.manifest_sha256(raw)
 
     def _manifest_catalog(
         self, declared: Mapping[str, Any] | None, module_id: str, project: str

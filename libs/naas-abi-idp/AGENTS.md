@@ -245,7 +245,7 @@ two pages look alike.
 | Where | How |
 |---|---|
 | `abi dev up` | automatic in NATS mode when the project names no other provider, or names `provisioning: builtin` (`dev_modules.with_builtin_idp`); the overlay configures the provider; mail goes to the local email adapter (`storage/email/`) |
-| Docker (`abi deploy local`) | the `idp` service of `docker-compose.yml`, its own SDK-only container; create its key once the stack is up (`abi iam service-account create module/<project>/idp --key` into `.env` `IDP_SERVICE_KEY`, `abi iam module approve ...`) |
+| Docker (`abi deploy local`, `abi deploy dokploy`) | the `idp` service of `docker-compose.yml`, its own SDK-only container. `abi deploy` generates its key into `.env` (`IDP_SERVICE_KEY`); the engine registers it at boot and approves the manifest of its own copy of `naas_abi_idp` (`IAMService.provision_first_party_module`), so it starts with nothing to do by hand. A manifest that differs waits for `abi iam module approve module/<project>/idp` |
 | By hand | `ABI_NATS_URL=... ABI_SERVICE_KEY=abi_sk_... ABI_DISCOVERY_PROJECT=... ABI_IDP_ISSUER=... python -m naas_abi_idp` |
 
 Module id `idp` is reserved to this module: the seals and the secret endpoint

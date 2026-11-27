@@ -30,6 +30,7 @@ from ..admin_credentials import (
     NATS_CALLOUT_SEED,
     NATS_PASSWORDS,
     ensure_idp_client_secret,
+    ensure_idp_service_key,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
     generate_data_service_secret,
@@ -435,6 +436,13 @@ def _fixed(value: str) -> Callable[[], str]:
     return factory
 
 
+def _new_idp_service_key() -> str:
+    """A service key (``abi_sk_...``) for module/<project>/idp."""
+    from naas_abi_core.services.iam import keys
+
+    return keys.generate_key("service").value
+
+
 def _env_layout(
     *,
     stack_name: str,
@@ -500,9 +508,9 @@ def _env_layout(
         sign_in = [
             # Nexus signs in to the built-in identity provider as this client.
             (IDP_CLIENT_SECRET, lambda: secrets.token_urlsafe(32)),
-            # The service key of module/<project>/idp, created once the stack
-            # is up (`abi iam service-account create ... --key`).
-            ("IDP_SERVICE_KEY", _fixed("")),
+            # The service key of module/<project>/idp: the engine registers it
+            # at boot and approves the IdP's own manifest.
+            ("IDP_SERVICE_KEY", _new_idp_service_key),
         ]
     else:
         infrastructure += [
@@ -841,6 +849,7 @@ def setup_dokploy_deploy(
         ensure_nats_passwords(env_path)
         ensure_nats_callout_seed(env_path)
         ensure_idp_client_secret(env_path)
+        ensure_idp_service_key(env_path)
 
     _print_next_steps(
         hosts, include_coding=include_coding, wildcard_cert=wildcard_cert, empty=empty

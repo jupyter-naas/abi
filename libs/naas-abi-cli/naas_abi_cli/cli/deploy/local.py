@@ -19,6 +19,7 @@ from ..admin_credentials import (
     configured_superadmins,
     ensure_data_service_secrets,
     ensure_idp_client_secret,
+    ensure_idp_service_key,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
     generate_data_service_secret,
@@ -898,6 +899,8 @@ def setup_local_deploy(
     # The secret of the client ABI signs in to the built-in identity provider
     # with: the engine's config and the `idp` service both read it from .env.
     ensure_idp_client_secret(Path(local_env_target_path))
+    # The key the `idp` service logs in with; the engine registers it at boot.
+    ensure_idp_service_key(Path(local_env_target_path))
 
     persisted_public_api_host = (
         _get_env_var(local_env_target_path, "PUBLIC_API_HOST")

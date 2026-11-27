@@ -95,7 +95,8 @@ def test_a_generated_nats_stack_runs_the_idp_in_its_own_container(
     assert "module/" in compose  # the comment says which account to create
     env = _env_values(tmp_path / ".env")
     assert len(env["ABI_IDP_CLIENT_SECRET"]) >= 24
-    assert "IDP_SERVICE_KEY" not in env  # an operator creates it (a module's key)
+    # Generated like the client secret; the engine registers it at boot (#1643).
+    assert env["IDP_SERVICE_KEY"].startswith("abi_sk_")
 
 
 def test_the_engine_signs_in_through_the_redirect_uri_the_idp_registers(

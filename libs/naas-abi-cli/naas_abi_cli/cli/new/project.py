@@ -10,6 +10,7 @@ import click
 import naas_abi_cli
 from naas_abi_cli.cli.admin_credentials import (
     ensure_idp_client_secret,
+    ensure_idp_service_key,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
     is_email_address,
@@ -349,6 +350,8 @@ def new_project(
         # The secret of the client ABI signs in to the built-in identity
         # provider with (`abi dev up` runs it; docker-compose runs it too).
         ensure_idp_client_secret(env_path)
+        # The key the built-in IdP logs in with, registered by the engine.
+        ensure_idp_service_key(env_path)
 
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
     # ai-openrouter is the marketplace extra the generated config.yaml enables:

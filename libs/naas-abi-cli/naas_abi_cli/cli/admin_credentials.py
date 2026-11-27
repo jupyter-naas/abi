@@ -37,6 +37,11 @@ API_KEY = "ABI_API_KEY"
 # built-in IdP with: read by the engine (identity.providers) and by the IdP
 # module, which hashes it. Generated once per project.
 IDP_CLIENT_SECRET = "ABI_IDP_CLIENT_SECRET"
+# The service key the built-in IdP (module/<project>/idp) logs in to the broker
+# with. Generated once per project like the client secret: the engine registers
+# it at boot and approves the IdP's own manifest, so the `idp` service starts
+# with no `abi iam` step (#1643).
+IDP_SERVICE_KEY = "IDP_SERVICE_KEY"
 # The broker's static users and the .env keys of their passwords: the engine's
 # processes (engine), the engine's auth callout responder (auth), and its
 # connection warden in the system account (sys), which ends the module
@@ -127,6 +132,24 @@ def ensure_idp_client_secret(env_path: Path) -> str:
     secret = secrets.token_urlsafe(32)
     _write(env_path, _set(lines, IDP_CLIENT_SECRET, secret))
     return secret
+
+
+def ensure_idp_service_key(env_path: Path) -> str:
+    """Return ``IDP_SERVICE_KEY`` from ``.env``, generating it when missing or
+    not a service key (``abi_sk_...``). A key made by hand is kept."""
+    from naas_abi_core.services.iam import keys
+
+    lines = _read(env_path)
+    value = _value(lines, IDP_SERVICE_KEY)
+    if value:
+        try:
+            if keys.parse(value).kind == "service":
+                return value
+        except (ValueError, KeyError):
+            pass
+    value = keys.generate_key("service").value
+    _write(env_path, _set(lines, IDP_SERVICE_KEY, value))
+    return value
 
 
 def ensure_nats_callout_seed(env_path: Path) -> str:

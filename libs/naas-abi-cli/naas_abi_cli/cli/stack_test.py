@@ -81,6 +81,8 @@ def test_start_seeds_the_nats_secrets_before_compose_reads_env(
     assert env["NATS_AUTH_CALLOUT_SEED"].startswith("SA")
     assert env["NATS_AUTH_CALLOUT_ISSUER"].startswith("A")
     assert "NATS_JWT_SECRET" not in env
+    # A project deployed before `abi deploy` generated the IdP's key gets it.
+    assert env["IDP_SERVICE_KEY"].startswith("abi_sk_")
     assert [args for args, _ in compose.calls] == [["up", "-d"]]
     up = compose.env_of("up")
     assert up["COMPOSE_PROFILES"] == ""

@@ -14,6 +14,7 @@ from .admin_credentials import (
     ADMIN_ADDRESS_ENV,
     ensure_admin_email,
     ensure_data_service_secrets,
+    ensure_idp_service_key,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
     ensure_rabbitmq_credentials,
@@ -140,6 +141,9 @@ def _ensure_stack_secrets(project: Path) -> None:
         return
     ensure_nats_passwords(env_path)
     ensure_nats_callout_seed(env_path)
+    # The key the built-in IdP logs in with, for a project deployed before
+    # `abi deploy` generated it: the engine registers it at boot.
+    ensure_idp_service_key(env_path)
 
 
 def _use_profile(profile: str) -> None:
