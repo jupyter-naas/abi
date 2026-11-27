@@ -34,6 +34,7 @@ from naas_abi.apps.nexus.apps.api.app.services.view_as.port import (
     NO_LONGER_ALLOWED,
     STOP,
     VIEW_LIFETIME,
+    Eligibility,
     Person,
     UnknownPersonError,
     UnknownWorkspaceError,
@@ -86,19 +87,32 @@ class ViewAsService:
     async def workspaces(self, viewer: Viewer, principal_id: str) -> list[WorkspaceRef]:
         """The workspaces the person belongs to where IAM accepts a view by the
         viewer; none for a person who has not signed in to Nexus."""
+        return (await self.eligibility(viewer, principal_id)).workspaces
+
+    async def eligibility(self, viewer: Viewer, principal_id: str) -> Eligibility:
+        """The workspaces of ``workspaces``, and why there is none (``Eligibility``)."""
         person = await self._store.person(principal_id)
         if person is None:
-            return []
+            return Eligibility([], "not_signed_in")
         groups, _ = await self._groups(person)
-        found = []
+        found: list[WorkspaceRef] = []
+        refusal: str | None = None
+        asked = False
         for workspace in await self._store.workspaces(await self._iam.candidates(person.user_id)):
             container = await self._iam.container_of(workspace.id)
             if container is None:
                 continue
+            asked = True
             verdict = await self._iam.verdict(viewer, person.principal_id, container, groups)
             if verdict.allowed:
                 found.append(workspace)
-        return found
+            elif refusal is None:
+                refusal = verdict.reason
+        if found:
+            return Eligibility(found)
+        if not asked:
+            return Eligibility([], "no_workspace")
+        return Eligibility([], "refused", refusal)
 
     async def _groups(self, person: Person) -> tuple[tuple[str, ...], datetime | None]:
         recorded = await self._store.recorded_groups(person.user_id)

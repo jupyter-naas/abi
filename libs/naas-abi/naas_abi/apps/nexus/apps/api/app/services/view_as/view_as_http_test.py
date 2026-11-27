@@ -436,6 +436,29 @@ async def test_the_workspaces_of_a_person_where_a_view_is_accepted(world) -> Non
 
 
 @pytest.mark.asyncio
+async def test_the_eligibility_says_why_no_workspace_may_be_viewed(world) -> None:
+    root, carol = await world.sign_in("root"), await world.sign_in("carol")
+
+    def ask(client, person):
+        return client.get(
+            "/api/iam/view-as/eligibility",
+            params={"principal_id": world.principals.get(person, person)},
+        )
+
+    ok = (await ask(root, "carol")).json()
+    assert [w["id"] for w in ok["workspaces"]] == [ALPHA] and ok["reason"] is None
+    # No Nexus account answers to the id: the person has not signed in yet.
+    assert (await ask(root, "nobody-at-all")).json() == {
+        "workspaces": [],
+        "reason": "not_signed_in",
+        "detail": None,
+    }
+    # Olivia holds more than Carol: IAM refuses Carol a view of her, and says why.
+    refused = (await ask(carol, "olivia")).json()
+    assert refused["workspaces"] == [] and refused["reason"] == "refused" and refused["detail"]
+
+
+@pytest.mark.asyncio
 async def test_a_view_is_started_from_a_browser_session_only(world) -> None:
     anonymous = httpx.AsyncClient(transport=httpx.ASGITransport(app=world.app), base_url=API)
 

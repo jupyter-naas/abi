@@ -65,6 +65,23 @@ async def viewable_workspaces(
     return [workspace_json(workspace) for workspace in found]
 
 
+@router.get("/eligibility", dependencies=[declares("iam:ViewAs")])
+async def view_eligibility(
+    request: Request,
+    principal_id: str = Query(min_length=1, max_length=255),
+    service: ViewAsService = Depends(_service),
+) -> dict:
+    """The workspaces of ``/workspaces``, and when there is none, why (``reason``:
+    ``not_signed_in``, ``no_workspace``, ``refused``, with IAM's words in ``detail``): what
+    a person's page says on a disabled View as."""
+    found = await service.eligibility(_viewer(request), principal_id)
+    return {
+        "workspaces": [workspace_json(workspace) for workspace in found.workspaces],
+        "reason": found.reason,
+        "detail": found.detail,
+    }
+
+
 @router.post("", dependencies=[declares("iam:ViewAs")])
 async def start_view(
     request: Request, body: StartBody, service: ViewAsService = Depends(_service)
