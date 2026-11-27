@@ -8,6 +8,7 @@ import pytest
 from naas_abi_cli.cli.admin_credentials import (
     ADMIN_EMAIL,
     ensure_api_key,
+    ensure_idp_service_key,
 )
 
 
@@ -195,3 +196,35 @@ def test_placeholder_address_keeps_reserved_names_and_their_subdomains(
     from naas_abi_cli.cli.admin_credentials import is_placeholder_address
 
     assert is_placeholder_address(email) is placeholder
+
+
+def test_the_idp_service_key_is_generated_once(tmp_path: Path) -> None:
+    from naas_abi_core.services.iam import keys
+
+    env = tmp_path / ".env"
+    env.write_text("OTHER=kept\n")
+
+    first = ensure_idp_service_key(env)
+
+    assert keys.parse(first).kind == "service"
+    assert ensure_idp_service_key(env) == first
+    assert _env(env) == {"OTHER": "kept", "IDP_SERVICE_KEY": first}
+    assert env.stat().st_mode & 0o777 == 0o600
+
+
+def test_an_idp_key_made_by_hand_is_kept(tmp_path: Path) -> None:
+    from naas_abi_core.services.iam import keys
+
+    by_hand = keys.generate_key("service").value
+    env = tmp_path / ".env"
+    env.write_text(f"IDP_SERVICE_KEY={by_hand}\n")
+
+    assert ensure_idp_service_key(env) == by_hand
+
+
+@pytest.mark.parametrize("value", ["", "not-a-key", "abi_pk_x"])
+def test_a_value_that_is_not_a_service_key_is_replaced(tmp_path, value) -> None:
+    env = tmp_path / ".env"
+    env.write_text(f"IDP_SERVICE_KEY={value}\n")
+
+    assert ensure_idp_service_key(env).startswith("abi_sk_")

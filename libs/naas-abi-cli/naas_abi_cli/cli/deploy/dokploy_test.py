@@ -328,6 +328,8 @@ def test_the_env_holds_every_variable_the_compose_needs(
     assert ("NATS_ENGINE_PASSWORD" in env) is nats
     assert ("NATS_AUTH_CALLOUT_SEED" in env) is nats
     assert ("ABI_IDP_CLIENT_SECRET" in env) is nats
+    # The IdP's own key, which the engine registers at boot (#1643).
+    assert env.get("IDP_SERVICE_KEY", "").startswith("abi_sk_") is nats
     assert ("RABBITMQ_PASSWORD" in env) is not nats
     # Every secret the config reads is listed, commented out until filled in:
     # an empty variable would still win over the engine's secrets file.
