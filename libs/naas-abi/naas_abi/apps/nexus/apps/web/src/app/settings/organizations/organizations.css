@@ -42,12 +42,6 @@
   background-color: var(--muted-bg-hex);
 }
 
-.platform-orgs-new-error {
-  margin: 0;
-  color: hsl(var(--destructive));
-  font-size: var(--font-size-sm);
-}
-
 .platform-orgs-slug-hint code {
   font-family: var(--font-mono, ui-monospace, monospace);
 }
