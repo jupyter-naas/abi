@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
-import { SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
 import {
   addable,
   createMemberRolesApi,
@@ -22,6 +21,8 @@ import {
   type RoleSelection,
 } from '@/lib/member-roles';
 import { RolePickerDialog, roleHint } from './role-picker-dialog';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 
 const NOTHING: HeldRoles = { groups: [], policies: [], names: {} };
 
@@ -68,6 +69,7 @@ export function MemberRoleSection({
   onChanged,
   onPerson,
   api,
+  onLeave,
 }: {
   scope: RoleScope;
   /** Their Nexus id (an organization's, the platform's page; the platform takes their IAM id too). */
@@ -80,6 +82,9 @@ export function MemberRoleSection({
   /** At a workspace: the member found, so the page names them. */
   onPerson?: (person: PersonRef | null) => void;
   api?: MemberRolesApi;
+  /** At a workspace: takes them out of it (the page's own route, as its Users list does).
+   *  Their membership row offers it, after a confirmation; without it the row is kept. */
+  onLeave?: () => Promise<void>;
 }) {
   const roles = useMemo(() => api ?? createMemberRolesApi(), [api]);
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -134,6 +139,26 @@ export function MemberRoleSection({
     setError('');
     setNotice(done);
     onChanged?.();
+  };
+
+  // Their membership group is the workspace itself: leaving it takes them out of the
+  // workspace, with their level and what is attached to them there. Asked first.
+  const leave = async () => {
+    if (!onLeave) return;
+    const name = person?.name || person?.email || 'them';
+    const ok = await confirm({
+      title: `Remove ${name} from this workspace?`,
+      description:
+        'They leave it: its groups, their level and the policies attached to them here. Their account and their other workspaces stay.',
+      confirmLabel: 'Remove from workspace',
+    });
+    if (!ok) return;
+    setError('');
+    try {
+      await onLeave();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove them from the workspace.');
+    }
   };
 
   const remove = async (option: RoleOption) => {
@@ -196,8 +221,26 @@ export function MemberRoleSection({
                 <span className="shrink-0 text-xs text-muted-foreground" title={MANAGED_TEXT[option.managed].title} data-managed={option.managed}>
                   {MANAGED_TEXT[option.managed].label}
                 </span>
+              ) : option.kind === 'own' && onLeave && scope.kind === 'workspace' ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!ready}
+                  onClick={() => void leave()}
+                  data-action="remove-from-workspace"
+                >
+                  <Trash2 size={14} />
+                  Remove from workspace
+                </Button>
               ) : option.kind === 'own' ? (
-                <span className="shrink-0 text-xs text-muted-foreground" title="Remove them from Users to take them out">
+                <span
+                  className="shrink-0 text-xs text-muted-foreground"
+                  title={
+                    scope.kind === 'workspace'
+                      ? 'Remove from workspace, at the top right, takes them out'
+                      : 'Remove them from Users to take them out'
+                  }
+                >
                   Kept while they are here
                 </span>
               ) : (
@@ -253,22 +296,22 @@ export function MemberRoleSection({
   return (
     <div className="space-y-4" data-member-role="">
       {error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {error}
-        </SettingsNotice>
+        </Notice>
       )}
-      {notice && <SettingsNotice tone="info">{notice}</SettingsNotice>}
+      {notice && <Notice tone="info">{notice}</Notice>}
       {split && (
-        <SettingsSection title="Workspaces" description={WORKSPACES_HELP} actions={addButton('workspaces', moreWorkspaces)}>
+        <Card title="Workspaces" description={WORKSPACES_HELP} actions={addButton('workspaces', moreWorkspaces)}>
           <div data-role-list="workspaces">{person === undefined ? loading : list(heldWorkspaces, 'In none of its workspaces.')}</div>
-        </SettingsSection>
+        </Card>
       )}
-      <SettingsSection title="Groups" description={GROUPS_HELP[scope.kind]} actions={addButton('groups', moreGroups)}>
+      <Card title="Groups" description={GROUPS_HELP[scope.kind]} actions={addButton('groups', moreGroups)}>
         <div data-role-list="groups">{person === undefined ? loading : list(heldGroups, 'In no group here.')}</div>
-      </SettingsSection>
-      <SettingsSection title="Policies" description={POLICIES_HELP[scope.kind]} actions={addButton('policies', morePolicies)}>
+      </Card>
+      <Card title="Policies" description={POLICIES_HELP[scope.kind]} actions={addButton('policies', morePolicies)}>
         <div data-role-list="policies">{person === undefined ? loading : list(items.policies, 'No policy attached to them here.')}</div>
-      </SettingsSection>
+      </Card>
       {picker && (
         <RolePickerDialog
           open

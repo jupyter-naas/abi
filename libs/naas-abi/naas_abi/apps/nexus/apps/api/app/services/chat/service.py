@@ -30,6 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
     ChatPersistencePort,
     ChatSecretRecord,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import ModelNotOfferedError
 from naas_abi.apps.nexus.apps.api.app.services.ollama import (
     DEFAULT_CHAT_MODEL_TAG,
     FALLBACK_CHAT_MODEL_TAGS,
@@ -657,9 +658,9 @@ class ChatService:
         try:
             # The turn was authorized (SendMessage); the catalog is the caller's own
             # view, narrowed to what they may use here (the skills feature and
-            # ``UseSkill``), and to what the workspace has not turned off.
+            # ``UseSkill``).
             skills = await self.skills_service.adapter.list_visible(workspace_id, user_id)
-            enabled = [s for s in skills if s.enabled and getattr(s, "enabled_here", True)]
+            enabled = [s for s in skills if s.enabled]
             if enabled:
                 enabled = await self.skill_access(user_id, workspace_id, enabled)
         except Exception:
@@ -881,6 +882,11 @@ class ChatService:
             conversation_id,
             user_id,
         )
+
+    async def _conversation_workspace(self, user_id: str, conversation_id: str) -> str | None:
+        """The workspace the user's conversation is stored in, if any."""
+        stored = await self.get_conversation_for_user(user_id, conversation_id)
+        return getattr(stored, "workspace_id", None) if stored is not None else None
 
     async def _own_conversation(
         self,
@@ -1284,27 +1290,54 @@ class ChatService:
                 llm_model = apply_slides_model_override(
                     provider.llm_model, request.context, request.message
                 )
-
-                response_content = await complete_with_provider(
-                    messages=provider_messages,
-                    config=ProviderConfig(
-                        id=provider.id,
-                        name=provider.name,
-                        type=provider.type,
-                        enabled=provider.enabled,
-                        endpoint=provider.endpoint,
-                        api_key=provider.api_key,
-                        account_id=provider.account_id,
-                        model=provider.model,
-                        llm_model=llm_model,
-                    ),
-                    system_prompt=system_prompt,
-                    thread_id=conversation_id,
-                    injection_preamble=injection_preamble,
-                    workspace_id=provider.run_workspace_id,
+                # The models the conversation's workspace uses (its offer's Models
+                # section): the turn runs on one of them, or is refused.
+                from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import (
+                    for_turn,
+                    models_in_workspace,
+                    turn_llm_model,
                 )
+                from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+                    inprocess_agent_model_ids,
+                )
+
+                turn_models = await models_in_workspace(
+                    request.workspace_id
+                    or await self._conversation_workspace(user_id, conversation_id)
+                )
+                llm_model = turn_llm_model(
+                    turn_models,
+                    provider_type=provider.type,
+                    endpoint=provider.endpoint,
+                    provider_model=provider.model,
+                    llm_model=llm_model,
+                    agent_models=lambda: inprocess_agent_model_ids(provider.model),
+                )
+
+                with for_turn(turn_models):
+                    response_content = await complete_with_provider(
+                        messages=provider_messages,
+                        config=ProviderConfig(
+                            id=provider.id,
+                            name=provider.name,
+                            type=provider.type,
+                            enabled=provider.enabled,
+                            endpoint=provider.endpoint,
+                            api_key=provider.api_key,
+                            account_id=provider.account_id,
+                            model=provider.model,
+                            llm_model=llm_model,
+                        ),
+                        system_prompt=system_prompt,
+                        thread_id=conversation_id,
+                        injection_preamble=injection_preamble,
+                        workspace_id=provider.run_workspace_id,
+                    )
                 response_content = self._unwrap_json_content(response_content)
                 provider_used = f"{provider.name} ({provider.model})"
+            except ModelNotOfferedError as exc:
+                response_content = f"**{exc}**"
+                provider_used = f"{provider.name} (refused)"
             except Exception as exc:
                 logging.getLogger(__name__).warning(
                     "Provider %s failed: %s", provider.name, exc, exc_info=True

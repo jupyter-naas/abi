@@ -20,6 +20,20 @@ def _features() -> list[str]:
     return offer_choices(live_settings().feature_flags)
 
 
+async def _dataset_catalog() -> list[tuple[str, str]]:
+    """The engine's datasets as ``(namespace, name)``, in the caller's call (the kernel
+    answers with the namespaces the deployment shares); none without a dataset service."""
+    from naas_abi import ABIModule
+    from naas_abi.apps.nexus.apps.api.app.services.datasets.service import DatasetsService
+    from starlette.concurrency import run_in_threadpool
+
+    services = ABIModule.get_instance().engine.services
+    if not services.dataset_available():
+        return []
+    items = await run_in_threadpool(DatasetsService(services.dataset).list)
+    return [(item.namespace, item.name) for item in items]
+
+
 def _default() -> FeatureAccessService:
     from naas_abi.apps.nexus.apps.api.app.core import database
     from naas_abi.apps.nexus.apps.api.app.services.feature_access.adapters.secondary.postgres import (  # noqa: E501
@@ -33,8 +47,12 @@ def _default() -> FeatureAccessService:
         EngineIamGateway,
     )
     from naas_abi.apps.nexus.apps.api.app.services.iam_admin.runtime import AUDIT_PREFIX
+    from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
     from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.sql_audit_log import (  # noqa: E501
         SqlAdminAuditLog,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary.resource_access import (  # noqa: E501
+        offer_ontology_catalog,
     )
 
     return FeatureAccessService(
@@ -44,6 +62,10 @@ def _default() -> FeatureAccessService:
         container_of=AUTHZ.container_of,
         defaults_of=CONTAINER_DEFAULTS.record_of,
         features=_features,
+        # The ontology files as Settings › Ontologies lists them (its catalog).
+        ontology_catalog=offer_ontology_catalog(lambda: ServiceRegistry.instance().ontology),
+        # The datasets as the caller lists them (Settings › Datasets): the namespaces closed.
+        dataset_catalog=_dataset_catalog,
     )
 
 

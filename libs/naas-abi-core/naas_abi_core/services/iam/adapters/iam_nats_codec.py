@@ -407,6 +407,7 @@ def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
                 module_scope=t.module_scope,
                 policy_only=t.policy_only,
                 platform_companions=t.platform_companions,
+                no_membership_roles=t.no_membership_roles,
                 parents=list(t.parents),
             )
             for t in catalog.resource_types
@@ -457,6 +458,7 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
                 module_scope=t.module_scope,
                 policy_only=t.policy_only,
                 platform_companions=t.platform_companions,
+                no_membership_roles=t.no_membership_roles,
                 parents=tuple(t.parents),
             )
             for t in message.resource_types

@@ -5,15 +5,18 @@ import './bus.css';
 import { Binary, File, FileJson, FileText, Lock, MessagesSquare, Waypoints, type LucideIcon } from 'lucide-react';
 import { absoluteTime, formatBytes, formatCount } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
-import { Badge, CopyButton, EmptyState, Hint, Notice, RelativeTime, type Tone } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Notice } from '@/components/ui/notice';
+import { CopyButton, Hint, RelativeTime, type Tone } from '../data-ui';
 import { BinaryView } from '../viewers/binary-view';
 import { TextPreview, type PreviewContext } from '../viewers/preview';
 import type { ServiceView } from './types';
 
 const KINDS: Record<string, { label: string; tone: Tone }> = {
-  kv: { label: 'KV bucket', tone: 'warn' },
+  kv: { label: 'KV bucket', tone: 'warning' },
   jobs: { label: 'Jobs', tone: 'info' },
-  bus: { label: 'Bus', tone: 'accent' },
+  bus: { label: 'Bus', tone: 'primary' },
   other: { label: 'Stream', tone: 'neutral' },
 };
 
@@ -28,7 +31,7 @@ export function isKvStream(id: string): boolean {
 
 export function KindBadge({ kind }: { kind: string | undefined }) {
   const k = KINDS[kind ?? 'other'] ?? KINDS.other;
-  return <Badge tone={k.tone}>{k.label}</Badge>;
+  return <Badge variant={k.tone}>{k.label}</Badge>;
 }
 
 function Subjects({ value }: { value: string | undefined }) {
@@ -80,7 +83,11 @@ export function MessagePreview({ detail, ctx }: { detail: ResourceDetail; ctx: P
   const content = detail.content;
   return (
     <div className="data-bus-preview">
-      {isKvStream(detail.entry.id) && <Notice tone="warn">{KV_READ_ONLY}</Notice>}
+      {isKvStream(detail.entry.id) && (
+        <Notice tone="warning" className="mb-3">
+          {KV_READ_ONLY}
+        </Notice>
+      )}
       <div className="data-bus-envelope">
         <div className="data-bus-envelope-subject">
           <code className="data-mono">{subject}</code>
@@ -110,9 +117,7 @@ export function MessagePreview({ detail, ctx }: { detail: ResourceDetail; ctx: P
       <section className="data-section">
         <h4 className="data-section-title">Payload</h4>
         {!content || (content.encoding === 'text' && !content.text) ? (
-          <EmptyState icon={File} title="Empty payload">
-            This message carries headers only.
-          </EmptyState>
+          <EmptyState icon={<File size={22} strokeWidth={1.5} />} title="Empty payload" description="This message carries headers only." />
         ) : content.encoding === 'binary' ? (
           <BinaryView name={subject} size={content.size} load={ctx.download} />
         ) : (
@@ -207,7 +212,7 @@ export const busView: ServiceView = {
             { id: 'size', label: 'Size', width: '64px', align: 'end', render: (e) => <span className="data-num">{formatBytes(e.size)}</span> },
             { id: 'published', label: 'Published', width: '96px', render: (e) => <RelativeTime iso={e.modified} /> },
           ],
-          notice: isKvStream(parent) ? <Notice tone="warn">{KV_READ_ONLY}</Notice> : undefined,
+          notice: isKvStream(parent) ? <Notice tone="warning">{KV_READ_ONLY}</Notice> : undefined,
           emptyTitle: isKvStream(parent) ? 'No revisions stored' : 'No messages stored',
           emptyText: isKvStream(parent)
             ? KV_READ_ONLY

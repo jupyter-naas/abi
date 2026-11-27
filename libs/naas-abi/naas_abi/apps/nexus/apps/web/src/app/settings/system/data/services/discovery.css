@@ -43,15 +43,15 @@
   color: var(--muted-foreground-hex);
 }
 
-.data-discovery-lease-warn {
+.data-discovery-lease-warning {
   color: #B45309;
 }
 
-.data-discovery-lease-danger {
+.data-discovery-lease-destructive {
   color: var(--destructive-hex);
 }
 
-.dark .data-discovery-lease-warn {
+.dark .data-discovery-lease-warning {
   color: #FCD34D;
 }
 

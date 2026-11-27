@@ -5,8 +5,9 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { WorkspaceCreateUserForm } from '@/components/people/workspace-create-user';
 import { AlertCircle } from 'lucide-react';
-import { SettingsLoading, SettingsNotice } from '@/components/settings/settings-ui';
 import { createUserPrefill, createdMessage, membersAddedHref } from '@/lib/people';
+import { Notice } from '@/components/ui/notice';
+import { Loading } from '@/components/ui/spinner';
 
 /**
  * Create user (Workspace settings › Users › Create user): their email, full name and Role here
@@ -22,13 +23,13 @@ function WorkspaceCreateUser() {
   const membersPath = `/workspace/${workspaceId}/settings/users`;
   const prefill = useMemo(() => createUserPrefill(search), [search]);
 
-  if (!workspace) return <SettingsLoading label="Loading workspace…" />;
+  if (!workspace) return <Loading label="Loading workspace…" />;
   // The API decides; a known role that may not add anyone is told so before typing.
   if (workspace.currentUserRole && !['owner', 'admin'].includes(workspace.currentUserRole)) {
     return (
-      <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+      <Notice tone="error" icon={<AlertCircle size={14} />}>
         Only workspace admins can add members.
-      </SettingsNotice>
+      </Notice>
     );
   }
 
@@ -56,7 +57,7 @@ function WorkspaceCreateUser() {
 
 export default function WorkspaceCreateUserPage() {
   return (
-    <Suspense fallback={<SettingsLoading label="Loading…" />}>
+    <Suspense fallback={<Loading label="Loading…" />}>
       <WorkspaceCreateUser />
     </Suspense>
   );

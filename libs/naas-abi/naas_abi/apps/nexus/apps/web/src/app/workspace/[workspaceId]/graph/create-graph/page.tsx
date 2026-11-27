@@ -8,6 +8,7 @@ import { GraphHeader as Header } from '@/components/graph/graph-header';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
+import { toast } from '@/components/ui/toast';
 import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
 
 interface CreatedGraph {
@@ -360,6 +361,8 @@ export default function CreateGraphPage() {
       }
       const data = (await res.json()) as CreatedGraph;
       setCreated(data);
+      // Said in the app's one toast stack, as an import of triples is.
+      toast.success(isEditing ? 'Graph updated' : 'Graph created', `"${trimmedLabel}"`);
       selectGraph(data.id);
       setVisibleGraphs([data.id]);
       window.dispatchEvent(new CustomEvent('graph-list-update'));

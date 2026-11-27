@@ -279,6 +279,22 @@ html {
   @apply outline-none ring-2 ring-ring/30 ring-offset-0;
 }
 
+/* Fields and dropdowns: focus changes nothing. With the cursor in a field (or a list open
+   from a picker), no coloured or darker border, no halo: past the global ring above and the
+   features' own focus classes. */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):focus,
+select:focus,
+textarea:focus,
+[role='combobox']:focus,
+.search-picker-trigger:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  /* The border it has unfocused: focus changes nothing. */
+  border-color: hsl(var(--input)) !important;
+}
+
 /* Remove focus ring from inputs inside glass cards (the card itself shows focus) */
 .glass-card :focus-visible,
 .glass-card:focus-within {
@@ -700,24 +716,6 @@ aside.glass :focus-visible {
 
 /* Files explorer only: match Ontology/KG sidebar density (12/18), keep shell listRow at 14/19. */
 .files-explorer-list-row {
-  font-size: 12px;
-  line-height: 18px;
-}
-
-/* Slides sidebar tree only: same 12/18 density; Chat uses .chat-list-row in chat-components.css. */
-.slides-sidebar-list-row {
-  font-size: 12px;
-  line-height: 18px;
-}
-
-/* Documents sidebar tree: same 12/18; keep global shell listRow at 14/19. */
-.documents-sidebar-list-row {
-  font-size: 12px;
-  line-height: 18px;
-}
-
-/* Sheets sidebar tree: same 12/18; keep global shell listRow at 14/19. */
-.sheets-sidebar-list-row {
   font-size: 12px;
   line-height: 18px;
 }

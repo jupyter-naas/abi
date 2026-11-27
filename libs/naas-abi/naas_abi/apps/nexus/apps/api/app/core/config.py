@@ -303,6 +303,10 @@ class FeatureFlagsConfig(BaseModel):
     level_features: dict[Literal["viewer", "member"], list[FeatureKey]] = Field(
         default_factory=dict
     )
+    # Whether a Viewer reads their My Files (and their platform storage). Off: the
+    # level policy "Viewer access" denies it (services/iam/levels.py), rewritten at
+    # the next start. A Member and a workspace admin always write theirs.
+    viewer_my_files: bool = True
     # Deprecated: no role brings a feature, a policy does. Read once, when Nexus
     # moves what each role had in each workspace into that workspace's policy
     # "Features of <role>" (services/iam/role_features.py); a configuration

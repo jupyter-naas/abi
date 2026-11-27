@@ -40,6 +40,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationCreateInput,
     OrganizationDomainCreateInput,
     OrganizationDomainRecord,
+    OrganizationMemberAccountRecord,
     OrganizationMemberDetailsRecord,
     OrganizationMemberProfileRecord,
     OrganizationMemberRecord,
@@ -547,6 +548,17 @@ class OrganizationService:
             account=account,
             organization_profile=profile or OrganizationMemberProfileRecord(),
         )
+
+    async def get_member_profile(
+        self, org_id: str | None, user_id: str
+    ) -> tuple[OrganizationMemberAccountRecord | None, OrganizationMemberProfileRecord | None]:
+        """Someone's account and, in ``org_id``, the profile it set for them (None when it set
+        none, or for a workspace in no organization): what a workspace's page shows of them."""
+        account = await self.adapter.get_member_account(user_id)
+        profile = (
+            await self.adapter.get_organization_member_profile(org_id, user_id) if org_id else None
+        )
+        return account, profile
 
     async def get_member_workspace_access(
         self, org_id: str, user_id: str

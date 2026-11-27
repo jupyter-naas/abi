@@ -1,6 +1,7 @@
 /** HTTP client for `/api/search/topics` (see `search-topics.ts` for the types). */
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
+import { SEARCH_SOURCE_IDS } from '@/lib/search-scopes';
 import type { PreviewResult, QueryRole, RoleContract, SearchTopic, TopicDetail, TopicResults } from '@/lib/search-topics';
 
 export class TopicApiError extends Error {
@@ -31,12 +32,32 @@ const ws = (workspaceId: string) => `workspace_id=${encodeURIComponent(workspace
 export const topicsApi = {
   list: (workspaceId: string) =>
     request<{ topics: SearchTopic[]; disabled_scopes?: string[]; can_edit: boolean }>(`?${ws(workspaceId)}`),
-  /** Switch a Nexus feature or a web engine ("web.<engine>") on or off for the workspace. */
-  setScopeEnabled: (workspaceId: string, scopeId: string, enabled: boolean) =>
-    request<{ disabled_scopes: string[] }>(`/scopes/${encodeURIComponent(scopeId)}?${ws(workspaceId)}`, {
-      method: 'PUT',
-      body: JSON.stringify({ enabled }),
-    }),
+  /**
+   * Offer or stop offering a source of the search, a feature or a web engine ("web.<engine>"):
+   * a section of the workspace's offer ("<W> access"), written as the caller. IAM refuses a
+   * source beyond the organization's offer, or one the caller does not hold. Answers the
+   * sources the workspace no longer offers.
+   */
+  setScopeEnabled: async (workspaceId: string, scopeId: string, enabled: boolean, policyId?: string | null) => {
+    // `?policy=`: another policy of the workspace, picked in the Settings column.
+    const policy = policyId ? `?policy=${encodeURIComponent(policyId)}` : '';
+    const response = await authFetch(
+      `${getApiUrl()}/api/workspaces/${encodeURIComponent(workspaceId)}/offer/search-sources${policy}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ changes: { [scopeId]: enabled } }),
+      },
+    );
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { detail?: unknown } | null;
+      const detail = typeof body?.detail === 'string' ? body.detail : `Request failed (${response.status})`;
+      throw new TopicApiError(detail, response.status);
+    }
+    const state = (await response.json()) as { offered?: { search_sources?: string[] } };
+    const offered = new Set(state.offered?.search_sources ?? []);
+    return { disabled_scopes: SEARCH_SOURCE_IDS.filter((id) => !offered.has(id)) };
+  },
   contract: () => request<Record<QueryRole, RoleContract>>('/contract'),
   results: (workspaceId: string, topicId: string, q: string, offset = 0, limit = 30) =>
     request<TopicResults>(

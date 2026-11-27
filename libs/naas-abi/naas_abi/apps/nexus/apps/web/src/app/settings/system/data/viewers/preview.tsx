@@ -4,7 +4,9 @@
 import { Eye, Lock } from 'lucide-react';
 import { detectLanguage, formatBytes, parseJson } from '../data-model';
 import type { ResourceDetail } from '../data-types';
-import { EmptyState, Notice } from '../data-ui';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Notice } from '@/components/ui/notice';
 import { BinaryView } from './binary-view';
 import { CheckpointView } from './checkpoint-view';
 import { CodeView } from './code-view';
@@ -93,18 +95,17 @@ export function Preview({ detail, ctx = {} }: { detail: ResourceDetail; ctx?: Pr
     if (content.encoding === 'masked') {
       body = (
         <EmptyState
-          icon={Lock}
+          icon={<Lock size={22} strokeWidth={1.5} />}
           title="Value hidden"
           action={
             ctx.reveal && (
-              <button type="button" className="data-button" onClick={ctx.reveal} disabled={ctx.revealing}>
+              <Button variant="secondary" size="sm" onClick={ctx.reveal} disabled={ctx.revealing}>
                 <Eye size={14} aria-hidden="true" /> {ctx.revealing ? 'Revealing…' : 'Reveal'}
-              </button>
+              </Button>
             )
           }
-        >
-          Revealing shows the value for 30 seconds and records it in the audit log.
-        </EmptyState>
+          description="Revealing shows the value for 30 seconds and records it in the audit log."
+        />
       );
     } else if (content.encoding === 'binary') {
       body = (
@@ -119,7 +120,7 @@ export function Preview({ detail, ctx = {} }: { detail: ResourceDetail; ctx?: Pr
       body = <TextPreview text={content.text ?? ''} name={detail.entry.name} mediaType={mediaType} />;
     }
   }
-  if (!body) return <EmptyState icon={Eye} title="Nothing to preview" />;
+  if (!body) return <EmptyState icon={<Eye size={22} strokeWidth={1.5} />} title="Nothing to preview" />;
   return (
     <div className="data-preview">
       {content?.truncated && (

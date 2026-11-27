@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  WORKFLOW_EXPORT_HEADERS,
   fetchWorkflowSettings,
-  filterWorkflows,
+  sortedWorkflows,
+  workflowCellValues,
+  workflowExportRow,
   workflowKey,
+  workflowRows,
+  workflowSearchTexts,
   type WorkflowSetting,
 } from './workflows-model';
+import type { ModuleItem } from '@/components/settings/module-items-model';
 
 const item = (over: Partial<WorkflowSetting>): WorkflowSetting => ({
   type: 'workflow',
@@ -20,15 +26,38 @@ const ITEMS = [
   item({ type: 'pipeline', name: 'pipeline.import', display_name: 'Import' }),
   item({ module_id: 'acme.market', name: 'prices', display_name: 'Prices' }),
 ];
-const ALL = { query: '', type: 'all' };
 
 describe('workflow settings', () => {
-  it('sorts by module then name and filters by type and text', () => {
-    expect(filterWorkflows(ITEMS, ALL).map((i) => i.name)).toEqual(['prices', 'pipeline.import', 'sync']);
-    expect(filterWorkflows(ITEMS, { ...ALL, type: 'pipeline' }).map((i) => i.name)).toEqual([
-      'pipeline.import',
+  it('sorts by module then name', () => {
+    expect(sortedWorkflows(ITEMS).map((i) => i.name)).toEqual(['prices', 'pipeline.import', 'sync']);
+  });
+
+  it('gives each column the values its filter sees, and the search its texts', () => {
+    expect(workflowCellValues(ITEMS[1], 'name')).toEqual(['Import']);
+    expect(workflowCellValues(ITEMS[1], 'type')).toEqual(['pipeline']);
+    expect(workflowCellValues(ITEMS[2], 'module')).toEqual(['acme.market']);
+    expect(workflowSearchTexts(ITEMS[0])).toEqual(['Sync', 'sync', 'acme.people', 'Syncs the directory']);
+  });
+
+  it('exports a row with its key, type, module and description', () => {
+    expect(WORKFLOW_EXPORT_HEADERS).toEqual(['Name', 'Key', 'Type', 'Module', 'Description', 'Enabled']);
+    expect(workflowExportRow(ITEMS[0])).toEqual(['Sync', 'sync', 'workflow', 'acme.people', 'Syncs the directory', 'Enabled']);
+  });
+
+  it('lists every workflow and pipeline of the modules: those listed keep their row, the others get one', () => {
+    const catalog: ModuleItem[] = [
+      { kind: 'workflows', module: 'acme.people', name: 'sync', label: 'sync', offered: true, grantable: true },
+      { kind: 'pipelines', module: 'acme.people', name: 'pipeline.clean', label: 'Clean', offered: false, grantable: true },
+      { kind: 'agents', module: 'acme.people', name: 'Coach', label: 'Coach', offered: true, grantable: true },
+    ];
+    const rows = workflowRows([ITEMS[0]], catalog);
+    expect(rows.map((row) => [workflowKey(row), row.listed, row.item?.label])).toEqual([
+      ['pipeline/acme.people/pipeline.clean', false, 'Clean'],
+      ['workflow/acme.people/sync', true, 'sync'],
     ]);
-    expect(filterWorkflows(ITEMS, { ...ALL, query: 'directory' }).map((i) => i.name)).toEqual(['sync']);
+    expect(rows[0].display_name).toBe('Clean');
+    expect(workflowCellValues(rows[0], 'enabled')).toEqual(['Disabled']);
+    expect(workflowCellValues(rows[1], 'enabled')).toEqual(['Enabled']);
   });
 
   it('keys an item by its type, module and name', () => {

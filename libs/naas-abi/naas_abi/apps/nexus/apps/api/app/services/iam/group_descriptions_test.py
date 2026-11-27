@@ -29,7 +29,6 @@ def test_each_kind_of_group_says_what_it_is_for():
         "org people": described("Acme people", owner=ORG, membership_of=ORG),
         "runners": described("Workflow runners", owner=ORG),
         "models": described("Models · all", owner=PLATFORM),
-        "files": described("Platform Files · Alpha (ws-1)", owner=PLATFORM),
     }
     assert all(kinds.values()), [k for k, v in kinds.items() if not v]
     assert len(set(kinds.values())) == len(kinds)  # one sentence per kind

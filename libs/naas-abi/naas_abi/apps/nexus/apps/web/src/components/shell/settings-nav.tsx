@@ -1,19 +1,24 @@
 import {
-  AppWindow,
   BarChart3,
   Bot,
   BrainCircuit,
-  Network,
   Globe,
+  SlidersHorizontal,
   Cpu,
   KeyRound,
   Users,
-  UsersRound,
+  Group,
   Workflow,
   Zap,
   Search,
   Map,
+  LayoutGrid,
+  Files,
+  Waypoints,
   type LucideIcon,
+  Package,
+  Database,
+  ServerCog,
 } from 'lucide-react';
 import { opensSection, type AccessSection } from '@/components/access/access-sections';
 import type { AccessView } from '@/lib/iam-admin/types';
@@ -48,20 +53,29 @@ export type SettingsNavGroup = {
  * they do not hold, or whose module resources they may use none of, is hidden
  * (`visibleSettingsGroups`), and its page says so.
  */
+// The Features group wears the sidebar's icons (`sidebar/index.tsx`) where the sidebar has the page.
 export const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
     label: 'General',
     items: [
       { href: '/settings/general', label: 'General', icon: Globe }, // the Organization's and Platform's icon
       { href: '/settings/users', label: 'Users', icon: Users },
+      // Groups of people sit with the people; still a page of Access for whoever IAM lets open it.
+      { href: '/settings/groups', label: 'Groups', icon: Group, needs: 'groups' },
       { href: '/settings/analytics', label: 'Analytics', icon: BarChart3, needs: 'analytics' },
     ],
   },
   {
     label: 'Access',
     items: [
-      { href: '/settings/groups', label: 'Groups', icon: UsersRound, needs: 'groups' },
+      // The policies first: the pages below edit one of them.
       { href: '/settings/policies', label: 'Policies', icon: KeyRound, needs: 'policies' },
+      // The workspace's offer ("<W> access"): which features and which modules it offers; the
+      // pages under Features then show what is offered.
+      { href: '/settings/features', label: 'Features', icon: SlidersHorizontal },
+      // How far people go with each core service of the engine (graphs, files, vectors...).
+      { href: '/settings/core-services', label: 'Core Services', icon: ServerCog },
+      { href: '/settings/modules', label: 'Modules', icon: Package },
     ],
   },
   {
@@ -69,10 +83,15 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     items: [
       // Agents the workspace builds itself (a model and a prompt) need no module.
       { href: '/settings/agents', label: 'Agents', icon: Bot, feature: 'agents' },
-      { href: '/settings/apps', label: 'Apps', icon: AppWindow, feature: 'apps', kinds: ['apps'] },
-      { href: '/settings/graphs', label: 'Graphs', icon: Network, feature: 'graph' },
+      { href: '/settings/apps', label: 'Apps', icon: LayoutGrid, feature: 'apps', kinds: ['apps'] },
+      // The dataset namespaces the workspace uses (its offer closes the others).
+      { href: '/settings/datasets', label: 'Datasets', icon: Database, feature: 'datasets' },
+      // Every kind of files: shown even when Workspace Files is off, which is turned on here.
+      { href: '/settings/files', label: 'Files', icon: Files },
+      { href: '/settings/graphs', label: 'Graphs', icon: Waypoints, feature: 'graph' },
       { href: '/settings/maps', label: 'Maps', icon: Map, feature: 'maps' },
-      { href: '/settings/models', label: 'Models', icon: Cpu },
+      // The chat's models: gone with the chat (Access None).
+      { href: '/settings/models', label: 'Models', icon: Cpu, feature: 'chat' },
       { href: '/settings/ontologies', label: 'Ontologies', icon: BrainCircuit, feature: 'ontology' },
       { href: '/settings/search', label: 'Search', icon: Search, feature: 'search' },
       { href: '/settings/skills', label: 'Skills', icon: Zap, feature: 'skills' },

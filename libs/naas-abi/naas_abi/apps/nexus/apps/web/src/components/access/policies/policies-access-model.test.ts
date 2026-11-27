@@ -74,25 +74,15 @@ describe('"<W> access" as the workspace offer', () => {
     expect(offerWorkspaceOf(memberAccess)).toBeNull();
   });
 
-  it('opens with its toggles above the document', async () => {
-    const offer = {
-      workspace_id: 'ws-1',
-      scope: WS,
-      access_policy: { id: 'pol_w', name: 'Workspace ws-1 access', owner_scope: WS },
-      editable: true,
-      whole_module: '*',
-      offered: { agents: [{ module: 'acme.people', name: '*' }], apps: [], workflows: [], pipelines: [] },
-    };
-    const fetchMock = vi.fn(async (url: string) => {
-      if (String(url).endsWith('/offer')) return new Response(JSON.stringify(offer), { status: 200 });
-      return new Response(JSON.stringify({ detail: 'no' }), { status: 403 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
+  it('opens on its document: the offer is changed from the settings pages, not here', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ detail: 'no' }), { status: 403 })));
     await open([wsAccess], wsScope);
     expect(document.querySelector('[data-policy="pol_w"] [data-workspace-offer]')?.textContent).toBe('workspace offer');
     await mounted!.click(document.querySelector('[data-policy="pol_w"] button'));
-    await vi.waitFor(() => expect(document.querySelector('[aria-label="Workspace offer"]')).not.toBeNull());
-    const whole = document.querySelector('[data-offer-section="agents"] [data-offer-module="acme.people"] [role="switch"]');
-    expect(whole?.getAttribute('aria-checked')).toBe('true');
+    await vi.waitFor(() => expect(document.querySelector('[role="tab"]')).not.toBeNull());
+    const tabs = [...document.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
+    expect(tabs).not.toContain('Configuration');
+    expect(tabs).toContain('Advanced');
+    expect(document.querySelector('[aria-label="Workspace offer"]')).toBeNull();
   });
 });

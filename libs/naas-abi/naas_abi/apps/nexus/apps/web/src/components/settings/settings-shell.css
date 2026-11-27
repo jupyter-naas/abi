@@ -194,19 +194,97 @@
 }
 
 /* Atop the column of an organization's or a workspace's Settings: the level, picked as Files
-   picks a drive (its picker), each under its kind. */
+   picks a drive (its picker), in the pages' text size. */
 .settings-scope {
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-2);
   padding: 0 var(--space-1);
+}
+
+/* The search under the pickers (a page's name and what it is for): the platform's search field
+   (Ontology's), at the pickers' size and text, square as the settings are. */
+.settings-nav-search {
+  position: relative;
+  display: block;
+  margin: 0 var(--space-1) var(--space-4);
+}
+
+.settings-nav-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  color: var(--muted-foreground-hex);
+  pointer-events: none;
+}
+
+.settings-nav-search input {
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 10px 4px 30px;
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background: var(--background-hex, transparent);
+  color: var(--foreground-hex);
+  font-size: var(--font-size-sm);
+}
+
+.settings-nav-search input::placeholder {
+  color: var(--muted-foreground-hex);
+}
+
+.settings-nav-search-empty {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
 }
 
 .settings-scope.search-picker-stack {
   gap: var(--space-2);
 }
 
-.settings-scope-kind {
-  display: block;
-  margin-bottom: 2px;
-  font-size: var(--font-size-xs);
-  color: var(--muted-foreground-hex);
+
+/* Access › Features and its sub-group (the Features pages, and the policy they set): the fold
+   toggle sits at the row's right, over its padding, so the row keeps its look; the pages hang
+   one step in. */
+.settings-nav-item-with-subgroup {
+  position: relative;
 }
+
+.settings-nav-subgroup-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+}
+
+.settings-nav-subgroup-toggle:hover {
+  background: var(--muted-hex, rgba(0, 0, 0, 0.05));
+  color: var(--foreground-hex);
+}
+
+.settings-nav-item-with-subgroup > .org-settings-nav-item {
+  padding-right: 36px;
+}
+
+/* The Features pages and their policy, 12px in behind a rule: the pages' highlight and the
+   filter's tint span the same width, from the rule to the column's edge. */
+.settings-nav-subgroup {
+  margin: var(--space-1) 0 var(--space-1) 12px;
+  border-left: 1px solid var(--border-hex);
+}
+
+/* The policy those pages set, first under the rule. */
+.settings-nav-subgroup .settings-policy-picker {
+  padding: 0 0 var(--space-1);
+}
+

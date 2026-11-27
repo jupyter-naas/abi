@@ -5,7 +5,8 @@ import './triple-store.css';
 import { BookOpen, Network, Shapes, Waypoints } from 'lucide-react';
 import { compactIri, formatCount } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
-import { Badge, CopyButton } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { CopyButton } from '../data-ui';
 import { TriplesView } from '../viewers/triples-view';
 import type { ServiceView } from './types';
 
@@ -177,7 +178,7 @@ export const tripleStoreView: ServiceView = {
   },
   badges: (entry) => (
     <>
-      {entry.attributes.role === SCHEMA_ROLE && <Badge tone="info">Schema · read-only</Badge>}
+      {entry.attributes.role === SCHEMA_ROLE && <Badge variant="info">Schema · read-only</Badge>}
       {count(entry) === 0 && <Badge>Empty</Badge>}
     </>
   ),

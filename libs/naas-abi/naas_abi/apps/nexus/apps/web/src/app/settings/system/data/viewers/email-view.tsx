@@ -2,6 +2,7 @@
 
 /** A sent email as a reader shows it. HTML renders in a sandbox with no scripts. */
 import { useState } from 'react';
+import { Tabs } from '@/components/ui/tabs';
 import { absoluteTime } from '../data-model';
 
 function list(value: string[] | string | undefined): string {
@@ -53,20 +54,17 @@ export function EmailView({
         )}
       </dl>
       {html && text && (
-        <div className="data-segmented" role="tablist" aria-label="Body format">
-          {(['html', 'text'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              role="tab"
-              aria-selected={mode === m}
-              className={mode === m ? 'data-segment data-segment-active' : 'data-segment'}
-              onClick={() => setMode(m)}
-            >
-              {m === 'html' ? 'HTML' : 'Text'}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          variant="segmented"
+          label="Body format"
+          className="w-fit"
+          value={mode}
+          onChange={setMode}
+          items={[
+            { id: 'html', label: 'HTML' },
+            { id: 'text', label: 'Text' },
+          ]}
+        />
       )}
       {mode === 'html' && html ? (
         <iframe className="mail-frame" title="Email body" sandbox="" srcDoc={html} />

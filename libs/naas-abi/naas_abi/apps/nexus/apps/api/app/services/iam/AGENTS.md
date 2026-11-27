@@ -31,8 +31,14 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `workspace_offer.py` | "<W> access" as an allow-list ("Ceilings as allow-lists"): `Offer`, `offer_document`, `offer_of`, `with_offer`, `in_offer_form`, `offer_from_seed`, `seeded_offer` |
 | `model_sets.py` | "Models · member", "Models · all", "Models · embeddings" (platform policies kept in step with `nexus_config.models.member_set` at start, `ensure_configured`); `level_model_policy_ids(iam, level)` for the level groups |
 | `capabilities.py` | Capability groups made on demand (`ensure_capability`): an organization's "Workflow runners", the platform's "Models · all" |
-| `platform_files.py` | Platform Files given with the workspace (#1590): "Platform Files · read" / "· write", a platform group per workspace kept in step with its people (`set_workspace_platform_files`, `follow`, `sync_platform_files`, `ensure_configured`), the legacy flags (`convert_legacy_drive_flags`, `DriveFlagChange`) |
-| `platform_files_routes.py` | `GET`/`PUT /api/workspaces/{id}/platform-files`: `{workspace_id, mode, can_change}`; read as the configuration, changed by the platform admin alone |
+| `given_files.py` | The files a workspace's offer gives outside it: `GivenOrgFiles`, `GivenPlatformFiles`, `GivenSystemFiles` by mode (`statements`, `mode_of`) |
+| `files_offer.py` | Startup, once: the Platform Files groups of #1590 into `GivenPlatformFiles`, groups and policies deleted (`iam_migrations` `files_offer_v1`); the legacy drive flags (`convert_legacy_drive_flags`, `DriveFlagChange`) |
+| `given_graphs.py` | The graphs a workspace's offer gives outside it and what it closes of its own: `GivenGraphs`, `GivenGraphsWrite`, `GivenGraphsAll`, `OfferGraphsDeny` (`statements`, `fields_of` from a `WorkspaceGraphPolicyConfig`, `config_of` back, `summary`) |
+| `workspace_models.py` | The chat models a workspace uses (its offer's `OfferModels`, `*` every one, and `OfferDefaultModel`; ADR `20261126_models_in_the_offer`): `WorkspaceModels` (`model_for` switches to the default, `require` refuses), `models_in_workspace`/`models_in_container` (the offer cache), `for_turn`/`set_for_turn`/`models_for_turn` (the turn's), `turn_llm_model` (by provider: switch, the engine's, or refuse), `install_substitute` (the engine's model registry asks it for a remote module's turn) |
+| `models_offer.py` | Startup, once: every model (`*`) into each recorded access policy that names none (`iam_migrations` `models_offer_v1`) |
+| `graphs_offer.py` | Startup, once: each workspace's graph assignment into its offer, the `workspace.<ws>.graphs.read|write` policies and their per-person attachments deleted (`iam_migrations` `graphs_offer_v1`); `configured_graphs` for a seeded workspace made later |
+| `given_maps.py` | The Maps items a workspace's offer gives it without owning them, and the deployment items it closes: `GivenMaps`, `GivenBasemaps`, `OfferMapsDeny`, `OfferBasemapsDeny` (`statements`, `fields_of` from a `MapsAssignment`, `assignment_of` back, `with_item`, `summary`) |
+| `maps_offer.py` | Startup, once: what each workspace may use per `maps_grants` into its offer (`iam_migrations` `maps_offer_v1`); `maps_grants` kept for a workspace whose access policy is no allow-list yet |
 | `container_defaults.py` | Each organization's and workspace's access policy and groups ("Access policies and default groups"): "<O> access", "<O> admins", "<O> people"; "<W> access" (W's bound), "<W> workspace", "<W> admins"; made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), forgotten with it (`dropped`); `grouped` / `grouped_record` (whether its people are groups, #1585); a container recorded before #1585 keeps its "<X> members" and admins in step with the roles (`sync_scope`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
 | `access_model.py` | Startup, once, after `container_defaults_v1`: per-person attachments become groups, with the report of every access change, compared after the start ("The access move"; `migrate_access`, `complete_report`, `iam_migrations` `access_model_v1`; `abi iam migrate-access --dry-run`, `migrate_from_cli`) |
 | `shadow_iam.py` | A copy of an IAM in memory (`shadow_of`), or kept as JSON (`snapshot`, `store_of`): the access move tries its plan there first, and reads its report from the copies' decisions |
@@ -257,7 +263,7 @@ policy tree of issue #1413's journeys, the groups of #1585 ("Levels as groups"):
 | "<W> access" | the workspace | "<O> access"; none for a workspace in no organization | its offer (`workspace_offer`) | by "<W> workspace" at W: **W's bound** (core "Bounds"), not a grant |
 | "<W> workspace" | W, a membership group of W | | its people | "<W> access" at W (the bound) |
 | "<W> admins" | W, a membership group of W | | its admins | `builtin.admin` and "Workspace admin access" at `${my workspaces}` (W alone: its owner) |
-| "<O> people" | O, a membership group of O | | the organization's people | `builtin.viewer` and "Viewer access" at `${my workspaces}` |
+| "<O> people" | O, a membership group of O | | the organization's people (its admins, and whoever holds a role at O) | "Organization view" at `${my workspaces}` and at O (O's bound): they see O, nothing it holds; `organization` is `no_membership_roles`, so no level's built-in role reaches O (ADR decision 12, `org_people_view_v1`) |
 | "<O> admins" | O | | its admins | "<O> access" below O, `builtin.admin` at O and below it |
 
 A container recorded before #1585 has "<X> members" (every user holding a role at X itself) in place of its
@@ -365,9 +371,8 @@ there is a level. Nothing is attached to a person.
   makes the level groups (`LEVELS.peek`).
 - **Workspace creation** takes `admin_id` (default the creator; in an organization, someone of its directory, else
   400), who joins "<W> admins" and "<W> workspace"; the defaults are made before the grant.
-- **Shared graph grants** (`graph_grants.py`) follow the groups: `.read` to whoever belongs to W, `.write` to its
-  admins (and, in a container of before, its members). A group W owns receives attachments at W only, always at a
-  scope, and a scoped one keeps only `${scope}` names, so they stay unscoped attachments to each holder, kept in step.
+- **Shared graphs** are the Graphs part of W's offer (`given_graphs.py`): IAM gives them to W's people while they
+  belong there; nothing is kept in step with the groups. So are the **Maps items** W does not own (`given_maps.py`).
 
 ### The upgrade (`container_defaults_v1`)
 
@@ -460,8 +465,8 @@ lock; it waits for `container_defaults_v1`. Built from what IAM holds now with S
   declared actions, shared graphs, models) compared, each change a `Change` with a reason (`REASONS`, intended ones
   flagged: members lose workflows and pipelines, members gain datasets, model sets, owners lose delete, org Member
   roles go). Also: empty workspaces, workspaces with no admin, org-only people, retired and kept policies, the drive
-  flags (`platform_files.convert_legacy_drive_flags`, #1590: once the people are in their groups, after
-  `sync_platform_files`; it drops its holding table; a dry run asks it with `apply=False` on the copy).
+  flags (`files_offer.convert_legacy_drive_flags`: into each workspace's offer once its access policy is
+  recorded; it drops its holding table; a dry run asks it with `apply=False` on the copy).
 - **Safety.** A shape it does not know, or a plan the copy refuses (`AccessModelStop`), stops it: nothing written,
   nothing recorded. Before the real IAM changes, the move is kept (`access_model_v1_planned`: its plan's report, its
   inputs and IAM as it was, `shadow_iam.snapshot`); a start interrupted half way is finished by the next, which
@@ -478,31 +483,89 @@ lock; it waits for `container_defaults_v1`. Built from what IAM holds now with S
   the copy. Tests: `access_model_test.py` (decision matrices on `policy_tree_test`'s world and on
   `role_features_test`'s taken back to before #1585), `shadow_iam_test.py`.
 
-## Platform Files given with the workspace (#1590)
+## Files given by the workspace's offer (ADR `20261125_offer_gives_outside_resources`)
 
-- **Two platform policies, written once** (`platform_files.ensure_policies`, at start): "Platform Files · read"
-  (`ListPlatformFiles`, `GetPlatformFile` on `abi:nexus:platform_file/*`; `object_storage` list and get on
-  `naas_abi/platform-drive` and `/*`) and "Platform Files · write" (read, plus `PutPlatformFile`,
-  `DeletePlatformFile`, `object_storage:PutObject`, `PutObjectStream`, `DeleteObject`). An edit is replaced at the
-  next start.
-- **A platform group per workspace that has it**, "Platform Files · <W> (<workspace id>)", holds one of them,
-  unscoped; the setting (`off`, `read`, `write`) is which one, so IAM is its only store
-  (`workspace_platform_files`). Not "<W> workspace": what it holds at W is W's bound, and IAM refuses an unscoped
-  attachment to a group a workspace owns.
-- **Its members are W's people** (the members of W's membership groups, `list_container_members`), kept in step as
-  `api`: `MEMBERSHIPS` calls `follow(iam, principal)` after each membership change, where "Workspace admins" is kept;
-  `iam_admin` does after `add_member`/`remove_member` (`follow_member`); `set_workspace_platform_files` after a change;
-  `ensure_configured` at start (`bootstrap.apply_access_settings`), which also deletes the group of a deleted
-  workspace (and `MEMBERSHIPS.drop_scope` deletes it at once). A migration moving memberships without `MEMBERSHIPS`
-  calls `sync_platform_files(iam)` after.
-- **Who changes it:** `set_workspace_platform_files(iam, workspace_id, mode)` runs the group and attachment writes in
-  the ambient call context: only unscoped grants reach a platform group and attaching is held-checked, so the
-  platform admin (`may_set`: `iam:CreateGroup` at the platform). A workspace or org admin gets
-  `PermissionDeniedError`.
-- **The legacy flags:** `convert_legacy_drive_flags(iam, db) -> list[DriveFlagChange]` (`workspace_id`, `flag`
-  `"platform"|"system"`, `action` `"converted"|"reported"|"none"`, `detail`) reads `workspace_drive_flags_legacy`
-  (kept by `0073_drop_drive_flags.sql` on PostgreSQL), sets `write` for each `platform_drive_enabled`, reports
-  `system_drive_enabled`, then drops the table; idempotent (no table, `[]`); `apply=False` is a dry run.
+- **Given sections** of "<W> access" (`given_files.py`, read and written by `workspace_offer`): `GivenOrgFiles`
+  (off, read, write; the workspace's organization's `nexus:*OrgFile*` on `<O>/nexus:file/organization` and `/*`, and
+  `object_storage` on `<O>/object_storage:object/naas_abi/organization-drive/<o>` and `/*`), `GivenPlatformFiles`
+  (off, read, write; `nexus:*PlatformFile*` on `abi:nexus:platform_file/*`, `object_storage` on
+  `abi:object_storage:object/naas_abi/platform-drive` and `/*`), `GivenSystemFiles` (off, read;
+  `ListObjectStoreFiles`, `GetObjectStoreFile` on `abi:nexus:system_file/*`, `object_storage` read on
+  `abi:object_storage:object/*` and `abi:*/object_storage:object/*`). Each is its Nexus half and its object storage
+  half (`<sid>2`); read lists and reads, write also puts and deletes. Core IAM gives them to W's people while they
+  belong to W, each action within their level there (core "Given statements"): a Viewer reads, a Member writes.
+- **Who changes them:** a write of "<W> access" as the caller (`feature_access.FeatureAccessService.set_files`,
+  `PUT /api/workspaces/{id}/offer/files`), held-checked by IAM: the platform admin
+  gives Platform and System Files, an organization's admins its Organization Files; a workspace admin narrows or
+  removes. `read_offer` says per row the mode, the `choices` the caller has (held, per `grantable` at the platform,
+  or narrower than now) and `editable`.
+- **My Files** is no section: `feature_flags.viewer_my_files` (default true); off, "Viewer access" denies
+  `ListMyFiles`, `GetMyFile`, `ListUserStorage`, `GetUserStorage` (`levels.no_my_files_statement`).
+- **The move** `files_offer_v1` (`files_offer.py`, `main._offer_moves`): each "Platform Files · <W> (<id>)" group of
+  #1590 becomes `GivenPlatformFiles` in its mode, then the groups and the two policies "Platform Files · read|write"
+  are deleted (a policy someone else holds is kept and named). **The legacy flags:**
+  `files_offer.convert_legacy_drive_flags(iam, db) -> list[DriveFlagChange]` (`workspace_id`, `flag`
+  `"platform"|"system"`, `action` `"converted"|"reported"|"none"`, `detail`) reads `workspace_drive_flags_legacy`,
+  gives `GivenPlatformFiles` write for each `platform_drive_enabled`, reports `system_drive_enabled`, then drops the
+  table; idempotent; `apply=False` is a dry run.
+
+## Graphs given by the workspace's offer (ADR `20261125_offer_gives_outside_resources`)
+
+- **Sections** of "<W> access" (`given_graphs.py`, read and written by `workspace_offer`, fields `graphs_read`,
+  `graphs_write`, `graphs_all`, `graphs_no_create`, `graphs_closed`): `GivenGraphs` (parts `GivenGraphs2`...: the
+  `triple_store` actions at the list and read levels on each graph W reads or writes), `GivenGraphsWrite` (parts too:
+  `Insert`, `Remove` on each graph it writes), `GivenGraphsAll` (read, `read_all`: `<O>/triple_store:graph/*`,
+  `<O>/*/triple_store:graph/*`, W's own for a workspace in none, and the schema graph), and W's only Denies,
+  `OfferGraphsDeny` (`CreateGraph` on `${scope}/triple_store:graph/*`: creation closed) and `OfferGraphsDeny2`...
+  (every graph action on `${scope}/triple_store:graph/<iri>` of each own graph it excludes, and the name of
+  `given_graphs.NEW_GRAPH`, which says it excludes them). Never `ClearGraph` nor `DropGraph`; Nexus's own graphs
+  never. Capped per person: a Viewer reads, a Member and an admin write.
+- **Names.** Settings › Graphs names a graph it adds as IAM placed it (`graph_iam.graph_name`), which the caller must
+  hold (core's held check, unscoped); the migration and a configuration name it wherever placed
+  (`given_graphs.anywhere_names`). The graphs that stay keep their names (`fields_of(current=)`), so a workspace
+  admin removes one without holding the others.
+- **Who changes them:** Settings › Graphs (`resource_access.py`, kind `graphs`) through
+  `FeatureAccessService.set_graphs`, as the caller and audited. `read_all` turned on also needs `ManageSystem`.
+  A Deny of W's bound restricts W's own admins (core: only whom it does not restrict lifts it): reopening creation or
+  W's own graphs is an organization admin's or the platform admin's. `read_offer` says `graphs`
+  (`given_graphs.summary`), which the offer editor shows.
+- **The move** `graphs_offer_v1` (`graphs_offer.py`, `main._offer_moves` after `files_offer`): each workspace's
+  effective assignment (`load_resource_policy`: its row, else its configuration's) becomes its sections, then the
+  policies are detached from everyone and deleted. A workspace with something to move and no access policy waits
+  (its policies kept, not recorded). Reported: `written`, `kept`, `waiting`, `policies_deleted`,
+  `attachments_deleted`, `widened` (a policy of theirs passed `MAX_PATTERNS` names, never written: given for the
+  first time), `failed`. A configured workspace made later gets its graphs with its access policy
+  (`container_defaults.migrate`, `configured_graphs`); its organization's offer never takes them.
+
+## Maps given by the workspace's offer (ADR `20261125_offer_gives_outside_resources`, "Maps")
+
+- **Sections** of "<W> access" (`given_maps.py`, read and written by `workspace_offer`, fields `maps` and
+  `maps_closed`): `GivenMaps` (parts `GivenMaps2`...: `ListLayouts`, `GetLayout`) and `GivenBasemaps` (`ListBasemaps`,
+  `GetBasemap`) on absolute names: the deployment's feeds or basemaps, `abi:nexus:<kind>/*` (every one, the ones
+  added later too) or `abi:nexus:<kind>/<id>`, and an item another workspace V shares with W, `<V>/nexus:<kind>/<id>`;
+  and W's Denies `OfferMapsDeny`, `OfferBasemapsDeny` (the same actions on `${scope}/nexus:<kind>/<id>`: a deployment
+  item W does not use though every one is given). List and read only: W administers its own copies through its
+  roles. A feed's layers follow their feed; built-in feeds and graph layers are never in it. Hiding an item stays
+  W's display choice (`maps_settings.hidden_*`), not the offer's.
+- **Read by Nexus** as W's `MapsAssignment` (`given_maps.assignment_of`, `maps/permissions` `IamMapsOffers` through
+  `AUTHZ.offer_of`): which deployment items W seeds and lists, which shared items it lists. A workspace whose access
+  policy is no allow-list yet (`offer_of` None) still goes by `maps_grants`.
+- **Who changes them:** Settings › Maps › Access (`/api/maps/permissions`, item by item) writes the offer of each
+  workspace whose answer changes, through `FeatureAccessService.set_maps`, as the caller and audited. Its rules
+  first (a deployment item and "every workspace" are the platform admin's, a workspace's item is shared from it to
+  workspaces the caller administers), then IAM's: only the platform admin gives a deployment item, an item of V is
+  given by whoever holds it in V, a workspace admin closes a deployment item and never reopens it. A change a
+  workspace with no allow-list would need is refused (409) before anything is written; the writes are one per
+  workspace. `read_offer` says `maps` (`given_maps.summary`), which the offer editor shows.
+- **New workspaces** are given every deployment feed and basemap (`container_defaults.platform_maps`, in
+  `new_workspace_offer` and for a configured workspace made by `migrate`); their organization's offer never takes it.
+- **The move** `maps_offer_v1` (`maps_offer.py`, `main._offer_moves` after `graphs_offer`): each workspace gets every
+  deployment item, each one a `maps_grants` row narrowed away from it closed, and each item another workspace
+  shared with it (by list or with every workspace) by its name there. Its other sections are kept; idempotent.
+  A workspace with no access policy waits (not recorded). Reported: `written`, `kept`, `waiting`, `closed`,
+  `shared_with_all` (given to each workspace now, not to one made later), `dropped` (shared by a workspace that is
+  gone), `failed`. `maps_grants` stays for the workspaces that are no allow-list yet; one written into a ceiling of
+  an older version is kept when the access migration converts it (`access_model.ceiling_offer`).
 
 ## The upgrade: sets and toggles become policies
 
@@ -784,7 +847,12 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   overviews, and its path is not found there. Enabling one in a workspace (`AssignOntology`, admin level) is
   decided in the workspace's organization, on `<organization>/nexus:ontology/<path>` (the platform's for a
   workspace in none): Workspace settings › Ontologies offers only what the caller may assign plus what the
-  workspace already enables, and its save refuses another, naming it. naas_abi lists ontologies for the
+  workspace already enables, and its save refuses another, naming it. The offer editor
+  (`components/access/offer/offer-editor.tsx`) has an Ontologies part with the same data (`read_offer`'s `ontologies`: the offer's refs and a
+  row per file of the deployment, `assignable`, `editable`, `reason`; a ref no file answers to is a row to
+  remove), switched one at a time through `PUT /api/workspaces/{id}/offer/ontologies` (`{changes: {id:
+  offered}}`, `FeatureAccessService.save_ontologies`, then `set_ontologies` as the caller): 403 for a file the
+  caller may not assign, 422 for one of no file of the deployment. naas_abi lists ontologies for the
   builder (`listers.ontologies`): every file of the deployment at an organization or the platform, a
   workspace's enabled ones there. *Consequences:* an organization's admins and owners assign any ontology to
   its workspaces by their role there (an admin-level action in their container), and the platform admin

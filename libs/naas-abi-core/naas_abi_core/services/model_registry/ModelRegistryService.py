@@ -46,6 +46,7 @@ from naas_abi_core.services.model_registry.ModelRegistryPort import (
     IModelRegistry,
     ModelAction,
     ModelNotFoundError,
+    ModelSubstitute,
     ProviderNotConfiguredError,
     UseAction,
 )
@@ -113,6 +114,8 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
         self._chat_providers: dict[str, ChatProviderFactory] = {}
         self._embedding_providers: dict[str, EmbeddingProviderFactory] = {}
         self._guard = ServiceGuard.of(CATALOG, self)
+        # A host's choice of the chat model a container uses (``substitute_chat_model``).
+        self._substitute: ModelSubstitute | None = None
 
     # ------------------------------------------------------------------ authorization
 
@@ -201,6 +204,18 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
         name = _norm(provider)
         assert name is not None
         self._embedding_providers[name] = factory
+
+    def register_model_substitute(self, substitute: ModelSubstitute) -> None:
+        self._substitute = substitute
+
+    def substitute_chat_model(self, canonical_id: str, container: str | None) -> str:
+        """The chat model a remote caller's request uses in ``container`` (its call
+        context's): what the host's substitute says, else ``canonical_id``. The host
+        may refuse (``PermissionDeniedError``). In-process turns are the host's to
+        retarget: it holds their models."""
+        if self._substitute is None:
+            return canonical_id
+        return self._substitute(container, canonical_id) or canonical_id
 
     # ------------------------------------------------------------------ lookup
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ColumnResizeHandle, useColumnResize } from '@/components/shell/column-resize-handle';
+import { ColumnResizeHandle, useColumnResize } from '@/components/ui/split-pane';
 
 /** Width of the settings nav (Organization and Platform Settings share it). */
 export const SETTINGS_NAV_WIDTH_DEFAULT = 224;
@@ -66,7 +66,7 @@ export function SettingsLayoutNav({
   return (
     <>
       {isDragging && <div className="fixed inset-0 z-50 cursor-col-resize" />}
-      <nav className="settings-layout-nav" aria-label={title} style={resizable ? { width } : undefined}>
+      <nav className="settings-layout-nav" data-hover-tip-edge="" aria-label={title} style={resizable ? { width } : undefined}>
         {children}
       </nav>
       {resizable && (

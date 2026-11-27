@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useRef } from 'react';
 import { Camera, Save, X, RefreshCw } from 'lucide-react';
+import { toast } from '@/components/ui/toast';
 import { getApiUrl } from '@/lib/config';
 import { usePageDraft } from '@/hooks/use-page-state';
 import { useAuthStore, type User } from '@/stores/auth';
@@ -97,12 +98,12 @@ export default function ProfilePage() {
 
     const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
     if (!validTypes.includes(file.type)) {
-      alert('Please upload a valid image file (PNG, JPG, GIF, or WEBP)');
+      toast.error('Not an image', 'Upload a PNG, JPG, GIF or WEBP file.');
       return;
     }
 
     if (file.size > 2 * 1024 * 1024) {
-      alert('File size must be less than 2MB');
+      toast.error('Image too large', 'The file must be under 2 MB.');
       return;
     }
 
@@ -128,11 +129,11 @@ export default function ProfilePage() {
         }
       } else {
         const error = await response.json().catch(() => ({}));
-        alert(`Upload failed: ${formatApiError(error, 'Unknown error')}`);
+        toast.error('Upload failed', formatApiError(error, 'Unknown error'));
       }
     } catch (error) {
       console.error('Upload error:', error);
-      alert('Failed to upload avatar');
+      toast.error('Failed to upload avatar');
     } finally {
       setUploading(false);
       if (event.target) {
@@ -152,11 +153,11 @@ export default function ProfilePage() {
         }
       } else {
         const error = await response.json().catch(() => ({}));
-        alert(`Remove failed: ${formatApiError(error, 'Unknown error')}`);
+        toast.error('Remove failed', formatApiError(error, 'Unknown error'));
       }
     } catch (error) {
       console.error('Remove avatar error:', error);
-      alert('Failed to remove avatar');
+      toast.error('Failed to remove avatar');
     }
   };
 
@@ -180,7 +181,7 @@ export default function ProfilePage() {
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        alert(formatApiError(err, 'Failed to save profile'));
+        toast.error('Failed to save profile', formatApiError(err, 'Unknown error'));
         return;
       }
 
@@ -205,7 +206,7 @@ export default function ProfilePage() {
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
       console.error(e);
-      alert('Failed to save profile');
+      toast.error('Failed to save profile');
     }
   };
 
@@ -216,7 +217,10 @@ export default function ProfilePage() {
         subtitle="Manage your personal information"
         actions={
           <button
+            type="button"
             onClick={handleSave}
+            // Faded until something changes, as Organization › General's Save.
+            disabled={draft.dirty.length === 0}
             className={
               saved
                 ? 'account-profile-save-button account-profile-save-button-saved'

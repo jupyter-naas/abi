@@ -17,6 +17,7 @@ import {
   Trash2,
   UploadCloud,
 } from 'lucide-react';
+import { useConfirm } from '@/components/ui/dialogs';
 import { authFetch } from '@/stores/auth';
 import { useEnsureSelectedRepo } from '@/stores/code';
 
@@ -57,6 +58,7 @@ export default function BranchesPage() {
   const [token, setToken] = useState<{ username: string; token: string } | null>(null);
   const [tokenBusy, setTokenBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -138,7 +140,7 @@ export default function BranchesPage() {
   };
 
   const remove = async (name: string) => {
-    if (!window.confirm(`Delete branch "${name}"? This cannot be undone.`)) return;
+    if (!(await confirm({ title: `Delete branch "${name}"?`, description: 'This cannot be undone.' }))) return;
     setBusy(true);
     setError(null);
     try {
@@ -181,6 +183,7 @@ export default function BranchesPage() {
 
   return (
     <div className="flex h-full flex-col">
+      {confirmDialog}
       <div className="flex flex-shrink-0 items-center gap-3 border-b border-border/50 px-4 py-2">
         <button
           onClick={() => void refresh()}

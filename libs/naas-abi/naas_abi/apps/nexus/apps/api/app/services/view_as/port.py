@@ -48,6 +48,18 @@ class WorkspaceRef:
 
 
 @dataclass(frozen=True)
+class Eligibility:
+    """The workspaces a person may be viewed in, and when there is none, why:
+    ``not_signed_in`` (no Nexus account linked to the IAM id: the view reads the groups of
+    their last session), ``no_workspace`` (in none), ``refused`` (IAM refuses each one;
+    ``detail`` its first words)."""
+
+    workspaces: list[WorkspaceRef]
+    reason: str | None = None
+    detail: str | None = None
+
+
+@dataclass(frozen=True)
 class RecordedGroups:
     """The IAM groups the person's most recent sign-in session recorded."""
 

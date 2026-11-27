@@ -196,14 +196,24 @@ describe('PoliciesView at a workspace', () => {
     await mounted!.type(field('Policy name'), name);
   };
 
-  it('lists the level’s own and, read-only, those it may attach from above', async () => {
+  it('lists the workspace’s own policies only: those from above open from their links', async () => {
     const api = await open(() => true, listed, wsScope);
     expect(api.listPolicies).toHaveBeenCalledWith(undefined, WS);
-    expect(document.querySelector('[data-policy="pol_org"]')?.textContent).toContain('Organization acme');
-    expect(document.querySelector('[aria-label="Delete Org readers"]')).toBeNull();
     expect(document.querySelector('[aria-label="Delete Recruiters"]')).not.toBeNull();
-    await mounted!.click(document.querySelector('[data-policy="pol_org"] button'));
-    expect(mounted!.host.textContent).toContain('Read only');
+    // The organization's and the platform's (the built-in roles among them) are not the
+    // workspace's: not listed here, still attached from "+ Attach" and opened from a link.
+    expect(document.querySelector('[data-policy="pol_org"]')).toBeNull();
+    expect(document.querySelector('[data-policy^="builtin."]')).toBeNull();
+  });
+
+  it('opens a policy from above by its link, read-only', async () => {
+    await mounted?.unmount();
+    const api = fake(listed);
+    mounted = await mount(PoliciesView, { api, can: () => true, scope: wsScope, directory: EMPTY_DIRECTORY, focus: 'pol_org' });
+    await mounted.flush();
+    await mounted.flush();
+    expect(document.querySelector('[data-policy-page="pol_org"]')).not.toBeNull();
+    expect(mounted.host.textContent).toContain('Read only');
   });
 
   it('offers by publisher: the engine, naas_abi, then the modules', async () => {
@@ -432,13 +442,18 @@ describe('PoliciesView sub-policies', () => {
   const publishers = vi.fn((_scope: string, parent?: string | null) => Promise.resolve(parent === 'pol_o' ? withinO : adminPublishers));
 
   it('shows the policies as a tree of parents and sub-policies', async () => {
-    await open(() => true, listed, wsScope);
-    const rows = [...document.querySelectorAll('[data-policy]')].map((r) => [r.getAttribute('data-policy'), r.getAttribute('data-depth')]);
-    expect(rows).toEqual([
+    await open(() => true, listed, PLATFORM_ACCESS_SCOPE);
+    const rows = () => [...document.querySelectorAll('[data-policy]')].map((r) => [r.getAttribute('data-policy'), r.getAttribute('data-depth')]);
+    expect(rows()).toEqual([
       ['pol_o', '0'],
       ['pol_w', '1'],
     ]);
     expect(document.querySelector('[data-policy="pol_w"] [aria-label="Sub-policy"]')).not.toBeNull();
+
+    // At the workspace, its own only: the sub-policy at the top, its parent named on its page.
+    await mounted!.unmount();
+    await open(() => true, listed, wsScope);
+    expect(rows()).toEqual([['pol_w', '0']]);
   });
 
   it('creates a sub-policy offering only what the parent has, saved with its parent', async () => {

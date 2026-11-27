@@ -62,6 +62,16 @@ def under_scope(pattern: str) -> bool:
     return pattern == SCOPE or pattern.startswith((SCOPE_PREFIX, OLD_SCOPE_PREFIX))
 
 
+def is_given(statement: Statement) -> bool:
+    """Whether ``statement`` is a given statement: an Allow whose resources are
+    all absolute (no variable). In a container's bound it grants to the
+    container's members (AGENTS.md, "Given statements"); anywhere else it is
+    an ordinary Allow."""
+    return statement.effect == "Allow" and not any(
+        "${" in pattern for pattern in statement.resources
+    )
+
+
 _SID = re.compile(r"^[A-Za-z0-9]{1,64}$")
 _ACTION_PATTERN = re.compile(r"^(\*|[a-z?*][a-z0-9_?*]*:[A-Za-z0-9?*]+)$")
 _STATEMENT_KEYS = frozenset({"sid", "effect", "actions", "resources"})
@@ -149,6 +159,25 @@ class PolicyDocument:
         )
 
     @property
+    def confined_or_given(self) -> bool:
+        """Whether every Allow is confined to ``${scope}`` or is a given
+        statement (``is_given``): what a container's bound may hold."""
+        return all(
+            is_given(statement) or all(under_scope(p) for p in statement.resources)
+            for statement in self.statements
+            if statement.effect == "Allow"
+        )
+
+    @property
+    def given(self) -> tuple[tuple[int, Statement], ...]:
+        """The given statements (``is_given``), with their index."""
+        return tuple(
+            (index, statement)
+            for index, statement in enumerate(self.statements)
+            if is_given(statement)
+        )
+
+    @property
     def wholly_within_scope(self) -> bool:
         """Whether every resource pattern, a Deny's included, is ``${scope}``
         or ``${scope}/...``: what a policy owned by a container is, so that,
@@ -173,28 +202,45 @@ def denies_beyond_scope(documents: Iterable[PolicyDocument]) -> bool:
     )
 
 
-def check_owned_document(document: PolicyDocument, owner: str) -> None:
+def check_owned_document(
+    document: PolicyDocument, owner: str, *, given: bool = True
+) -> None:
     """A policy owned by a container (``owner``) is written for its scope: its
     Allow and Deny patterns are all ``${scope}`` or ``${scope}/...``, so it is
     always attached at a scope and reaches nothing beyond it, whoever holds it.
-    ``PolicyValidationError`` names each pattern that does not."""
+    One exception: a given statement (``is_given``, absolute names only), which
+    grants only as the container's bound and is held-checked unscoped.
+    ``PolicyValidationError`` names each pattern that does not fit, and each
+    Allow mixing ``${scope}`` with absolute names. ``given=False``: no
+    exception."""
     if owner == PLATFORM_SCOPE or document.wholly_within_scope:
         return
-    outside = sorted(
-        {
-            pattern
-            for statement in document.statements
-            for pattern in statement.resources
-            if not under_scope(pattern)
-        }
-    )
-    raise PolicyValidationError(
-        [
-            f"A policy of {owner} names only ${{scope}} and resources under "
-            f"${{scope}}/, and {pattern!r} is not"
-            for pattern in outside
-        ]
-    )
+    errors: list[str] = []
+    outside: set[str] = set()
+    for index, statement in enumerate(document.statements):
+        if given and is_given(statement):
+            continue
+        beyond = [p for p in statement.resources if not under_scope(p)]
+        if (
+            statement.effect == "Allow"
+            and beyond
+            and len(beyond) < len(statement.resources)
+            and not any("${" in p for p in beyond)
+        ):
+            errors.append(
+                f"statements[{index}] mixes ${{scope}} and absolute names: write "
+                "what is outside the scope in a statement of its own"
+            )
+            continue
+        outside.update(beyond)
+    errors += [
+        f"A policy of {owner} names only ${{scope}} and resources under "
+        f"${{scope}}/ (an Allow may name only absolute names instead), and "
+        f"{pattern!r} is not"
+        for pattern in sorted(outside)
+    ]
+    if errors:
+        raise PolicyValidationError(errors)
 
 
 def within_scope(statement: Statement) -> Statement | None:

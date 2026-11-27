@@ -7,30 +7,9 @@
 }
 
 /* Theme section */
-.account-appearance-theme-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
 
-.account-appearance-theme-heading {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
 
-.account-appearance-theme-label {
-  margin: 0;
-  font-weight: var(--font-weight-medium);
-  color: var(--foreground-hex);
-}
 
-.account-appearance-theme-description {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-sm);
-  color: var(--muted-foreground-hex);
-}
 
 .account-appearance-theme-grid {
   display: grid;
@@ -41,12 +20,6 @@
 @media (min-width: 640px) {
   .account-appearance-theme-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 768px) {
-  .account-appearance-theme-grid {
-    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -118,12 +91,6 @@
 }
 
 /* Hint */
-.account-appearance-hint {
-  padding: var(--space-4);
-  border: 1px solid var(--border-hex);
-  border-radius: var(--org-border-radius, 0px);
-  background-color: var(--surface-subtle-hex);
-}
 
 .account-appearance-hint-text {
   margin: 0;

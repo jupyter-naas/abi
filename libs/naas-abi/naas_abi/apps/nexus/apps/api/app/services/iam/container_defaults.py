@@ -45,7 +45,7 @@ import json
 import re
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Protocol
 
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
@@ -65,6 +65,8 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     offer_document,
     offer_of,
     with_offer,
+    without_graphs_fields,
+    without_maps_fields,
 )
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
@@ -304,32 +306,66 @@ def _parsed_seed(raw: Any) -> dict[str, Any] | None:
 def enabled_features() -> list[str]:
     """The deployment's enabled features: what a new workspace offers until its
     Features setting turns one off."""
-    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import enabled_feature_catalog
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import deployment_catalog
     from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
 
     try:
-        return list(enabled_feature_catalog(live_settings().feature_flags))
+        return list(deployment_catalog(live_settings().feature_flags))
     except Exception:  # noqa: BLE001 - no settings: no feature offered
         logger.exception("The enabled features could not be read: a new workspace offers none")
         return []
 
 
+def ensure_platform_offer(iam: Any) -> str:
+    """ "Platform access", made from the deployment's ``enabled_features`` (Settings
+    aside: no offer switches it) when there is none. As ``api``."""
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
+        PINNED_FEATURES,
+        enabled_feature_catalog,
+    )
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+    from naas_abi.apps.nexus.apps.api.app.services.iam import platform_offer
+
+    configured = enabled_feature_catalog(live_settings().feature_flags)
+    return platform_offer.ensure(iam, [key for key in configured if key not in PINNED_FEATURES])
+
+
 def new_workspace_offer(slug: str | None, catalog_seed: dict[str, Any] | None) -> Offer:
     """What a new workspace offers: its seed's agents, apps and shared modules
-    (``workspace_offer.seeded_offer``), and every enabled feature. The unresolved
-    seed refs are logged."""
+    (``workspace_offer.seeded_offer``), every enabled feature, and every map of the
+    platform (``platform_maps``). The unresolved seed refs are logged."""
     from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import seeded_offer
 
     features = enabled_features()
     seeded = seeded_offer(slug, catalog_seed, features=features)
     if seeded is None:
-        return Offer(features=frozenset(features))
+        from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
+            EVERY_MODEL,
+            default_search_sources,
+        )
+
+        return Offer(
+            features=frozenset(features),
+            search_sources=default_search_sources(),
+            models=frozenset({EVERY_MODEL}),
+        ).merged(platform_maps())
     offer, unresolved = seeded
     if unresolved:
         logger.warning(
             f"Workspace {slug}: not offered, its module is not loaded: {', '.join(unresolved)}"
         )
-    return offer
+    return offer.merged(platform_maps())
+
+
+def platform_maps() -> Offer:
+    """Every feed and basemap of the deployment, the ones added later too
+    (``given_maps.every_platform_map``): what a workspace used before its offer said it
+    (``maps_grants`` with no row), and what a new one is given."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import given_maps
+
+    return Offer(
+        **given_maps.fields_of(given_maps.every_platform_map(), container_of=lambda _w: None)
+    )
 
 
 def widen_offer(iam: Any, policy_id: str | None, offer: Offer) -> bool:
@@ -493,8 +529,11 @@ def group_attachments(
         found += [
             (roles.ADMIN, admins, container),
             (roles.ADMIN, admins, below),
-            (roles.VIEWER, membership, MY_CONTAINERS_SCOPE),
-            (levels.viewer_access, membership, MY_CONTAINERS_SCOPE),
+            # "<O> people" sees O, nothing it holds: "Organization view" grants it
+            # through ``${my workspaces}``, and held at O it is O's bound, which keeps
+            # the level policies to it there (the roles stop at O: no_membership_roles).
+            (levels.org_view, membership, MY_CONTAINERS_SCOPE),
+            (levels.org_view, membership, container),
         ]
     else:
         if access:
@@ -879,8 +918,9 @@ class ContainerDefaults:
         # A workspace in an organization offers its seed and the enabled features,
         # bounded by the organization's offer (its parent): the creator's picks never
         # reach beyond it. One in none has no parent to bound it: it offers nothing
-        # until the platform administrators widen it, as before.
-        offer = None
+        # until the platform administrators widen it, as before; only the platform's
+        # maps are given to it, as to any workspace (``platform_maps``).
+        offer = platform_maps()
         if org_id:
             seed_of = getattr(store, "workspace_seed", None)
             seed = await seed_of(workspace_id) if callable(seed_of) else None
@@ -1145,7 +1185,11 @@ def apply_seeded_offers(
             logger.exception(f"The seed of {workspace_id} is not in its access policy")
             report.failed.append(f"{workspace_id}: {exc}")
         if org_id:
-            by_org[org_id] = by_org.get(org_id, Offer()).merged(offer)
+            # What a workspace is given of the graphs and the maps is its own: never its
+            # organization's.
+            by_org[org_id] = by_org.get(org_id, Offer()).merged(
+                replace(offer, **without_graphs_fields(), **without_maps_fields())
+            )
     for org_id, offer in sorted(by_org.items()):
         record = records.get(org_container(org_id))
         try:
@@ -1339,9 +1383,29 @@ async def migrate(db: AsyncSession, defaults: ContainerDefaults = CONTAINER_DEFA
             report = Report()
             report.notes.append(f"Waits for {move}: nothing made")
             return report
+    # What the platform offers its organizations, made once from ``enabled_features``
+    # (``platform_offer``): until it is made, those decide alone, as before.
+    try:
+        await run_in_threadpool(lambda: _as_api(ensure_platform_offer))
+    except Exception:  # noqa: BLE001 - made at the next start; enabled_features decide meanwhile
+        logger.exception("Platform access not made: the deployment's enabled_features decide")
     orgs, workspaces = await read_nexus(db)
     known = {record.container: record for record in await store.all()}
     offers = await configured_offers(db)
+    # A configured workspace made now is given the graphs its configuration names
+    # (``graphs_offer.configured_graphs``); one made before has them in its offer.
+    missing = {
+        w: workspaces[w][0]
+        for w in offers
+        if w in workspaces and workspace_container(workspaces[w][0], w) not in known
+    }
+    if missing:
+        from naas_abi.apps.nexus.apps.api.app.services.iam.graphs_offer import configured_graphs
+
+        graphs = await configured_graphs(db, missing)
+        offers = {w: o.merged(graphs[w]) if w in graphs else o for w, o in offers.items()}
+        # And every map of the platform, as any new workspace (``new_workspace_offer``).
+        offers = {w: o.merged(platform_maps()) if w in missing else o for w, o in offers.items()}
     made, report = await run_in_threadpool(
         lambda: _as_api(lambda iam: plan_and_apply(iam, orgs, workspaces, known, offers))
     )

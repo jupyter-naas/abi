@@ -2,8 +2,8 @@
 
 /** The keyboard map, opened with ``?``. */
 import { Keyboard } from 'lucide-react';
+import { Dialog } from '@/components/ui/dialog';
 import { Kbd } from './data-ui';
-import { Modal } from './modal';
 
 export const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['/'], label: 'Search' },
@@ -22,7 +22,7 @@ export const SHORTCUTS: { keys: string[]; label: string }[] = [
 
 export function ShortcutsSheet({ onClose }: { onClose: () => void }) {
   return (
-    <Modal title="Keyboard shortcuts" icon={<Keyboard size={18} />} onClose={onClose}>
+    <Dialog title="Keyboard shortcuts" icon={<Keyboard size={18} />} onClose={onClose}>
       <dl className="data-shortcuts">
         {SHORTCUTS.map((s) => (
           <div key={s.label} className="data-shortcut">
@@ -35,6 +35,6 @@ export function ShortcutsSheet({ onClose }: { onClose: () => void }) {
           </div>
         ))}
       </dl>
-    </Modal>
+    </Dialog>
   );
 }

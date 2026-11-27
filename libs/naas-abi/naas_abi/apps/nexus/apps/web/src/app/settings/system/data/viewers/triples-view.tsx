@@ -2,6 +2,7 @@
 
 /** RDF triples as subject / predicate / object, IRIs compacted with prefixes. */
 import { useMemo, useState } from 'react';
+import { SearchBox } from '@/components/ui/search-box';
 import { compactIri, formatCount } from '../data-model';
 
 export type Term =
@@ -61,13 +62,7 @@ export function TriplesView({
   return (
     <div className="rdf">
       <div className="rdf-toolbar">
-        <input
-          className="data-input data-input-sm"
-          placeholder="Filter triples"
-          aria-label="Filter triples"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
+        <SearchBox size="sm" className="rdf-filter" placeholder="Filter triples" value={filter} onChange={setFilter} />
         <span className="data-muted">
           {total !== null && total !== undefined && total > triples.length
             ? `${formatCount(shown.length)} shown · first ${formatCount(triples.length)} of ${formatCount(total)}`

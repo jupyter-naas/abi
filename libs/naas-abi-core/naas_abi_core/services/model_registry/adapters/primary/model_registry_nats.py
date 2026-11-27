@@ -15,6 +15,7 @@ from naas_abi_core import logger
 from naas_abi_core.engine.call_context import (
     ANONYMOUS,
     CallContext,
+    current_call_context,
     service_account,
     use_call_context,
 )
@@ -412,6 +413,26 @@ class ModelRegistryNATS(SessionHost):
         if msg.reply:
             await reply(msg, payload)
 
+    async def _substituted(self, ref):
+        """``ref``, or the chat model the host gives the caller's container instead
+        (``substitute_chat_model``): a module asks for its own model, the workspace it
+        runs in may use another. The pinned provider and variant go with the model
+        asked. Never an embedding."""
+        if ref.kind == "embedding":
+            return ref
+        canonical = ref.canonical_id
+        if not canonical and ref.kind == "chat":
+            canonical = self.registry.default_chat_model_id or ""
+        if not canonical:
+            return ref
+        container = current_call_context().container
+        found = await asyncio.to_thread(
+            self.registry.substitute_chat_model, canonical, container
+        )
+        if not isinstance(found, str) or found == canonical:
+            return ref
+        return pb.ModelRef(canonical_id=found, kind=ref.kind)
+
     def _resolve(self, ref, action="Resolve"):
         """``(canonical id, model, run configuration)`` of a reference, checked
         in the domain service with this operation's ``action``."""
@@ -469,9 +490,8 @@ class ModelRegistryNATS(SessionHost):
         # endpoint and credentials are the registered model's own.
         options = checked_options(options, GENERATION_OPTIONS)
         tool_options = checked_options(tool_options, TOOL_OPTIONS)
-        canonical, wrapper, config = await asyncio.to_thread(
-            self._resolve, request.ref, action
-        )
+        ref = await self._substituted(request.ref)
+        canonical, wrapper, config = await asyncio.to_thread(self._resolve, ref, action)
         model = wrapper.model
         if request.tools_json:
             tools = [decode_json(tool) for tool in request.tools_json]
@@ -578,7 +598,8 @@ class ModelRegistryNATS(SessionHost):
                 or "",
             )
         if operation == "resolve":
-            cid, model, _ = await asyncio.to_thread(self._resolve, request.ref)
+            ref = await self._substituted(request.ref)
+            cid, model, _ = await asyncio.to_thread(self._resolve, ref)
             return pb.ResolveResponse(model=self._descriptor(cid, model))
         if operation == "stream_close":
             stream = self.streams.get(request.stream_id)

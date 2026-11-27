@@ -66,6 +66,8 @@ export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   'maps',
   'skills',
   'apps',
+  // Settings › Datasets (new, but `getWorkspacePath(null, ...)` yields it too).
+  'datasets',
   'models',
   // Workspace settings › Drives, gone: its page redirects (Platform Settings' own is /settings/drives).
   'drives',
@@ -78,6 +80,10 @@ export const LEGACY_WORKSPACE_SETTINGS_SLUGS: readonly string[] = [
   // Access of the workspace (Platform Settings' own is /settings/access).
   'policies',
   'groups',
+  // Features and Files of the workspace (new, but `getWorkspacePath(null, ...)` yields them too).
+  'features',
+  'files',
+  'core-services',
 ];
 
 /**

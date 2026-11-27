@@ -2,7 +2,10 @@
 
 /** Every job across engine and remote modules, the ones needing attention first. */
 import { ListTree, Play, Server, Workflow } from 'lucide-react';
-import { Badge, EmptyState, Hint, RelativeTime } from '../data/data-ui';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Hint, RelativeTime } from '../data/data-ui';
 import { isWorkflow, moduleLabel, sortJobs } from './jobs-model';
 import type { JobView, RunSummary } from './jobs-types';
 import { Countdown, RunDuration, RunStatus, RunStrip } from './jobs-ui';
@@ -51,11 +54,15 @@ export function JobsTable({
 }) {
   if (!jobs.length) {
     return (
-      <EmptyState icon={Workflow} title={filtered ? 'No job matches' : 'No jobs yet'}>
-        {filtered
-          ? 'Nothing matches the filter.'
-          : 'Modules declare jobs with JobDescriptor or the @job decorator, and workflows with @workflow; they show up here with their schedules and runs.'}
-      </EmptyState>
+      <EmptyState
+        icon={<Workflow size={22} strokeWidth={1.5} />}
+        title={filtered ? 'No job matches' : 'No jobs yet'}
+        description={
+          filtered
+            ? 'Nothing matches the filter.'
+            : 'Modules declare jobs with JobDescriptor or the @job decorator, and workflows with @workflow; they show up here with their schedules and runs.'
+        }
+      />
     );
   }
   return (
@@ -86,12 +93,12 @@ export function JobsTable({
               <span className="jobs-name-title">
                 {job.name}
                 {isWorkflow(job) && (
-                  <Badge tone="success" title="A durable workflow: typed input, checkpointed steps">
+                  <Badge variant="success" title="A durable workflow: typed input, checkpointed steps">
                     workflow
                   </Badge>
                 )}
                 {job.location === 'remote' && (
-                  <Badge tone="info" title={`${job.instances} live instance(s)`}>
+                  <Badge variant="info" title={`${job.instances} live instance(s)`}>
                     remote{job.instances > 1 ? ` ×${job.instances}` : ''}
                   </Badge>
                 )}
@@ -105,15 +112,15 @@ export function JobsTable({
           <RunStrip runs={job.recent} onOpen={onOpenRun} />
           <LastRun run={job.last_run} />
           <span className="jobs-now data-align-end">
-            {job.running > 0 && <Badge tone="info">{job.running} running</Badge>}
-            {(job.queued ?? 0) > 0 && <Badge tone="warn">{job.queued} queued</Badge>}
+            {job.running > 0 && <Badge variant="info">{job.running} running</Badge>}
+            {(job.queued ?? 0) > 0 && <Badge variant="warning">{job.queued} queued</Badge>}
             {job.running === 0 && !job.queued && <span className="data-muted">idle</span>}
           </span>
           <span className="jobs-row-actions" onClick={(e) => e.stopPropagation()}>
             <Hint label={`Run ${job.name} now`}>
-              <button type="button" className="data-button" onClick={() => onRun(job)} aria-label={`Run ${job.name} now`}>
+              <Button variant="secondary" size="sm" onClick={() => onRun(job)} aria-label={`Run ${job.name} now`}>
                 <Play size={13} aria-hidden="true" /> Run
-              </button>
+              </Button>
             </Hint>
           </span>
         </div>

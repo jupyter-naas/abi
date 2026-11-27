@@ -765,8 +765,8 @@ class SkillModel(Base):
 
 
 class SkillWorkspaceSwitchModel(Base):
-    """An organization skill turned on or off in one workspace of its organization,
-    by that workspace's admins."""
+    """Unused: an organization skill is no longer switched per workspace (no route
+    reads or writes it). Kept until a migration drops the table."""
 
     __tablename__ = "skill_workspace_switches"
 

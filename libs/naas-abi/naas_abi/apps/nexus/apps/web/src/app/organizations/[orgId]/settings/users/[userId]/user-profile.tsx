@@ -1,13 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertCircle, Camera, ChevronDown, RefreshCw, Save, Trash2, X } from 'lucide-react';
+import { AlertCircle, Camera, RefreshCw, Save, Trash2, X } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { useConfirm } from '@/components/ui/dialogs';
-import { AccountSectionCard } from '@/app/account/components/account-section-card';
+import { usePageDraft } from '@/hooks/use-page-state';
 import { orgSettingsSectionPath } from '../../lib/nav';
 import { removableFromOrganization, removalConfirmation } from '../users-model';
 import {
@@ -20,11 +20,15 @@ import {
 import '@/components/access/access-base.css';
 import '@/components/access/access.css';
 import { ViewAsControl } from '@/components/access/people/view-as-control';
-import { SettingsNotice } from '@/components/settings/settings-ui';
-import { PersonBack, PersonInfoSection } from '@/components/access/people/person-info';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
+import { PersonBack } from '@/components/access/people/person-info';
+import { InstanceHeader } from '@/components/access/instance-header';
 import { MemberRoleSection } from '@/components/people/member-role-section';
-import { UsersReloadButton } from '@/components/settings/users-table/users-table-actions';
 import '@/app/account/profile/profile.css';
+// The unsaved-changes bar and the Save button of the settings pages.
+import '@/app/organizations/[orgId]/settings/general/general.css';
+import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 import '../users.css';
 
 const BIO_MAX_LENGTH = 2000;
@@ -60,11 +64,6 @@ async function readApiError(response: Response, fallback: string): Promise<strin
   return fallback;
 }
 
-const emptyDraft = (): Record<MemberProfileField, string> =>
-  Object.fromEntries(PROFILE_FIELDS.map((field) => [field, ''])) as Record<
-    MemberProfileField,
-    string
-  >;
 
 /**
  * One member of the organization, laid out like Account Settings > Profile.
@@ -91,18 +90,15 @@ export default function OrgUserProfilePage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [refused, setRefused] = useState(false);
-  const [draft, setDraft] = useState(emptyDraft);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  // Bumped by Reload: their Role is read again too.
-  const [nonce, setNonce] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /** ``resetForm: false`` refreshes the data (e.g. a new picture) and keeps unsaved edits. */
-  const load = useCallback(async ({ resetForm = true }: { resetForm?: boolean } = {}) => {
+  /** Read the member again (after a save, a new picture, a change of role): unsaved edits stay. */
+  const load = useCallback(async () => {
     try {
       const res = await authFetch(
         `/api/organizations/${orgId}/members/${encodeURIComponent(userId)}`
@@ -117,13 +113,8 @@ export default function OrgUserProfilePage() {
         return;
       }
       const data: MemberDetails = await res.json();
+      // The draft (usePageDraft) rebases on it: fields edited and not saved stay.
       setDetails(data);
-      if (!resetForm) return;
-      setDraft(
-        Object.fromEntries(
-          PROFILE_FIELDS.map((field) => [field, data.organization_profile[field] ?? ''])
-        ) as Record<MemberProfileField, string>
-      );
     } catch {
       setLoadError('Failed to load this user. Please try again.');
     } finally {
@@ -135,6 +126,24 @@ export default function OrgUserProfilePage() {
     if (orgId && userId) void load();
   }, [orgId, userId, load]);
 
+  // Their profile in this organization as saved, and the unsaved edits over it: kept for a
+  // return to the page, as every settings form keeps its own (lib/page-state.ts).
+  const savedProfile = details?.organization_profile ?? null;
+  const server = useMemo(
+    () =>
+      savedProfile
+        ? (Object.fromEntries(PROFILE_FIELDS.map((f) => [f, savedProfile[f] ?? ''])) as Record<
+            MemberProfileField,
+            string
+          >)
+        : null,
+    [savedProfile]
+  );
+  const pageDraft = usePageDraft(
+    orgId && userId ? { scope: `organization:${orgId}`, page: 'user', detail: userId } : null,
+    server
+  );
+
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading user...</p>;
   if (!details) {
@@ -143,9 +152,9 @@ export default function OrgUserProfilePage() {
         <PersonBack onClick={() => router.push(orgSettingsSectionPath(orgId, 'users'))} />
         {refused && <p className="text-sm text-muted-foreground">Only the organization’s admins see its people.</p>}
         {!refused && (
-          <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+          <Notice tone="error" icon={<AlertCircle size={14} />}>
             {loadError || 'User not found.'}
-          </SettingsNotice>
+          </Notice>
         )}
       </div>
     );
@@ -154,6 +163,8 @@ export default function OrgUserProfilePage() {
   const { member, account, organization_profile: orgProfile, workspaces } = details;
   const isSelf = member.user_id === authUser?.id;
   const canRemove = removableFromOrganization(member.user_id, authUser?.id);
+  const draft = pageDraft.values ?? (server as Record<MemberProfileField, string>);
+  const setField = (field: MemberProfileField, value: string) => pageDraft.set({ [field]: value });
   const changes = changedProfileFields(orgProfile, draft);
   // Their Role (level, org admin, workspaces, groups, policies) is saved in its own section.
   const dirty = Object.keys(changes).length > 0;
@@ -176,6 +187,7 @@ export default function OrgUserProfilePage() {
         setError(failed);
         return;
       }
+      pageDraft.discard();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } finally {
@@ -217,7 +229,7 @@ export default function OrgUserProfilePage() {
     setUploading(true);
     try {
       await uploadMemberAvatar(orgId, member.user_id, file);
-      await load({ resetForm: false });
+      await load();
     } catch (err) {
       setError(formatError(err, 'Failed to upload the picture'));
     } finally {
@@ -230,32 +242,118 @@ export default function OrgUserProfilePage() {
     setError('');
     try {
       await removeMemberAvatar(orgId, member.user_id);
-      await load({ resetForm: false });
+      await load();
     } catch (err) {
       setError(formatError(err, 'Failed to remove the picture'));
     }
   };
 
+  const textField = ({ field, label, placeholder }: (typeof TEXT_FIELDS)[number]) => (
+    <div key={field} className="account-profile-field">
+      <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
+        {label}
+      </label>
+      <input
+        id={`org-member-${field}`}
+        type="text"
+        value={draft[field]}
+        onChange={(event) =>
+          setField(field, field === 'interest' ? event.target.value.slice(0, INTEREST_MAX_LENGTH) : event.target.value)
+        }
+        placeholder={placeholder}
+        className="account-profile-field-input"
+      />
+    </div>
+  );
+  const readOnlyField = (key: string, label: string, value: string, title?: string) => (
+    <div className="account-profile-field">
+      <label className="account-profile-field-label" htmlFor={`org-member-${key}`}>
+        {label}
+      </label>
+      <input
+        id={`org-member-${key}`}
+        type="text"
+        value={value}
+        className="account-profile-field-input account-profile-field-input-readonly"
+        title={title}
+        readOnly
+        aria-readonly="true"
+      />
+    </div>
+  );
+
   return (
     <div className="access-instance-page">
-      {/* The page alone: back to Users, then who it is about (Info), their profile and what they hold. */}
+      {/* The page alone: back to Users, then who it is about, with their picture changed in
+          place as on Account › Profile, then their profile and what they hold. */}
       <PersonBack onClick={() => router.push(orgSettingsSectionPath(orgId, 'users'))} />
-      <PersonInfoSection
-        id={member.principal_id ?? member.user_id}
+      <InstanceHeader
         name={displayName}
-        email={account.email ?? null}
-        image={orgAvatarUrl}
+        id={member.principal_id ?? member.user_id}
+        avatar={
+          <div className="account-profile-avatar-wrapper" data-member-avatar="">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+              onChange={(event) => void handleAvatarUpload(event)}
+              className="account-profile-avatar-input"
+            />
+            {orgAvatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={orgAvatarUrl} alt={displayName} className="account-profile-avatar-image" />
+            ) : (
+              <div className="account-profile-avatar-placeholder">{displayName.charAt(0).toUpperCase()}</div>
+            )}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="account-profile-avatar-upload-button"
+              title="Upload a picture for this organization"
+              aria-label="Upload a picture for this organization"
+              data-action="upload-picture"
+            >
+              {uploading ? (
+                <RefreshCw size={16} className="account-profile-avatar-upload-button-spin" />
+              ) : (
+                <Camera size={16} />
+              )}
+            </button>
+          </div>
+        }
+        meta={
+          <>
+            {account.email ? <span>{account.email}</span> : null}
+            <span className="block">Organization picture (max 2MB): their account shows it when it has none.</span>
+            {orgAvatarUrl ? (
+              <button
+                type="button"
+                onClick={() => void handleAvatarRemove()}
+                className="account-profile-avatar-remove-button"
+                data-action="remove-picture"
+              >
+                <X size={12} />
+                Remove picture
+              </button>
+            ) : null}
+          </>
+        }
         actions={
           <>
             {member.principal_id && !isSelf && (
               <ViewAsControl personId={member.principal_id} name={displayName} workspaceId={null} />
             )}
-            <UsersReloadButton
-              onReload={() => {
-                setNonce((n) => n + 1);
-                void load({ resetForm: false });
-              }}
-            />
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={!dirty || saving}
+              className={saved ? 'org-settings-primary-button org-settings-primary-button-saved' : 'org-settings-primary-button'}
+              data-action="save-profile"
+            >
+              <Save size={16} />
+              {saved ? 'Saved!' : saving ? 'Saving...' : 'Save changes'}
+            </button>
             <button
               type="button"
               onClick={() => void handleRemove()}
@@ -272,194 +370,65 @@ export default function OrgUserProfilePage() {
       />
 
       {(error || loadError) && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {error || loadError}
-        </SettingsNotice>
+        </Notice>
       )}
-
-      {/* Their profile in this organization first, folded; then where they work. */}
-      <details className="group border border-border bg-card" data-section="profile">
-        <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-foreground">Profile</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Their profile in this organization. Their account shows these values when it has none of its own.
-            </p>
-          </div>
-          <ChevronDown size={16} className="mt-0.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="account-profile-page border-t border-border p-4">
-          <div className="account-profile-avatar-section">
-            <div className="account-profile-avatar-wrapper">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
-                onChange={(event) => void handleAvatarUpload(event)}
-                className="account-profile-avatar-input"
-              />
-              {orgAvatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={orgAvatarUrl} alt={displayName} className="account-profile-avatar-image" />
-              ) : (
-                <div className="account-profile-avatar-placeholder">
-                  {displayName.charAt(0).toUpperCase()}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="account-profile-avatar-upload-button"
-                title="Upload a picture for this organization"
-              >
-                {uploading ? (
-                  <RefreshCw size={16} className="account-profile-avatar-upload-button-spin" />
-                ) : (
-                  <Camera size={16} />
-                )}
-              </button>
-            </div>
-            <div>
-              <h3 className="account-profile-avatar-info-name">{displayName}</h3>
-              <p className="account-profile-avatar-info-email">{account.email}</p>
-              <p className="account-profile-avatar-info-hint">
-                Organization picture (max 2MB). Their account shows it when it has no picture.
-              </p>
-              {orgAvatarUrl ? (
-                <button
-                  type="button"
-                  onClick={() => void handleAvatarRemove()}
-                  className="account-profile-avatar-remove-button"
-                >
-                  <X size={12} />
-                  Remove picture
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <AccountSectionCard padded stack>
-            <div className="account-profile-form-grid">
-              <div className="account-profile-field">
-                <label className="account-profile-field-label" htmlFor="org-member-name">
-                  Full name
-                </label>
-                <input
-                  id="org-member-name"
-                  type="text"
-                  value={account.name ?? ''}
-                  className="account-profile-field-input"
-                  title="The account name (Account Settings > Profile)"
-                  disabled
-                  readOnly
-                />
-              </div>
-              <div className="account-profile-field">
-                <label className="account-profile-field-label" htmlFor="org-member-email">
-                  Email
-                </label>
-                <input
-                  id="org-member-email"
-                  type="email"
-                  value={account.email ?? ''}
-                  className="account-profile-field-input"
-                  disabled
-                  readOnly
-                />
-              </div>
-              {TEXT_FIELDS.slice(0, 2).map(({ field, label, placeholder }) => (
-                <div key={field} className="account-profile-field">
-                  <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
-                    {label}
-                  </label>
-                  <input
-                    id={`org-member-${field}`}
-                    type="text"
-                    value={draft[field]}
-                    onChange={(event) => setDraft((d) => ({ ...d, [field]: event.target.value }))}
-                    placeholder={placeholder}
-                    className="account-profile-field-input"
-                  />
-                </div>
-              ))}
-              {TEXT_FIELDS.slice(2).map(({ field, label, placeholder }) => (
-                <div key={field} className="account-profile-field">
-                  <label className="account-profile-field-label" htmlFor={`org-member-${field}`}>
-                    {label}
-                  </label>
-                  <input
-                    id={`org-member-${field}`}
-                    type="text"
-                    value={draft[field]}
-                    onChange={(event) =>
-                      setDraft((d) => ({
-                        ...d,
-                        [field]:
-                          field === 'interest'
-                            ? event.target.value.slice(0, INTEREST_MAX_LENGTH)
-                            : event.target.value,
-                      }))
-                    }
-                    placeholder={placeholder}
-                    className="account-profile-field-input"
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="account-profile-field">
-              <div className="account-profile-bio-header">
-                <label className="account-profile-field-label" htmlFor="org-member-bio">
-                  Bio
-                </label>
-                <span
-                  className={
-                    draft.bio.length > BIO_MAX_LENGTH
-                      ? 'account-profile-bio-count account-profile-bio-count-over'
-                      : 'account-profile-bio-count'
-                  }
-                >
-                  {draft.bio.length} / {BIO_MAX_LENGTH}
-                </span>
-              </div>
-              <textarea
-                id="org-member-bio"
-                value={draft.bio}
-                onChange={(event) =>
-                  setDraft((d) => ({ ...d, bio: event.target.value.slice(0, BIO_MAX_LENGTH) }))
-                }
-                placeholder={account.bio ?? 'Bio in this organization'}
-                rows={8}
-                maxLength={BIO_MAX_LENGTH}
-                className="account-profile-field-textarea"
-              />
-            </div>
-          </AccountSectionCard>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => void handleSave()}
-              disabled={!dirty || saving}
-              className={
-                saved
-                  ? 'account-profile-save-button account-profile-save-button-saved'
-                  : 'account-profile-save-button'
-              }
-              data-action="save-profile"
-            >
-              <Save size={16} />
-              {saving ? 'Saving...' : saved ? 'Saved!' : 'Save changes'}
-            </button>
-          </div>
+      {pageDraft.dirty.length > 0 ? (
+        <div className="org-settings-general-draft" role="status">
+          <p className="org-settings-general-draft-text">
+            {pageDraft.conflicts.length > 0
+              ? `Changed elsewhere since you began editing: ${pageDraft.conflicts
+                  .map((f) => TEXT_FIELDS.find((t) => t.field === f)?.label ?? 'Bio')
+                  .join(', ')}. Saving keeps your version.`
+              : 'Unsaved changes.'}
+          </p>
+          <button type="button" onClick={pageDraft.discard} className="org-settings-general-draft-discard">
+            Discard changes
+          </button>
         </div>
-      </details>
+      ) : null}
+
+      {/* Info and Profile in one section: their account's name and email once, read-only (their
+          own profile changes them), then their profile in this organization. */}
+      <Card bodyClassName="space-y-6 p-4">
+        <div className="account-profile-form-grid" data-section="profile">
+          {readOnlyField('name', 'Name', account.name ?? '', 'The account name (Account Settings > Profile)')}
+          {readOnlyField('email', 'Email', account.email ?? '')}
+          {TEXT_FIELDS.map(textField)}
+        </div>
+        <div className="account-profile-field">
+          <div className="account-profile-bio-header">
+            <label className="account-profile-field-label" htmlFor="org-member-bio">
+              Bio
+            </label>
+            <span
+              className={
+                draft.bio.length > BIO_MAX_LENGTH
+                  ? 'account-profile-bio-count account-profile-bio-count-over'
+                  : 'account-profile-bio-count'
+              }
+            >
+              {draft.bio.length} / {BIO_MAX_LENGTH}
+            </span>
+          </div>
+          <textarea
+            id="org-member-bio"
+            value={draft.bio}
+            onChange={(event) => setField('bio', event.target.value.slice(0, BIO_MAX_LENGTH))}
+            placeholder={account.bio ?? 'Bio in this organization'}
+            rows={8}
+            maxLength={BIO_MAX_LENGTH}
+            className="account-profile-field-textarea"
+          />
+        </div>
+      </Card>
 
       {!isSelf && (
         <MemberRoleSection
           scope={{ kind: 'organization', id: orgId }}
           userId={member.user_id}
-          nonce={nonce}
-          onChanged={() => void load({ resetForm: false })}
+          onChanged={() => void load()}
         />
       )}
       {confirmDialog}

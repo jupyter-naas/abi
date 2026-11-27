@@ -1272,11 +1272,19 @@ def test_validating_at_a_scope_checks_what_creating_there_does(world, ws2):
         }
 
     at_ws2 = f"/policies/validate?scope={ws2}"
-    for document in (statement("Deny", "*"), statement("Allow", f"{ws2}:triple_store:graph/*")):
-        checked = post(world, at_ws2, "ws2admin", document=document).json()
-        assert checked["valid"] is False and "${scope}" in checked["errors"][0], checked
-        refused = post(world, "/policies", "ws2admin", name="x", document=document, scope=ws2)
-        assert refused.status_code == 422, refused.text
+    # A Deny of a workspace's policy stays within ${scope}.
+    deny = statement("Deny", "*")
+    checked = post(world, at_ws2, "ws2admin", document=deny).json()
+    assert checked["valid"] is False and "${scope}" in checked["errors"][0], checked
+    refused = post(world, "/policies", "ws2admin", name="x", document=deny, scope=ws2)
+    assert refused.status_code == 422, refused.text
+    # An Allow naming only what lies outside is a given statement (what the workspace's
+    # bound gives its people): well formed, but written only by whoever holds it, and a
+    # workspace's admin does not hold every graph of the platform.
+    given = statement("Allow", "abi:triple_store:graph/*")
+    assert post(world, at_ws2, "ws2admin", document=given).json()["valid"] is True
+    refused = post(world, "/policies", "ws2admin", name="x", document=given, scope=ws2)
+    assert refused.status_code == 403, refused.text
     assert post(world, at_ws2, "ws2admin", document=SCOPED_READER).json()["valid"] is True
     # The platform's policies name what they like.
     assert post(world, "/policies/validate", document=statement("Deny", "*")).json()["valid"]

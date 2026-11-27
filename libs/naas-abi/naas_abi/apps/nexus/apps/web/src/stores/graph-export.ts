@@ -12,14 +12,12 @@ import {
   type ExportRecord,
 } from '@/lib/graph-export-records';
 import { authFetch } from '@/stores/auth';
-import type { ToastItem } from '@/components/graph/toast-notification';
+import { toast } from '@/components/ui/toast';
 
 interface GraphExportState {
   recordsByWorkspace: Record<string, ExportRecord[]>;
   isExportPageActive: boolean;
-  toasts: ToastItem[];
   setExportPageActive: (active: boolean) => void;
-  dismissToast: (id: string) => void;
   loadWorkspaceRecords: (workspaceId: string) => void;
   startExport: (
     workspaceId: string,
@@ -35,13 +33,6 @@ interface GraphExportState {
 
 const runningJobs = new Set<string>();
 const initializedWorkspaces = new Set<string>();
-
-function createToast(toast: Omit<ToastItem, 'id'>): ToastItem {
-  return {
-    ...toast,
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-  };
-}
 
 function parseCountHeader(value: string | null): number | undefined {
   if (!value) return undefined;
@@ -119,7 +110,7 @@ async function runExportJob(
       tripleCount: stats.tripleCount,
     });
 
-    const { isExportPageActive, toasts, recordsByWorkspace } = useGraphExportStore.getState();
+    const { isExportPageActive, recordsByWorkspace } = useGraphExportStore.getState();
     const record = (recordsByWorkspace[workspaceId] ?? []).find((item) => item.id === recordId);
     const individuals = record?.kpis?.individuals ?? stats.namedIndividualCount;
     const formatLabel = EXPORT_FORMAT_LABELS[format];
@@ -129,33 +120,14 @@ async function runExportJob(
         individuals != null
           ? `${individuals.toLocaleString()} individuals`
           : 'Export';
-      useGraphExportStore.setState({
-        toasts: [
-          ...toasts,
-          createToast({
-            type: 'success',
-            title: 'Export ready',
-            message: `${graphLabel} (${formatLabel}) — ${individualsLabel} ready to download`,
-          }),
-        ],
-      });
+      toast.success('Export ready', `${graphLabel} (${formatLabel}) — ${individualsLabel} ready to download`);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Export failed';
     updateRecord(workspaceId, recordId, { status: 'error', error: message });
 
-    const { isExportPageActive, toasts } = useGraphExportStore.getState();
-    if (!isExportPageActive) {
-      useGraphExportStore.setState({
-        toasts: [
-          ...toasts,
-          createToast({
-            type: 'error',
-            title: 'Export failed',
-            message: `${graphLabel}: ${message}`,
-          }),
-        ],
-      });
+    if (!useGraphExportStore.getState().isExportPageActive) {
+      toast.error('Export failed', `${graphLabel}: ${message}`);
     }
   } finally {
     runningJobs.delete(recordId);
@@ -178,14 +150,7 @@ function resumeProcessingExports(workspaceId: string, records: ExportRecord[]): 
 export const useGraphExportStore = create<GraphExportState>((set, get) => ({
   recordsByWorkspace: {},
   isExportPageActive: false,
-  toasts: [],
-
   setExportPageActive: (active) => set({ isExportPageActive: active }),
-
-  dismissToast: (id) =>
-    set((state) => ({
-      toasts: state.toasts.filter((toast) => toast.id !== id),
-    })),
 
   loadWorkspaceRecords: (workspaceId) => {
     if (initializedWorkspaces.has(workspaceId)) return;

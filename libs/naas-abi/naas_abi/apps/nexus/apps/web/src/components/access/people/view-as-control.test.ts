@@ -36,6 +36,11 @@ const open = (workspaces: ViewableWorkspace[], over: Partial<Parameters<typeof V
     ...over,
   });
 const button = () => mounted!.host.querySelector('button');
+// The picker is a modal, rendered in document.body.
+const dialog = () => document.querySelector('[role="dialog"]');
+const select = () => document.querySelector('[role="dialog"] select') as HTMLSelectElement;
+const dialogButton = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent === label);
 
 describe('the View as button', () => {
   it('is not shown when no workspace may be viewed', async () => {
@@ -54,46 +59,84 @@ describe('the View as button', () => {
   });
 
   it('asks for the person’s workspaces by their IAM id', async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify([ALPHA]), { status: 200 }));
+    const fetcher = vi.fn(
+      async () => new Response(JSON.stringify({ workspaces: [ALPHA], reason: null, detail: null }), { status: 200 }),
+    );
     vi.stubGlobal('fetch', fetcher);
     mounted = await mount(ViewAsControl, { personId: 'iam carol', name: 'Carol', workspaceId: null });
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalled());
     await mounted.flush();
     expect(String(fetcher.mock.calls[0][0])).toBe(
-      'https://api.example.test/api/iam/view-as/workspaces?principal_id=iam%20carol',
+      'https://api.example.test/api/iam/view-as/eligibility?principal_id=iam%20carol',
     );
     expect(button()?.textContent).toContain('View as Carol');
   });
 });
 
-describe('the picker', () => {
+describe('a View as with no workspace to view', () => {
+  it('is shown disabled, saying why, for a person who has not signed in yet', async () => {
+    mounted = await open([], { viewable: () => Promise.resolve({ workspaces: [], reason: 'not_signed_in' }) });
+    expect(button()?.disabled).toBe(true);
+    expect(button()?.textContent).toContain('View as Carol');
+    // A no-entry box (cursor in CSS) with the reason in its tooltip, described for screen readers.
+    const box = mounted.host.querySelector('[data-view-as-control][data-unavailable]')!;
+    expect(box.classList.contains('access-view-as-unavailable')).toBe(true);
+    expect(box.getAttribute('aria-describedby')).toBe('view-as-unavailable');
+    expect(mounted.host.querySelector('[role="tooltip"]')?.textContent).toBe(
+      'Carol has not signed in to Nexus yet: a view needs their first sign-in.',
+    );
+  });
+
+  it('says IAM’s words when IAM refuses each workspace', async () => {
+    mounted = await open([], {
+      viewable: () => Promise.resolve({ workspaces: [], reason: 'refused', detail: 'Carol holds something you do not' }),
+    });
+    expect(mounted.host.querySelector('[role="tooltip"]')?.textContent).toBe('Carol holds something you do not');
+  });
+
+  it('opens nothing', async () => {
+    mounted = await open([], { viewable: () => Promise.resolve({ workspaces: [], reason: 'no_workspace' }) });
+    await mounted.click(button());
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+});
+
+describe('the picker, in a modal', () => {
+  it('opens on click, not in the page, and closes with Cancel', async () => {
+    mounted = await open([ALPHA, BRAVO]);
+    expect(dialog()).toBeNull();
+    await mounted.click(button());
+    expect(dialog()?.textContent).toContain('View as Carol');
+    expect(mounted.host.querySelector('select')).toBeNull();
+    await mounted.click(dialogButton('Cancel')!);
+    expect(dialog()).toBeNull();
+  });
+
   it('lists the workspaces with their organization, the first one chosen', async () => {
     mounted = await open([ALPHA, BRAVO]);
     await mounted.click(button());
-    const select = mounted.host.querySelector('select') as HTMLSelectElement;
-    expect([...select.options].map((o) => o.textContent)).toEqual(['Alpha · Acme', 'Bravo']);
-    expect(select.value).toBe('ws-alpha');
+    expect([...select().options].map((o) => o.textContent)).toEqual(['Alpha · Acme', 'Bravo']);
+    expect(select().value).toBe('ws-alpha');
   });
 
   it('preselects the page’s workspace', async () => {
     mounted = await open([ALPHA, BRAVO], { workspaceId: 'ws-bravo' });
     await mounted.click(button());
-    expect((mounted.host.querySelector('select') as HTMLSelectElement).value).toBe('ws-bravo');
+    expect(select().value).toBe('ws-bravo');
   });
 
   it('keeps the first when the page’s workspace is not offered', async () => {
     mounted = await open([ALPHA, BRAVO], { workspaceId: 'ws-elsewhere' });
     await mounted.click(button());
-    expect((mounted.host.querySelector('select') as HTMLSelectElement).value).toBe('ws-alpha');
+    expect(select().value).toBe('ws-alpha');
   });
 
   it('starts the view in the workspace picked, from this page', async () => {
     const start = vi.fn().mockResolvedValue(undefined);
     mounted = await open([ALPHA, BRAVO], { start, returnTo: () => '/settings/roles?section=people&person=iam_carol' });
     await mounted.click(button());
-    await mounted.select(mounted.host.querySelector('select'), 'ws-bravo');
-    const startButton = [...mounted.host.querySelectorAll('button')].find((b) => b.textContent === 'Start');
-    await mounted.click(startButton!);
+    await mounted.select(select(), 'ws-bravo');
+    await mounted.click(dialogButton('Start')!);
     expect(start).toHaveBeenCalledWith('iam_carol', 'ws-bravo', '/settings/roles?section=people&person=iam_carol');
   });
 
@@ -101,9 +144,8 @@ describe('the picker', () => {
     const start = vi.fn().mockRejectedValue(new Error('Carol holds something you do not'));
     mounted = await open([ALPHA], { start });
     await mounted.click(button());
-    const startButton = [...mounted.host.querySelectorAll('button')].find((b) => b.textContent === 'Start');
-    await mounted.click(startButton!);
-    expect(mounted.host.querySelector('[role="alert"]')?.textContent).toBe('Carol holds something you do not');
+    await mounted.click(dialogButton('Start')!);
+    expect(document.querySelector('[role="dialog"] [role="alert"]')?.textContent).toBe('Carol holds something you do not');
   });
 });
 

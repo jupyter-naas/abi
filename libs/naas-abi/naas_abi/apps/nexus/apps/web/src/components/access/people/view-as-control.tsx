@@ -2,11 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { Eye } from 'lucide-react';
-import { beginView, listViewableWorkspaces } from '@/lib/view-as';
+import { Dialog } from '@/components/ui/dialog';
+import { beginView, viewAsEligibility, viewAsUnavailable, type ViewAsEligibility } from '@/lib/view-as';
 import type { ViewableWorkspace } from '@/lib/view-model';
 import { viewFlagActive } from '@/lib/view-flag';
+// The buttons of the person page's header (Reload, Remove) and of the settings pages (Save).
+import '@/app/organizations/[orgId]/settings/users/users.css';
+import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 
-export type ViewableWorkspaces = (personId: string) => Promise<ViewableWorkspace[]>;
+/** The workspaces to view, with why there is none (a bare list: no reason). */
+export type ViewableWorkspaces = (personId: string) => Promise<ViewableWorkspace[] | ViewAsEligibility>;
 
 type Props = {
   /** The person's IAM id. */
@@ -27,19 +32,21 @@ const label = (w: ViewableWorkspace) => (w.organization ? `${w.name} · ${w.orga
 
 /**
  * "View as <name>", on a person's page: shown when IAM accepts a view of them in at least one
- * workspace (the server's list, empty when none). The button opens a picker of those workspaces,
- * this page's workspace preselected; Start asks the server and loads the workspace as the person
- * sees it. Nothing is decided here: a refusal is the server's words.
+ * workspace (the server's list, empty when none). The button opens a modal: a picker of those
+ * workspaces, this page's workspace preselected; Start asks the server and loads the workspace as
+ * the person sees it. Nothing is decided here: a refusal is the server's words.
  */
 export function ViewAsControl({
   personId,
   name,
   workspaceId,
   returnTo = here,
-  viewable = (id) => listViewableWorkspaces(id),
+  viewable = (id) => viewAsEligibility(id),
   start = beginView,
 }: Props) {
   const [workspaces, setWorkspaces] = useState<ViewableWorkspace[]>([]);
+  // Why no workspace may be viewed (shown on a disabled button); null: nothing to say, nothing shown.
+  const [unavailable, setUnavailable] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [pick, setPick] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -50,9 +57,19 @@ export function ViewAsControl({
     setOpen(false);
     // No view starts from inside a view (the server answers none), so nothing is asked.
     if (viewFlagActive()) return;
+    setUnavailable(null);
     viewable(personId).then(
-      (found) => !cancelled && setWorkspaces(found),
-      () => !cancelled && setWorkspaces([]),
+      (found) => {
+        if (cancelled) return;
+        const eligibility = Array.isArray(found) ? { workspaces: found, reason: null } : found;
+        setWorkspaces(eligibility.workspaces);
+        setUnavailable(eligibility.workspaces.length ? null : viewAsUnavailable(name, eligibility));
+      },
+      () => {
+        if (cancelled) return;
+        setWorkspaces([]);
+        setUnavailable(null);
+      },
     );
     return () => {
       cancelled = true;
@@ -60,7 +77,35 @@ export function ViewAsControl({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [personId]);
 
-  if (workspaces.length === 0) return null;
+  if (workspaces.length === 0) {
+    // No workspace to view: the button says why, disabled; nothing when there is no reason to give.
+    if (!unavailable) return null;
+    return (
+      <div
+        className="access-view-as access-view-as-unavailable"
+        data-view-as-control=""
+        data-unavailable=""
+        // Focusable: the reason shows on keyboard focus too (a disabled button takes none).
+        tabIndex={0}
+        aria-describedby="view-as-unavailable"
+      >
+        <button
+          type="button"
+          className="org-settings-users-secondary-button"
+          disabled
+          aria-disabled="true"
+          tabIndex={-1}
+          data-action="view-as"
+        >
+          <Eye size={16} aria-hidden="true" />
+          View as {name}
+        </button>
+        <span id="view-as-unavailable" role="tooltip" className="access-view-as-tooltip">
+          {unavailable}
+        </span>
+      </div>
+    );
+  }
 
   const chosen = pick && workspaces.some((w) => w.id === pick)
     ? pick
@@ -77,21 +122,50 @@ export function ViewAsControl({
     }
   };
 
+  const close = () => {
+    if (starting) return;
+    setOpen(false);
+    setError(null);
+  };
+
   return (
     <div className="access-view-as" data-view-as-control="">
-      {!open ? (
-        <button type="button" className="access-button" onClick={() => setOpen(true)}>
-          <Eye size={14} aria-hidden="true" /> View as {name}
-        </button>
-      ) : (
-        <div className="access-view-as-picker">
-          <label className="access-att-field">
-            <span>View {name} in</span>
+      <button
+        type="button"
+        className="org-settings-users-secondary-button"
+        onClick={() => setOpen(true)}
+        data-action="view-as"
+      >
+        <Eye size={16} aria-hidden="true" />
+        View as {name}
+      </button>
+      <Dialog
+        open={open}
+        onClose={close}
+        dismissible={!starting}
+        title={`View as ${name}`}
+        description={`Open a workspace as ${name} sees it: what they may use and read there. A banner lets you stop the view.`}
+        className="access-view-as-dialog"
+        onSubmit={() => void go()}
+        footer={
+          <>
+            <button type="button" className="org-settings-users-secondary-button" disabled={starting} onClick={close}>
+              Cancel
+            </button>
+            <button type="button" className="org-settings-primary-button" disabled={starting} onClick={() => void go()}>
+              {starting ? 'Starting…' : 'Start'}
+            </button>
+          </>
+        }
+      >
+          <label className="flex flex-col gap-2">
+            <span className="org-settings-field-label">Workspace</span>
             <select
-              className="access-input"
+              className="org-settings-input"
               aria-label="Workspace to view"
               value={chosen}
               onChange={(event) => setPick(event.target.value)}
+              disabled={starting}
             >
               {workspaces.map((w) => (
                 <option key={w.id} value={w.id}>
@@ -100,19 +174,12 @@ export function ViewAsControl({
               ))}
             </select>
           </label>
-          <button type="button" className="access-button access-button-primary" disabled={starting} onClick={() => void go()}>
-            Start
-          </button>
-          <button type="button" className="access-button" disabled={starting} onClick={() => setOpen(false)}>
-            Cancel
-          </button>
-        </div>
-      )}
-      {error && (
-        <p className="access-source-note" role="alert">
-          {error}
-        </p>
-      )}
+          {error && (
+            <p className="access-source-note mt-3" role="alert">
+              {error}
+            </p>
+          )}
+      </Dialog>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import {
   mapsLayerPath,
   mapsLibraryPath,
   mapsPath,
+  mapsSettingsLegacyPath,
   mapsSettingsPath,
   mapsSettingsSelectedFeed,
   mapsSettingsSelectedLayer,
@@ -92,18 +93,27 @@ describe('mapsLibraryPath', () => {
 describe('mapsSettingsPath', () => {
   it('builds Settings → Maps paths', () => {
     expect(mapsSettingsPath('ws-1')).toBe('/workspace/ws-1/settings/maps');
-    expect(mapsSettingsPath('ws-1', { create: true })).toBe('/workspace/ws-1/settings/maps?layer=new');
-    expect(mapsSettingsPath('ws-1', { layer: 'offices' })).toBe(
-      '/workspace/ws-1/settings/maps?layer=offices',
-    );
+    // A feed and a layer each have a page, as an agent or a skill.
+    expect(mapsSettingsPath('ws-1', { create: true })).toBe('/workspace/ws-1/settings/maps/layers/new');
+    expect(mapsSettingsPath('ws-1', { layer: 'offices' })).toBe('/workspace/ws-1/settings/maps/layers/offices');
   });
 
   it('builds feed and new-layer paths', () => {
-    expect(mapsSettingsPath('ws-1', { feed: 'edf' })).toBe('/workspace/ws-1/settings/maps?feed=edf');
+    expect(mapsSettingsPath('ws-1', { feed: 'edf' })).toBe('/workspace/ws-1/settings/maps/feeds/edf');
+    expect(mapsSettingsPath('ws-1', { feed: 'new' })).toBe('/workspace/ws-1/settings/maps/feeds/new');
     expect(mapsSettingsPath('ws-1', { layer: 'new', forFeed: 'edf' })).toBe(
-      '/workspace/ws-1/settings/maps?layer=new&for=edf',
+      '/workspace/ws-1/settings/maps/layers/new?for=edf',
     );
     expect(mapsSettingsSelectedFeed(new URLSearchParams('feed=edf'))).toBe('edf');
+  });
+
+  it('sends the former ?feed= and ?layer= links to the pages', () => {
+    expect(mapsSettingsLegacyPath('ws-1', new URLSearchParams('feed=edf'))).toBe('/workspace/ws-1/settings/maps/feeds/edf');
+    expect(mapsSettingsLegacyPath('ws-1', new URLSearchParams('layout=edf'))).toBe('/workspace/ws-1/settings/maps/layers/edf');
+    expect(mapsSettingsLegacyPath('ws-1', new URLSearchParams('layer=new&for=edf'))).toBe(
+      '/workspace/ws-1/settings/maps/layers/new?for=edf',
+    );
+    expect(mapsSettingsLegacyPath('ws-1', new URLSearchParams(''))).toBeNull();
   });
 
   it('reads the selected layer, including older ?layout= links', () => {

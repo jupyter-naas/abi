@@ -1,8 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronDown } from 'lucide-react';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { graphMode } from '@/lib/graph-explorer';
 import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
@@ -10,7 +8,7 @@ import { useGraphExplorerStore } from '@/stores/graph-explorer';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { useConfirm } from '@/components/ui/dialogs';
-import { APP_MENU_ROW, APP_MENU_SURFACE, APP_MENU_TRIGGER } from '@/components/shell/app-menu-classes';
+import { Menu, MenuBar, type MenuEntry } from '@/components/ui/menu';
 
 export function GraphMenuBar() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -29,9 +27,6 @@ export function GraphMenuBar() {
     selected && selected.can_write === true &&
     !['schema', 'nexus'].includes(selected.uri.split('/').pop() || '') &&
     !['schema', 'nexus'].includes(selected.id);
-  const row = APP_MENU_ROW;
-  const surface = APP_MENU_SURFACE;
-  const trigger = APP_MENU_TRIGGER;
   async function refresh() {
     setBusy(true);
     setError('');
@@ -89,115 +84,44 @@ export function GraphMenuBar() {
     if (cls) p.set('class', cls);
     router.push(`${root}/network?${p}`);
   }
+  const inGraph = graphs[0] ? `?graph=${encodeURIComponent(graphs[0])}` : '';
+  const locked = !editable || busy;
+  const fileItems: MenuEntry[] = [
+    { id: 'create-graph', label: 'Create New Graph', onSelect: () => router.push(`${root}/create-graph`) },
+    { id: 'create-individual', label: 'Create New Instance', onSelect: () => router.push(`${root}/create-individual${inGraph}`) },
+    { id: 'sep-io', kind: 'separator' },
+    { id: 'import', label: 'Import Triples…', onSelect: () => router.push(`${root}/import`) },
+    { id: 'export', label: 'Export Triples…', onSelect: () => router.push(`${root}/export`) },
+    { id: 'sep-graph', kind: 'separator' },
+    { id: 'edit', label: 'Edit Graph…', disabled: locked, onSelect: () => router.push(`${root}/create-graph?edit=${encodeURIComponent(selected!.uri)}`) },
+    { id: 'clear', label: 'Clear Graph…', disabled: locked, onSelect: () => void remove('clear') },
+    { id: 'delete', label: 'Delete Graph…', disabled: locked, onSelect: () => void remove('delete') },
+  ];
+  const viewItems: MenuEntry[] = [
+    ...['Explorer', 'Composer'].map((mode) => ({
+      id: mode.toLowerCase(),
+      label: mode,
+      checked: graphMode(path) === mode.toLowerCase(),
+      onSelect: () => router.push(`${root}/${mode.toLowerCase()}`),
+    })),
+    { id: 'sep-open', kind: 'separator' },
+    { id: 'network', label: 'Open Network', onSelect: openNetwork },
+    { id: 'individuals', label: 'Manage Individuals', onSelect: () => router.push(`${root}/individuals${inGraph}`) },
+    { id: 'sep-refresh', kind: 'separator' },
+    { id: 'refresh', label: busy ? 'Refreshing…' : 'Refresh', disabled: busy, onSelect: () => void refresh() },
+  ];
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-3">
-      <nav className="flex items-center gap-1" aria-label="Knowledge Graph menus">
-        <span className="mr-1 hidden text-xs font-semibold sm:inline">Knowledge Graph</span>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger className={trigger}>
-            File <ChevronDown size={11} />
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content align="start" sideOffset={5} className={surface}>
-              <DropdownMenu.Item
-                className={row}
-                onSelect={() => router.push(`${root}/create-graph`)}
-              >
-                Create New Graph
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                className={row}
-                onSelect={() =>
-                  router.push(
-                    `${root}/create-individual${graphs[0] ? `?graph=${encodeURIComponent(graphs[0])}` : ''}`,
-                  )
-                }
-              >
-                Create New Instance
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator className="my-1 h-px bg-border" />
-              <DropdownMenu.Item className={row} onSelect={() => router.push(`${root}/import`)}>
-                Import Triples…
-              </DropdownMenu.Item>
-              <DropdownMenu.Item className={row} onSelect={() => router.push(`${root}/export`)}>
-                Export Triples…
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator className="my-1 h-px bg-border" />
-              <DropdownMenu.Item
-                className={row}
-                disabled={!editable || busy}
-                onSelect={() =>
-                  router.push(`${root}/create-graph?edit=${encodeURIComponent(selected!.uri)}`)
-                }
-              >
-                Edit Graph…
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                className={row}
-                disabled={!editable || busy}
-                onSelect={() => void remove('clear')}
-              >
-                Clear Graph…
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                className={row}
-                disabled={!editable || busy}
-                onSelect={() => void remove('delete')}
-              >
-                Delete Graph…
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger className={trigger}>
-            View <ChevronDown size={11} />
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content align="start" sideOffset={5} className={surface}>
-              <DropdownMenu.RadioGroup
-                value={graphMode(path)}
-                onValueChange={(mode) => router.push(`${root}/${mode}`)}
-              >
-                {['Explorer', 'Composer'].map((mode) => (
-                  <DropdownMenu.RadioItem key={mode} value={mode.toLowerCase()} className={row}>
-                    <span className="w-3">
-                      <DropdownMenu.ItemIndicator>
-                        <Check size={12} />
-                      </DropdownMenu.ItemIndicator>
-                    </span>
-                    {mode}
-                  </DropdownMenu.RadioItem>
-                ))}
-              </DropdownMenu.RadioGroup>
-              <DropdownMenu.Separator className="my-1 h-px bg-border" />
-              <DropdownMenu.Item className={row} onSelect={openNetwork}>
-                Open Network
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                className={row}
-                onSelect={() =>
-                  router.push(
-                    `${root}/individuals${graphs[0] ? `?graph=${encodeURIComponent(graphs[0])}` : ''}`,
-                  )
-                }
-              >
-                Manage Individuals
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator className="my-1 h-px bg-border" />
-              <DropdownMenu.Item className={row} disabled={busy} onSelect={() => void refresh()}>
-                {busy ? 'Refreshing…' : 'Refresh'}
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
-      </nav>
-      {error && (
-        <span role="alert" className="text-xs text-destructive">
-          {error}
-        </span>
-      )}
+    <>
+      <MenuBar
+        label="Knowledge Graph menus"
+        title="Knowledge Graph"
+        className="flex-wrap"
+        trailing={error ? <span role="alert" className="ml-2 text-xs text-destructive">{error}</span> : null}
+      >
+        <Menu label="File" items={fileItems} />
+        <Menu label="View" items={viewItems} />
+      </MenuBar>
       {dialog}
-    </div>
+    </>
   );
 }

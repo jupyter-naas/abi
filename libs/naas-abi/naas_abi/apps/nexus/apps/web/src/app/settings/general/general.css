@@ -6,14 +6,13 @@
   gap: var(--space-8);
 }
 
-.platform-general-source {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-sm);
-  color: var(--muted-foreground-hex);
+/* The identity at the top (as Organization › General): the logo stays square. */
+.platform-general-logo {
+  border-radius: 0 !important;
+  object-fit: contain;
 }
 
-.platform-general-source code,
+.account-profile-avatar-info-hint code,
 .platform-general-key,
 .platform-general-color code {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);

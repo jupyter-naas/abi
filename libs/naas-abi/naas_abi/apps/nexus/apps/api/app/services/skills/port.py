@@ -24,9 +24,6 @@ class SkillRecord:
     last_used_at: datetime | None
     created_at: datetime
     updated_at: datetime
-    # An organization skill as the listing workspace has it: False once that
-    # workspace's admins turned it off there.
-    enabled_here: bool = True
 
 
 @dataclass
@@ -65,12 +62,6 @@ class SkillPersistencePort(ABC):
     @abstractmethod
     async def organization_of(self, workspace_id: str) -> str | None:
         """The organization ``workspace_id`` is in, None for one in none."""
-
-    @abstractmethod
-    async def set_enabled_in(
-        self, skill_id: str, workspace_id: str, enabled: bool, user_id: str
-    ) -> None:
-        """Turn an organization skill on or off in one workspace of the organization."""
 
     @abstractmethod
     async def get_visible_by_slug(

@@ -16,11 +16,16 @@ from naas_abi.apps.nexus.apps.api.app.services.feature_access.adapters.primary.f
     router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.feature_access.service_test import (  # noqa: F401
+    ALPHA,
+    FEATURES,
     acme,
     audit,
+    enabled_features,
     nexus,
+    ontologies,
     service,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 
 PATH = "/api/workspaces/alpha/feature-access"
 
@@ -96,3 +101,125 @@ def test_the_offer_reads_as_configuration_and_saves_as_the_caller(client):
         == 422
     )
     assert client.put(path, json={"changes": []}, headers={"x-user": "olivia"}).status_code == 422
+
+
+def test_the_files_given_are_read_with_the_offer_and_saved_as_the_caller(client):
+    """Olivia, Acme's owner, gives Acme's Organization Files; Platform Files is the
+    platform admin's (403); a mode a section does not have or no change at all is 422."""
+    path = "/api/workspaces/alpha/offer/files"
+    state = client.get("/api/workspaces/alpha/offer", headers={"x-user": "olivia"}).json()
+    rows = {row["key"]: row for row in state["files"]}
+    assert set(rows) == {"org_files", "platform_files", "system_files"}
+    assert rows["org_files"]["mode"] == "off" and rows["org_files"]["editable"]
+    assert not rows["platform_files"]["editable"]
+    assert state["my_files"] == {"members": "write", "viewers": "read"}
+    saved = client.put(path, json={"org_files": "read"}, headers={"x-user": "olivia"})
+    assert saved.status_code == 200
+    assert {r["key"]: r["mode"] for r in saved.json()["files"]}["org_files"] == "read"
+    refused = client.put(path, json={"platform_files": "read"}, headers={"x-user": "olivia"})
+    assert refused.status_code == 403
+    assert (
+        client.put(path, json={"system_files": "write"}, headers={"x-user": "root"}).status_code
+        == 422
+    )
+    assert client.put(path, json={}, headers={"x-user": "olivia"}).status_code == 422
+    assert client.put(path, json={"org_files": "read"}, headers={"x-user": "dave"}).status_code in (
+        403,
+        404,
+    )
+    # ``?policy=``: the policy picked in the settings column; one the workspace does not own: 404.
+    elsewhere = client.put(
+        f"{path}?policy=pol_unknown", json={"system_files": "off"}, headers={"x-user": "olivia"}
+    )
+    assert elsewhere.status_code == 404
+    assert (
+        client.get(
+            "/api/workspaces/alpha/offer/datasets?policy=pol_unknown", headers={"x-user": "olivia"}
+        ).status_code
+        == 404
+    )
+
+
+def test_the_models_are_read_with_the_offer_and_saved_as_the_caller(client, nexus, acme):  # noqa: F811
+    """Olivia limits Acme's workspace to one model, its default; a list with no default
+    is 422; Dave (a member) may not change the offer."""
+    from naas_abi.apps.nexus.apps.api.app.services.feature_access.service_test import _access
+    from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
+        Offer,
+        offer_of,
+        with_offer,
+    )
+    from naas_abi_core.engine.call_context import use_call_context
+
+    with use_call_context(NexusIam.context("root")):
+        org = nexus.iam.get_policy(_access(nexus, acme).parent_id)
+        nexus.iam.update_policy(
+            org.id,
+            expected_revision=org.revision,
+            document=with_offer(
+                org.document, offer_of(org.document).merged(Offer.of(models=["*"]))
+            ),
+        )
+    path = "/api/workspaces/alpha/offer/models"
+    saved = client.put(
+        path, json={"models": ["qwen-3.8"], "default": "qwen-3.8"}, headers={"x-user": "olivia"}
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["models"]["offered"] == ["qwen-3.8"]
+    state = client.get("/api/workspaces/alpha/offer", headers={"x-user": "olivia"}).json()
+    assert state["models"]["default"] == "qwen-3.8"
+    assert (
+        client.put(path, json={"models": ["qwen-3.8"]}, headers={"x-user": "olivia"}).status_code
+        == 422
+    )
+    assert client.put(path, json={"models": ["*"]}, headers={"x-user": "dave"}).status_code in (
+        403,
+        404,
+    )
+
+
+class TestOntologies:
+    """On a deployment with the ontology feature."""
+
+    @pytest.fixture
+    def enabled_features(self) -> list[str]:
+        return [*FEATURES, "ontology"]
+
+    @pytest.fixture
+    def client(self, ontologies):  # noqa: F811
+        previous = runtime.configure(lambda: ontologies)
+        app = FastAPI()
+        app.include_router(router, prefix="/api/workspaces")
+        app.dependency_overrides[get_current_user_required] = _by_header
+        yield TestClient(app)
+        runtime.configure(previous)
+
+    @pytest.mark.asyncio
+    async def test_the_ontologies_are_read_with_the_offer_and_saved_as_the_caller(self, client):
+        """Olivia, Acme's owner, assigns any ontology; Alpha's admin Frank, who may
+        not, is refused one (403) and removes one; a file outside the catalog or no
+        change is 422; a member changes nothing."""
+        path = "/api/workspaces/alpha/offer/ontologies"
+        olivia, frank = {"x-user": "olivia"}, {"x-user": "frank"}
+        state = client.get("/api/workspaces/alpha/offer", headers=olivia).json()
+        assert state["ontologies"]["offered"] == ["Core:BFO.ttl"]
+        rows = {row["id"]: row for row in state["ontologies"]["rows"]}
+        assert rows["core:bfo.ttl"]["offered"] and rows["core:agent.ttl"]["editable"]
+        saved = client.put(path, json={"changes": {"core:agent.ttl": True}}, headers=olivia)
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["ontologies"]["offered"] == ["Core:BFO.ttl", "core:agent.ttl"]
+        await MEMBERSHIPS.grant("frank", "admin", ALPHA)
+        refused = client.put(path, json={"changes": {"acme.sales:sales.ttl": True}}, headers=frank)
+        assert refused.status_code == 403
+        assert "AssignOntology" in refused.json()["detail"]
+        removed = client.put(path, json={"changes": {"core:agent.ttl": False}}, headers=frank)
+        assert removed.status_code == 200, removed.text
+        assert removed.json()["ontologies"]["offered"] == ["Core:BFO.ttl"]
+        unknown = client.put(path, json={"changes": {"nope:Nope.ttl": True}}, headers=olivia)
+        assert unknown.status_code == 422
+        assert client.put(path, json={"changes": {}}, headers=olivia).status_code == 422
+        member = client.put(
+            path, json={"changes": {"core:bfo.ttl": False}}, headers={"x-user": "dave"}
+        )
+        assert member.status_code in (403, 404)

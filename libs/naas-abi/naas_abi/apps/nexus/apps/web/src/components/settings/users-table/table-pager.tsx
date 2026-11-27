@@ -27,6 +27,9 @@ export type PagedRows<T> = {
 export function usePagedRows<T>(rows: readonly T[], resetKey: string): PagedRows<T> {
   const [state, setState] = useState<{ page: number; key: string }>({ page: 0, key: resetKey });
   const [size, setSizeState] = useState<PageSize>(PAGE_SIZES[0]);
+  // Kept, not only derived: a search typed then cleared finds the first page, not the one
+  // shown before it (React re-renders at once with the new state).
+  if (state.key !== resetKey) setState({ page: 0, key: resetKey });
   const page = state.key === resetKey ? state.page : 0;
   const window = pageWindow(rows.length, page, size);
   const pageRows = useMemo(() => rows.slice(window.start, window.end), [rows, window.start, window.end]);

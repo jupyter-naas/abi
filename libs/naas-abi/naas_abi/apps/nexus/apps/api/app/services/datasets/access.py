@@ -7,18 +7,29 @@ A dataset is ``dataset/<namespace>/<name>`` and its namespace ``dataset/<namespa
 dataset: a listing leaves it out, and a query refuses SQL that reads it through any
 namespace, not only the one it is sent to. The kernel reads a name as spelled or in
 lower case (``DatasetService``), so both spellings are checked.
+
+A namespace the workspace does not use, or one dataset of it (closed in its offer "<W>
+access", or in its organization's "<O> access": ``OfferDatasetsDeny``,
+``iam/given_datasets.py``) is hidden there the same way. IAM decides datasets on their platform names, so Nexus applies the
+closure here, before IAM is asked.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from naas_abi.apps.nexus.apps.api.app.services.datasets.datasets__schema import (
     DatasetQueryError,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource
+from naas_abi.apps.nexus.apps.api.app.services.iam import given_datasets
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, AuthzDenied
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    nexus_resource,
+    org_container,
+    org_of,
+)
 from naas_abi_core.services.dataset.DatasetPort import DatasetRequestRefused
 from naas_abi_core.services.dataset.sql_references import referenced_datasets
 
@@ -32,6 +43,56 @@ def referenced(sql: str, namespace: str) -> list[tuple[str, str]]:
         return referenced_datasets(sql, namespace)
     except DatasetRequestRefused as exc:
         raise DatasetQueryError(str(exc)) from exc
+
+
+NOT_OFFERED = "This dataset namespace is not offered in this workspace"
+
+
+async def _offers_of(workspace_id: str) -> list[Any]:
+    """The offers that bound the workspace: its own "<W> access", then its organization's
+    "<O> access" (None where one is no allow-list yet)."""
+    container = await AUTHZ.container_of(workspace_id)
+    if container is None:
+        return []
+    org = org_of(container)
+    wheres = [container, *([org_container(org)] if org else [])]
+    return [await AUTHZ.offer_of(where) for where in wheres]
+
+
+@dataclass(frozen=True)
+class Closed:
+    """What a workspace does not use, in lower case (as the kernel reads names too):
+    whole namespaces, and single datasets ``(namespace, name)`` of the others."""
+
+    namespaces: frozenset[str]
+    datasets: frozenset[tuple[str, str]]
+
+    def hides(self, namespace: str, name: str | None = None) -> bool:
+        """Whether ``namespace`` (or its dataset ``name``) is closed."""
+        if namespace.lower() in self.namespaces:
+            return True
+        return name is not None and (namespace.lower(), name.lower()) in self.datasets
+
+
+async def closed_datasets(workspace_id: str) -> Closed:
+    """What the workspace does not use: closed in its offer or in its organization's."""
+    namespaces: set[str] = set()
+    datasets: set[tuple[str, str]] = set()
+    for offer in await _offers_of(workspace_id):
+        if offer is None:
+            continue
+        for entry in offer.datasets_closed:
+            namespace, name = given_datasets.split_entry(entry)
+            if name is None:
+                namespaces.add(namespace.lower())
+            else:
+                datasets.add((namespace.lower(), name.lower()))
+    return Closed(frozenset(namespaces), frozenset(datasets))
+
+
+async def closed_namespaces(workspace_id: str) -> frozenset[str]:
+    """The namespaces the workspace does not use at all, in lower case."""
+    return (await closed_datasets(workspace_id)).namespaces
 
 
 async def require_datasets(
@@ -51,6 +112,9 @@ async def require_datasets(
             [*(s for ns in namespaces for s in (ns, ns.lower())), *(ns for ns, _ in spelled)]
         )
     )
+    closed = await closed_datasets(workspace_id)
+    if any(closed.hides(ns) for ns in names) or any(closed.hides(ns, n) for ns, n in spelled):
+        raise AuthzDenied(403, detail=NOT_OFFERED)
     for namespace in names:
         await AUTHZ.require(action, user=user, workspace=workspace_id, id=namespace)
     for namespace, name in spelled:
@@ -80,9 +144,12 @@ async def require_query(user: Any, workspace_id: str, sql: str, namespace: str) 
     )
 
 
-async def visible(items: Iterable[_T], *, user: Any) -> list[_T]:
+async def visible(items: Iterable[_T], *, user: Any, workspace_id: str | None = None) -> list[_T]:
     """The datasets (``.namespace``, ``.name``) the user may list, and whose
-    namespace they may list."""
+    namespace they may list; in ``workspace_id``, none of a namespace it does not use."""
+    if workspace_id is not None:
+        closed = await closed_datasets(workspace_id)
+        items = [item for item in items if not closed.hides(item.namespace, item.name)]
     kept = await AUTHZ.filter(
         "ListDatasets",
         items,
@@ -101,4 +168,13 @@ async def visible(items: Iterable[_T], *, user: Any) -> list[_T]:
     return [item for item in kept if item.namespace in allowed]
 
 
-__all__ = ["referenced", "require_datasets", "require_query", "visible"]
+__all__ = [
+    "NOT_OFFERED",
+    "Closed",
+    "closed_datasets",
+    "closed_namespaces",
+    "referenced",
+    "require_datasets",
+    "require_query",
+    "visible",
+]

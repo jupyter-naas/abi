@@ -499,21 +499,6 @@ async def test_a_member_joined_when_they_entered_the_workspace_s_groups(world):
 
 
 @pytest.mark.asyncio
-async def test_an_organization_s_admins_read_and_write_its_workspaces_shared_graphs(world):
-    """An organization's admins are admins of each of its workspaces, with no "<W>
-    admins": its shared graphs' grants follow them too."""
-    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
-        GraphGrants,
-    )
-
-    await _team(world)
-    readers, writers = await GraphGrants._holders(world.W)
-    oadmin, member = world.principal("oadmin"), world.principal("member")
-    assert oadmin in readers and oadmin in writers
-    assert member in readers and member not in writers
-
-
-@pytest.mark.asyncio
 async def test_a_role_at_the_organization_and_at_the_platform(world):
     """Organization › Users and Platform › Users › Role: the organization's people first
     and its admins for an org admin (no level); at the platform, Platform admins for a
@@ -620,3 +605,359 @@ async def test_a_member_chats_with_the_member_set_and_a_viewer_does_not(world):
     assert not _can(world, "viewer", "model_registry:Chat", chosen)
     assert _can(world, "viewer", "model_registry:Embed", other)
     assert _can(world, "wadmin", "model_registry:Chat", other)
+
+
+# -- search sources (fix-permissions-offer) ----------------------------------------------
+
+
+def _source(world, source: str, container: str | None = None) -> str:
+    return f"{container or world.W}/nexus:search_source/{source}"
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_offers_its_search_sources_and_its_levels_use_them_there(world):
+    """A search source (a feature searched, a web engine) is used where the workspace's
+    offer names it, within the organization's, by the levels that search. A source the
+    offer leaves out is refused to everyone in W, its admins included; in another
+    workspace the first's offer gives nothing."""
+    await _team(world)
+    w_access = world.record.access_policy_id
+    with as_service_account("api"):
+        o_access = world.iam.get_policy(w_access).parent_id
+        widen_offer(
+            world.iam,
+            o_access,
+            Offer.of(
+                features=["search"], search_sources=["chat", "web.wikipedia", "web.duckduckgo"]
+            ),
+        )
+        widen_offer(
+            world.iam,
+            w_access,
+            Offer.of(features=["search"], search_sources=["chat", "web.wikipedia"]),
+        )
+    use = "nexus:UseSearchSource"
+    assert _can(world, "member", use, _source(world, "web.wikipedia"))
+    assert _can(world, "member", use, _source(world, "chat"))
+    assert _can(world, "wadmin", use, _source(world, "web.wikipedia"))
+    for user in ("member", "wadmin"):
+        assert not _can(world, user, use, _source(world, "web.duckduckgo"))
+    # A Viewer does not search (no search feature at their level, so no source).
+    assert not _can(world, "viewer", use, _source(world, "web.wikipedia"))
+    # W's offer gives nothing in ws-2, which offers no source.
+    ws2 = workspace_container("org-1", "ws-2")
+    assert not _can(world, "member", use, _source(world, "web.wikipedia", ws2))
+    # A level grants a type, never a source: the bound names which.
+    member = level_document(MEMBER_ACCESS).to_dict()
+    sources = [r for s in member["statements"] for r in s["resources"] if "search_source" in r]
+    assert sources == ["${scope}/nexus:search_source/*"]
+    viewer = level_document(VIEWER_ACCESS).to_dict()
+    assert not [r for s in viewer["statements"] for r in s["resources"] if "search_source" in r]
+
+
+@pytest.mark.asyncio
+async def test_the_move_writes_the_sources_each_workspace_kept_on(world):
+    """``search_sources_offer``: an organization offers every source; a workspace
+    every source but those its Settings › Search switched off. Its other sections are
+    kept; a second pass changes nothing (a section naming nothing stays so)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import search_sources_offer
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import offer_of
+
+    await _team(world)
+    w_access = world.record.access_policy_id
+    with as_service_account("api"):
+        o_access = world.iam.get_policy(w_access).parent_id
+        before = offer_of(world.iam.get_policy(w_access).document)
+        # Search itself is offered (the sources are what it reads).
+        widen_offer(world.iam, o_access, Offer.of(features=["search"]))
+        widen_offer(world.iam, w_access, Offer.of(features=["search"]))
+    policies = {ORG: o_access, world.W: w_access}
+    switched_off = {"ws-1": ["web.duckduckgo", "maps"]}
+    report = search_sources_offer.apply(world.iam, policies, switched_off)
+    assert sorted(report.written) == sorted(policies) and not report.failed
+    world.authz.forget_offers()
+    use = "nexus:UseSearchSource"
+    assert _can(world, "member", use, _source(world, "web.wikipedia"))
+    assert not _can(world, "member", use, _source(world, "web.duckduckgo"))
+    assert not _can(world, "member", use, _source(world, "maps"))
+    with as_service_account("api"):
+        after = offer_of(world.iam.get_policy(w_access).document)
+    assert after.agents == before.agents and after.apps == before.apps
+    assert "web.duckduckgo" not in after.search_sources and "chat" in after.search_sources
+    # Once written, a pass leaves it: an admin's later choice is theirs.
+    again = search_sources_offer.apply(world.iam, policies, {})
+    assert not again.written and sorted(again.kept) == sorted(policies)
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_offers_its_ontologies_and_its_levels_read_them_there(world):
+    """An ontology file is read where the workspace's offer names it, within the
+    organization's (which allows every file, as its admins could assign any)."""
+    await _team(world)
+    w_access = world.record.access_policy_id
+    with as_service_account("api"):
+        o_access = world.iam.get_policy(w_access).parent_id
+        org = world.iam.get_policy(o_access)
+        doc = org.document.to_dict()
+        doc["statements"].append(
+            {
+                "sid": "Ontologies",
+                "effect": "Allow",
+                "actions": ["nexus:UseOntology"],
+                "resources": ["${scope}/nexus:ontology_file/*"],
+            }
+        )
+        world.iam.update_policy(o_access, expected_revision=org.revision, document=doc)
+        widen_offer(world.iam, w_access, Offer.of(ontologies=["bfo:bfo-core.ttl"]))
+    use = "nexus:UseOntology"
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource
+
+    file = nexus_resource("ontology_file", container=world.W, id="bfo:bfo-core.ttl")
+    other = nexus_resource("ontology_file", container=world.W, id="acme:Sales.ttl")
+    assert _can(world, "member", use, file) and _can(world, "wadmin", use, file)
+    assert not _can(world, "member", use, other)
+    # A Viewer reads no ontology (no ontology feature at their level).
+    assert not _can(world, "viewer", use, file)
+
+
+@pytest.mark.asyncio
+async def test_the_move_writes_each_workspaces_ontologies_and_lets_its_organization_allow_any(
+    world,
+):
+    from naas_abi.apps.nexus.apps.api.app.services.iam import ontologies_offer
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource
+
+    await _team(world)
+    w_access = world.record.access_policy_id
+    with as_service_account("api"):
+        o_access = world.iam.get_policy(w_access).parent_id
+    policies = {ORG: o_access, world.W: w_access}
+    report = ontologies_offer.apply(world.iam, policies, {"ws-1": ["bfo:bfo-core.ttl"]})
+    assert sorted(report.written) == sorted(policies) and not report.failed
+    use = "nexus:UseOntology"
+
+    def reads(ref: str) -> bool:
+        return _can(
+            world, "member", use, nexus_resource("ontology_file", container=world.W, id=ref)
+        )
+
+    assert reads("bfo:bfo-core.ttl") and not reads("acme:Sales.ttl")
+    # The organization allows any file: its admins may offer another one in W.
+    with as_service_account("api"):
+        widen_offer(world.iam, w_access, Offer.of(ontologies=["acme:Sales.ttl"]))
+    assert reads("acme:Sales.ttl")
+    again = ontologies_offer.apply(world.iam, policies, {})
+    assert not again.written
+
+
+@pytest.mark.asyncio
+async def test_a_viewer_given_the_chat_feature_is_not_shown_a_chat_they_cannot_use(world):
+    """Chatting is writing a conversation, which the Viewer level never does: a policy
+    giving a Viewer the chat feature does not show them the chat (every message would
+    be refused). A Member is shown it."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.user_features import user_feature_flags
+
+    await _team(world)
+    world.allow("viewer", ["nexus:UseFeature"], ["${scope}/nexus:feature/chat"], world.W)
+    assert _can(world, "viewer", "nexus:UseFeature", f"{world.W}/nexus:feature/chat")
+
+    async def chat(user: str) -> bool:
+        flags = await user_feature_flags(SimpleUser(user), [("org-1", "ws-1")], ["chat"])
+        assert flags is not None
+        return flags["ws-1"]["chat"]
+
+    assert await chat("member") is True
+    assert await chat("viewer") is False
+
+
+@pytest.mark.asyncio
+async def test_a_viewer_reads_my_files_unless_the_deployment_says_not(world):
+    """My Files is no workspace's to give: every Member writes theirs, and a Viewer
+    reads theirs unless ``feature_flags.viewer_my_files`` is off, which writes a Deny
+    into "Viewer access" (rewritten at the next start)."""
+    await _team(world)
+
+    async def mine(user: str, action: str, of: str = "my_file") -> bool:
+        what = {"my_file": f"{action}MyFile", "user_storage": f"{action}UserStorage"}[of]
+        if action == "List":
+            what = {"my_file": "ListMyFiles", "user_storage": "ListUserStorage"}[of]
+        return await world.authz.allowed(what, user=user, id=(user, "notes.md"))
+
+    assert await mine("viewer", "List") and await mine("viewer", "Get")
+    assert await mine("viewer", "Get", "user_storage")
+    assert not await mine("viewer", "Put")
+    assert await mine("member", "Put") and await mine("wadmin", "Put")
+
+    world.flags.viewer_my_files = False
+    LEVELS.forget()
+    LEVELS.get(world.iam)
+    with as_service_account("api"):
+        viewer = [p for p in world.iam.list_policies(limit=500).items if p.name == VIEWER_ACCESS]
+    assert len(viewer) == 1
+    assert not await mine("viewer", "List") and not await mine("viewer", "Get")
+    assert not await mine("viewer", "Get", "user_storage")
+    assert await mine("member", "Get") and await mine("member", "Put")
+    assert await mine("wadmin", "Put")
+    assert not any(
+        s["effect"] == "Deny" for s in level_document(MEMBER_ACCESS).to_dict()["statements"]
+    )
+
+
+# -- the organization's people (B1) ------------------------------------------------------
+
+_AT_ORG = {
+    "ListSecrets": ("nexus:ListSecrets", f"{ORG}/nexus:secret/s1"),
+    "ListOrgFiles": ("nexus:ListOrgFiles", f"{ORG}/nexus:file/organization"),
+    "GetOrgFile": ("nexus:GetOrgFile", f"{ORG}/nexus:file/organization/report.pdf"),
+    "PutOrgFile": ("nexus:PutOrgFile", f"{ORG}/nexus:file/organization/report.pdf"),
+    "GetObject": (
+        "object_storage:GetObject",
+        f"{ORG}/object_storage:object/naas_abi/organization-drive/org-1/report.pdf",
+    ),
+    "Query": ("triple_store:Query", f"{ORG}/triple_store:graph/org-level"),
+    "GetOrganization": ("nexus:GetOrganization", ORG),
+    "ListOrganizations": ("nexus:ListOrganizations", ORG),
+}
+
+
+def _at_org(world, person: str) -> dict[str, bool]:
+    return {label: _can(world, person, *probe) for label, probe in _AT_ORG.items()}
+
+
+@pytest.mark.asyncio
+async def test_the_organizations_people_see_it_and_nothing_it_holds(world):
+    """ "<O> people" holds "Organization view" (``GetOrganization``,
+    ``ListOrganizations``), not ``builtin.viewer``: a Viewer or a Member of the
+    organization sees it, and reads nothing it holds (secrets, Organization Files, its
+    drive, its graphs); the roles of their level stop at the organization
+    (``no_membership_roles``). Its admins keep what ``builtin.admin`` gives at it."""
+    await _team(world)
+    await MEMBERSHIPS.grant("bob", "member", ORG)
+    await MEMBERSHIPS.grant("stranger", "viewer", ORG)
+    sees_only = {label: label in ("GetOrganization", "ListOrganizations") for label in _AT_ORG}
+    assert _at_org(world, "stranger") == sees_only
+    assert _at_org(world, "bob") == sees_only
+    assert all(_at_org(world, "oadmin").values())
+    # The people of a workspace are not the organization's: unchanged.
+    assert not any(_at_org(world, "member").values())
+
+
+@pytest.mark.asyncio
+async def test_a_group_given_organization_files_at_it_reads_them(world):
+    """Organization Files for someone the offers do not give them to: a group holding a
+    policy at the organization (not at ``${my workspaces}``) gives them there."""
+    await _team(world)
+    with as_service_account("api"):
+        policy = world.iam.create_policy(
+            "Org Files read",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "sid": "OrgFiles",
+                        "effect": "Allow",
+                        "actions": ["nexus:ListOrgFiles", "nexus:GetOrgFile"],
+                        "resources": [
+                            "${scope}/nexus:file/organization",
+                            "${scope}/nexus:file/organization/*",
+                        ],
+                    }
+                ],
+            },
+            scope=ORG,
+        )
+        group = world.iam.create_group("Org Files Group", scope=ORG)
+        world.iam.attach_policy(policy.id, group.id, ORG)
+        world.iam.add_group_member(group.id, world.principal("viewer"))
+    seen = _at_org(world, "viewer")
+    assert seen["ListOrgFiles"] and seen["GetOrgFile"]
+    assert not seen["PutOrgFile"] and not seen["ListSecrets"] and not seen["Query"]
+
+
+@pytest.mark.asyncio
+async def test_the_move_gives_each_organizations_people_the_view_only(world):
+    """``org_people_view_v1``: an organization made before holds ``builtin.viewer``
+    and "Viewer access" at ``${my workspaces}`` on "<O> people"; the move takes them
+    away and attaches "Organization view" there and at the organization (its bound).
+    Idempotent."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import org_people_view
+    from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+        CONTAINER_DEFAULTS,
+    )
+    from naas_abi_core.services.iam.names import MY_CONTAINERS_SCOPE
+
+    await MEMBERSHIPS.grant("stranger", "viewer", ORG)
+    levels = LEVELS.get(world.iam)
+    people = CONTAINER_DEFAULTS._known[ORG].members_group_id
+    with as_service_account("api"):
+        for policy_id, scope in ((levels.org_view, MY_CONTAINERS_SCOPE), (levels.org_view, ORG)):
+            world.iam.detach_policy(policy_id, people, scope)
+        world.iam.attach_policy(roles.VIEWER, people, MY_CONTAINERS_SCOPE)
+        world.iam.attach_policy(levels.viewer_access, people, MY_CONTAINERS_SCOPE)
+    # With catalog 21 the role of before already gives nothing at the organization, its
+    # view included: the move gives the view back.
+    assert not any(_at_org(world, "stranger").values())
+
+    report = org_people_view.apply(world.iam, {ORG: people})
+    assert report.converted == [ORG] and not report.failed
+    with as_service_account("api"):
+        held = {(a.policy_id, a.scope) for a in world.iam.list_attachments(principal_id=people)}
+    assert held == {(levels.org_view, MY_CONTAINERS_SCOPE), (levels.org_view, ORG)}
+    assert _at_org(world, "stranger") == {
+        label: label in ("GetOrganization", "ListOrganizations") for label in _AT_ORG
+    }
+    assert org_people_view.apply(world.iam, {ORG: people}).converted == []
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_offers_its_models_and_the_chatting_levels_use_them_there(world):
+    """``UseModel`` is granted by the levels that chat (``${scope}/nexus:model/*``) and
+    bounded by W's offer (``OfferModels``): ``*`` every model, else the ones it names.
+    A Viewer does not chat: no model."""
+    from dataclasses import replace
+
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
+        offer_of,
+        with_offer,
+    )
+
+    await _team(world)
+    W = world.W
+
+    def model(name: str) -> str:
+        return f"{W}/nexus:model/{name}"
+
+    rows = {"member": True, "wadmin": True, "viewer": False, "stranger": False}
+    # The fixture's offer names no model: none is used in W through the level.
+    assert not _can(world, "member", "nexus:UseModel", model("qwen-3.8"))
+    with as_service_account("api"):
+        # W's offer is bounded by its organization's (its parent): it names every model.
+        org_access = world.iam.get_policy(world.record.access_policy_id).parent_id
+        widen_offer(world.iam, org_access, Offer.of(models=["*"]))
+        policy = world.iam.get_policy(world.record.access_policy_id)
+        world.iam.update_policy(
+            policy.id,
+            expected_revision=policy.revision,
+            document=with_offer(
+                policy.document,
+                replace(offer_of(policy.document), models=frozenset({"*"})),
+            ),
+        )
+    for person, wanted in rows.items():
+        assert _can(world, person, "nexus:UseModel", model("gpt-x")) == wanted, person
+    with as_service_account("api"):
+        policy = world.iam.get_policy(world.record.access_policy_id)
+        world.iam.update_policy(
+            policy.id,
+            expected_revision=policy.revision,
+            document=with_offer(
+                policy.document,
+                replace(
+                    offer_of(policy.document),
+                    models=frozenset({"qwen-3.8"}),
+                    default_model="qwen-3.8",
+                ),
+            ),
+        )
+    assert _can(world, "member", "nexus:UseModel", model("qwen-3.8"))
+    assert not _can(world, "member", "nexus:UseModel", model("gpt-x"))

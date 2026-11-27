@@ -8,6 +8,13 @@ import {
 import { PLATFORM_SETTINGS_INDEX, type PlatformSettingsNavGroup } from '@/app/settings/lib/nav';
 import type { SettingsNavGroup } from '@/components/shell/settings-nav';
 import { settingsScopeFromPathname, type SettingsLevelId } from '@/lib/settings-scope-path';
+import {
+  ACCOUNT_PAGE_DESCRIPTIONS,
+  ORGANIZATION_PAGE_DESCRIPTIONS,
+  OTHER_ORGANIZATION_DESCRIPTION,
+  PLATFORM_PAGE_DESCRIPTIONS,
+  WORKSPACE_PAGE_DESCRIPTIONS,
+} from './settings-page-descriptions';
 
 /**
  * Settings, one tab per level, from the widest to the narrowest: what a change there
@@ -16,7 +23,8 @@ import { settingsScopeFromPathname, type SettingsLevelId } from '@/lib/settings-
  * there, and a level with nothing is left out: a plain member has Account alone.
  */
 
-export type SettingsLink = { href: string; label: string; icon: LucideIcon };
+/** `description`: what the page is for, its link's hover tip (`settings-page-descriptions`). */
+export type SettingsLink = { href: string; label: string; icon: LucideIcon; description?: string };
 
 /** `label` null: the level's first group, named by its tab. */
 export type SettingsLinkGroup = { label: string | null; links: SettingsLink[] };
@@ -40,8 +48,12 @@ export type SettingsLevelsInput = {
   platform: PlatformSettingsNavGroup[];
 };
 
-function link(item: { href: string; label: string; icon: LucideIcon }, href = item.href): SettingsLink {
-  return { href, label: item.label, icon: item.icon };
+function link(
+  item: { href: string; label: string; icon: LucideIcon },
+  href = item.href,
+  description?: string
+): SettingsLink {
+  return { href, label: item.label, icon: item.icon, ...(description ? { description } : {}) };
 }
 
 export function settingsLevels(input: SettingsLevelsInput): SettingsLevel[] {
@@ -53,7 +65,10 @@ export function settingsLevels(input: SettingsLevelsInput): SettingsLevel[] {
       id: 'platform',
       label: 'Platform',
       index: PLATFORM_SETTINGS_INDEX,
-      groups: platformGroups.map((group) => ({ label: group.label, links: group.items.map((item) => link(item)) })),
+      groups: platformGroups.map((group) => ({
+        label: group.label,
+        links: group.items.map((item) => link(item, item.href, PLATFORM_PAGE_DESCRIPTIONS[item.id])),
+      })),
     });
   }
 
@@ -61,6 +76,7 @@ export function settingsLevels(input: SettingsLevelsInput): SettingsLevel[] {
     href: orgSettingsIndexPath(org.id),
     label: org.name,
     icon: Building2,
+    description: OTHER_ORGANIZATION_DESCRIPTION,
   }));
   const organization = input.organization && input.organization.items.length > 0 ? input.organization : null;
   if (organization) {
@@ -71,7 +87,13 @@ export function settingsLevels(input: SettingsLevelsInput): SettingsLevel[] {
         heading,
         links: organization.items
           .filter((item) => (item.group ?? null) === heading)
-          .map((item) => link({ ...item, href: orgSettingsSectionPath(organization.id, item.slug) })),
+          .map((item) =>
+            link(
+              { ...item, href: orgSettingsSectionPath(organization.id, item.slug) },
+              undefined,
+              ORGANIZATION_PAGE_DESCRIPTIONS[item.slug]
+            )
+          ),
       }))
       .filter((group) => group.links.length > 0)
       .map((group, index) => ({ label: index === 0 ? null : group.heading, links: group.links }));
@@ -97,7 +119,9 @@ export function settingsLevels(input: SettingsLevelsInput): SettingsLevel[] {
       index: `/workspace/${workspace.id}/settings`,
       groups: workspaceGroups.map((group, index) => ({
         label: index === 0 ? null : group.label,
-        links: group.items.map((item) => link(item, `/workspace/${workspace.id}${item.href}`)),
+        links: group.items.map((item) =>
+          link(item, `/workspace/${workspace.id}${item.href}`, WORKSPACE_PAGE_DESCRIPTIONS[item.href])
+        ),
       })),
     });
   }
@@ -106,7 +130,7 @@ export function settingsLevels(input: SettingsLevelsInput): SettingsLevel[] {
     id: 'account',
     label: 'Account',
     index: '/account',
-    groups: [{ label: null, links: input.account.map((item) => link(item)) }],
+    groups: [{ label: null, links: input.account.map((item) => link(item, item.href, ACCOUNT_PAGE_DESCRIPTIONS[item.href])) }],
   });
   return levels;
 }

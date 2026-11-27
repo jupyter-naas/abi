@@ -32,6 +32,8 @@ class SearchResponse(BaseModel):
 
 
 class WebSearchRequest(BaseModel):
+    # The workspace searching: an engine is used where its offer names it.
+    workspace_id: str = Field(..., min_length=1, max_length=100)
     query: str = Field(..., min_length=1, max_length=500)
     engine: Literal["wikipedia", "duckduckgo"] = "wikipedia"
     limit: int = Field(default=10, ge=1, le=50)

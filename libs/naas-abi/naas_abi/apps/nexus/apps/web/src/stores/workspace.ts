@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { toast } from '@/components/ui/toast';
 import { createDeferredStorage } from '@/lib/deferred-storage';
 import type { WorkspaceFeatureFlags } from '@/lib/feature-access';
 import { DEFAULT_NAV_ORDER, mergeNavOrder } from '@/lib/sidebar-nav';
@@ -1397,7 +1398,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       
       if (!response.ok) {
         if (response.status === 403) {
-          alert('⚠️ Permission denied: Only workspace admins can change theme settings.');
+          toast.error('Permission denied', 'Only workspace admins can change theme settings.');
         } else {
           console.error('Failed to update workspace theme:', response.status);
         }
@@ -1406,7 +1407,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       }
     } catch (error) {
       console.error('Failed to update workspace theme:', error);
-      alert('❌ Failed to save theme changes. Please try again.');
+      toast.error('Failed to save theme changes', 'Please try again.');
       // Revert optimistic update on error
       await get().fetchWorkspaces();
     }

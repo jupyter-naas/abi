@@ -1,10 +1,10 @@
 """A workspace's view of the knowledge graphs, for each request.
 
-Graph rights are IAM's (``graph_grants``, ``graph_placements``). This module
-resolves which graphs a workspace offers its members: its own (IAM placed them
-in it), the ones its saved assignments share with it, and, when it reads the
-whole catalog, every graph of the catalog; each narrowed to what the kernel
-lets the signed-in user read and write.
+Graph rights are IAM's (``graph_placements``, and the Graphs part of the workspace's
+offer, ``iam/given_graphs``). This module resolves which graphs a workspace offers its
+members: its own (IAM placed them in it), the ones its offer gives it, and, when it reads
+the whole catalog, every graph of the catalog; each narrowed to what the kernel lets the
+signed-in user read and write.
 """
 
 from __future__ import annotations
@@ -89,19 +89,31 @@ def build_scope(
     return GraphAccessScope(workspace_id, frozenset(readable), frozenset(writable), can_create)
 
 
+async def graph_config(
+    db: AsyncSession, workspace_id: str, container: str | None
+) -> WorkspaceGraphPolicyConfig:
+    """What the workspace's offer says of its graphs (``given_graphs.config_of``); for a
+    workspace whose access policy is no allow-list yet, its saved assignments."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import given_graphs
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.resource_access_postgres import (
+        load_resource_policy,
+    )
+
+    offer = await AUTHZ.offer_of(container) if container else None
+    if offer is not None:
+        return given_graphs.config_of(offer)
+    saved = await load_resource_policy(db, workspace_id, "graphs")
+    return WorkspaceGraphPolicyConfig.model_validate(saved.data)
+
+
 async def load_workspace_scope(
     db: AsyncSession,
     store: Any,
     workspace_id: str,
     user: Any,
 ) -> GraphAccessScope:
-    from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.resource_access_postgres import (
-        load_resource_policy,
-    )
-
-    saved = await load_resource_policy(db, workspace_id, "graphs")
-    config = WorkspaceGraphPolicyConfig.model_validate(saved.data)
     container = await AUTHZ.container_of(workspace_id)
+    config = await graph_config(db, workspace_id, container)
 
     def resolve() -> GraphAccessScope:
         owned = graph_iam.owned_by(workspace_id)

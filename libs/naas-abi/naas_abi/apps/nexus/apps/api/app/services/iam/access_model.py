@@ -77,7 +77,7 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import unquote
 
-from naas_abi.apps.nexus.apps.api.app.services.iam import platform_files, runtime
+from naas_abi.apps.nexus.apps.api.app.services.iam import files_offer, given_maps, runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import NEXUS_CATALOG
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
     CONTAINER_DEFAULTS,
@@ -117,6 +117,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import (
     Item,
     Offer,
     in_offer_form,
+    maps_only,
     offer_of,
     offer_section,
     with_offer,
@@ -182,6 +183,10 @@ COMPANIONS = frozenset({roles.PLATFORM_MEMBER, roles.PLATFORM_VIEWER, roles.PLAT
 GRAPH_GRANT_PREFIX = "workspace."
 GRAPH_GRANT_INFIX = ".graphs."
 
+# The actions a workspace's offer names item by item beside its features (search
+# sources, ontology files, chat models), which the level policies grant by type.
+OFFER_SECTION_ACTIONS = frozenset({"nexus:UseSearchSource", "nexus:UseOntology", "nexus:UseModel"})
+
 # Why a decision changed: (label, intended). Intended: the narrowings and widenings
 # the ADR lists; the others are what the model is, named so none is silent.
 REASONS: dict[str, tuple[str, bool]] = {
@@ -200,6 +205,11 @@ REASONS: dict[str, tuple[str, bool]] = {
         "The org Member role goes: reached the organization only through a workspace",
         True,
     ),
+    "org_people_view": (
+        "The organization's people see it and nothing it holds (Organization view): the "
+        "roles stop at the organization",
+        True,
+    ),
     "level_global": ("A level is one choice: the highest held anywhere applies everywhere", False),
     "level_features": ("The level's features, within what the workspace offers", True),
     "viewer_features": (
@@ -208,6 +218,10 @@ REASONS: dict[str, tuple[str, bool]] = {
         False,
     ),
     "level_instances": ("The level's agents and apps, within what the workspace offers", False),
+    "offer_sections": (
+        "The level's search sources and ontology files, within what the workspace offers",
+        True,
+    ),
     "module_actions": ("A module's declared actions are not part of a workspace's offer", False),
     "shared_graphs": (
         "Shared graphs: read for the workspace's people, write for its admins",
@@ -529,7 +543,9 @@ def ceiling_offer(
     held = Offer()
     for statement in _statements_of(document):
         sid, effect, actions, resources = _statement_parts(statement)
-        if offer_section(sid) is not None and effect == "Allow":
+        section = offer_section(sid)
+        if section is not None and (effect == "Allow" or section in given_maps.DENY_SIDS):
+            # Its sections are kept; of its Denies, the deployment maps it closes.
             held = held.merged(offer_of({"statements": [statement]}))
             continue
         if sid == NOTHING_SID:
@@ -593,7 +609,8 @@ def ceiling_offer(
         **{kind: frozenset(items) for kind, items in offered.items()},
         features=frozenset(wanted_features | set(held.features)),
     )
-    return offer, dropped
+    # The Maps part ``maps_offer_v1`` wrote into a ceiling not converted yet is kept.
+    return offer.merged(maps_only(held)), dropped
 
 
 # -- what each person holds and gets --------------------------------------------------
@@ -967,8 +984,9 @@ def _no_level_needed(orgs: set[str]) -> str:
 
 
 def _is_graph_grant(policy_id: str, names: Mapping[str, str]) -> bool:
-    """A workspace's shared-graph policy (``graph_grants.policy_name``): per person,
-    kept in step by ``_sync_graph_grants``."""
+    """A workspace's shared-graph policy of before (``graphs_offer.policy_name``): per
+    person, kept in step by ``_sync_graph_grants`` until ``graphs_offer_v1`` moves it into
+    the offer."""
     name = names.get(policy_id, "")
     return name.startswith(GRAPH_GRANT_PREFIX) and GRAPH_GRANT_INFIX in name
 
@@ -1277,10 +1295,11 @@ def _default_admin(iam: Any, inputs: Inputs, outcome: Outcome, levels: Levels) -
 
 
 def _sync_graph_grants(iam: Any, inputs: Inputs, outcome: Outcome) -> list[str]:
-    """Each workspace's shared-graph policies (``graph_grants``) held by exactly its
-    people (read) and its admins (write), unscoped, as Nexus keeps them. Returns the
-    policies' ids."""
-    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
+    """Each workspace's shared-graph policies of before (``graphs_offer.policy_name``) held
+    by exactly its people (read) and its admins (write), unscoped, as Nexus kept them
+    until ``graphs_offer_v1`` (which runs after this move) put them in the offer. Returns
+    the policies' ids."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.graphs_offer import (
         READ,
         WRITE,
         policy_name,
@@ -1559,6 +1578,8 @@ def reason_of(
         return "model_sets"
     if org and is_org_container(container) and org in plan.org_roles_removed:
         return "org_member_role"
+    if org and is_org_container(container) and not after and org not in plan.org_admin_of:
+        return "org_people_view"
     if not after and action.startswith("nexus:") and _deletes(action):
         return "owners_lose_delete"
     if action.startswith("triple_store:"):
@@ -1583,6 +1604,8 @@ def reason_of(
         and f"/{service}:" in resource
     ):
         return "module_actions"
+    if action in OFFER_SECTION_ACTIONS:
+        return "offer_sections"
     if action == USE_FEATURE and not after and plan.level == VIEWER:
         return "viewer_features"
     if action == USE_FEATURE:
@@ -1713,7 +1736,6 @@ def apply_planned(iam: Any, inputs: Inputs, levels: Levels) -> dict[str, Default
     """The move made on ``iam`` itself, in IAM's thread. Returns the records to
     write."""
     done = apply(iam, inputs, levels, dry_run=False)
-    platform_files.sync_platform_files(iam)
     return done.records
 
 
@@ -1795,9 +1817,9 @@ async def read_inputs(
     member_models = tuple(getattr(models, "member_set", None) or ()) if models else ()
     flags = getattr(settings, "feature_flags", None)
     if flags is not None:
-        from naas_abi.apps.nexus.apps.api.app.core.feature_flags import enabled_feature_catalog
+        from naas_abi.apps.nexus.apps.api.app.core.feature_flags import deployment_catalog
 
-        features = tuple(enabled_feature_catalog(flags))
+        features = tuple(deployment_catalog(flags))
     else:
         features = tuple(enabled_features())
     inputs = Inputs(
@@ -1876,11 +1898,11 @@ def named_universe(iam: Any) -> Universe:
 async def convert_drive_flags(
     iam: Any, db: AsyncSession, *, apply: bool = True
 ) -> list[dict[str, Any]]:
-    """The drive flags the holding table kept, converted by Platform Files
-    (``platform_files.convert_legacy_drive_flags``, #1590), which owns that table and
-    drops it: its rows (workspace, flag, action, detail). ``apply=False``: the report
-    alone, nothing changed, the table kept."""
-    changes = await platform_files.convert_legacy_drive_flags(iam, db, apply=apply)
+    """The drive flags the holding table kept, converted into the workspaces' offers
+    (``files_offer.convert_legacy_drive_flags``), which owns that table and drops it:
+    its rows (workspace, flag, action, detail). ``apply=False``: the report alone,
+    nothing changed, the table kept."""
+    changes = await files_offer.convert_legacy_drive_flags(iam, db, apply=apply)
     return [asdict(change) for change in changes]
 
 

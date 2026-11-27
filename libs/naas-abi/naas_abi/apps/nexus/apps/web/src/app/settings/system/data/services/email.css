@@ -46,20 +46,12 @@
   background-color: #FFFFFF;
 }
 
-.data-mail-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--font-size-sm);
-  color: var(--foreground-hex);
-}
-
 .data-mail-footer {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  margin: 6px -20px -18px;
+  margin: 6px -20px -16px;
   padding: 12px 20px;
   border-top: 1px solid var(--border-hex);
 }

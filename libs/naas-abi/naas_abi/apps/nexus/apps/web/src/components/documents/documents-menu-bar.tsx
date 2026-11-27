@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, ChevronDown, ChevronRight } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Menu, MenuBar, menuClasses, type MenuEntry } from '@/components/ui/menu';
 import {
   DOCUMENT_PARAGRAPH_STYLES,
   type DocumentParagraphStyleId,
@@ -10,23 +11,6 @@ import {
 } from './documents-outline';
 
 export type DocumentsEditorMode = 'preview' | 'code';
-
-type MenuKey = 'file' | 'edit' | 'view' | 'insert' | 'format' | null;
-
-export type SectionsMenuEntry = {
-  id: string;
-  label?: string;
-  shortcut?: string;
-  disabled?: boolean;
-  checked?: boolean;
-  separator?: boolean;
-  items?: SectionsMenuEntry[];
-  onSelect?: () => void;
-};
-
-function isSeparator(item: SectionsMenuEntry): boolean {
-  return Boolean(item.separator);
-}
 
 export function isDocumentsTypingTarget(target: EventTarget | null): boolean {
   if (target == null || typeof target !== 'object') return false;
@@ -55,11 +39,11 @@ export function buildSectionsEditMenu(opts: {
   manualEdit?: boolean;
   canManualEdit?: boolean;
   onManualEditChange?: (enabled: boolean) => void;
-}): SectionsMenuEntry[] {
+}): MenuEntry[] {
   return [
     { id: 'undo', label: 'Undo', shortcut: `${opts.mod}Z`, disabled: true },
     { id: 'redo', label: 'Redo', shortcut: `${opts.mod}Y`, disabled: true },
-    { id: 'sep-history', separator: true },
+    { id: 'sep-history', kind: 'separator' },
     {
       id: 'duplicate',
       label: 'Duplicate page',
@@ -73,7 +57,7 @@ export function buildSectionsEditMenu(opts: {
       disabled: !opts.canDelete,
       onSelect: opts.onDelete,
     },
-    { id: 'sep-manual-edit', separator: true },
+    { id: 'sep-manual-edit', kind: 'separator' },
     {
       id: 'manual-edit',
       label: 'Manual edit',
@@ -89,7 +73,7 @@ export function buildSectionsInsertMenu(opts: {
   canDuplicate: boolean;
   onInsert: (kind: DocumentsInsertKind) => void;
   onDuplicate: () => void;
-}): SectionsMenuEntry[] {
+}): MenuEntry[] {
   return [
     {
       id: 'page-break',
@@ -109,7 +93,7 @@ export function buildSectionsInsertMenu(opts: {
       disabled: !opts.canInsert,
       onSelect: () => opts.onInsert('paragraph'),
     },
-    { id: 'sep-dup', separator: true },
+    { id: 'sep-dup', kind: 'separator' },
     {
       id: 'duplicate',
       label: 'Duplicate page',
@@ -117,204 +101,6 @@ export function buildSectionsInsertMenu(opts: {
       onSelect: opts.onDuplicate,
     },
   ];
-}
-
-function MenuRow({ item, onClose }: { item: SectionsMenuEntry; onClose: () => void }) {
-  const [subOpen, setSubOpen] = useState(false);
-  if (isSeparator(item)) {
-    return <div role="separator" className="my-1 h-px bg-border" />;
-  }
-  const submenu = item.items?.filter((child) => !isSeparator(child));
-  if (submenu?.length) {
-    return (
-      <div
-        className="relative"
-        onMouseEnter={() => {
-          if (!item.disabled) setSubOpen(true);
-        }}
-        onMouseLeave={() => setSubOpen(false)}
-      >
-        <button
-          type="button"
-          role="menuitem"
-          aria-haspopup="menu"
-          aria-expanded={subOpen}
-          disabled={item.disabled}
-          data-testid={`sections-menuitem-${item.id}`}
-          onClick={() => {
-            if (item.disabled) return;
-            setSubOpen((open) => !open);
-          }}
-          className={cn(
-            'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
-            item.disabled
-              ? 'cursor-not-allowed text-muted-foreground/50'
-              : 'hover:bg-muted',
-          )}
-        >
-          <span className="w-3.5 shrink-0" />
-          <span className="flex-1">{item.label}</span>
-          <ChevronRight size={12} className="opacity-60" />
-        </button>
-        {subOpen && !item.disabled ? (
-          <div
-            role="menu"
-            data-testid={`sections-submenu-${item.id}`}
-            className="absolute left-full top-0 z-[301] ml-0.5 min-w-[10rem] rounded-md border border-border bg-card py-1 shadow-lg"
-          >
-            {submenu.map((child) => (
-              <MenuRow key={child.id} item={child} onClose={onClose} />
-            ))}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-  return (
-    <button
-      key={item.id}
-      type="button"
-      role="menuitem"
-      disabled={item.disabled}
-      data-testid={`sections-menuitem-${item.id}`}
-      onClick={() => {
-        if (item.disabled || !item.onSelect) return;
-        item.onSelect();
-        onClose();
-      }}
-      className={cn(
-        'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
-        item.disabled
-          ? 'cursor-not-allowed text-muted-foreground/50'
-          : 'hover:bg-muted',
-      )}
-    >
-      <span className="w-3.5 shrink-0">
-        {item.checked ? <Check size={12} className="text-workspace-accent" /> : null}
-      </span>
-      <span className="flex-1">{item.label}</span>
-      {item.shortcut ? (
-        <span className="text-[10px] text-muted-foreground">{item.shortcut}</span>
-      ) : null}
-    </button>
-  );
-}
-
-function ParagraphStylePicker({
-  style,
-  disabled,
-  open,
-  onOpenChange,
-  onSelect,
-}: {
-  style: DocumentParagraphStyleId;
-  disabled: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSelect: (style: DocumentParagraphStyleId) => void;
-}) {
-  const current =
-    DOCUMENT_PARAGRAPH_STYLES.find((item) => item.id === style)?.label || 'Normal text';
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label="Paragraph style"
-        disabled={disabled}
-        data-testid="documents-style-picker"
-        onClick={() => {
-          if (!disabled) onOpenChange(!open);
-        }}
-        className={cn(
-          'inline-flex min-w-[7.5rem] items-center justify-between gap-1 rounded px-2 py-1 text-xs font-medium transition-colors',
-          disabled
-            ? 'cursor-not-allowed text-muted-foreground/50'
-            : open
-              ? 'bg-muted text-foreground'
-              : 'text-foreground/90 hover:bg-muted hover:text-foreground',
-        )}
-      >
-        <span className="truncate">{current}</span>
-        <ChevronDown size={12} className="opacity-60" />
-      </button>
-      {open && !disabled ? (
-        <div
-          role="listbox"
-          aria-label="Paragraph style"
-          data-testid="documents-style-picker-dropdown"
-          className="absolute left-0 top-full z-[300] mt-1 min-w-[12.5rem] rounded-md border border-border bg-card py-1 shadow-lg"
-        >
-          {DOCUMENT_PARAGRAPH_STYLES.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="option"
-              aria-selected={item.id === style}
-              data-testid={`documents-style-${item.id}`}
-              onClick={() => {
-                onSelect(item.id);
-                onOpenChange(false);
-              }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted"
-            >
-              <span className="w-3.5 shrink-0">
-                {item.id === style ? <Check size={12} className="text-workspace-accent" /> : null}
-              </span>
-              <span className="flex-1">{item.label}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function MenuDropdown({
-  label,
-  menuKey,
-  open,
-  onOpenChange,
-  items,
-}: {
-  label: string;
-  menuKey: Exclude<MenuKey, null>;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  items: SectionsMenuEntry[];
-}) {
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        data-testid={`sections-menu-${menuKey}`}
-        onClick={() => onOpenChange(!open)}
-        className={cn(
-          'inline-flex items-center gap-0.5 rounded px-2 py-1 text-xs font-medium transition-colors',
-          open
-            ? 'bg-muted text-foreground'
-            : 'text-foreground/90 hover:bg-muted hover:text-foreground',
-        )}
-      >
-        {label}
-        <ChevronDown size={12} className="opacity-60" />
-      </button>
-      {open && (
-        <div
-          role="menu"
-          data-testid={`sections-menu-${menuKey}-dropdown`}
-          className="absolute left-0 top-full z-[300] mt-1 min-w-[12.5rem] rounded-md border border-border bg-card py-1 shadow-lg"
-        >
-          {items.map((item) => (
-            <MenuRow key={item.id} item={item} onClose={() => onOpenChange(false)} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function modKey(): string {
@@ -407,21 +193,9 @@ export function DocumentsMenuBar({
   onParagraphStyleChange,
   paragraphStyleDisabled,
 }: DocumentsMenuBarProps) {
-  const [openMenu, setOpenMenu] = useState<MenuKey>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
   const mod = modKey();
 
-  useEffect(() => {
-    const onDoc = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpenMenu(null);
-      }
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, []);
-
-  const fileItems: SectionsMenuEntry[] = [
+  const fileItems: MenuEntry[] = [
     {
       id: 'new',
       label: 'New document',
@@ -429,7 +203,7 @@ export function DocumentsMenuBar({
       onSelect: onNewPresentation,
     },
   ];
-  const saveItems: SectionsMenuEntry[] = [];
+  const saveItems: MenuEntry[] = [];
   if (onCommit) {
     saveItems.push({
       id: 'commit',
@@ -447,7 +221,7 @@ export function DocumentsMenuBar({
       onSelect: onSaveToMyDrive,
     });
   }
-  const exportItems: SectionsMenuEntry[] = [];
+  const exportItems: MenuEntry[] = [];
   if (onExportPdf) {
     exportItems.push({
       id: 'export-pdf',
@@ -473,10 +247,10 @@ export function DocumentsMenuBar({
     });
   }
   if (saveItems.length) {
-    fileItems.push({ id: 'sep-save', separator: true }, ...saveItems);
+    fileItems.push({ id: 'sep-save', kind: 'separator' }, ...saveItems);
   }
   if (exportItems.length) {
-    fileItems.push({ id: 'sep-export', separator: true }, ...exportItems);
+    fileItems.push({ id: 'sep-export', kind: 'separator' }, ...exportItems);
   }
 
   // File/Edit/View/Insert are always present, like a real app menu bar :
@@ -504,7 +278,7 @@ export function DocumentsMenuBar({
   });
 
   const canChangeMode = Boolean(mode && onModeChange);
-  const viewItems: SectionsMenuEntry[] = [
+  const viewItems: MenuEntry[] = [
     {
       id: 'preview',
       label: 'Preview',
@@ -519,7 +293,7 @@ export function DocumentsMenuBar({
       checked: mode === 'code',
       onSelect: () => onModeChange?.('code'),
     },
-    { id: 'sep-refresh', separator: true },
+    { id: 'sep-refresh', kind: 'separator' },
     {
       id: 'refresh',
       label: 'Refresh',
@@ -529,50 +303,41 @@ export function DocumentsMenuBar({
     },
   ];
 
+  const menus: [string, string, MenuEntry[]][] = [
+    ['file', 'File', fileItems],
+    ['edit', 'Edit', editItems],
+    ['view', 'View', viewItems],
+    ['insert', 'Insert', insertItems],
+  ];
+
   return (
-    <div
-      ref={rootRef}
-      className="flex min-w-0 items-center gap-1"
-      data-testid="documents-menu-bar"
+    <MenuBar
+      label="Documents menus"
+      title="Documents"
+      trailing={trailing}
+      testId="documents-menu-bar"
       data-new-disabled={newDisabled ? 'true' : undefined}
     >
-      <span className="mr-1 hidden text-xs font-semibold text-foreground sm:inline">Documents</span>
-      <MenuDropdown
-        label="File"
-        menuKey="file"
-        open={openMenu === 'file'}
-        onOpenChange={(open) => setOpenMenu(open ? 'file' : null)}
-        items={fileItems}
-      />
-      <MenuDropdown
-        label="Edit"
-        menuKey="edit"
-        open={openMenu === 'edit'}
-        onOpenChange={(open) => setOpenMenu(open ? 'edit' : null)}
-        items={editItems}
-      />
-      <MenuDropdown
-        label="View"
-        menuKey="view"
-        open={openMenu === 'view'}
-        onOpenChange={(open) => setOpenMenu(open ? 'view' : null)}
-        items={viewItems}
-      />
-      <MenuDropdown
-        label="Insert"
-        menuKey="insert"
-        open={openMenu === 'insert'}
-        onOpenChange={(open) => setOpenMenu(open ? 'insert' : null)}
-        items={insertItems}
-      />
-      <ParagraphStylePicker
-        style={paragraphStyle}
+      {menus.map(([key, label, items]) => (
+        <Menu key={key} label={label} items={items} testId={`sections-menu-${key}`} itemTestIdPrefix="sections-menuitem-" />
+      ))}
+      <Menu
+        testId="documents-style-picker"
         disabled={paragraphStyleDisabled || !onParagraphStyleChange}
-        open={openMenu === 'format'}
-        onOpenChange={(open) => setOpenMenu(open ? 'format' : null)}
-        onSelect={(next) => onParagraphStyleChange?.(next)}
+        trigger={
+          <button type="button" aria-label="Paragraph style" className={cn(menuClasses.trigger, 'min-w-[7.5rem] justify-between')}>
+            <span className="truncate">{DOCUMENT_PARAGRAPH_STYLES.find((item) => item.id === paragraphStyle)?.label || 'Normal text'}</span>
+            <ChevronDown size={11} className="opacity-60" />
+          </button>
+        }
+        items={DOCUMENT_PARAGRAPH_STYLES.map((item) => ({
+          id: item.id,
+          label: item.label,
+          checked: item.id === paragraphStyle,
+          testId: `documents-style-${item.id}`,
+          onSelect: () => onParagraphStyleChange?.(item.id),
+        }))}
       />
-      {trailing}
-    </div>
+    </MenuBar>
   );
 }

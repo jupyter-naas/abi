@@ -10,8 +10,10 @@ the owners' and admins' to read (#1346), so their list and get actions are
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import action, rtype
 
 TYPES = (
-    # An organization sits at the platform.
-    rtype("organization", container=True, parents=("-",)),
+    # An organization sits at the platform. A built-in role attached at
+    # ``${my workspaces}`` gives nothing at it: its people hold "Organization view"
+    # ("<O> people", ``container_defaults``), its admins their roles attached at it.
+    rtype("organization", container=True, parents=("-",), no_membership_roles=True),
     # Members of an org (in its container) and of a workspace (in the workspace's).
     rtype("member"),
     rtype("domain"),

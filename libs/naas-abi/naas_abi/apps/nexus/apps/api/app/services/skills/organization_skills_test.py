@@ -115,44 +115,12 @@ async def test_an_organization_skill_keeps_to_the_organizations_admins(world) ->
 
 
 @pytest.mark.asyncio
-async def test_a_workspace_keeps_an_organization_skill_out_of_its_chats(world) -> None:
-    sid = await _org_skill(world)
-    async with world.as_("member2") as http:
-        refused = await http.put(f"/{sid}/workspaces/ws-2", json={"enabled": False})
-    assert refused.status_code == 403
-    async with world.as_("admin2") as http:
-        off = await http.put(f"/{sid}/workspaces/ws-2", json={"enabled": False})
-    assert off.status_code == 200, off.text
-    assert off.json()["enabled_here"] is False
-    assert PROMPT not in await world.block("member2", "ws-2")
-    # Only there: the organization's other workspaces still carry it.
-    assert PROMPT in await world.block("member1", "ws-1")
-    async with world.as_("admin2") as http:
-        on = await http.put(f"/{sid}/workspaces/ws-2", json={"enabled": True})
-    assert on.json()["enabled_here"] is True
-    assert PROMPT in await world.block("member2", "ws-2")
-
-
-@pytest.mark.asyncio
 async def test_the_chat_keeps_the_skills_its_user_may_not_use_out(world) -> None:
     await _org_skill(world)
     # A viewer of ws-2 has no skills feature there.
     assert PROMPT not in await world.block("viewer2", "ws-2")
     assert PROMPT not in await world.block("stranger", "ws-2")
     assert PROMPT in await world.block("member2", "ws-2")
-
-
-@pytest.mark.asyncio
-async def test_a_switch_keeps_to_organization_skills(world) -> None:
-    sid = await _org_skill(world)
-    async with world.as_("orgadmin") as http:
-        off = await http.put(f"/{sid}/workspaces/ws-1", json={"enabled": False})
-        assert off.json()["enabled_here"] is False
-        narrowed = await http.patch(f"/{sid}", json={"scope": "workspace"})
-        assert narrowed.status_code == 200, narrowed.text
-        listed = await http.get("/?workspace_id=ws-1")
-    assert [(s["id"], s["enabled_here"]) for s in listed.json()] == [(sid, True)]
-    assert PROMPT in await world.block("member1", "ws-1")
 
 
 @pytest.mark.asyncio

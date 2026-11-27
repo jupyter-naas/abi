@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { resolveSlidesPreviewAssets } from './slides-assets';
+import { resolveSlidesPreviewAssets } from '@/components/office/office-assets';
+import { OfficePartThumb } from '@/components/office/office-cover-thumb';
+import { SLIDES_KIND } from '@/components/office/office-kinds';
 import { type SlideOutlineItem } from './slides-outline';
-import { SlidesSlideThumb } from './slides-cover-thumb';
+import { SLIDES_COVER_FIT } from './slides-preview-fit';
 
 export function SlidesFilmstrip({
   html,
@@ -107,7 +109,7 @@ export function SlidesFilmstrip({
                       : 'ring-1 ring-border hover:ring-muted-foreground/50',
                   )}
                 >
-                  <SlidesSlideThumb html={thumbHtml} index={slide.index} title={label} />
+                  <OfficePartThumb fit={SLIDES_COVER_FIT} testId={SLIDES_KIND.partThumbTestId} html={thumbHtml} index={slide.index} title={label} />
                 </span>
                 <span
                   className={cn(

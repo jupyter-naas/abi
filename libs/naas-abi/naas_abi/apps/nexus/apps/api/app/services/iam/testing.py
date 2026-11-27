@@ -305,6 +305,9 @@ class NexusIam:
         from naas_abi.apps.nexus.apps.api.app.services.iam.levels import LEVELS
 
         def forget() -> None:
+            from naas_abi.apps.nexus.apps.api.app.services.iam import platform_offer
+
+            platform_offer.forget()
             self.authz.forget_workspaces()
             LEVELS.forget()
             model_sets.forget()

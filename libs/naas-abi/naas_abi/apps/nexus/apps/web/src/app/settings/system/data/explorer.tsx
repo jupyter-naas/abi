@@ -16,7 +16,10 @@ import { SystemFrame } from '../system-frame';
 import { createDataApi, type DataApi, type Failure } from './data-api';
 import { childId, decodeLocation, encodeLocation, plural } from './data-model';
 import type { ResourceEntry } from './data-types';
-import { EmptyState, Notice } from './data-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Notice } from '@/components/ui/notice';
+import { Loading } from '@/components/ui/spinner';
+import { toast } from '@/components/ui/toast';
 import { CreateDialog, DeleteDialog, EditorDialog, type EditorRequest } from './dialogs';
 import { Inspector } from './inspector';
 import { RecentChanges } from './recent';
@@ -24,7 +27,6 @@ import { ShortcutsSheet } from './shortcuts';
 import { Browser, ServiceHeader, Toolbar } from './browser';
 import { useServiceView } from './services/registry';
 import type { ServiceView } from './services/types';
-import { ToastStack, useToasts } from './toasts';
 import { useExplorer } from './use-explorer';
 
 const WIDTH_KEY = 'nexus-data-inspector-width';
@@ -74,12 +76,12 @@ export function DataExplorer(props: DataExplorerProps) {
   const { view, failed } = useServiceView(props.service);
   if (failed) {
     return (
-      <p className="system-empty" role="alert">
+      <Notice tone="error" className="m-6">
         This page could not be loaded. Reload to try again.
-      </p>
+      </Notice>
     );
   }
-  if (!view) return <p className="system-empty">Loading…</p>;
+  if (!view) return <Loading />;
   return <ServiceExplorer {...props} view={view} />;
 }
 
@@ -96,7 +98,6 @@ function ServiceExplorer({
   const params = useSearchParams();
   const initial = useMemo(() => decodeLocation(new URLSearchParams(params.toString())), []); // eslint-disable-line react-hooks/exhaustive-deps
   const x = useExplorer(api, service, initial, nonce);
-  const { toasts, push, dismiss } = useToasts();
   const searchRef = useRef<HTMLInputElement>(null);
   const [chosenWidth, setWidth] = useState<number | null>(null);
   const [editor, setEditor] = useState<EditorRequest | null>(null);
@@ -138,8 +139,8 @@ function ServiceExplorer({
   }, [x.path, itemId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const notify = useCallback(
-    (failure: Failure) => push({ tone: 'danger', title: failure.source === 'audit' ? 'Audit log unavailable' : 'Something went wrong', detail: failure.reason }),
-    [push],
+    (failure: Failure) => toast({ tone: 'error', title: failure.source === 'audit' ? 'Audit log unavailable' : 'Something went wrong', detail: failure.reason }),
+    [],
   );
 
   const activate = (entry: ResourceEntry) => {
@@ -176,15 +177,15 @@ function ServiceExplorer({
     for (const file of files) {
       const name = view.dropName ? view.dropName(file) : file.name;
       if (!name) {
-        push({ tone: 'danger', title: `${file.name} was not uploaded`, detail: view.dropHint });
+        toast({ tone: 'error', title: `${file.name} was not uploaded`, detail: view.dropHint });
         continue;
       }
       const result = await x.write(childId(x.parent, name), file);
       if (result.ok) done += 1;
-      else if (result.status === 409) push({ tone: 'danger', title: `${file.name} already exists`, detail: 'Open it and use Edit to replace it.' });
+      else if (result.status === 409) toast({ tone: 'error', title: `${file.name} already exists`, detail: 'Open it and use Edit to replace it.' });
       else notify(result);
     }
-    if (done) push({ tone: 'success', title: `Uploaded ${plural(done, 'file', 'files')}`, detail: `to ${parentLabel}` });
+    if (done) toast({ tone: 'success', title: `Uploaded ${plural(done, 'file', 'files')}`, detail: `to ${parentLabel}` });
   };
 
   // Keyboard: / search · j k ↑ ↓ move · Enter open · Esc close · ⌫ up · n new · e edit · d download · r refresh · ⌘⌫ delete
@@ -243,22 +244,22 @@ function ServiceExplorer({
   if (x.servicesFailure) {
     return frame(
       <div className="data-explorer-state">
-        <Notice tone="danger">{x.servicesFailure.reason}</Notice>
+        <Notice tone="error">{x.servicesFailure.reason}</Notice>
       </div>,
     );
   }
   if (!x.services) {
-    return frame(<div className="data-explorer-state data-muted">Loading…</div>);
+    return frame(<Loading />);
   }
   if (!x.service || !x.service.available) {
     return frame(
       <div className="data-explorer">
         <EmptyState
-          icon={view.icon}
+          className="flex-1"
+          icon={<view.icon size={22} strokeWidth={1.5} />}
           title={x.service ? `${view.label} is off in this deployment` : `This deployment has no ${view.label.toLowerCase()} service`}
-        >
-          {x.service?.reason || null}
-        </EmptyState>
+          description={x.service?.reason || null}
+        />
       </div>,
     );
   }
@@ -357,7 +358,7 @@ function ServiceExplorer({
               const result = await x.write(id, body, confirm, options);
               if (result.ok) {
                 setEditor(null);
-                push({ tone: 'success', title: editor.mode === 'edit' ? 'Saved' : `Created ${result.data.name}`, detail: 'Recorded in the audit log' });
+                toast({ tone: 'success', title: editor.mode === 'edit' ? 'Saved' : `Created ${result.data.name}`, detail: 'Recorded in the audit log' });
               }
               return result;
             }}
@@ -373,7 +374,7 @@ function ServiceExplorer({
               const result = await x.write(id, body);
               if (result.ok) {
                 setCreating(false);
-                push({ tone: 'success', title: `${view.createLabel ?? 'Created'}: ${result.data.name}`, detail: 'Recorded in the audit log' });
+                toast({ tone: 'success', title: `${view.createLabel ?? 'Created'}: ${result.data.name}`, detail: 'Recorded in the audit log' });
               }
               return result;
             }}
@@ -389,7 +390,7 @@ function ServiceExplorer({
             onConfirm={async (typed) => {
               const result = await x.remove(deleting.id, typed);
               if (!result.ok) return result;
-              push({
+              toast({
                 tone: 'success',
                 title: `${view.deleteLabel ? `${view.deleteLabel}ed` : 'Deleted'} ${deleting.name}`,
                 detail: 'Recorded in the audit log',
@@ -411,7 +412,6 @@ function ServiceExplorer({
           />
         )}
         {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
-        <ToastStack toasts={toasts} dismiss={dismiss} />
       </div>
     </Tooltip.Provider>,
   );

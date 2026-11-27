@@ -41,12 +41,15 @@ from naas_abi.apps.nexus.apps.api.app.services.documents.handlers import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.drives.handlers import router as drives_router
 from naas_abi.apps.nexus.apps.api.app.services.feature_access.handlers import (
+    org_router as org_feature_access_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.feature_access.handlers import (
+    platform_router as platform_feature_access_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.feature_access.handlers import (
     router as feature_access_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
-from naas_abi.apps.nexus.apps.api.app.services.iam.platform_files_routes import (
-    router as platform_files_router,
-)
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.handlers import (
     router as iam_admin_router,
 )
@@ -115,10 +118,13 @@ api_router.include_router(
     organizations.public_router, prefix="/organizations", tags=["organizations-public"]
 )
 api_router.include_router(workspaces_router, prefix="/workspaces", tags=["workspaces"])
-# Workspace settings > General › Features: the managed per-feature policies.
+# Workspace settings › Features and › Files, and the offer ("<W> access") of the policy page.
 api_router.include_router(feature_access_router, prefix="/workspaces", tags=["workspaces"])
-# Workspace settings > General › Platform Files: given with the workspace (#1590).
-api_router.include_router(platform_files_router, prefix="/workspaces", tags=["workspaces"])
+api_router.include_router(platform_feature_access_router, prefix="/platform", tags=["platform"])
+# Organization › Access › Features, Services and Modules: the same on "<O> access".
+api_router.include_router(
+    org_feature_access_router, prefix="/organizations", tags=["organizations"]
+)
 # Invitations through the engine's identity providers, and IdP groups bound to roles.
 api_router.include_router(invitations_router, prefix="/invitations", tags=["invitations"])
 api_router.include_router(idp_groups_router, prefix="/idp-groups", tags=["invitations"])

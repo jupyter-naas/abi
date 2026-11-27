@@ -218,6 +218,26 @@ async def test_the_workspaces_are_those_iam_accepts(world) -> None:
 
 
 @pytest.mark.asyncio
+async def test_no_workspace_to_view_says_why(world) -> None:
+    service, store, iam, _, _ = world
+
+    found = await service.eligibility(VIEWER, "usr_carol")
+    assert [w.id for w in found.workspaces] == ["alpha"] and found.reason is None
+
+    # Never signed in to Nexus: no account linked to the IAM id.
+    nobody = await service.eligibility(VIEWER, "usr_nobody")
+    assert (nobody.workspaces, nobody.reason) == ([], "not_signed_in")
+    # Signed in, in no workspace.
+    iam.belongs = {}
+    assert (await service.eligibility(VIEWER, "usr_carol")).reason == "no_workspace"
+    # In workspaces, each refused by IAM: its words are kept.
+    iam.belongs = {"carol": ["alpha", "bravo"]}
+    iam.allowed = set()
+    refused = await service.eligibility(VIEWER, "usr_carol")
+    assert refused.reason == "refused" and "You may not view as usr_carol" in (refused.detail or "")
+
+
+@pytest.mark.asyncio
 async def test_the_person_is_named_by_their_principal_id_whichever_id_was_given(world) -> None:
     service, store, iam, audit, _ = world
 

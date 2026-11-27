@@ -46,6 +46,7 @@ def rtype(
     policy_only: bool = False,
     container: bool = False,
     platform_companions: bool = False,
+    no_membership_roles: bool = False,
     parents: tuple[str, ...] = (),
     description: str = "",
 ) -> ResourceType:
@@ -55,6 +56,7 @@ def rtype(
         placement="platform" if platform else "placed",
         container=container,
         platform_companions=platform_companions,
+        no_membership_roles=no_membership_roles,
         parents=parents,
         personal=personal,
         description=description,

@@ -187,6 +187,16 @@ def test_ontologies_are_listed_every_one_above_a_workspace_and_its_enabled_ones_
 
     monkeypatch.setattr(database, "AsyncSessionLocal", session)
     monkeypatch.setattr(resource_access_postgres, "load_resource_policy", load)
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_offer import Offer
+
+    # ws-1's access policy is no allow-list yet: its stored list.
+    offers: dict[str, object] = {}
+
+    async def offer_of(container):
+        return offers.get(container)
+
+    monkeypatch.setattr(AUTHZ, "offer_of", offer_of)
     lister = listers.OnLoop(loop, listers.ontologies)
     at_org = lister.list_resources(ListingQuery("nexus", "ontology", ORG))
     assert [(i.name, i.label) for i in at_org.items] == [
@@ -202,6 +212,10 @@ def test_ontologies_are_listed_every_one_above_a_workspace_and_its_enabled_ones_
     in_ws = lister.list_resources(ListingQuery("nexus", "ontology", WS1))
     assert [i.id for i in in_ws.items] == ["/o/ontologies/BFO.ttl"]
     assert asked == [None, None, ["/o/ontologies/BFO.ttl"]]
+    # Once it is: the files its offer names (``OfferOntologies``), the stored list unread.
+    offers[WS1] = Offer.of(ontologies=["/o/ontologies/Agent.ttl"])
+    in_ws = lister.list_resources(ListingQuery("nexus", "ontology", WS1))
+    assert [i.id for i in in_ws.items] == ["/o/ontologies/Agent.ttl"]
     # Another module's container holds no ontology.
     project = f"{WS1}/crm:project/p1"
     assert lister.list_resources(ListingQuery("nexus", "ontology", project)).items == ()

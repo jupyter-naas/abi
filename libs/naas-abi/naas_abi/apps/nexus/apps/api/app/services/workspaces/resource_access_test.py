@@ -169,34 +169,44 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_graph_scope_and_cache_key_follow_saved_revocation(self):
         from naas_abi.apps.nexus.apps.api.app.services.graph.access_test import ALPHA
+        from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_iam import (
+            graph_name,
+        )
         from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.workspace_policy import (
             load_workspace_scope,
         )
         from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
+        from naas_abi_core.engine.call_context import as_service_account
 
         self.seed.graphs = WorkspaceGraphPolicyConfig(read=[ALPHA], include_owned=False)
         nexus = NexusIam()
         scope = nexus.workspace("org", "a")
         nexus.grant("admin", "member", scope)
         with nexus.installed():
-            # ALPHA is shared with the workspace: an Allow statement for its members.
-            from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
-                GraphGrants,
-            )
-
-            grants = GraphGrants()
-            async with self.sessions() as db:
-                before_config = WorkspaceGraphPolicyConfig.model_validate(
-                    (await repo.load_resource_policy(db, "a", "graphs")).data
+            # The workspace's access policy is no allow-list here: its view goes by the
+            # saved assignments. IAM lets the admin read ALPHA (a platform policy).
+            with as_service_account("engine"):
+                policy = nexus.iam.create_policy(
+                    "reads-alpha",
+                    {
+                        "version": "2026-10-13",
+                        "statements": [
+                            {
+                                "effect": "Allow",
+                                "actions": ["triple_store:Query"],
+                                "resources": [graph_name(ALPHA)],
+                            }
+                        ],
+                    },
                 )
-                await grants.apply("a", before_config)
+                nexus.iam.attach_policy(policy.id, nexus.principal("admin"))
+            async with self.sessions() as db:
                 before = await load_workspace_scope(db, SimpleNamespace(), "a", "admin")
                 self.assertIn(ALPHA, before.readable)
                 saved = await repo.load_resource_policy(db, "a", "graphs")
                 await ResourceAccessService(repo.ResourcePolicyPostgres(db)).save(
                     "a", "graphs", {"include_owned": False}, saved.revision, "admin"
                 )
-                await grants.apply("a", WorkspaceGraphPolicyConfig(include_owned=False))
                 after = await load_workspace_scope(db, SimpleNamespace(), "a", "admin")
                 self.assertFalse(after.readable)
                 self.assertNotEqual(before.cache_key, after.cache_key)
@@ -333,11 +343,12 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
                     "revision": first.json()["revision"],
                     "policy": {"read": [], "include_owned": False},
                 }
+                # A workspace's graphs are given by its offer: one whose access policy is
+                # no allow-list yet is refused, and nothing is stored.
                 response = await admin.put(uri, json=body)
-                self.assertEqual(response.status_code, 200, response.text)
-                self.assertEqual(response.json()["data"]["read"], [])
-                self.assertEqual((await admin.put(uri, json=body)).status_code, 409)
-                body["revision"] = response.json()["revision"]
+                self.assertEqual(response.status_code, 409, response.text)
+                self.assertIn("allow-list", response.json()["detail"])
+                self.assertEqual((await admin.get(uri)).json(), first.json())
                 body["policy"] = {"read": ["urn:not-in-catalog"]}
                 self.assertEqual((await admin.put(uri, json=body)).status_code, 422)
             calls = catalog.await_count
@@ -443,6 +454,42 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
             # What the workspace holds stays offered to its admin, to keep or remove.
             self.assertEqual(await offered("admin"), ["BFO core", "Agent"])
             self.assertEqual((await save("admin", ["core:bfo.ttl"])).status_code, 200)
+
+    async def test_the_offer_editor_lists_every_file_and_those_the_caller_may_assign(self):
+        """The policy page's Configuration reads the same catalog as Settings ›
+        Ontologies: every file of the deployment by its portable id, and the ones the
+        caller may assign (``AssignOntology`` in the workspace's organization)."""
+        from naas_abi.apps.nexus.apps.api.app.services.graph.testing import knowledge_team
+        from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary import (
+            resource_access as http,
+        )
+
+        files = [
+            SimpleNamespace(
+                path="/o/ontologies/modules/BFO.ttl", name="BFO core", module_name="core"
+            ),
+            SimpleNamespace(
+                path="/o/ontologies/modules/Agent.ttl", name="Agent", module_name="core"
+            ),
+        ]
+        listing = http.offer_ontology_catalog(
+            lambda: SimpleNamespace(list_ontology_files=AsyncMock(return_value=files))
+        )
+        async with self.sessions() as db:
+            db.add(
+                WorkspaceModel(
+                    id="ws-1", name="W", slug="ws-1", owner_id="admin", organization_id="org"
+                )
+            )
+            await db.commit()
+        with knowledge_team() as nexus:
+            nexus.grant("orgadmin", "admin", nexus.org("org-1"))
+            entries, assignable = await listing(SimpleNamespace(id="orgadmin"), "ws-1")
+            self.assertEqual([e["id"] for e in entries], ["core:bfo.ttl", "core:agent.ttl"])
+            self.assertEqual([e["name"] for e in entries], ["BFO core", "Agent"])
+            self.assertEqual(assignable, {"core:bfo.ttl", "core:agent.ttl"})
+            # The workspace's admin assigns nothing by their role there.
+            self.assertEqual((await listing("admin", "ws-1"))[1], set())
 
     async def test_a_view_answers_what_the_first_read_would_store_and_stores_nothing(self):
         from naas_abi.apps.nexus.apps.api.app.services.view_as.active import use_view

@@ -186,3 +186,14 @@ describe('search concurrency', () => {
     expect(concurrent).toBeLessThan(2 * delay);
   });
 });
+
+describe('web search names its workspace', () => {
+  it('asks each engine for the current workspace, whose offer decides', async () => {
+    const done = useSearchStore.getState().search('x');
+    calls.forEach((c) => c.resolve([]));
+    await done;
+    const bodies = authFetch.mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+    expect(bodies.length).toBeGreaterThan(0);
+    expect(bodies.every((b) => b.workspace_id === 'ws-1')).toBe(true);
+  });
+});

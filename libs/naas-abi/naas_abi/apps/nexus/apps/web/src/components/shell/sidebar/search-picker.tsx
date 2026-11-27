@@ -14,7 +14,7 @@ export type SearchPickerOption = { value: string; label: string; detail?: string
  * pickers, the Settings column's Organization and Workspace): picking closes it and the choice
  * is checked, not ticked. Without ``allLabel`` there is no All row.
  */
-export function SearchPicker({ items, value, onToggle, onClear, loading, error, label, allLabel, noun, arrowOnly = false, popupAnchorRef, action, single = false, ariaLabel }: {
+export function SearchPicker({ items, value, onToggle, onClear, loading, error, label, allLabel, noun, arrowOnly = false, popupAnchorRef, action, single = false, ariaLabel, size = 'xs', nativeTitles = true }: {
   items: SearchPickerOption[];
   value: string[];
   onToggle: (value: string) => void;
@@ -28,14 +28,19 @@ export function SearchPicker({ items, value, onToggle, onClear, loading, error, 
   arrowOnly?: boolean;
   popupAnchorRef?: RefObject<HTMLElement>;
   action?: { label: string; onClick: () => void };
+  /** The text size: `xs` in the sidebar's sections, `sm` as the pages' text (Settings' level pickers). */
+  size?: 'xs' | 'sm';
   single?: boolean;
   /** The trigger's name before its label (default ``Filter <noun>``). */
   ariaLabel?: string;
+  /** The browser's own tip (``title``) repeating the label on hover; off where a hover tip says more. */
+  nativeTitles?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
-  const [box, setBox] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  // Below its trigger by its top; above it by its bottom, so a short list hugs the trigger.
+  const [box, setBox] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
@@ -67,7 +72,8 @@ export function SearchPicker({ items, value, onToggle, onClear, loading, error, 
       const below = roomBelow >= 220 || roomBelow >= roomAbove;
       const maxHeight = Math.max(80, Math.min(448, below ? roomBelow : roomAbove));
       const width = Math.min(rect.width, window.innerWidth - 16);
-      setBox({ top: below ? rect.bottom + 4 : rect.top - maxHeight - 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)), width, maxHeight });
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+      setBox(below ? { top: rect.bottom + 4, left, width, maxHeight } : { bottom: window.innerHeight - rect.top + 4, left, width, maxHeight });
     }
     position();
     const observer = new ResizeObserver(position);
@@ -108,9 +114,9 @@ export function SearchPicker({ items, value, onToggle, onClear, loading, error, 
 
   return <div ref={wrapRef} className={cn('search-picker', arrowOnly && 'search-picker--arrow')}>
     <button ref={triggerRef} type="button" onClick={() => { if (open) close(); else { setQuery(''); setActiveIndex(0); setOpen(true); } }}
-      className={cn('search-picker-trigger', value.length > 0 && 'is-filtered')}
+      className={cn('search-picker-trigger', size === 'sm' && 'search-picker-trigger--sm', value.length > 0 && 'is-filtered')}
       aria-label={`${ariaLabel ?? `Filter ${noun}`}: ${label}`} aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? listId : undefined}
-      title={label}>
+      title={nativeTitles ? label : undefined}>
       {!arrowOnly && <span className="search-picker-label">{label}</span>}<ChevronDown size={14} className="shrink-0 opacity-70" />
     </button>
     {open && box && createPortal(<div ref={popupRef} className="fixed z-[260] flex flex-col overflow-hidden border border-border bg-background shadow-xl" style={box}>
@@ -127,21 +133,21 @@ export function SearchPicker({ items, value, onToggle, onClear, loading, error, 
             else if (event.key === 'ArrowUp') { event.preventDefault(); setActiveIndex(Math.max(active - 1, 0)); }
             else if (event.key === 'Enter') { event.preventDefault(); pick(active); }
           }}
-          placeholder={`Search ${noun}…`} className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none focus-visible:ring-0 placeholder:text-muted-foreground"
+          placeholder={`Search ${noun}…`} className={cn('min-w-0 flex-1 bg-transparent text-foreground outline-none focus-visible:ring-0 placeholder:text-muted-foreground', size === 'sm' ? 'text-sm' : 'text-xs')}
           role="combobox" aria-label={`Search ${noun}`} aria-autocomplete="list" aria-expanded={open} aria-controls={listId} aria-activedescendant={`${listId}-${active}`} />
       </div>
       <div className="min-h-0 overflow-y-auto">
         <div id={listId} role="listbox" aria-label={noun} aria-multiselectable={!single}>
           {allLabel !== undefined && <button type="button" role="option" aria-selected={!value.length} id={`${listId}-0`} data-option-index={0} tabIndex={-1}
             onMouseEnter={() => setActiveIndex(0)} onMouseDown={event => event.preventDefault()} onClick={() => pick(0)}
-            className={cn('flex w-full items-center gap-2 border-b border-border px-3 py-1.5 text-left text-xs', active === 0 ? 'bg-muted' : 'hover:bg-muted/70')}>
+            className={cn('flex w-full items-center gap-2 border-b border-border px-3 py-1.5 text-left', size === 'sm' ? 'text-sm' : 'text-xs', active === 0 ? 'bg-muted' : 'hover:bg-muted/70')}>
             <span className="flex-1">{allLabel}</span>{!value.length && <Check size={14} className="text-workspace-accent" />}
           </button>}
           {available && options.map((item, index) => {
             const checked = value.includes(item.value);
             return <button key={item.value} type="button" role="option" aria-selected={checked} id={`${listId}-${index + base}`} data-option-index={index + base} tabIndex={-1}
-              title={item.title || item.label} onMouseEnter={() => setActiveIndex(index + base)} onMouseDown={event => event.preventDefault()} onClick={() => pick(index + base)}
-              className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs', active === index + base ? 'bg-muted' : 'hover:bg-muted/70')}>
+              title={nativeTitles ? item.title || item.label : undefined} onMouseEnter={() => setActiveIndex(index + base)} onMouseDown={event => event.preventDefault()} onClick={() => pick(index + base)}
+              className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-left', size === 'sm' ? 'text-sm' : 'text-xs', active === index + base ? 'bg-muted' : 'hover:bg-muted/70')}>
               <span className="min-w-0 flex-1"><span className="block truncate">{item.label}</span>{item.detail && <span className="block truncate text-[11px] text-muted-foreground">{item.detail}</span>}</span>
               {single ? checked && <Check size={14} className="text-workspace-accent" />
                 : <span aria-hidden="true" className={cn('flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border', checked ? 'border-workspace-accent text-workspace-accent' : 'border-muted-foreground/50')}>

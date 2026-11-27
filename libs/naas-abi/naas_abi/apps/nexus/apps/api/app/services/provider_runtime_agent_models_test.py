@@ -120,3 +120,90 @@ def test_a_turn_in_no_workspace_lends_nothing(world):
     assert agent_model_owners(agent, None) == {}
     with _as_member_in_w(), agents_own_models(agent), pytest.raises(ModelNotFoundError):
         large.invoke("hi")
+
+
+# -- a workspace limited to some models (``iam/workspace_models``) ---------------------------
+
+
+def test_a_limited_workspace_lends_only_the_models_it_offers(world):
+    """The loan of an agent's own models is narrowed to what the workspace uses: a
+    model it does not offer is the member's set's again (refused here)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import WorkspaceModels
+
+    _nexus, _registry, agent, large, _helper = world
+    only_larger = WorkspaceModels(frozenset({"larger"}), "larger")
+    with _as_member_in_w(), inside(W):
+        with agents_own_models(agent, only_larger), pytest.raises(ModelNotFoundError):
+            large.invoke("hi")
+        with agents_own_models(agent, WorkspaceModels()):
+            assert large.invoke("hi").content == "answer"
+
+
+def test_each_agent_of_a_turn_on_a_model_not_offered_switches_to_the_default(world):
+    """The turn's agent and each of its sub-agents: one on a model the workspace does
+    not offer (or on one the registry cannot name) is switched to its default; one on an
+    offered model keeps it."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import WorkspaceModels
+    from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+        keep_agent_to_models,
+    )
+
+    _nexus, registry, agent, large, helper_model = world
+    with as_service_account("engine"):
+        larger = registry.get_chat_model("larger").model
+    loaded: list[str] = []
+
+    def load(model_id: str):
+        loaded.append(model_id)
+        return larger
+
+    switched = keep_agent_to_models(
+        agent, WorkspaceModels(frozenset({"large", "larger"}), "larger"), load=load
+    )
+    assert agent._chat_model is large  # offered: kept
+    assert agent._agents[0]._chat_model is larger  # helper-model is not: switched
+    assert switched == ["HelperAgent"] and loaded == ["larger"]
+    unknown = HelperAgent(FakeListChatModel(responses=["x"]))
+    keep_agent_to_models(unknown, WorkspaceModels(frozenset({"larger"}), "larger"), load=load)
+    assert unknown._chat_model is larger
+    # Every model: nothing switched.
+    assert keep_agent_to_models(AnalystAgent(helper_model), WorkspaceModels(), load=load) == []
+
+
+@pytest.mark.asyncio
+async def test_a_turns_model_is_kept_to_its_workspaces(world, monkeypatch):
+    """A picked model the workspace does not offer runs on its default; none picked,
+    the agents are switched node by node; no default: refused."""
+    from naas_abi.apps.nexus.apps.api.app.services import provider_runtime
+    from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import (
+        ModelNotOfferedError,
+        WorkspaceModels,
+        for_turn,
+    )
+
+    _nexus, _registry, agent, _large, _helper = world
+    seen: list[str] = []
+    monkeypatch.setattr(
+        provider_runtime,
+        "keep_agent_to_models",
+        lambda node, models: seen.append(type(node).__name__) or [],
+    )
+    limited = WorkspaceModels(frozenset({"larger"}), "larger")
+    with for_turn(limited):
+        assert await provider_runtime._workspace_models_for_turn(agent, "large") == (
+            limited,
+            "larger",
+        )
+        assert await provider_runtime._workspace_models_for_turn(agent, "larger") == (
+            limited,
+            "larger",
+        )
+        assert await provider_runtime._workspace_models_for_turn(agent, None) == (limited, None)
+    assert seen == ["AnalystAgent"]
+    with (
+        for_turn(WorkspaceModels(frozenset({"larger"}), None)),
+        pytest.raises(ModelNotOfferedError),
+    ):
+        await provider_runtime._workspace_models_for_turn(agent, "large")
+    with for_turn(WorkspaceModels()):
+        assert (await provider_runtime._workspace_models_for_turn(agent, "large"))[1] == "large"

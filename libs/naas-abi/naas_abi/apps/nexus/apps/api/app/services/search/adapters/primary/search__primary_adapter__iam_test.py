@@ -26,6 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi.apps.nexus.apps.api.app.services.search.adapters.primary import (
     search__primary_adapter__FastAPI as search_api,
 )
+from naas_abi.apps.nexus.apps.api.app.services.search.sources import ALL_SOURCES
 from naas_abi.apps.nexus.apps.api.app.services.search.topics import placement
 from naas_abi.apps.nexus.apps.api.app.services.search.topics.adapters.primary import (
     topics__primary_adapter__FastAPI as topics_api,
@@ -40,6 +41,20 @@ from rdflib import Graph
 
 TOPIC = sorted(BUILTIN_TOPICS)[0]
 ROLES = ("owner", "admin", "member", "viewer")
+OFFERED = [s for s in ALL_SOURCES if s != "web.duckduckgo"]
+
+
+class OfflineSearch(search_api.SearchService):
+    """No engine is called: the engine's name comes back."""
+
+    async def _search_wikipedia(self, query: str, limit: int) -> list[Any]:
+        return []
+
+    async def _search_duckduckgo(self, query: str, limit: int) -> list[Any]:
+        return []
+
+    async def get_suggestions(self, query: str, limit: int) -> list[str]:
+        return [query]
 
 
 class MemoryCache:
@@ -68,6 +83,13 @@ def _world(flags: FeatureFlagsConfig | None = None) -> NexusIam:
     scope = nexus.workspace("org-1", "ws-1")
     for role in ROLES:
         nexus.grant(role, role, scope)
+        # The sources ws-1 offers, as its level and offer give them (DuckDuckGo left out).
+        nexus.allow(
+            role,
+            ["nexus:UseSearchSource"],
+            [f"${{scope}}/nexus:search_source/{s}" for s in OFFERED],
+            scope,
+        )
     nexus.user("stranger")
     return nexus
 
@@ -86,7 +108,7 @@ def _client_factory(monkeypatch):
     app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(id=user["id"])
     service = SearchTopicService(InMemorySearchTopicStore())
     app.dependency_overrides[topics_api.get_search_topic_service] = lambda: service
-    app.dependency_overrides[search_api.get_search_service] = lambda: search_api.SearchService()
+    app.dependency_overrides[search_api.get_search_service] = lambda: OfflineSearch()
     cache = SearchCache(MemoryCache())
     monkeypatch.setattr(topics_api, "_SEARCH_CACHE", cache)
 
@@ -132,7 +154,7 @@ async def test_a_viewer_reads_the_topics_and_cannot_edit_them(client) -> None:
         ).status_code == 403
         assert (await http.delete(f"/api/search/topics/{TOPIC}", params=WS)).status_code == 403
         scope = await http.put("/api/search/topics/scopes/chat", params=WS, json={"enabled": False})
-        assert scope.status_code == 403
+        assert scope.status_code in (403, 410)
         preview = {"workspace_id": "ws-1", "role": "results", "query": "SELECT 1"}
         assert (await http.post("/api/search/topics/preview", json=preview)).status_code == 403
         assert (await http.post("/api/search/topics/cache/refresh", params=WS)).status_code == 403
@@ -158,8 +180,9 @@ async def test_an_admin_edits_resets_and_previews_topics(client) -> None:
         saved = await http.put(f"/api/search/topics/{TOPIC}", params=WS, json=topic_body())
         assert saved.status_code == 200, saved.text
         assert (await http.delete(f"/api/search/topics/{TOPIC}", params=WS)).status_code == 200
+        # The sources are the workspace's offer now: this switch is gone.
         scope = await http.put("/api/search/topics/scopes/chat", params=WS, json={"enabled": False})
-        assert scope.status_code == 200
+        assert scope.status_code == 410
         preview = {
             "workspace_id": "ws-1",
             "role": "results",
@@ -219,3 +242,42 @@ async def test_the_search_section_follows_the_feature(monkeypatch) -> None:
             assert (await http.post("/api/search/private", json=private)).status_code == 403
         async with client("admin") as http:
             assert (await http.get("/api/search/topics", params=WS)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_the_web_is_searched_through_an_engine_the_workspace_offers(client) -> None:
+    """The query leaves Nexus only through an engine ws-1's offer names (DuckDuckGo is
+    left out), for someone of ws-1, and always naming the workspace."""
+    wikipedia = {"workspace_id": "ws-1", "query": "x", "engine": "wikipedia"}
+    async with client("member") as http:
+        assert (await http.post("/api/search/web", json=wikipedia)).status_code == 200
+        duck = {**wikipedia, "engine": "duckduckgo"}
+        assert (await http.post("/api/search/web", json=duck)).status_code == 403
+        nowhere = {"query": "x", "engine": "wikipedia"}
+        assert (await http.post("/api/search/web", json=nowhere)).status_code == 422
+        elsewhere = {**wikipedia, "workspace_id": "ws-2"}
+        assert (await http.post("/api/search/web", json=elsewhere)).status_code == 403
+        hint = await http.get("/api/search/suggestions", params={"query": "x", **WS})
+        assert hint.status_code == 200
+        assert (await http.get("/api/search/suggestions", params={"query": "x"})).status_code == 422
+    async with client("stranger") as http:
+        assert (await http.post("/api/search/web", json=wikipedia)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_the_topics_list_the_sources_the_offer_leaves_out(client) -> None:
+    async with client("member") as http:
+        listed = (await http.get("/api/search/topics", params=WS)).json()
+        assert listed["disabled_scopes"] == ["web.duckduckgo"]
+
+
+@pytest.mark.asyncio
+async def test_a_topic_switched_off_does_not_run(client) -> None:
+    async with client("admin") as http:
+        body = {**topic_body(), "enabled": False}
+        assert (
+            await http.put(f"/api/search/topics/{TOPIC}", params=WS, json=body)
+        ).status_code == 200
+        ran = await http.get(f"/api/search/topics/{TOPIC}/results", params=WS)
+        assert ran.status_code == 403
+        assert "switched" in ran.json()["detail"]

@@ -67,6 +67,10 @@ class ResourceType:
     # A container type at which a role attached brings the platform companions
     # (``roles.py``; Nexus's workspace).
     platform_companions: bool = False
+    # A container type at which a built-in role attached at ``${my workspaces}`` gives
+    # nothing (``AGENTS.md``, "Groups"; Nexus's organization: its people hold what a
+    # policy gives them there, its admins their roles attached at it).
+    no_membership_roles: bool = False
     # A container type: the containers it may sit in, ``<service>:<type>`` each,
     # ``-`` for the platform; empty: any (Nexus's workspace: an organization or
     # the platform).
@@ -175,6 +179,7 @@ class ActionCatalog:
                     **({"module_scope": True} if t.module_scope else {}),
                     **({"policy_only": True} if t.policy_only else {}),
                     **({"platform_companions": True} if t.platform_companions else {}),
+                    **({"no_membership_roles": True} if t.no_membership_roles else {}),
                     **({"parents": list(t.parents)} if t.parents else {}),
                 }
                 for t in self.resource_types
@@ -242,6 +247,7 @@ class ActionCatalog:
                         module_scope=bool(t.get("module_scope", False)),
                         policy_only=bool(t.get("policy_only", False)),
                         platform_companions=bool(t.get("platform_companions", False)),
+                        no_membership_roles=bool(t.get("no_membership_roles", False)),
                         parents=tuple(t.get("parents", ()) or ()),
                     )
                     for t in data.get("resource_types", ())
@@ -327,6 +333,11 @@ def _catalog_errors(catalog: ActionCatalog) -> list[str]:
             errors.append(
                 f"resource type {t.name}: only a container type brings the "
                 "platform companions"
+            )
+        if t.no_membership_roles and not t.container:
+            errors.append(
+                f"resource type {t.name}: only a container type keeps out the "
+                "roles at ${my workspaces}"
             )
     action_names = [a.name for a in catalog.actions]
     if len(set(action_names)) != len(action_names):

@@ -20,18 +20,13 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
 import { Input } from '@/components/ui/input';
-import {
-  SettingsEmpty,
-  SettingsField,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsFilterSelect,
-  SettingsSection,
-  SettingsTableToolbar,
-  countLabel,
-  settingsTable,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsFilterSelect, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Field } from '@/components/ui/field';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
+import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import {
   useServersStore,
@@ -261,11 +256,6 @@ export function ServersPanel({
     });
   };
 
-  // Only block on the first load; later refetches keep showing the cached list.
-  if (!mounted || (loading && servers.length === 0)) {
-    return <SettingsLoading label="Loading servers…" />;
-  }
-
   const query = searchQuery.trim().toLowerCase();
   const filteredServers = servers.filter((server) => {
     if (typeFilter !== 'all' && server.type !== typeFilter) return false;
@@ -279,6 +269,18 @@ export function ServersPanel({
       (server.description || '').toLowerCase().includes(query)
     );
   });
+  // 20 a page: the search and the filters reach every server, and a change of them goes back to
+  // the first page.
+  const paged = usePagedRows(
+    filteredServers,
+    JSON.stringify([searchQuery, typeFilter, healthFilter, enabledFilter]),
+  );
+
+  // Only block on the first load; later refetches keep showing the cached list.
+  if (!mounted || (loading && servers.length === 0)) {
+    return <Loading label="Loading servers…" />;
+  }
+
   const onlineCount = servers.filter((server) => server.status === 'online').length;
   const enabledCount = servers.filter((server) => server.enabled).length;
 
@@ -297,7 +299,7 @@ export function ServersPanel({
       <SettingsPageHeader
         title="Servers"
         badge={`${enabledCount} enabled`}
-        description="Configure inference servers for running AI models"
+        description="The inference servers that run AI models"
         actions={
           <>
             {workspacePicker}
@@ -313,12 +315,12 @@ export function ServersPanel({
         }
       />
 
-      {actionError && <SettingsNotice tone="error">{actionError}</SettingsNotice>}
+      {actionError && <Notice tone="error">{actionError}</Notice>}
 
       {showAddForm && (
-        <SettingsSection title="Add New Server">
+        <Card title="Add New Server">
           <div className="grid gap-4">
-            <SettingsField label="Server Type">
+            <Field label="Server Type">
               <div className="grid grid-cols-5 gap-2">
                 {serverTypeOptions.map((opt) => {
                   const active = newServer.type === opt.id;
@@ -338,18 +340,18 @@ export function ServersPanel({
                   );
                 })}
               </div>
-            </SettingsField>
+            </Field>
 
             <div className="grid grid-cols-2 gap-4">
-              <SettingsField label="Name *">
+              <Field label="Name *">
                 <Input
                   type="text"
                   value={newServer.name}
                   onChange={(e) => setNewServer({ ...newServer, name: e.target.value })}
                   placeholder="e.g., Local Ollama"
                 />
-              </SettingsField>
-              <SettingsField label="Endpoint *">
+              </Field>
+              <Field label="Endpoint *">
                 <Input
                   type="text"
                   value={newServer.endpoint}
@@ -357,29 +359,29 @@ export function ServersPanel({
                   placeholder="http://localhost:11434"
                   className="font-mono"
                 />
-              </SettingsField>
+              </Field>
             </div>
 
-            <SettingsField label="Description">
+            <Field label="Description">
               <Input
                 type="text"
                 value={newServer.description}
                 onChange={(e) => setNewServer({ ...newServer, description: e.target.value })}
                 placeholder="Optional description"
               />
-            </SettingsField>
+            </Field>
 
-            <SettingsField label="API Key (optional)">
+            <Field label="API Key (optional)">
               <Input
                 type="password"
                 value={newServer.apiKey}
                 onChange={(e) => setNewServer({ ...newServer, apiKey: e.target.value })}
                 placeholder="For authenticated servers"
               />
-            </SettingsField>
+            </Field>
 
             <div className="grid grid-cols-2 gap-4">
-              <SettingsField label="Health Check Path (optional)">
+              <Field label="Health Check Path (optional)">
                 <Input
                   type="text"
                   value={newServer.healthPath}
@@ -387,8 +389,8 @@ export function ServersPanel({
                   placeholder="e.g., /health"
                   className="font-mono"
                 />
-              </SettingsField>
-              <SettingsField label="Models List Path (optional)">
+              </Field>
+              <Field label="Models List Path (optional)">
                 <Input
                   type="text"
                   value={newServer.modelsPath}
@@ -396,7 +398,7 @@ export function ServersPanel({
                   placeholder="e.g., /api/v1/models"
                   className="font-mono"
                 />
-              </SettingsField>
+              </Field>
             </div>
 
             <div className="flex justify-end gap-2">
@@ -414,11 +416,11 @@ export function ServersPanel({
               </Button>
             </div>
           </div>
-        </SettingsSection>
+        </Card>
       )}
 
       {servers.length === 0 ? (
-        <SettingsEmpty
+        <EmptyState framed
           icon={<Server size={40} className="opacity-40" />}
           title="No servers configured"
           description="Use Add Server at the top right to run AI models locally or remotely."
@@ -488,21 +490,21 @@ export function ServersPanel({
                   </td>
                 </tr>
               )}
-              {filteredServers.map((server) => (
-                <tr key={server.id} className={settingsTable.row}>
+              {paged.pageRows.map((server) => (
+                <tr key={server.id} data-server={server.id} className={settingsTable.row}>
                   {editingId === server.id ? (
                     <td className={settingsTable.td} colSpan={6}>
                       <div className="space-y-3">
                         <div className="grid grid-cols-2 gap-3">
-                          <SettingsField label="Name">
+                          <Field label="Name">
                             <Input
                               type="text"
                               value={editForm.name}
                               onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                               placeholder="Name"
                             />
-                          </SettingsField>
-                          <SettingsField label="Endpoint">
+                          </Field>
+                          <Field label="Endpoint">
                             <Input
                               type="text"
                               value={editForm.endpoint}
@@ -510,26 +512,26 @@ export function ServersPanel({
                               placeholder="Endpoint"
                               className="font-mono"
                             />
-                          </SettingsField>
+                          </Field>
                         </div>
-                        <SettingsField label="Description">
+                        <Field label="Description">
                           <Input
                             type="text"
                             value={editForm.description}
                             onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                             placeholder="Description (optional)"
                           />
-                        </SettingsField>
+                        </Field>
                         <div className="grid grid-cols-3 gap-3">
-                          <SettingsField label="API Key">
+                          <Field label="API Key">
                             <Input
                               type="password"
                               value={editForm.apiKey}
                               onChange={(e) => setEditForm({ ...editForm, apiKey: e.target.value })}
                               placeholder="Optional"
                             />
-                          </SettingsField>
-                          <SettingsField label="Health Path">
+                          </Field>
+                          <Field label="Health Path">
                             <Input
                               type="text"
                               value={editForm.healthPath}
@@ -537,8 +539,8 @@ export function ServersPanel({
                               placeholder="e.g., /health"
                               className="font-mono"
                             />
-                          </SettingsField>
-                          <SettingsField label="Models Path">
+                          </Field>
+                          <Field label="Models Path">
                             <Input
                               type="text"
                               value={editForm.modelsPath}
@@ -546,7 +548,7 @@ export function ServersPanel({
                               placeholder="e.g., /api/v1/models"
                               className="font-mono"
                             />
-                          </SettingsField>
+                          </Field>
                         </div>
                         <div className="flex items-center justify-between">
                           <Checkbox
@@ -651,10 +653,11 @@ export function ServersPanel({
             </tbody>
           </table>
         </div>
+        <TablePager total={filteredServers.length} paged={paged} />
         </div>
       )}
 
-      <SettingsSection title="Supported Server Types">
+      <Card title="Supported Server Types">
         <div className="grid grid-cols-2 gap-3 text-sm">
           {serverTypeOptions.map((opt) => (
             <div key={opt.id} className="flex items-start gap-2">
@@ -666,7 +669,7 @@ export function ServersPanel({
             </div>
           ))}
         </div>
-      </SettingsSection>
+      </Card>
       {confirmDialog}
     </div>
   );

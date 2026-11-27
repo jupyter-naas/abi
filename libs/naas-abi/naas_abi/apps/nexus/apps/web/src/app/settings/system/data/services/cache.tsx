@@ -5,7 +5,9 @@ import './cache.css';
 import { Binary, Braces, Package, ShieldAlert, Type, Zap, type LucideIcon } from 'lucide-react';
 import { formatBytes } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
-import { Badge, Notice, RelativeTime, type Tone } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { Notice } from '@/components/ui/notice';
+import { RelativeTime, type Tone } from '../data-ui';
 import { BinaryView } from '../viewers/binary-view';
 import { Preview, type PreviewContext } from '../viewers/preview';
 import { PrefixBadge, ValueLine } from './keyvalue-parts';
@@ -14,18 +16,18 @@ import type { ServiceView } from './types';
 const TYPES: Record<string, { label: string; tone: Tone; icon: LucideIcon }> = {
   json: { label: 'JSON', tone: 'info', icon: Braces },
   text: { label: 'Text', tone: 'neutral', icon: Type },
-  binary: { label: 'Binary', tone: 'warn', icon: Binary },
-  pickle: { label: 'Pickle', tone: 'danger', icon: Package },
+  binary: { label: 'Binary', tone: 'warning', icon: Binary },
+  pickle: { label: 'Pickle', tone: 'destructive', icon: Package },
 };
 
 export function TypeBadge({ type }: { type?: string }) {
   if (!type) return null;
   const known = TYPES[type];
-  return <Badge tone={known?.tone ?? 'neutral'}>{known?.label ?? type}</Badge>;
+  return <Badge variant={known?.tone ?? 'neutral'}>{known?.label ?? type}</Badge>;
 }
 
 function tierTone(tier: string): Tone {
-  if (tier === 'hot') return 'warn';
+  if (tier === 'hot') return 'warning';
   if (tier === 'cold') return 'info';
   return 'neutral';
 }
@@ -40,7 +42,7 @@ export function TierBadges({ entry }: { entry: ResourceEntry }) {
   return (
     <span className="data-cache-tiers">
       {tiers.map((tier) => (
-        <Badge key={tier} tone={tierTone(tier)}>
+        <Badge key={tier} variant={tierTone(tier)}>
           {tier}
         </Badge>
       ))}
@@ -75,12 +77,9 @@ export function CachePreview({ detail, ctx }: { detail: ResourceDetail; ctx: Pre
       </p>
       {type === 'pickle' ? (
         <>
-          <Notice tone="warn">
-            <ShieldAlert size={14} aria-hidden="true" />
-            <span>
-              A pickled Python object. The System app never loads pickles: unpickling runs code chosen by whoever
-              wrote the bytes. Download it, or inspect the raw bytes below.
-            </span>
+          <Notice tone="warning" icon={<ShieldAlert size={14} aria-hidden="true" />}>
+            A pickled Python object. The System app never loads pickles: unpickling runs code chosen by whoever wrote
+            the bytes. Download it, or inspect the raw bytes below.
           </Notice>
           <BinaryView name={entry.name} size={entry.size} load={ctx.download} />
         </>

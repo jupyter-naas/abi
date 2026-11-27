@@ -19,8 +19,8 @@ import './org-settings-components.css';
 type OrgWorkspace = { id: string; name: string };
 
 const SUBTITLES: Record<ContainerAccessPage, string> = {
-  policies: 'Where rights come from in this organization and its workspaces: each policy, and who holds it at which level',
-  groups: 'Groups of people of this organization and its workspaces, and what each holds',
+  policies: 'The policies of the organization and its workspaces, and who holds each',
+  groups: 'Groups of people here and in its workspaces, and what each holds',
 };
 
 /**

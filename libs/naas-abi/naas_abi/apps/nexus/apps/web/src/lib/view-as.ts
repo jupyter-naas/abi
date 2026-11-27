@@ -47,6 +47,44 @@ export async function listViewableWorkspaces(
   return Array.isArray(data) ? (data as ViewableWorkspace[]) : [];
 }
 
+/** Why no workspace may be viewed: no Nexus account yet, in none, or IAM refuses each. */
+export type ViewAsReason = 'not_signed_in' | 'no_workspace' | 'refused';
+export type ViewAsEligibility = {
+  workspaces: ViewableWorkspace[];
+  reason: ViewAsReason | null;
+  /** IAM's words for `refused`. */
+  detail?: string | null;
+};
+
+/** The workspaces of `listViewableWorkspaces`, and when there is none, why. */
+export async function viewAsEligibility(
+  personId: string,
+  fetcher: typeof authFetch = authFetch,
+): Promise<ViewAsEligibility> {
+  const response = await fetcher(`${VIEW_AS_API}/eligibility?principal_id=${encodeURIComponent(personId)}`);
+  if (!response.ok) throw await failure(response, 'Could not read the workspaces to view.');
+  const data = await response.json();
+  return {
+    workspaces: Array.isArray(data?.workspaces) ? (data.workspaces as ViewableWorkspace[]) : [],
+    reason: typeof data?.reason === 'string' ? (data.reason as ViewAsReason) : null,
+    detail: typeof data?.detail === 'string' ? data.detail : null,
+  };
+}
+
+/** What a disabled View as says, by the reason no workspace may be viewed. */
+export function viewAsUnavailable(name: string, eligibility: Pick<ViewAsEligibility, 'reason' | 'detail'>): string | null {
+  switch (eligibility.reason) {
+    case 'not_signed_in':
+      return `${name} has not signed in to Nexus yet: a view needs their first sign-in.`;
+    case 'no_workspace':
+      return `${name} is in no workspace to view.`;
+    case 'refused':
+      return eligibility.detail || `You may not view as ${name} in any of their workspaces.`;
+    default:
+      return null;
+  }
+}
+
 export async function startView(
   personId: string,
   workspaceId: string,

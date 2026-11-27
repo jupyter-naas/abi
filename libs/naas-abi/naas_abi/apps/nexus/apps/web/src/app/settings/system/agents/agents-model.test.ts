@@ -26,8 +26,8 @@ describe('agents model', () => {
   it('labels and colors every status', () => {
     expect(statusLabel('TIMED_OUT')).toBe('Timed out');
     expect(statusLabel('SOMETHING_NEW')).toBe('Something_new');
-    expect(statusTone('FAILED')).toBe('danger');
-    expect(statusTone('CANCELLING')).toBe('warn');
+    expect(statusTone('FAILED')).toBe('destructive');
+    expect(statusTone('CANCELLING')).toBe('warning');
     expect(statusTone('CANCELLED')).toBe('neutral');
   });
 

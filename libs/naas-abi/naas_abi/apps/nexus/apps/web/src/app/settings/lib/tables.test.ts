@@ -59,7 +59,9 @@ describe('table paths', () => {
     );
     expect(pages).toContain('infrastructure');
     // Users (once Members, still a legacy link) is new under that name: bare /settings/users is Platform's.
-    for (const page of pages.filter((p) => p !== 'users')) expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).toContain(page);
+    // Modules too: bare /settings/modules was Platform's Modules & features, now Platform › Access.
+    const own = (p: string) => p !== 'users' && p !== 'modules';
+    for (const page of pages.filter(own)) expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).toContain(page);
     expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).toContain('members');
   });
 
@@ -68,7 +70,9 @@ describe('table paths', () => {
     const workspaceSlugs = SETTINGS_GROUPS.flatMap((group) => group.items).map(
       (item) => item.href.replace(/^\/settings\//, '').split('/')[0]
     );
-    for (const slug of workspaceSlugs.filter((s) => s !== 'users')) expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).toContain(slug);
+    for (const slug of workspaceSlugs.filter((s) => s !== 'users' && s !== 'modules')) {
+      expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).toContain(slug);
+    }
   });
 });
 

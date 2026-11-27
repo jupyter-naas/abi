@@ -1,12 +1,17 @@
 /* workspace/tasks — semantic page styles (vanilla CSS, theme tokens).
    The toolbar and layouts come from components/database-view. */
 
-.tasks-page {
-  /* Tasks follow the workspace accent, not the app's default primary color. */
+/* Tasks follow the workspace accent, not the app's default primary color. The dialogs are
+   portalled to <body>, out of .tasks-page, so they declare the same variables. */
+.tasks-page,
+.tasks-dialog {
   --tasks-accent: var(--workspace-accent, #22c55e);
   --tasks-accent-subtle: color-mix(in srgb, var(--tasks-accent) 12%, transparent);
   --tasks-accent-hover: color-mix(in srgb, var(--tasks-accent) 90%, #000);
   --tasks-accent-focus: color-mix(in srgb, var(--tasks-accent) 45%, transparent);
+}
+
+.tasks-page {
   position: relative;
   display: flex;
   height: 100%;
@@ -266,15 +271,6 @@
   background-color: var(--tasks-accent-hover);
 }
 
-.tasks-button-danger {
-  border-color: var(--destructive-hex);
-  color: var(--destructive-hex);
-}
-
-.tasks-button-danger:hover:not(:disabled) {
-  background-color: var(--color-destructive-subtle);
-}
-
 .tasks-icon-button {
   display: inline-flex;
   align-items: center;
@@ -291,16 +287,6 @@
 .tasks-icon-button:hover {
   background-color: var(--muted-bg-hex);
   color: var(--foreground-hex);
-}
-
-/* Close buttons in the dialog and panel headers: icon only, no frame. */
-.tasks-drawer-header .tasks-icon-button {
-  border: none;
-  background: none;
-}
-
-.tasks-drawer-header .tasks-icon-button:hover {
-  background-color: var(--muted-bg-hex);
 }
 
 /* Empty states -------------------------------------------------------------- */
@@ -488,71 +474,14 @@
   color: var(--foreground-hex);
 }
 
-/* Task drawer ---------------------------------------------------------------- */
-
-.tasks-drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  background-color: #0f172a;
-  opacity: 0.25;
-}
-
-.tasks-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 41;
-  display: flex;
-  width: min(560px, 100vw);
-  flex-direction: column;
-  border-left: 1px solid var(--border-hex);
-  background-color: var(--background-hex);
-  box-shadow: var(--glass-shadow);
-}
-
-/* New task dialog: centered on the Tasks page, below the shell's navigation. */
-.tasks-create-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4);
-}
-
-.tasks-create-backdrop {
-  position: absolute;
-  inset: 0;
-  background-color: #0f172a;
-  opacity: 0.25;
-}
-
-.tasks-create-dialog {
-  position: relative;
-  display: flex;
-  width: min(640px, 100%);
-  max-height: 100%;
-  flex-direction: column;
-  border: 1px solid var(--border-hex);
-  border-radius: var(--org-border-radius, 0px);
-  background-color: var(--background-hex);
-  box-shadow: var(--glass-shadow);
-}
-
-/* The open task: same centered dialog, wider for comments and activity. */
-.tasks-task-dialog {
-  width: min(760px, 100%);
-}
+/* Task dialogs (New task, an open task) ----------------------------------------- */
 
 /* Workspace colors inside the dialog: checkboxes, date picker, Assign. */
-.tasks-create-dialog {
+.tasks-dialog {
   accent-color: var(--workspace-accent, #22c55e);
 }
 
-.tasks-create-dialog .tasks-column-add:hover {
+.tasks-dialog .tasks-column-add:hover {
   background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 10%, transparent);
   color: var(--workspace-accent, #22c55e);
 }
@@ -565,6 +494,12 @@
 
 .tasks-button-accent:hover:not(:disabled) {
   background-color: color-mix(in srgb, var(--workspace-accent, #22c55e) 90%, #000);
+}
+
+.tasks-dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 .tasks-create-prop-label {
@@ -715,14 +650,6 @@
   border-color: var(--border-hex);
 }
 
-.tasks-drawer-header {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  border-bottom: 1px solid var(--border-hex);
-}
-
 .tasks-drawer-title {
   min-width: 0;
   flex: 1;
@@ -744,15 +671,6 @@
   border-color: var(--border-hex);
   outline: none;
   box-shadow: none;
-}
-
-.tasks-drawer-body {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--space-4);
-  overflow-y: auto;
-  padding: var(--space-4);
 }
 
 .tasks-drawer-fields {
@@ -970,18 +888,6 @@
 
 .tasks-drawer-comment-form .tasks-drawer-textarea {
   min-height: 72px;
-}
-
-.tasks-drawer-footer {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-top: 1px solid var(--border-hex);
-}
-
-.tasks-drawer-footer-spacer {
-  flex: 1;
 }
 
 /* Settings page --------------------------------------------------------------- */

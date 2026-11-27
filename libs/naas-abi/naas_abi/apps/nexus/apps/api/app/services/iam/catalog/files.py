@@ -5,9 +5,10 @@ Each view is decided by IAM alone, no workspace flag:
 * **Workspace Files**: ``file/workspace/<path>`` in the workspace, every role by level.
 * **Organization Files**: ``file/organization/<path>`` in the organization's
   container (``<org container>/nexus:file/organization/<path>``), decided by its own
-  actions: its viewers and up read it, its admins and owners write it, and a policy
-  at the organization widens or narrows that per folder (members writing
-  ``operations/``, say).
+  actions: its viewers and up read it, its members and up write it (catalog 20), and a
+  policy at the organization widens or narrows that per folder (viewers writing
+  ``operations/``, say). A workspace's offer may give them to its people
+  (``GivenOrgFiles``), within each person's level there.
 * **My Files** (``my_file/<user>/<path>``) and the storage ``abi-platform`` moves data
   through (``user_storage``): personal, platform-level types; a user reaches their own
   through ``PLATFORM_ACCESS`` below (and the object storage under them through the
@@ -67,12 +68,12 @@ ACTIONS = (
     action("PutSystemFile", "admin", "file", feature="files", description=_DEPRECATED),
     action("DeleteSystemFile", "admin", "file", feature="files", description=_DEPRECATED),
     # Organization Files, decided at the organization: read by its viewers and
-    # up, written by its admins and owners (more through a policy there). The
+    # up, written by its members and up (more through a policy there). The
     # ``files`` feature is the workspace's it is reached through (the route's).
     action("ListOrgFiles", "list", "file", feature="files"),
     action("GetOrgFile", "read", "file", feature="files"),
-    action("PutOrgFile", "admin", "file", feature="files"),
-    action("DeleteOrgFile", "admin", "file", feature="files"),
+    action("PutOrgFile", "write", "file", feature="files"),
+    action("DeleteOrgFile", "write", "file", feature="files"),
     # Platform Files: nobody's until a policy at the platform grants it.
     action("ListPlatformFiles", "list", "platform_file", description="List Platform Files."),
     action("GetPlatformFile", "read", "platform_file", description="Read a Platform File."),

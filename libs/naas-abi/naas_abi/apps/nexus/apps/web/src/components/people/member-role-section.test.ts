@@ -76,6 +76,38 @@ describe('A person’s Groups and Policies', () => {
     expect(list('policies')).toEqual(['pol_read']);
   });
 
+  it('takes them out of the workspace from their membership row, once confirmed', async () => {
+    const { api } = fakeApi({ groups: ['grp_alpha', 'grp_members'], policies: [] });
+    const onLeave = vi.fn(() => Promise.resolve());
+    mounted = await mount(MemberRoleSection, {
+      scope: { kind: 'workspace', id: 'ws-alpha' },
+      principalId: 'usr_iam_bob',
+      api,
+      onLeave,
+    });
+    await mounted.flush();
+    const leave = document.body.querySelector('[data-role-item="grp_alpha"] [data-action="remove-from-workspace"]');
+    expect(leave?.textContent).toContain('Remove from workspace');
+    await mounted.click(leave);
+    // Asked first, saying what they lose: nothing happens before the answer.
+    expect(onLeave).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Remove Bob from this workspace?');
+    await mounted.click(confirmButton('Cancel'));
+    expect(onLeave).not.toHaveBeenCalled();
+    await mounted.click(leave);
+    // The modal's button (the row's carries the same words).
+    const inModal = [...document.body.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Remove from workspace').at(-1);
+    await mounted.click(inModal!);
+    await mounted.flush();
+    expect(onLeave).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the membership row without a way out when the page offers none', async () => {
+    await render({ groups: ['grp_alpha'], policies: [] });
+    expect(document.body.querySelector('[data-role-item="grp_alpha"] [data-action="remove-from-workspace"]')).toBeNull();
+    expect(document.body.querySelector('[data-role-item="grp_alpha"]')?.textContent).toContain('Kept while they are here');
+  });
+
   it('shows an organization admin’s groups managed elsewhere, none removable here', async () => {
     await render({ groups: ['grp_members'], policies: [] }, {}, [
       { id: 'grp_alpha', name: 'Alpha workspace', implied: true, managed: 'admins' },

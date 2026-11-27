@@ -305,3 +305,41 @@ def test_list_models_and_canonical_ids() -> None:
     reg.register("b", _chat_model("b", "anthropic"))
     assert sorted(reg.list_canonical_ids()) == ["a", "b"]
     assert len(reg.list_models()) == 3
+
+
+# ---------------------------------------------------------------- substitutes
+
+
+def test_without_a_substitute_a_chat_model_is_itself() -> None:
+    registry = ModelRegistryService()
+    assert registry.substitute_chat_model("gpt-x", "abi:nexus:organization/o") == "gpt-x"
+
+
+def test_a_registered_substitute_names_the_model_used_in_a_container() -> None:
+    """A host (Nexus) says which model a container uses instead of the one asked:
+    core knows nothing of why (a workspace's offer)."""
+    registry = ModelRegistryService()
+    seen: list[tuple[str | None, str]] = []
+
+    def substitute(container: str | None, canonical_id: str) -> str:
+        seen.append((container, canonical_id))
+        return "qwen-3.8" if container == "ws-a" else canonical_id
+
+    registry.register_model_substitute(substitute)
+    assert registry.substitute_chat_model("gpt-x", "ws-a") == "qwen-3.8"
+    assert registry.substitute_chat_model("gpt-x", "ws-b") == "gpt-x"
+    assert registry.substitute_chat_model("gpt-x", None) == "gpt-x"
+    assert seen == [("ws-a", "gpt-x"), ("ws-b", "gpt-x"), (None, "gpt-x")]
+
+
+def test_a_substitute_may_refuse() -> None:
+    from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+
+    registry = ModelRegistryService()
+
+    def refuse(container: str | None, canonical_id: str) -> str:
+        raise PermissionDeniedError("Not offered here")
+
+    registry.register_model_substitute(refuse)
+    with pytest.raises(PermissionDeniedError):
+        registry.substitute_chat_model("gpt-x", "ws-a")

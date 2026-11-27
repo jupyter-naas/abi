@@ -91,7 +91,7 @@
 }
 
 .datasets-card:hover {
-  border-color: var(--color-primary);
+  border-color: hsl(var(--primary));
 }
 
 .datasets-card__name {

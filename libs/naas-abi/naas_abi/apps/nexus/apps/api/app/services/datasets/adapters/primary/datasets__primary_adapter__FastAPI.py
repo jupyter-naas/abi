@@ -97,8 +97,9 @@ async def list_datasets(
         raise _http_error(exc) from exc
     # Namespaces are platform-wide (``dataset/<namespace>/<name>``): the listing
     # keeps what the caller may list, and a namespace refused as a whole (what a
-    # policy on ``dataset/<namespace>`` denies, as the query is) is left out.
-    items = await access.visible(items, user=current_user)
+    # policy on ``dataset/<namespace>`` denies, as the query is) or one the workspace
+    # does not use (its offer closes it) is left out.
+    items = await access.visible(items, user=current_user, workspace_id=workspace_id)
     return DatasetListResponse(datasets=[_to_info(item) for item in items], total=len(items))
 
 

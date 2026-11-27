@@ -152,6 +152,10 @@ class SearchTopicNotFoundError(SearchTopicError):
     pass
 
 
+class SearchTopicSwitchedOffError(SearchTopicError):
+    """The workspace switched the topic off: it does not run."""
+
+
 class SearchTopicValidationError(SearchTopicError):
     def __init__(self, errors: list[str]) -> None:
         super().__init__("; ".join(errors))

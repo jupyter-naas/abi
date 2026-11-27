@@ -1,8 +1,11 @@
-"""The deployment's features: which exist (``enabled_features``) and which a
-workspace offers (those within its set).
+"""The deployment's features: which the platform offers (``deployment_catalog``) and
+which a workspace offers (those within its set).
 
 Who may use one is IAM's ``nexus:UseFeature``, granted by policies only: no role
-brings a feature. A feature outside ``enabled_features`` exists nowhere: it is
+brings a feature. Every feature of ``KNOWN_FEATURE_KEYS`` is listed at the platform
+(Platform settings › Access › Features); what the platform offers its organizations is
+"Platform access" (``services/iam/platform_offer.py``), made from ``enabled_features``,
+which decide alone while it does not exist. A feature the platform does not offer is
 offered nowhere and usable by nobody, the platform admin included
 (``services/iam/authz.py``)."""
 
@@ -44,24 +47,39 @@ KNOWN_FEATURE_KEYS: tuple[str, ...] = (
 PINNED_FEATURES: tuple[str, ...] = ("settings",)
 
 
+def deployment_catalog(feature_flags_config: FeatureFlagsConfig) -> list[str]:
+    """The features the platform offers, in ``KNOWN_FEATURE_KEYS`` order: "Platform
+    access" (``platform_offer``), else the deployment's ``enabled_features``. The pinned
+    ones (Settings) follow ``enabled_features``: no offer switches them."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import platform_offer
+
+    configured = enabled_feature_catalog(feature_flags_config)
+    platform = platform_offer.offered()
+    if platform is None:
+        return configured
+    return [
+        key
+        for key in KNOWN_FEATURE_KEYS
+        if key in platform or (key in PINNED_FEATURES and key in configured)
+    ]
+
+
 def offered_features(feature_flags_config: FeatureFlagsConfig) -> list[str]:
-    """The features a workspace offers, in catalog order: the deployment's enabled
-    ones. Who uses one is a policy's: ``services/iam/user_features``."""
-    return enabled_feature_catalog(feature_flags_config)
+    """The features a workspace offers, in catalog order: those the platform offers.
+    Who uses one is a policy's: ``services/iam/user_features``."""
+    return deployment_catalog(feature_flags_config)
 
 
 def offer_choices(feature_flags_config: FeatureFlagsConfig) -> list[str]:
     """The features an offer switches (General › Features, a policy's Configuration): the
     deployment's enabled ones but the pinned, which whoever administers the workspace keeps
     whatever the offer says (``user_features.ALWAYS_SHOWN``)."""
-    return [
-        key for key in enabled_feature_catalog(feature_flags_config) if key not in PINNED_FEATURES
-    ]
+    return [key for key in deployment_catalog(feature_flags_config) if key not in PINNED_FEATURES]
 
 
 def feature_enabled(feature_flags_config: FeatureFlagsConfig, key: str) -> bool:
-    """Whether ``key`` exists in this deployment (``enabled_features``)."""
-    return key in _resolve_enabled_catalog(feature_flags_config.enabled_features)
+    """Whether the platform offers ``key`` (``deployment_catalog``)."""
+    return key in deployment_catalog(feature_flags_config)
 
 
 def enabled_feature_catalog(feature_flags_config: FeatureFlagsConfig) -> list[str]:

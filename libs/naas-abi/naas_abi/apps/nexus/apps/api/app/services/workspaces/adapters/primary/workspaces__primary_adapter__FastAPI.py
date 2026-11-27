@@ -26,7 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     KNOWN_FEATURE_KEYS,
-    enabled_feature_catalog,
+    deployment_catalog,
     offered_features,
 )
 from naas_abi.apps.nexus.apps.api.app.core.workspace_config_seeds import workspace_seed_rows
@@ -377,7 +377,7 @@ async def _feature_flags(
     return await user_features.user_feature_flags(
         user,
         [(r.organization_id, r.id) for r in records],
-        enabled_feature_catalog(settings.feature_flags),
+        deployment_catalog(settings.feature_flags),
     )
 
 
@@ -739,9 +739,7 @@ async def get_workspace_resources(
     flags = (await _feature_flags(current_user, [record]) or {}).get(record.id, {})
     return {
         "organization_id": record.organization_id,
-        "features": [
-            key for key in enabled_feature_catalog(settings.feature_flags) if flags.get(key)
-        ],
+        "features": [key for key in deployment_catalog(settings.feature_flags) if flags.get(key)],
         "modules": modules,
         "totals": {
             plural: sum(entry[plural] for entry in modules)
@@ -782,6 +780,55 @@ async def list_workspace_members(
     rows = await service.list_workspace_members(workspace_id=workspace_id, with_roles=roles)
     moved_at = await _access_moved_at(db)
     return [_member_view(row, moved_at=moved_at) for row in rows]
+
+
+class WorkspaceMemberProfile(BaseModel):
+    """A member's account and their profile in the workspace's organization, read-only at
+    the workspace (its organization's admins change the profile)."""
+
+    user_id: str
+    name: str | None = None
+    email: str | None = None
+    avatar: str | None = None
+    organization_id: str | None = None
+    organization_profile: dict[str, str | None] | None = None
+
+
+PROFILE_KEYS = ("organization", "job_title", "service_line", "country", "interest", "bio", "avatar")
+
+
+@router.get(
+    "/{workspace_id}/members/{user_id}/profile",
+    dependencies=[guard("ListWorkspaceMembers", literal="-")],
+)
+async def read_workspace_member_profile(
+    workspace_id: str,
+    user_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+    org_service: OrganizationService = Depends(get_organization_service),
+) -> WorkspaceMemberProfile:
+    """One member of the workspace: their account (name, email, picture) and the profile
+    its organization set for them, read-only (Workspace settings › Users › a person). 404
+    for someone who is not a member here."""
+    members = await service.list_workspace_members(workspace_id=workspace_id, with_roles=False)
+    if not any(m.user_id == user_id for m in members):
+        raise HTTPException(status_code=404, detail="Member not found")
+    workspace = await service.get_workspace(workspace_id)
+    org_id = getattr(workspace, "organization_id", None)
+    account, profile = await org_service.get_member_profile(org_id, user_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    return WorkspaceMemberProfile(
+        user_id=user_id,
+        name=account.name,
+        email=account.email,
+        avatar=account.avatar,
+        organization_id=org_id,
+        organization_profile=(
+            {key: getattr(profile, key, None) for key in PROFILE_KEYS} if org_id else None
+        ),
+    )
 
 
 async def _access_moved_at(db: AsyncSession) -> datetime | None:
@@ -1489,7 +1536,7 @@ class BackgroundImageCommit(BaseModel):
     current: str | None = None
     x: float = Field(default=50.0, ge=0, le=100)
     y: float = Field(default=50.0, ge=0, le=100)
-    zoom: float = Field(default=MIN_ZOOM, ge=MIN_ZOOM, le=MAX_ZOOM)
+    zoom: float = Field(default=1.0, ge=MIN_ZOOM, le=MAX_ZOOM)
 
 
 _BACKGROUND_DENIED = "Only admins can change the background image"

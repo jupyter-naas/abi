@@ -3,8 +3,8 @@
 A graph a workspace creates is placed in it by the kernel's create rule. The
 ones that already exist carry a ``graphWorkspaceId`` triple in Nexus's
 application graph, written before graphs had placements: ``place_existing``
-applies them at startup, and the workspaces' saved assignments are projected
-into IAM in the same pass (``graph_grants``).
+applies them at startup. What a workspace is given of other graphs is its offer's
+(``iam/given_graphs``), not a placement.
 """
 
 from __future__ import annotations
@@ -19,7 +19,6 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.placements import (
     Placement,
-    on_workspace_created,
     placement_source,
 )
 from naas_abi.apps.nexus.graph_policy_config import NEXUS_GRAPH
@@ -72,26 +71,3 @@ async def workspace_graph_placements(db: AsyncSession) -> list[Placement]:
             )
         placements.append(graph_placement(iri, sorted(workspaces)[0]))
     return placements
-
-
-@placement_source
-async def workspace_graph_grants(db: AsyncSession) -> list[Placement]:
-    """No placement: applies the workspaces' saved graph assignments to IAM, in
-    the same startup pass, so a workspace holds what it was given."""
-    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
-        sync_all,
-    )
-
-    await sync_all(db, store=_store())
-    return []
-
-
-@on_workspace_created
-async def new_workspace_grants(db: AsyncSession, workspace_id: str) -> list[Placement]:
-    """No placement: the new workspace holds its saved (default) graph assignments."""
-    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
-        sync_workspace,
-    )
-
-    await sync_workspace(db, workspace_id, store=_store())
-    return []

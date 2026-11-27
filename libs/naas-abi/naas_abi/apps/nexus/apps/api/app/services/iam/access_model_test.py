@@ -20,7 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam import (
     access_model,
     container_defaults,
     container_names,
-    platform_files,
+    files_offer,
     policy_tree,
     role_features,
 )
@@ -66,6 +66,7 @@ NARROWINGS = {
     "members_lose_workflows",
     "owners_lose_delete",
     "org_member_role",
+    "org_people_view",
     "model_sets",
     "module_actions",
     "shared_graphs",
@@ -338,13 +339,13 @@ async def _holding_table(nexus_db, rows: list[tuple[str, bool, bool]]) -> None:
     async with nexus_db() as db:
         await db.execute(
             text(
-                f"CREATE TABLE {platform_files.HOLDING_TABLE} (workspace_id TEXT PRIMARY KEY, "
+                f"CREATE TABLE {files_offer.HOLDING_TABLE} (workspace_id TEXT PRIMARY KEY, "
                 "platform_drive_enabled BOOLEAN, system_drive_enabled BOOLEAN)"
             )
         )
         for row in rows:
             await db.execute(
-                text(f"INSERT INTO {platform_files.HOLDING_TABLE} VALUES (:w, :p, :s)"),
+                text(f"INSERT INTO {files_offer.HOLDING_TABLE} VALUES (:w, :p, :s)"),
                 {"w": row[0], "p": row[1], "s": row[2]},
             )
         await db.commit()
@@ -354,14 +355,14 @@ async def _has_holding_table(nexus_db) -> bool:
     async with nexus_db() as db:
         connection = await db.connection()
         return await connection.run_sync(
-            lambda sync: inspect(sync).has_table(platform_files.HOLDING_TABLE)
+            lambda sync: inspect(sync).has_table(files_offer.HOLDING_TABLE)
         )
 
 
 @pytest.mark.asyncio
 async def test_the_drive_flags_are_given_to_the_people_of_the_workspace_after_the_move(nexus_db):
-    """``platform_drive_enabled`` (kept by 0073) becomes Platform Files · read and
-    write for the workspace's people once they are in its groups; the dry run
+    """``platform_drive_enabled`` (kept by 0073) becomes Platform Files, read and
+    write, in the workspace's offer once its access policy is recorded; the dry run
     reports it and keeps the table."""
     nexus = previous._world()
     with nexus.installed():
@@ -374,8 +375,6 @@ async def test_the_drive_flags_are_given_to_the_people_of_the_workspace_after_th
             ("ws-a", "system", "reported"),
         }
         assert await _has_holding_table(nexus_db)
-        with as_service_account("engine"):
-            assert platform_files.platform_files_groups(nexus.iam) == {}
         report = await _move(nexus_db, nexus)
         assert report is not None
         assert {(r["flag"], r["action"]) for r in report.drive_flags} == {
@@ -384,11 +383,10 @@ async def test_the_drive_flags_are_given_to_the_people_of_the_workspace_after_th
         }
         assert not await _has_holding_table(nexus_db)
         container = _containers(previous)["ws-a"]
+        record = next(r for r in await _defaults(nexus_db) if r.container == container)
         with as_service_account("engine"):
-            assert platform_files.workspace_platform_files(nexus.iam, "ws-a") == "write"
-            group = platform_files.platform_files_groups(nexus.iam)["ws-a"]
-            members = set(nexus.iam.list_group_members(group))
-            assert members and members == platform_files.people_of(nexus.iam, container)
+            access = nexus.iam.get_policy(record.access_policy_id)
+        assert offer_of(access.document).platform_files == "write"
         kept = json.loads(await _recorded(nexus_db, access_model.MIGRATION_NAME) or "{}")
         assert len(kept["drive_flags"]) == 2
 
@@ -536,6 +534,32 @@ def test_a_ceiling_of_more_modules_than_one_statement_holds_becomes_an_offer_in_
     parse_policy_document(document)
     assert [s["sid"] for s in document["statements"]] == ["OfferAgents", "OfferAgents2"]
     assert offer_of(document) == offer
+
+
+def test_a_ceiling_keeps_the_maps_a_move_gave_and_closed_in_it():
+    """A ceiling of an older version holds the Maps part ``maps_offer_v1`` wrote into it
+    (its given Allows, and its Denies within ``${scope}``): both stay in the offer it
+    becomes."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import given_maps
+
+    universe = access_model.Universe(agents=frozenset({("acme.sales", "Agent")}))
+    given = frozenset({given_maps.every_name("layout"), given_maps.every_name("basemap")})
+    closed = frozenset({given_maps.closed_name("layout", "narrowed")})
+    ceiling = {
+        "version": POLICY_VERSION,
+        "statements": [
+            {
+                "sid": "Agents",
+                "effect": "Allow",
+                "actions": ["module:UseAgent"],
+                "resources": ["${scope}/module:agent/*"],
+            },
+            *given_maps.statements(given, closed),
+        ],
+    }
+    offer, _dropped = access_model.ceiling_offer(ceiling, universe=universe, features=())
+    assert offer.agents == {("acme.sales", "*")}
+    assert (offer.maps, offer.maps_closed) == (given, closed)
 
 
 @pytest.mark.asyncio

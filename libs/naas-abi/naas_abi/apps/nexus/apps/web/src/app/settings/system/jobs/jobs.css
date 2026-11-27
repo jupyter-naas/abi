@@ -13,14 +13,6 @@
   padding-bottom: var(--space-6);
 }
 
-.jobs-main .data-browser > .data-notice {
-  margin: var(--space-3) var(--data-gutter) 0;
-}
-
-.jobs-loading {
-  padding: var(--space-6) var(--data-gutter);
-}
-
 /* status strip */
 .jobs-strip {
   display: inline-flex;
@@ -365,16 +357,6 @@ button.jobs-strip-cell:hover {
   gap: 12px;
 }
 
-.job-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid var(--border-hex);
-  border-radius: var(--org-border-radius, 0px);
-  background-color: var(--card-hex);
-}
-
 .job-card-title {
   margin: 0;
   font-size: 11px;
@@ -586,10 +568,6 @@ button.jobs-strip-cell:hover {
   word-break: break-word;
 }
 
-.run-panel .data-notice {
-  margin: 4px 0 8px;
-}
-
 .run-logs {
   border: 1px solid var(--border-hex);
   background-color: var(--code-bg-hex, var(--muted-bg-hex));
@@ -691,7 +669,6 @@ button.jobs-strip-cell:hover {
 .run-panel-wide {
   width: 680px;
 }
-
 
 .job-last-skipped {
   margin: 0;

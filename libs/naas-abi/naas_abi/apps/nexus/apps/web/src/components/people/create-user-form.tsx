@@ -21,6 +21,10 @@ import {
 } from '@/lib/people';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
+import { Notice } from '@/components/ui/notice';
+// The creation pages' buttons: Cancel (secondary) then Create (primary, faded until it may create).
+import '@/app/organizations/[orgId]/settings/users/users.css';
+import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
 import {
   PROFILE_FIELDS,
   createUserRequest,
@@ -282,14 +286,14 @@ export function CreateUserForm({
         subtitle={subtitle}
         actions={
           <div className="org-member-detail-actions">
-            <button type="button" onClick={onCancel} className="org-member-detail-cancel-button">
+            <button type="button" onClick={onCancel} className="org-settings-users-secondary-button" data-action="cancel">
               Cancel
             </button>
             <button
               type="button"
               onClick={() => void handleCreate()}
               disabled={!emailValid || creating}
-              className="account-profile-save-button"
+              className="org-settings-primary-button"
               data-action="create"
             >
               <UserPlus size={16} />
@@ -300,10 +304,9 @@ export function CreateUserForm({
       />
 
       {error && (
-        <div className="org-settings-users-alert" role="alert">
-          <AlertCircle size={16} />
-          <span>{error}</span>
-        </div>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
+          <span role="alert">{error}</span>
+        </Notice>
       )}
 
       {notice && (

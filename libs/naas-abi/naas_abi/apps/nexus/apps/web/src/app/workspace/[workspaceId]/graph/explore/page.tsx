@@ -37,6 +37,7 @@ import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { BFO_BUCKET_DEFS, getBfoBucket } from '@/lib/bfo-buckets';
 import { CheckboxFilter } from '@/components/graph/checkbox-filter';
+import { CsvExportDialog, type CsvOptions } from '@/components/graph/graph-node-table';
 import { InstanceInspector } from '@/components/graph/instance-inspector';
 import {
   appendStep,
@@ -1524,9 +1525,6 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
 
   // CSV export dialog state
   const [csvExportOpen, setCsvExportOpen] = useState(false);
-  const [csvEncoding, setCsvEncoding] = useState<'utf-8' | 'utf-8-bom'>('utf-8');
-  const [csvSeparator, setCsvSeparator] = useState(';');
-  const [csvDecimal, setCsvDecimal] = useState(',');
 
   // Selecting Table ('flat') forces full-width; deselecting restores middle.
   const togglePreview = (id: PreviewType) => {
@@ -2671,78 +2669,15 @@ function DiscoveryPane(props: DiscoveryPaneProps) {
         </aside>
       )}
 
-      {/* CSV export options dialog */}
-      {csvExportOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setCsvExportOpen(false)}>
-          <div className="w-80 rounded-lg border bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-4 text-sm font-semibold">Export CSV options</h3>
-
-            <div className="space-y-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground">Encoding</label>
-                <select
-                  value={csvEncoding}
-                  onChange={(e) => setCsvEncoding(e.target.value as 'utf-8' | 'utf-8-bom')}
-                  className="rounded border bg-background px-2 py-1.5 text-xs"
-                >
-                  <option value="utf-8">UTF-8</option>
-                  <option value="utf-8-bom">UTF-8 with BOM (Excel)</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground">Column separator</label>
-                <select
-                  value={csvSeparator}
-                  onChange={(e) => setCsvSeparator(e.target.value)}
-                  className="rounded border bg-background px-2 py-1.5 text-xs"
-                >
-                  <option value=";">Semicolon ( ; )</option>
-                  <option value=",">Comma ( , )</option>
-                  <option value={'\t'}>Tab</option>
-                  <option value="|">Pipe ( | )</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground">Decimal separator</label>
-                <select
-                  value={csvDecimal}
-                  onChange={(e) => setCsvDecimal(e.target.value)}
-                  className="rounded border bg-background px-2 py-1.5 text-xs"
-                >
-                  <option value=",">Comma ( , )</option>
-                  <option value=".">Period ( . )</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setCsvExportOpen(false)}
-                className="rounded-md border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  exportFlatTableToCsv(filteredFlatTableRows, flatTableCols, {
-                    encoding: csvEncoding,
-                    separator: csvSeparator,
-                    decimal: csvDecimal,
-                  });
-                  setCsvExportOpen(false);
-                }}
-                className="rounded-md bg-workspace-accent px-3 py-1.5 text-xs text-white hover:opacity-90"
-              >
-                Export
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CsvExportDialog
+        open={csvExportOpen}
+        encodings={['utf-8', 'utf-8-bom']}
+        onClose={() => setCsvExportOpen(false)}
+        onExport={(options) => {
+          exportFlatTableToCsv(filteredFlatTableRows, flatTableCols, options);
+          setCsvExportOpen(false);
+        }}
+      />
     </div>
   );
 }
@@ -2762,7 +2697,7 @@ function downloadBlob(content: string, filename: string, mime: string) {
 function exportFlatTableToCsv(
   rows: Record<string, string>[],
   columns: { id: string; label: string }[],
-  options: { encoding: 'utf-8' | 'utf-8-bom'; separator: string; decimal: string } = {
+  options: CsvOptions = {
     encoding: 'utf-8', separator: ';', decimal: ',',
   }
 ) {

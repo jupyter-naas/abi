@@ -21,7 +21,6 @@ import {
 import { NEW_POLICY } from '../access-paths';
 import { PLATFORM, ownerOf, parseScope } from '../access-scope';
 import { listedOnPolicies } from '../builtins';
-import { WorkspaceOfferEditor } from '../offer/offer-editor';
 import { roleOfPolicy } from '../roles/role-change';
 import { levelPolicyOf, workspaceGroupName } from '@/lib/access-model/levels';
 import { PolicyAttachments } from './policy-attachments';
@@ -267,13 +266,25 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
     },
     { id: 'revision', label: 'Revision', sortBy: (p) => p.revision, values: (p) => [String(p.revision)] },
   ];
-  const list = useListControls(policies, { searchText: (p) => [p.name, p.id, ownerLabel(p)], columns });
+  // A workspace lists its own policies only: the organization's and the platform's (the
+  // built-in roles among them) are attached from "+ Attach" and open from their links, but
+  // are not the workspace's to list. Every policy stays known (parents, Start from, links).
+  const listedHere = useMemo(
+    () =>
+      policies === null
+        ? null
+        : scope.level === 'workspace'
+          ? policies.filter((p) => (p.owner_scope ?? PLATFORM) === here)
+          : policies,
+    [policies, scope.level, here],
+  );
+  const list = useListControls(listedHere, { searchText: (p) => [p.name, p.id, ownerLabel(p)], columns });
   const heldColumns: ListColumn<Held>[] = [
     { id: 'name', label: 'Policy', sortBy: (h) => h.name.toLowerCase(), values: (h) => [h.name] },
     { id: 'holders', label: 'Held by', sortBy: (h) => h.holders, values: (h) => [String(h.holders)] },
   ];
   const heldList = useListControls(held, { searchText: (h) => [h.name, h.id], columns: heldColumns });
-  useAccessBadge(lists ? policies?.length ?? null : holdsOnly ? held?.length ?? null : null, 'policy', 'policies', !!next);
+  useAccessBadge(lists ? listedHere?.length ?? null : holdsOnly ? held?.length ?? null : null, 'policy', 'policies', !!next);
   // Searched, filtered or sorted, a flat list of what matches; else the tree. A page of it.
   const rows = useMemo(
     () =>
@@ -281,8 +292,8 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
         ? []
         : list.filtered || list.sortKey
           ? list.visible.map((policy) => ({ policy, depth: 0 }))
-          : policyTree(policies),
-    [policies, list.filtered, list.sortKey, list.visible]
+          : policyTree(listedHere ?? []),
+    [policies, listedHere, list.filtered, list.sortKey, list.visible]
   );
   const paged = usePagedRows(rows, list.pageKey);
   const heldPaged = usePagedRows(heldList.visible, heldList.pageKey);
@@ -348,22 +359,6 @@ export function PoliciesView({ api, can, scope, directory, nonce = 0, open, focu
               selection.kind === 'policy' && offerWorkspaceOf(selection.policy)
                 ? workspaceGroupName(selection.policy.name.replace(/ access$/, ''))
                 : null
-            }
-            configuration={
-              // A workspace's offer ("<W> access"): its switches are the policy's Configuration.
-              selection.kind === 'policy' && offerWorkspaceOf(selection.policy)
-                ? (changed) => (
-                    <WorkspaceOfferEditor
-                      workspaceId={offerWorkspaceOf(selection.policy)!}
-                      scope={selection.policy.owner_scope ?? here}
-                      policyId={selection.policy.id}
-                      workspaceName={selection.policy.name.replace(/ access$/, '')}
-                      api={api}
-                      nonce={nonce}
-                      onChanged={changed}
-                    />
-                  )
-                : undefined
             }
           />
           </>

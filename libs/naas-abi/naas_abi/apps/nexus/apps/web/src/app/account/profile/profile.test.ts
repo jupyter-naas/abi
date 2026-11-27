@@ -53,6 +53,15 @@ const field = (label: string) => {
 };
 
 describe('Account › Profile keeps unsaved edits', () => {
+  it('fades Save Changes until something changes, as Organization › General', async () => {
+    mounted = await mount(ProfilePage, {});
+    const save = () =>
+      [...mounted!.host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Save Changes'))!;
+    expect(save().disabled).toBe(true);
+    await mounted.type(field('Bio'), 'Analytical engines');
+    expect(save().disabled).toBe(false);
+  });
+
   it('a return to the page finds them, without a save', async () => {
     mounted = await mount(ProfilePage, {});
     await mounted.type(field('Bio'), 'Analytical engines');

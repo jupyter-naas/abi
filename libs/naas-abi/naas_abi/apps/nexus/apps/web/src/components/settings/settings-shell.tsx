@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ChevronRight, type LucideIcon } from 'lucide-react';
+import { ChevronDown, ChevronRight, type LucideIcon } from 'lucide-react';
 import { applyBrandColorVariables, brandColorVariables } from '@/lib/color';
+import { rememberBrandColors } from '@/lib/brand-color-cache';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { workspaceReturnPath } from '@/lib/workspace-return-path';
+import { useHoverTip } from '@/components/ui/hover-tip';
 import { useSettingsScrollMemory } from './settings-scroll-memory';
 import './settings-shell.css';
 
@@ -45,14 +47,12 @@ export function SettingsLayoutRoot({
   const rootRef = useRef<HTMLDivElement>(null);
   useSettingsScrollMemory(rootRef, usePathname());
 
-  useEffect(
-    () =>
-      applyBrandColorVariables(
-        document.documentElement.style,
-        brandColorVariables(brandPrimary, brandAccent)
-      ),
-    [brandPrimary, brandAccent]
-  );
+  useEffect(() => {
+    const variables = brandColorVariables(brandPrimary, brandAccent);
+    // Kept for the next hard refresh of this page (none: the platform's colors, forgotten).
+    rememberBrandColors(window.location.pathname, variables);
+    return applyBrandColorVariables(document.documentElement.style, variables);
+  }, [brandPrimary, brandAccent]);
   const style = {
     ...(borderRadius !== undefined ? { '--org-border-radius': `${borderRadius}px` } : {}),
     ...brandVariables,
@@ -85,6 +85,8 @@ export function SettingsNavItem({
   chevron = false,
   badge,
   badgeTitle,
+  description,
+  subgroup,
 }: {
   href: string;
   label: string;
@@ -94,17 +96,32 @@ export function SettingsNavItem({
   /** A count that wants attention (failed runs), after the label. */
   badge?: string | null;
   badgeTitle?: string;
+  /** What the page is for: its hover tip, with the label (none on a phone's list). */
+  description?: string;
+  /** A sub-group under the link (Access › Features: the Features pages): its fold toggle, at the
+   *  row's right so the row keeps its look, and what it unfolds. */
+  subgroup?: { open: boolean; onToggle: () => void; label: string; children: ReactNode };
 }) {
   const router = useRouter();
+  // The dock's tip: the page's name and what it is for.
+  const hover = useHoverTip({ title: label, description, disabled: chevron });
   // On intent only (#1609): a long column must not warm every page it lists.
   const prefetch = () => router.prefetch(href);
   return (
-    <li>
+    <li className={subgroup ? 'settings-nav-item-with-subgroup' : undefined}>
       <Link
+        ref={hover.ref}
         href={href}
         prefetch={false}
-        onMouseEnter={prefetch}
-        onFocus={prefetch}
+        {...hover.anchorProps}
+        onMouseEnter={() => {
+          prefetch();
+          hover.anchorProps.onMouseEnter();
+        }}
+        onFocus={() => {
+          prefetch();
+          hover.anchorProps.onFocus();
+        }}
         onTouchStart={prefetch}
         className={active ? 'org-settings-nav-item org-settings-nav-item-active' : 'org-settings-nav-item'}
         aria-current={active ? 'page' : undefined}
@@ -118,6 +135,20 @@ export function SettingsNavItem({
         )}
         {chevron && <ChevronRight size={18} className="org-settings-nav-item-chevron" />}
       </Link>
+      {subgroup && (
+        <button
+          type="button"
+          className="settings-nav-subgroup-toggle"
+          aria-expanded={subgroup.open}
+          aria-label={`${subgroup.open ? 'Fold' : 'Unfold'} ${subgroup.label}`}
+          data-action="subgroup"
+          onClick={subgroup.onToggle}
+        >
+          {subgroup.open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+      )}
+      {subgroup?.open && <div className="settings-nav-subgroup">{subgroup.children}</div>}
+      {hover.tip}
     </li>
   );
 }

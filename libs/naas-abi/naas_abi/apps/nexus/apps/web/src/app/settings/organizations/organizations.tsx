@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
-import { SearchBox } from '@/components/settings/search-box';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
 import type { FacetBucket } from '@/lib/graph-query/types';
@@ -48,6 +47,7 @@ import {
 } from './organizations-model';
 import '../users/users.css';
 import './organizations.css';
+import { SearchBox } from '@/components/ui/search-box';
 
 type Panel = { mode: 'none' } | { mode: 'rename'; name: string } | { mode: 'delete'; typed: string };
 

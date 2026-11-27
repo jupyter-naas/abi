@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
 import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { PolicyRef, PolicySource, PolicyStatement, PolicyView, Publisher } from '@/lib/iam-admin/types';
@@ -30,15 +30,14 @@ import type { AccessDirectory } from '../access-directory';
 import type { AccessNavigation } from '../access-props';
 import { AccessHeaderAction, AccessHeaderSlotContext } from '../access-list';
 import { InstanceHeader } from '../instance-header';
-import { SettingsSection } from '@/components/settings/settings-ui';
 import { PolicyAttachments } from './policy-attachments';
 import { ownedBy, ownerLabel, type PolicyOwner } from './policy-owners';
 import { PolicyText } from './policy-text';
 import { StatementEditor } from './statement-editor';
 import { usePolicyValidation, VALIDATION_DELAY_MS } from './use-policy-validation';
+import { Card } from '@/components/ui/card';
 
-// `configuration`: the policy's own settings (a workspace's offer), when its page gives some.
-type Mode = 'configuration' | 'builder' | 'visual' | 'text';
+type Mode = 'builder' | 'visual' | 'text';
 
 type SaveError = { message: string; errors: string[]; conflict: boolean; refused: string[] };
 
@@ -88,7 +87,6 @@ export function PolicyEditor({
   can,
   open,
   nonce = 0,
-  configuration,
   offerOf = null,
 }: {
   api: IamAdminApi;
@@ -116,9 +114,6 @@ export function PolicyEditor({
   open?: AccessNavigation;
   /** Bumped by the page's refresh button. */
   nonce?: number;
-  /** The policy's own settings (a workspace's offer: its switches), its first tab, open first.
-   *  They save themselves; `changed` reads the document again. */
-  configuration?: (changed: () => void) => ReactNode;
   /** A workspace's offer: the workspace group it bounds, its Held by shown read-only. */
   offerOf?: string | null;
 }) {
@@ -129,7 +124,7 @@ export function PolicyEditor({
   // alone, with no header of the list above it.
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const [statements, setStatements] = useState<EditorStatement[]>(policy ? fromDocument(policy.document) : []);
-  const [mode, setMode] = useState<Mode>(configuration ? 'configuration' : 'visual');
+  const [mode, setMode] = useState<Mode>('visual');
   // Until the user picks a view, the editor opens in the builder once it can show the policy.
   const [picked, setPicked] = useState(false);
   const [format, setFormat] = useState<TextFormat>('json');
@@ -248,7 +243,6 @@ export function PolicyEditor({
     if (
       !picked &&
       mode !== 'text' &&
-      mode !== 'configuration' &&
       (policy ? split.rest.length === 0 : statements.length === 0 || split.rest.length === 0)
     ) {
       setMode('builder');
@@ -380,8 +374,7 @@ export function PolicyEditor({
       setParent(parentOf(fresh));
       setSubPolicies(fresh.sub_policies ?? []);
       if (builder) intoBuilder(fresh.document.statements, builder);
-      // The configuration reads the document again after each of its saves: it stays open.
-      if (mode !== 'configuration') setMode(builder ? 'builder' : 'visual');
+      setMode(builder ? 'builder' : 'visual');
       setSaveError(null);
     } catch (error) {
       setSaveError({ message: message(error), errors: [], conflict: false, refused: [] });
@@ -463,7 +456,7 @@ export function PolicyEditor({
       )}
       {/* Info (no title of its own: the page's is above): its name and description, then what
           it derives from and what derives from it. */}
-      <SettingsSection>
+      <Card>
         <div className="account-profile-form-grid">
           <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="policy-name">
@@ -578,7 +571,7 @@ export function PolicyEditor({
             </ul>
           </div>
         )}
-      </SettingsSection>
+      </Card>
 
       {newParent && !policy && (
         <p className={parentRefused ? 'access-policy-error' : 'access-policy-muted'} role={parentRefused ? 'alert' : 'status'} data-parent-verdict="">
@@ -607,8 +600,8 @@ export function PolicyEditor({
         </AccessHeaderAction>
       )}
 
-      {/* Saved from the page's top (the configuration saves each switch itself). */}
-      {!readOnly && mode !== 'configuration' && (
+      {/* Saved from the page's top. */}
+      {!readOnly && (
         <AccessHeaderAction>
           <button
             type="button"
@@ -623,11 +616,11 @@ export function PolicyEditor({
         </AccessHeaderAction>
       )}
 
-      <SettingsSection
+      <Card
         title="Configuration"
         // What IAM says of the document, at the section's top right (its errors stay below).
         actions={
-          mode !== 'configuration' && !readOnly ? (
+          !readOnly ? (
             validation.pending ? (
               <span className="access-policy-muted" data-policy-validity="pending">
                 Checking with IAM…
@@ -640,27 +633,16 @@ export function PolicyEditor({
             ) : undefined
           ) : undefined
         }
-        description={
-          configuration
-            ? 'What the workspace offers, switched here; Advanced, Builder and Code show its document.'
-            : 'What it allows and denies: its statements, as a form, built from a listing, or as code.'
-        }
+        description="What it allows and denies: its statements, as a form, built from a listing, or as code."
       >
         <div className="access-policy-config">
         <div className="access-policy-modes" role="tablist" aria-label="Editor view">
-          {configuration &&
-            tab('configuration', 'Configuration', () => {
-              setPicked(true);
-              setMode('configuration');
-            })}
           {tab('visual', 'Advanced', () => void showForm('visual'))}
           {builder && tab('builder', 'Builder', () => void showForm('builder'))}
           {tab('text', 'Code', showText)}
         </div>
   
-        {mode === 'configuration' && configuration ? (
-          configuration(() => void reload())
-        ) : mode === 'builder' && !builder ? (
+        {mode === 'builder' && !builder ? (
           // While what may be granted is read again (a new parent): nothing to edit yet.
           <p className="access-policy-muted" role="status" data-builder-loading="">
             Loading what you may grant…
@@ -690,12 +672,12 @@ export function PolicyEditor({
           <PolicyText text={text} onChange={setText} format={format} onFormat={changeFormat} readOnly={readOnly} />
         )}
   
-        {mode !== 'configuration' && switchError && (
+        {switchError && (
           <p className="access-policy-notice" role="status">
             {switchError}
           </p>
         )}
-        {mode !== 'configuration' && !readOnly && grantable.state === 'failed' && !parentRefused && (
+        {!readOnly && grantable.state === 'failed' && !parentRefused && (
           <p className="access-policy-notice" role="status" data-grantable-failure="">
             No builder or suggestions: {grantable.message}{' '}
             <button type="button" className="access-policy-button" onClick={() => setAttempt((n) => n + 1)}>
@@ -704,7 +686,7 @@ export function PolicyEditor({
           </p>
         )}
   
-        {mode !== 'configuration' && !readOnly && (
+        {!readOnly && (
           <div className="access-policy-validation" aria-live="polite">
             {errors.length > 0 && (
               <ul className="access-policy-errors" role="alert" aria-label="Validation errors">
@@ -740,7 +722,7 @@ export function PolicyEditor({
           </div>
         )}
         </div>
-      </SettingsSection>
+      </Card>
 
       {/* Who holds it, after what it allows. */}
       {policy && can && (

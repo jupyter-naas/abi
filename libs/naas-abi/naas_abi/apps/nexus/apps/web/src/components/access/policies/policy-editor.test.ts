@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createElement } from 'react';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { PolicyDocument, PolicyValidation, PublishersView } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
@@ -55,36 +54,6 @@ async function open(props: Partial<Parameters<typeof PolicyEditor>[0]> = {}, { b
   if (!builder && statements?.getAttribute('aria-selected') === 'false') await mounted.click(statements);
   return { onSaved };
 }
-
-describe('PolicyEditor with a Configuration (a workspace’s offer)', () => {
-  it('opens on Configuration, first of Configuration, Advanced, Builder, Code, with no Save', async () => {
-    const getPolicy = vi.fn().mockResolvedValue({ ...readerPolicy, revision: 4 });
-    let changed: () => void = () => undefined;
-    mounted = await mount(PolicyEditor, {
-      api: api({ getPolicy }),
-      policy: readerPolicy,
-      onSaved: vi.fn(),
-      validationDelayMs: 0,
-      configuration: (onChanged: () => void) => {
-        changed = onChanged;
-        return createElement('p', { 'data-configuration': '' }, 'The switches');
-      },
-    });
-    await mounted.flush();
-    expect([...document.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).toEqual(['Configuration', 'Advanced', 'Builder', 'Code']);
-    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Configuration');
-    expect(document.querySelector('[data-configuration]')).not.toBeNull();
-    expect(button('Save changes')).toBeUndefined();
-    // A switch saved: the document is read again, and Configuration stays open.
-    changed();
-    await mounted.flush();
-    expect(getPolicy).toHaveBeenCalledWith(readerPolicy.id);
-    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Configuration');
-    await mounted.click(tab('Advanced'));
-    expect(document.querySelector('[data-configuration]')).toBeNull();
-    expect(button('Save changes')).toBeDefined();
-  });
-});
 
 describe('PolicyEditor sub-policies', () => {
   it('counts them, names the first five, and five more at each Load more', async () => {

@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, type MutableRefObject } from 'react';
 import { Loader2, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ConfirmDialog } from '@/components/ui/dialogs';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { useGraphTableSizing, type GraphTableWidths } from './table/use-graph-table-sizing';
@@ -71,7 +72,6 @@ export function IndividualsTable({
     () => new Set(readOnly ? [] : instances.map((i) => i.uri)),
   );
   const [showDialog, setShowDialog] = useState(false);
-  const [confirmInput, setConfirmInput] = useState('');
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -104,7 +104,6 @@ export function IndividualsTable({
   const handleBatchDelete = async () => {
     setDeleting(true);
     setShowDialog(false);
-    setConfirmInput('');
     const uris = [...rowChecked];
     const deletedUris: string[] = [];
     for (const uri of uris) {
@@ -129,58 +128,15 @@ export function IndividualsTable({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      {showDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-2xl">
-            <h3 className="text-base font-semibold">
-              Remove {checkedCount} individual{checkedCount !== 1 ? 's' : ''}?
-            </h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              This will permanently remove {checkedCount} individual
-              {checkedCount !== 1 ? 's' : ''} and all their triples from the graph. This action
-              cannot be undone.
-            </p>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Type <span className="font-semibold text-foreground">{checkedCount}</span> to confirm:
-            </p>
-            <input
-              autoFocus
-              value={confirmInput}
-              onChange={(e) => setConfirmInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && confirmInput === String(checkedCount))
-                  void handleBatchDelete();
-                if (e.key === 'Escape') {
-                  setShowDialog(false);
-                  setConfirmInput('');
-                }
-              }}
-              className="mt-2 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-              placeholder={`Type ${checkedCount} to confirm`}
-            />
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowDialog(false);
-                  setConfirmInput('');
-                }}
-                className="px-4 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={confirmInput !== String(checkedCount)}
-                onClick={() => void handleBatchDelete()}
-                className="bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Remove {checkedCount} individual{checkedCount !== 1 ? 's' : ''}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={showDialog}
+        title={`Remove ${checkedCount} individual${checkedCount !== 1 ? 's' : ''}?`}
+        description={`This will permanently remove ${checkedCount} individual${checkedCount !== 1 ? 's' : ''} and all their triples from the graph. This action cannot be undone.`}
+        confirmText={String(checkedCount)}
+        confirmLabel={`Remove ${checkedCount} individual${checkedCount !== 1 ? 's' : ''}`}
+        onConfirm={() => void handleBatchDelete()}
+        onCancel={() => setShowDialog(false)}
+      />
 
       <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
         <span className="text-sm font-semibold">

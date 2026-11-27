@@ -9,13 +9,12 @@ import { ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/input';
-import {
-  SettingsField,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsSection,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader } from '@/components/settings/settings-ui';
+import { Field } from '@/components/ui/field';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
 const getApiBase = () => getApiUrl();
 
@@ -61,6 +60,8 @@ function toForm(model: Model): EditableFields {
 }
 
 export default function ModelDetailPage() {
+  // Links keep the policy picked in the Settings column (`?policy=`).
+  const policyHref = usePolicyHref();
   const router = useRouter();
   const params = useParams();
   const workspaceId = (params?.workspaceId as string | undefined) ?? '';
@@ -76,7 +77,8 @@ export default function ModelDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
-  const backToList = `/workspace/${workspaceId}/settings/models`;
+  // Opened from the Model catalog: back to it.
+  const backToList = `/workspace/${workspaceId}/settings/models/catalog`;
 
   const load = useCallback(async () => {
     if (!modelId) return;
@@ -167,17 +169,17 @@ export default function ModelDetailPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Button variant="secondary" onClick={() => router.push(backToList)}>
+        <Button variant="secondary" onClick={() => router.push(policyHref(backToList))}>
           <ArrowLeft size={16} />
-          Back to models
+          Back to the catalog
         </Button>
       </div>
 
       {loading ? (
-        <SettingsLoading label="Loading model…" />
+        <Loading label="Loading model…" />
       ) : error && !model ? (
         <div className="space-y-4">
-          <SettingsNotice tone="error">{error}</SettingsNotice>
+          <Notice tone="error">{error}</Notice>
           <Button variant="secondary" onClick={() => void load()}>
             Retry
           </Button>
@@ -204,18 +206,18 @@ export default function ModelDetailPage() {
             }
           />
 
-          <SettingsSection title="Display properties">
+          <Card title="Display properties">
             <div className="space-y-4">
-              <SettingsField label="Name">
+              <Field label="Name">
                 <Input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   placeholder="Model display name"
                 />
-              </SettingsField>
+              </Field>
 
-              <SettingsField label="Description">
+              <Field label="Description">
                 <Textarea
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
@@ -223,18 +225,18 @@ export default function ModelDetailPage() {
                   className="resize-y"
                   placeholder="Short description shown in the model list"
                 />
-              </SettingsField>
+              </Field>
 
-              <SettingsField label="Image URL">
+              <Field label="Image URL">
                 <Input
                   type="text"
                   value={form.image}
                   onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
                   placeholder="https://… or a relative asset path"
                 />
-              </SettingsField>
+              </Field>
 
-              <SettingsField label="Context window">
+              <Field label="Context window">
                 <Input
                   type="number"
                   min={0}
@@ -243,11 +245,11 @@ export default function ModelDetailPage() {
                   placeholder="e.g. 200000"
                 />
                 {contextWindowInvalid && <p className="text-xs text-destructive">Context window must be a number.</p>}
-              </SettingsField>
+              </Field>
             </div>
-          </SettingsSection>
+          </Card>
 
-          <SettingsSection title="Source identity (read-only)">
+          <Card title="Source identity (read-only)">
             <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
               <ReadOnly label="Model ID" value={model.model_id} mono />
               <ReadOnly label="Provider" value={model.provider} />
@@ -255,7 +257,7 @@ export default function ModelDetailPage() {
               <ReadOnly label="Status" value={model.configured ? 'Configured' : 'Not configured'} />
               <ReadOnly label="Module path" value={model.module_path} mono wide />
             </dl>
-          </SettingsSection>
+          </Card>
 
           <div className="flex items-center gap-3 border-t border-border pt-5">
             <Button onClick={() => void handleSave()} disabled={!isDirty || saving || contextWindowInvalid}>

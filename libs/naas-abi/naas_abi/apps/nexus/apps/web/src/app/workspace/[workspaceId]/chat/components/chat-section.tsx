@@ -17,6 +17,8 @@ import { getWorkspacePath } from '@/components/shell/sidebar/utils';
 import { newChatPath, NEW_CHAT_SLUG } from '@/app/workspace/[workspaceId]/chat/lib/chat-route';
 import { AgentAvatar } from '@/components/chat/agent-selector';
 import { useFeature } from '@/hooks/use-feature';
+import { useConfirm } from '@/components/ui/dialogs';
+import { toast } from '@/components/ui/toast';
 import { useStartNewChat } from '../lib/use-start-new-chat';
 import { ConversationItem } from './conversation-item';
 import { ProjectGroup } from './project-group';
@@ -35,6 +37,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const [agentMenuId, setAgentMenuId] = useState<string | null>(null);
   const [showAllSkills, setShowAllSkills] = useState(false);
   const [skillMenuId, setSkillMenuId] = useState<string | null>(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   // Narrow selectors: streamed tokens rebuild `conversations` on every chunk and
   // must not re-render the sidebar unless listed metadata changes.
@@ -174,12 +177,12 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
     [renameConversation]
   );
   const handleDelete = useCallback(
-    (id: string, title: string) => {
-      if (confirm(`Delete "${title}"?`)) {
+    async (id: string, title: string) => {
+      if (await confirm({ title: `Delete "${title}"?` })) {
         deleteConversation(id);
       }
     },
-    [deleteConversation]
+    [deleteConversation, confirm]
   );
 
   useEffect(() => {
@@ -201,287 +204,290 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
     `chat-list-row${active ? ' is-active' : ''}${isMobilePanel ? ' is-mobile-panel' : ''}`;
 
   return (
-    <CollapsibleSection
-      id="chat"
-      icon={<MessageSquare size={18} />}
-      label="Chat"
-      description="Interact with ABI-powered agents"
-      href={getWorkspacePath(currentWorkspaceId, '/chat')}
-      collapsed={collapsed}
-      detailOnly={detailOnly}
-      onNavigate={handleChatHeaderNavigate}
-    >
-      <SidebarNewItem
-        label="New Chat"
-        title="New chat (Ctrl+I)"
-        onClick={handleNewChat}
-        active={isNewChatActive}
-        mobilePanel={isMobilePanel}
-      />
+    <>
+      {confirmDialog}
+      <CollapsibleSection
+        id="chat"
+        icon={<MessageSquare size={18} />}
+        label="Chat"
+        description="Interact with ABI-powered agents"
+        href={getWorkspacePath(currentWorkspaceId, '/chat')}
+        collapsed={collapsed}
+        detailOnly={detailOnly}
+        onNavigate={handleChatHeaderNavigate}
+      >
+        <SidebarNewItem
+          label="New Chat"
+          title="New chat (Ctrl+I)"
+          onClick={handleNewChat}
+          active={isNewChatActive}
+          mobilePanel={isMobilePanel}
+        />
 
-      <div className="chat-section-group">
-        {canManageAgents ? (
-          <Link
-            href={getWorkspacePath(currentWorkspaceId, '/settings/agents')}
-            className={labelClass(true)}
-          >
-            Agents
-          </Link>
-        ) : (
-          <p className={labelClass()}>Agents</p>
-        )}
-        {visibleAgents.length === 0 && (
-          <p className="chat-section-hint">No agents available yet</p>
-        )}
-        {visibleAgents.map((agent) => {
-          const isSelected = isNewChatState && agentExplicitlySelected && selectedAgent === agent.id;
+        <div className="chat-section-group">
+          {canManageAgents ? (
+            <Link
+              href={getWorkspacePath(currentWorkspaceId, '/settings/agents')}
+              className={labelClass(true)}
+            >
+              Agents
+            </Link>
+          ) : (
+            <p className={labelClass()}>Agents</p>
+          )}
+          {visibleAgents.length === 0 && (
+            <p className="chat-section-hint">No agents available yet</p>
+          )}
+          {visibleAgents.map((agent) => {
+            const isSelected = isNewChatState && agentExplicitlySelected && selectedAgent === agent.id;
 
-          return (
-            <div key={agent.id} className="chat-list-row-wrap">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedAgent(agent.id, true);
-                  setActiveConversation(null);
-                  setMobilePendingChatSlug(NEW_CHAT_SLUG);
-                  router.push(newChatPath(currentWorkspaceId));
-                }}
-                className={listRowClass(isSelected)}
-              >
-                <span
-                  className={`chat-list-row-avatar${!agent.logoUrl ? (isSelected ? ' is-accent' : ' is-muted') : ''}`}
-                >
-                  <AgentAvatar agent={agent} size={iconSize} />
-                </span>
-                <span className="chat-list-row-title">{agent.name}</span>
-                {agent.isDefault && (
-                  <span className="chat-list-row-badge">Default</span>
-                )}
-                <div
-                  className="chat-list-row-menu-trigger"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAgentMenuId(agentMenuId === agent.id ? null : agent.id);
+            return (
+              <div key={agent.id} className="chat-list-row-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedAgent(agent.id, true);
+                    setActiveConversation(null);
+                    setMobilePendingChatSlug(NEW_CHAT_SLUG);
+                    router.push(newChatPath(currentWorkspaceId));
                   }}
-                  role="presentation"
+                  className={listRowClass(isSelected)}
                 >
-                  <MoreVertical size={12} />
-                </div>
-              </button>
+                  <span
+                    className={`chat-list-row-avatar${!agent.logoUrl ? (isSelected ? ' is-accent' : ' is-muted') : ''}`}
+                  >
+                    <AgentAvatar agent={agent} size={iconSize} />
+                  </span>
+                  <span className="chat-list-row-title">{agent.name}</span>
+                  {agent.isDefault && (
+                    <span className="chat-list-row-badge">Default</span>
+                  )}
+                  <div
+                    className="chat-list-row-menu-trigger"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAgentMenuId(agentMenuId === agent.id ? null : agent.id);
+                    }}
+                    role="presentation"
+                  >
+                    <MoreVertical size={12} />
+                  </div>
+                </button>
 
-              {agentMenuId === agent.id && (
-                <>
-                  <div className="chat-context-menu-backdrop" onClick={() => setAgentMenuId(null)} />
-                  <div className="chat-context-menu">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void setDefaultAgent(agent.id);
-                        setAgentMenuId(null);
-                      }}
-                      disabled={agent.isDefault}
-                      className="chat-context-menu-item"
-                    >
-                      <Star size={12} />
-                      {agent.isDefault ? 'Default agent' : 'Set as default'}
-                    </button>
-                    {canManageAgents && (
+                {agentMenuId === agent.id && (
+                  <>
+                    <div className="chat-context-menu-backdrop" onClick={() => setAgentMenuId(null)} />
+                    <div className="chat-context-menu">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          void setDefaultAgent(agent.id);
                           setAgentMenuId(null);
-                          router.push(getWorkspacePath(currentWorkspaceId, `/settings/agents/${agent.id}`));
                         }}
+                        disabled={agent.isDefault}
                         className="chat-context-menu-item"
                       >
-                        <Edit2 size={12} />
-                        Edit agent
+                        <Star size={12} />
+                        {agent.isDefault ? 'Default agent' : 'Set as default'}
                       </button>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-        {hiddenAgentCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowAllAgents(!showAllAgents)}
-            className={`chat-section-show-more${isMobilePanel ? ' is-mobile-panel' : ''}`}
-          >
-            <ChevronRight
-              size={iconSize}
-              className={`chat-section-show-more-chevron${showAllAgents ? ' is-expanded' : ''}`}
-            />
-            <span>{showAllAgents ? 'Show less' : `Show ${hiddenAgentCount} more`}</span>
-          </button>
-        )}
-      </div>
-
-      {canUseSkills && (
-        <div className="chat-section-group">
-          <Link
-            href={getWorkspacePath(currentWorkspaceId, '/settings/skills')}
-            className={labelClass(true)}
-          >
-            Skills
-          </Link>
-          {sortedSkills.length === 0 && (
-            <p className="chat-section-hint">Type /create-skill in the chat and the Skills agent adds one</p>
+                      {canManageAgents && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAgentMenuId(null);
+                            router.push(getWorkspacePath(currentWorkspaceId, `/settings/agents/${agent.id}`));
+                          }}
+                          className="chat-context-menu-item"
+                        >
+                          <Edit2 size={12} />
+                          Edit agent
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+          {hiddenAgentCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAllAgents(!showAllAgents)}
+              className={`chat-section-show-more${isMobilePanel ? ' is-mobile-panel' : ''}`}
+            >
+              <ChevronRight
+                size={iconSize}
+                className={`chat-section-show-more-chevron${showAllAgents ? ' is-expanded' : ''}`}
+              />
+              <span>{showAllAgents ? 'Show less' : `Show ${hiddenAgentCount} more`}</span>
+            </button>
           )}
-          {visibleSkills.map((skill) => (
-            <div key={skill.id} className="chat-list-row-wrap">
-              <button
-                type="button"
-                onClick={() => handleUseSkill(skill.slug)}
-                title={skill.description || skill.name}
-                className={listRowClass()}
-              >
-                <Zap size={iconSize} className="chat-list-row-icon" />
-                <span className="chat-list-row-title">
-                  {skill.name}
-                  <span className="chat-list-row-skill-slug">/{skill.slug}</span>
-                </span>
-                <div
-                  className="chat-list-row-menu-trigger"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSkillMenuId(skillMenuId === skill.id ? null : skill.id);
-                  }}
-                  role="presentation"
-                >
-                  <MoreVertical size={12} />
-                </div>
-              </button>
+        </div>
 
-              {skillMenuId === skill.id && (
-                <>
-                  <div className="chat-context-menu-backdrop" onClick={() => setSkillMenuId(null)} />
-                  <div className="chat-context-menu">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSkillMenuId(null);
-                        router.push(getWorkspacePath(currentWorkspaceId, `/settings/skills/${skill.id}`));
-                      }}
-                      className="chat-context-menu-item"
-                    >
-                      <Edit2 size={12} />
-                      Edit skill
-                    </button>
-                    {(skill.scope !== 'user' || skill.userId === currentUserId) && (
+        {canUseSkills && (
+          <div className="chat-section-group">
+            <Link
+              href={getWorkspacePath(currentWorkspaceId, '/settings/skills')}
+              className={labelClass(true)}
+            >
+              Skills
+            </Link>
+            {sortedSkills.length === 0 && (
+              <p className="chat-section-hint">Type /create-skill in the chat and the Skills agent adds one</p>
+            )}
+            {visibleSkills.map((skill) => (
+              <div key={skill.id} className="chat-list-row-wrap">
+                <button
+                  type="button"
+                  onClick={() => handleUseSkill(skill.slug)}
+                  title={skill.description || skill.name}
+                  className={listRowClass()}
+                >
+                  <Zap size={iconSize} className="chat-list-row-icon" />
+                  <span className="chat-list-row-title">
+                    {skill.name}
+                    <span className="chat-list-row-skill-slug">/{skill.slug}</span>
+                  </span>
+                  <div
+                    className="chat-list-row-menu-trigger"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSkillMenuId(skillMenuId === skill.id ? null : skill.id);
+                    }}
+                    role="presentation"
+                  >
+                    <MoreVertical size={12} />
+                  </div>
+                </button>
+
+                {skillMenuId === skill.id && (
+                  <>
+                    <div className="chat-context-menu-backdrop" onClick={() => setSkillMenuId(null)} />
+                    <div className="chat-context-menu">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setSkillMenuId(null);
-                          if (confirm(`Delete skill "/${skill.slug}"?`)) {
-                            void deleteSkill(skill.id).catch((err) =>
-                              alert(err instanceof Error ? err.message : 'Failed to delete skill')
-                            );
-                          }
+                          router.push(getWorkspacePath(currentWorkspaceId, `/settings/skills/${skill.id}`));
                         }}
-                        className="chat-context-menu-item is-destructive"
+                        className="chat-context-menu-item"
                       >
-                        <Trash2 size={12} />
-                        Delete
+                        <Edit2 size={12} />
+                        Edit skill
                       </button>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
-          {hiddenSkillCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowAllSkills(!showAllSkills)}
-              className={`chat-section-show-more${isMobilePanel ? ' is-mobile-panel' : ''}`}
-            >
-              <ChevronRight
-                size={iconSize}
-                className={`chat-section-show-more-chevron${showAllSkills ? ' is-expanded' : ''}`}
+                      {(skill.scope !== 'user' || skill.userId === currentUserId) && (
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            setSkillMenuId(null);
+                            if (await confirm({ title: `Delete skill "/${skill.slug}"?` })) {
+                              void deleteSkill(skill.id).catch((err) =>
+                                toast.error('Failed to delete skill', err instanceof Error ? err.message : undefined)
+                              );
+                            }
+                          }}
+                          className="chat-context-menu-item is-destructive"
+                        >
+                          <Trash2 size={12} />
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+            {hiddenSkillCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowAllSkills(!showAllSkills)}
+                className={`chat-section-show-more${isMobilePanel ? ' is-mobile-panel' : ''}`}
+              >
+                <ChevronRight
+                  size={iconSize}
+                  className={`chat-section-show-more-chevron${showAllSkills ? ' is-expanded' : ''}`}
+                />
+                <span>{showAllSkills ? 'Show less' : `Show ${hiddenSkillCount} more`}</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {pinnedConvs.length > 0 && (
+          <div className="chat-section-group">
+            <p className={labelClass()}>Pinned</p>
+            {pinnedConvs.map((conv) => (
+              <ConversationItem
+                key={conv.id}
+                id={conv.id}
+                title={conv.title}
+                pinned
+                isActive={isChatRoute && activeConversationId === conv.id}
+                onClick={handleSelectConversation}
+                onPin={togglePinConversation}
+                onArchive={toggleArchiveConversation}
+                isRenaming={renamingId === conv.id}
+                onStartRename={handleStartRename}
+                onRename={handleRename}
+                onCancelRename={handleCancelRename}
+                onDelete={handleDelete}
+                {...listItemProps}
               />
-              <span>{showAllSkills ? 'Show less' : `Show ${hiddenSkillCount} more`}</span>
-            </button>
-          )}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
 
-      {pinnedConvs.length > 0 && (
-        <div className="chat-section-group">
-          <p className={labelClass()}>Pinned</p>
-          {pinnedConvs.map((conv) => (
-            <ConversationItem
-              key={conv.id}
-              id={conv.id}
-              title={conv.title}
-              pinned
-              isActive={isChatRoute && activeConversationId === conv.id}
-              onClick={handleSelectConversation}
-              onPin={togglePinConversation}
-              onArchive={toggleArchiveConversation}
-              isRenaming={renamingId === conv.id}
-              onStartRename={handleStartRename}
-              onRename={handleRename}
-              onCancelRename={handleCancelRename}
-              onDelete={handleDelete}
-              {...listItemProps}
-            />
-          ))}
-        </div>
-      )}
+        {projectGroups.filter((p) => p.conversations.length > 0).map((project) => (
+          <ProjectGroup
+            key={project.id}
+            name={project.name}
+            conversations={project.conversations}
+            activeId={isChatRoute ? activeConversationId : null}
+            onSelect={handleSelectConversation}
+            onPin={togglePinConversation}
+            onArchive={toggleArchiveConversation}
+            renamingId={renamingId}
+            onStartRename={handleStartRename}
+            onRename={handleRename}
+            onCancelRename={handleCancelRename}
+            onDelete={handleDelete}
+            {...listItemProps}
+          />
+        ))}
 
-      {projectGroups.filter((p) => p.conversations.length > 0).map((project) => (
-        <ProjectGroup
-          key={project.id}
-          name={project.name}
-          conversations={project.conversations}
-          activeId={isChatRoute ? activeConversationId : null}
-          onSelect={handleSelectConversation}
-          onPin={togglePinConversation}
-          onArchive={toggleArchiveConversation}
-          renamingId={renamingId}
-          onStartRename={handleStartRename}
-          onRename={handleRename}
-          onCancelRename={handleCancelRename}
-          onDelete={handleDelete}
-          {...listItemProps}
-        />
-      ))}
+        {recentConvs.length > 0 && (
+          <div className="chat-section-group">
+            <p className={labelClass()}>Recent</p>
+            {recentConvs.slice(0, 10).map((conv) => (
+              <ConversationItem
+                key={conv.id}
+                id={conv.id}
+                title={conv.title}
+                isActive={isChatRoute && activeConversationId === conv.id}
+                onClick={handleSelectConversation}
+                onPin={togglePinConversation}
+                onArchive={toggleArchiveConversation}
+                isRenaming={renamingId === conv.id}
+                onStartRename={handleStartRename}
+                onRename={handleRename}
+                onCancelRename={handleCancelRename}
+                onDelete={handleDelete}
+                {...listItemProps}
+              />
+            ))}
+          </div>
+        )}
 
-      {recentConvs.length > 0 && (
-        <div className="chat-section-group">
-          <p className={labelClass()}>Recent</p>
-          {recentConvs.slice(0, 10).map((conv) => (
-            <ConversationItem
-              key={conv.id}
-              id={conv.id}
-              title={conv.title}
-              isActive={isChatRoute && activeConversationId === conv.id}
-              onClick={handleSelectConversation}
-              onPin={togglePinConversation}
-              onArchive={toggleArchiveConversation}
-              isRenaming={renamingId === conv.id}
-              onStartRename={handleStartRename}
-              onRename={handleRename}
-              onCancelRename={handleCancelRename}
-              onDelete={handleDelete}
-              {...listItemProps}
-            />
-          ))}
-        </div>
-      )}
-
-      {privateTo ? (
-        <PrivateToPerson what="Chat history" />
-      ) : (
-        conversations.length === 0 && <p className="chat-section-empty">No conversations yet</p>
-      )}
-    </CollapsibleSection>
+        {privateTo ? (
+          <PrivateToPerson what="Chat history" />
+        ) : (
+          conversations.length === 0 && <p className="chat-section-empty">No conversations yet</p>
+        )}
+      </CollapsibleSection>
+    </>
   );
 }

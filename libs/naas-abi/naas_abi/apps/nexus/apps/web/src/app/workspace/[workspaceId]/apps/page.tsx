@@ -19,7 +19,8 @@ import { usePublishFeatureResource } from '@/stores/feature-pane';
 import { usePrompt } from '@/components/ui/dialogs';
 import { useDocumentTitleDetail } from '@/contexts/tenant-context';
 import { appEditorPath, appProjectsApi, type AppProject } from '@/lib/app-projects';
-import { AppsMenuBar, type AppsMenuEntry } from '@/components/apps-builder/apps-menu-bar';
+import { AppsMenuBar } from '@/components/apps-builder/apps-menu-bar';
+import type { MenuEntry } from '@/components/ui/menu';
 import { ViewBar } from './components/view-bar';
 import { DatabaseBody } from './components/views';
 import { useAppViews } from './components/use-app-views';
@@ -239,8 +240,8 @@ function EmbedView({
   // app in the workspace, current one ticked, plus the app projects that open
   // straight in the editor. Apps that cannot be edited stay visible but greyed,
   // so the menu reads as the whole catalogue rather than a filtered remnant.
-  const editItems: AppsMenuEntry[] = [
-    { id: 'apps-heading', label: 'Apps', heading: true },
+  const editItems: MenuEntry[] = [
+    { id: 'apps-heading', kind: 'heading', label: 'Apps' },
     ...records.map((candidate) => ({
       id: `app-${candidate.id}`,
       label: candidate.name,
@@ -253,16 +254,16 @@ function EmbedView({
       onSelect: () => onEdit?.(candidate),
     })),
     ...(projects.length
-      ? [
-          { id: 'sep-projects', separator: true },
-          { id: 'projects-heading', label: 'App projects', heading: true },
+      ? ([
+          { id: 'sep-projects', kind: 'separator' },
+          { id: 'projects-heading', kind: 'heading', label: 'App projects' },
           ...projects.map((project) => ({
             id: `project-${project.slug}`,
             label: `${project.icon_emoji ? `${project.icon_emoji} ` : ''}${project.title}`,
             title: `Open ${project.title} in the Apps editor`,
             onSelect: () => onOpenProject(project),
           })),
-        ]
+        ] satisfies MenuEntry[])
       : []),
   ];
 

@@ -2,10 +2,15 @@
 
 /** Starting a run (with an optional payload) and cancelling one. */
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Play, Square } from 'lucide-react';
+import { AlertTriangle, Play } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/dialogs';
+import { Notice } from '@/components/ui/notice';
+import { Spinner } from '@/components/ui/spinner';
+import { Tabs } from '@/components/ui/tabs';
 import type { Failure } from '../data/data-api';
-import { Kbd, Notice } from '../data/data-ui';
-import { Modal } from '../data/modal';
+import { Kbd } from '../data/data-ui';
 import { CodeView } from '../data/viewers/code-view';
 import type { JsonSchema, RunSummary } from './jobs-types';
 import { SchemaForm } from './schema-fields';
@@ -126,9 +131,9 @@ export function TriggerDialog({
   const refused = failure?.errors?.length ? failure.errors : [];
   const shown = attempted ? (refused.length && !issues.length ? refused : issues) : [];
   return (
-    <Modal
+    <Dialog
       title={rerun ? `Run ${job} again` : `Run ${job} now`}
-      subtitle={<span className="data-mono">{moduleId}</span>}
+      description={<span className="data-mono">{moduleId}</span>}
       icon={<Play size={18} />}
       size="lg"
       onClose={onClose}
@@ -139,45 +144,42 @@ export function TriggerDialog({
             Recorded in the audit log · <Kbd>⌘</Kbd>
             <Kbd>↵</Kbd>
           </span>
-          <button type="button" className="data-button" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button type="button" className="data-button data-button-primary" disabled={Boolean(syntax) || busy} onClick={submit}>
-            <Play size={14} aria-hidden="true" /> {busy ? 'Starting…' : 'Run'}
-          </button>
+          </Button>
+          <Button disabled={Boolean(syntax) || busy} onClick={submit}>
+            {busy ? <Spinner size={14} /> : <Play size={14} aria-hidden="true" />} {busy ? 'Starting…' : 'Run'}
+          </Button>
         </>
       }
     >
       {workflow ? (
-        <p className="data-modal-text">
+        <p className="text-muted-foreground">
           Starts a durable run of this workflow. The input is checked against its input schema first; if a host stops
           mid-run, the retry resumes after the steps that finished.
         </p>
       ) : (
-        <p className="data-modal-text">
+        <p className="text-muted-foreground">
           Publishes one trigger for this job. A host picks it up like a schedule tick; it counts against the job&apos;s
           concurrency and retries like any run. The payload reaches the handler as <code className="data-mono">ctx.payload</code>.
         </p>
       )}
       {fields && (
-        <div className="data-segmented" role="tablist" aria-label="Input editor">
-          {(['form', 'json'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              role="tab"
-              aria-selected={mode === m}
-              className={mode === m ? 'data-segment data-segment-active' : 'data-segment'}
-              onClick={() => switchTo(m)}
-            >
-              {m === 'form' ? 'Form' : 'JSON'}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          variant="segmented"
+          label="Input editor"
+          className="w-fit"
+          value={mode}
+          onChange={switchTo}
+          items={[
+            { id: 'form', label: 'Form' },
+            { id: 'json', label: 'JSON' },
+          ]}
+        />
       )}
       {schema && !fields && (
-        <Notice tone="neutral">
-          <span>This input schema has no generated form (it uses shapes a form cannot show). Edit the JSON: it is checked against the schema before it is sent.</span>
+        <Notice tone="info">
+          This input schema has no generated form (it uses shapes a form cannot show). Edit the JSON: it is checked against the schema before it is sent.
         </Notice>
       )}
       {mode === 'form' && fields ? (
@@ -202,11 +204,11 @@ export function TriggerDialog({
       {syntax && <p className="data-field-error">{syntax}</p>}
       {mode === 'json' && shown.length > 0 && <IssueList issues={shown} />}
       {failure && (
-        <Notice tone="danger">
-          <AlertTriangle size={14} aria-hidden="true" /> {failure.reason}
+        <Notice tone="error" icon={<AlertTriangle size={14} aria-hidden="true" />}>
+          {failure.reason}
         </Notice>
       )}
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -228,34 +230,21 @@ export function CancelDialog({
     if (result) setFailure(result);
   };
   return (
-    <Modal
+    <ConfirmDialog
+      open
       title={`Cancel ${run.job}?`}
-      subtitle={<span className="data-mono">{run.run_id}</span>}
-      icon={<Square size={18} />}
-      tone="danger"
-      onClose={onClose}
-      onSubmit={submit}
-      footer={
-        <>
-          <span className="data-modal-hint">Recorded in the audit log</span>
-          <button type="button" className="data-button" onClick={onClose}>
-            Keep running
-          </button>
-          <button type="button" className="data-button data-button-danger" disabled={busy} onClick={submit}>
-            {busy ? 'Cancelling…' : 'Cancel run'}
-          </button>
-        </>
-      }
+      confirmLabel={busy ? 'Cancelling…' : 'Cancel run'}
+      cancelLabel="Keep running"
+      busy={busy}
+      error={failure?.reason}
+      onConfirm={submit}
+      onCancel={onClose}
     >
-      <p className="data-modal-text">
-        Cancelling is cooperative: the host sets <code className="data-mono">ctx.cancelled</code> and the job stops at
-        its next check. Sync jobs are interrupted after the grace period; work already done is not rolled back.
+      <p className="text-muted-foreground">
+        <code className="data-mono">{run.run_id}</code>: cancelling is cooperative. The host sets{' '}
+        <code className="data-mono">ctx.cancelled</code> and the job stops at its next check. Sync jobs are interrupted
+        after the grace period; work already done is not rolled back. Recorded in the audit log.
       </p>
-      {failure && (
-        <Notice tone="danger">
-          <AlertTriangle size={14} aria-hidden="true" /> {failure.reason}
-        </Notice>
-      )}
-    </Modal>
+    </ConfirmDialog>
   );
 }

@@ -96,7 +96,7 @@ SAFE_SEGMENTS = frozenset(
         "servers",
         "skills",
         "configuration",
-        "platform-files",
+        "offer",
         "feature-access",
         "jobs",
         "failures",

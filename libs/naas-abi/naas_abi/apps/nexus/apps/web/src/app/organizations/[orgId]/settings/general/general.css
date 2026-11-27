@@ -110,3 +110,8 @@
   color: var(--color-primary);
   cursor: pointer;
 }
+
+/* The identity at the top (as Workspace › General): the logo stays square (account avatars are round). */
+.org-settings-general-logo {
+  border-radius: 0 !important;
+}

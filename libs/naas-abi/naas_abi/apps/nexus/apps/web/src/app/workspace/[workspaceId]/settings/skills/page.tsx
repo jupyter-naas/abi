@@ -1,57 +1,55 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { BulkBar, SelectAllCell, SelectRowCell, onOffActions, useRowSelection } from '@/components/settings/bulk-access';
 import { useParams, useRouter } from 'next/navigation';
 import { Plus, Trash2, XCircle, Zap } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
-import { Input, Select, Textarea } from '@/components/ui/input';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
 import {
-  SettingsField,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsFilterSelect,
-  SettingsSection,
-  SettingsTableToolbar,
-  countLabel,
-  settingsTable,
-} from '@/components/settings/settings-ui';
-import { useSkillsStore, type SkillScope } from '@/stores/skills';
+  SettingsTableClear,
+  SettingsTableHead,
+  SettingsTableNoMatch,
+  useSettingsTable,
+} from '@/components/settings/users-table/settings-table';
+import { TablePager } from '@/components/settings/users-table/table-pager';
+import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
+import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
+import { useSkillsStore } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
+import {
+  SCOPE_LABELS,
+  SKILL_COLUMNS,
+  SKILL_EXPORT_HEADERS,
+  lastUsedDay,
+  skillCellValues,
+  skillExportRow,
+  skillSearchTexts,
+  skillSortValue,
+} from './skills-model';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
-const SCOPE_LABELS: Record<SkillScope, string> = {
-  user: 'Private',
-  workspace: 'Workspace',
-  organization: 'Organization',
-};
+/** The batch actions: enable or disable the skills selected. */
+const BULK_ACTIONS = onOffActions({ on: 'Enable', off: 'Disable' });
 
 export default function SkillsSettingsPage() {
+  // Links keep the policy picked in the Settings column (`?policy=`).
+  const policyHref = usePolicyHref();
   const params = useParams();
   const router = useRouter();
   const workspaceId = params.workspaceId as string;
 
-  const { skillsByWorkspace, fetchSkills, createSkill, updateSkill, deleteSkill } =
-    useSkillsStore();
+  const { skillsByWorkspace, fetchSkills, updateSkill, deleteSkill } = useSkillsStore();
   const currentUserId = useAuthStore((s) => s.user?.id);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [scopeFilter, setScopeFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+  const [switching, setSwitching] = useState(false);
   const { confirm: confirmDelete, dialog: confirmDialog } = useConfirm();
-  const [newSkill, setNewSkill] = useState({
-    name: '',
-    slug: '',
-    description: '',
-    prompt: '',
-    scope: 'user' as SkillScope,
-  });
-
   useEffect(() => {
     if (workspaceId) void fetchSkills(workspaceId, true);
   }, [workspaceId, fetchSkills]);
@@ -61,49 +59,56 @@ export default function SkillsSettingsPage() {
     [skillsByWorkspace, workspaceId]
   );
 
-  const filteredSkills = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return skills.filter((s) => {
-      if (scopeFilter !== 'all' && s.scope !== scopeFilter) return false;
-      if (statusFilter === 'enabled' && !s.enabled) return false;
-      if (statusFilter === 'disabled' && s.enabled) return false;
-      return (
-        !q ||
-        s.name.toLowerCase().includes(q) ||
-        s.slug.toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q)
-      );
-    });
-  }, [skills, searchQuery, scopeFilter, statusFilter]);
-  const enabledCount = skills.filter((s) => s.enabled).length;
+  const table = useSettingsTable({
+    rows: skills,
+    columns: SKILL_COLUMNS,
+    cellValues: skillCellValues,
+    searchTexts: skillSearchTexts,
+    sortValue: skillSortValue,
+    initialSort: 'skill',
+  });
 
-  const handleAddSkill = async () => {
-    if (!newSkill.name.trim() || !newSkill.prompt.trim()) {
-      setFormError('Name and prompt are required');
-      return;
-    }
-    setFormError(null);
+  const exportShown = (format: UsersExportFormat) => {
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTableExport(SKILL_EXPORT_HEADERS, table.shown.map(skillExportRow), format, `skills_${date}`, 'Skills');
+  };
+
+  // A table of switches: each change saved at once, and said.
+  const handleToggleEnabled = async (id: string, enabled: boolean) => {
+    setActionError(null);
+    setNotice('');
     try {
-      await createSkill(workspaceId, {
-        name: newSkill.name.trim(),
-        slug: newSkill.slug.trim() || undefined,
-        description: newSkill.description.trim() || undefined,
-        prompt: newSkill.prompt,
-        scope: newSkill.scope,
-      });
-      setNewSkill({ name: '', slug: '', description: '', prompt: '', scope: 'user' });
-      setShowAddForm(false);
+      await updateSkill(id, { enabled });
+      const skill = skills.find((s) => s.id === id);
+      setNotice(`/${skill?.slug ?? id} ${enabled ? 'enabled' : 'disabled'}.`);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Failed to create skill');
+      setActionError(err instanceof Error ? err.message : 'Failed to update skill');
     }
   };
 
-  const handleToggleEnabled = async (id: string, enabled: boolean) => {
+  // The skills checked for a batch change (the rows shown: select all takes them).
+  const selection = useRowSelection(useMemo(() => table.shown.map((skill) => skill.id), [table.shown]));
+  const canModifySkill = (skill: (typeof skills)[number]) => skill.scope !== 'user' || skill.userId === currentUserId;
+  /** Enable or disable every selected skill the caller may change, one after the other. */
+  const applyBulk = async (id: string) => {
+    const enabled = id === 'on';
+    const picked = skills.filter((s) => selection.selected.has(s.id) && canModifySkill(s) && s.enabled !== enabled);
     setActionError(null);
+    setNotice('');
+    setSwitching(true);
+    let done = 0;
     try {
-      await updateSkill(id, { enabled });
+      for (const skill of picked) {
+        await updateSkill(skill.id, { enabled });
+        done += 1;
+      }
+      setNotice(`${done} skill${done === 1 ? '' : 's'} ${enabled ? 'enabled' : 'disabled'}.`);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to update skill');
+      setActionError(
+        `${err instanceof Error ? err.message : 'Failed to update skill'} (${done} of ${picked.length} changed)`
+      );
+    } finally {
+      setSwitching(false);
     }
   };
 
@@ -122,204 +127,138 @@ export default function SkillsSettingsPage() {
     <div className="space-y-6">
       <SettingsPageHeader
         title="Skills"
-        badge={`${enabledCount} enabled`}
+        // One total: how many skills (the Enabled column says which are on).
+        badge={`${skills.length} skill${skills.length === 1 ? '' : 's'}`}
         description={
           <>
-            Reusable prompts invocable in the chat with /&lt;slug&gt; — or type /create-skill in the chat and the
-            Skills agent writes and saves one for you
+            Reusable prompts, run in the chat with /&lt;slug&gt;; /create-skill writes one for you
           </>
         }
         actions={
-          <Button onClick={() => setShowAddForm(true)}>
-            <Plus size={16} />
-            Add Skill
-          </Button>
+          <>
+            <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
+            {/* A page, as Create workspace: the skill's page opens once it is created. */}
+            <Button onClick={() => router.push(policyHref(`/workspace/${workspaceId}/settings/skills/new`))} data-action="create">
+              <Plus size={16} />
+              Create skill
+            </Button>
+          </>
         }
       />
 
-      {showAddForm && (
-        <SettingsSection title="Add New Skill">
-          <div className="grid gap-4">
-            <div className="grid grid-cols-2 gap-4">
-              <SettingsField label="Name *">
-                <Input
-                  type="text"
-                  value={newSkill.name}
-                  onChange={(e) => setNewSkill({ ...newSkill, name: e.target.value })}
-                  placeholder="Weekly report"
-                />
-              </SettingsField>
-              <SettingsField label="Slug">
-                <Input
-                  type="text"
-                  value={newSkill.slug}
-                  onChange={(e) => setNewSkill({ ...newSkill, slug: e.target.value })}
-                  placeholder="weekly-report (defaults from name)"
-                  className="font-mono"
-                />
-              </SettingsField>
-            </div>
-            <SettingsField label="Description">
-              <Input
-                type="text"
-                value={newSkill.description}
-                onChange={(e) => setNewSkill({ ...newSkill, description: e.target.value })}
-                placeholder="One sentence describing what this skill does"
-              />
-            </SettingsField>
-            <SettingsField label="Prompt *">
-              <Textarea
-                value={newSkill.prompt}
-                onChange={(e) => setNewSkill({ ...newSkill, prompt: e.target.value })}
-                placeholder="The reusable prompt the agent will apply when this skill is invoked"
-                rows={5}
-              />
-            </SettingsField>
-            <SettingsField label="Visibility">
-              <Select
-                value={newSkill.scope}
-                onChange={(e) => setNewSkill({ ...newSkill, scope: e.target.value as SkillScope })}
-                className="w-auto"
-              >
-                <option value="user">Private (only me)</option>
-                <option value="workspace">Workspace</option>
-                <option value="organization">Organization</option>
-              </Select>
-            </SettingsField>
-            {formError && <SettingsNotice tone="error">{formError}</SettingsNotice>}
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setShowAddForm(false);
-                  setFormError(null);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button onClick={handleAddSkill}>Add Skill</Button>
-            </div>
-          </div>
-        </SettingsSection>
-      )}
-
       {actionError && (
-        <SettingsNotice tone="error" icon={<XCircle size={14} />}>
+        <Notice tone="error" icon={<XCircle size={14} />}>
           {actionError}
-        </SettingsNotice>
+        </Notice>
+      )}
+      {notice && (
+        <p className="text-xs text-muted-foreground" role="status" data-skills-notice="">
+          {notice}
+        </p>
       )}
 
       <SettingsTableToolbar
-        search={searchQuery}
-        onSearchChange={setSearchQuery}
+        search={table.search}
+        onSearchChange={table.setSearch}
         searchPlaceholder="Search skills..."
-        filters={
-          <>
-            <SettingsFilterSelect
-              label="Visibility"
-              value={scopeFilter}
-              onChange={setScopeFilter}
-              options={[
-                { value: 'all', label: 'All visibilities' },
-                ...(Object.keys(SCOPE_LABELS) as SkillScope[]).map((scope) => ({
-                  value: scope,
-                  label: SCOPE_LABELS[scope],
-                })),
-              ]}
-            />
-            <SettingsFilterSelect
-              label="Status"
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={[
-                { value: 'all', label: 'All statuses' },
-                { value: 'enabled', label: 'Enabled' },
-                { value: 'disabled', label: 'Disabled' },
-              ]}
-            />
-          </>
-        }
-        meta={`${countLabel(filteredSkills.length, skills.length, 'skill')} · ${enabledCount} enabled`}
+        // No count above the search: the badge says how many, the pager how many are shown.
+        meta={<SettingsTableClear table={table} />}
+      />
+      <BulkBar
+        selection={selection}
+        noun="skill"
+        actions={BULK_ACTIONS}
+        onApply={applyBulk}
+        skippedFor={() => skills.filter((s) => selection.selected.has(s.id) && !canModifySkill(s)).length}
+        change="this change"
+        disabled={switching}
       />
 
-      <div className={settingsTable.wrapper}>
-        <table className={settingsTable.table}>
-          <thead>
-            <tr className={settingsTable.headRow}>
-              <th className={settingsTable.th}>Skill</th>
-              <th className={settingsTable.th}>Command</th>
-              <th className={settingsTable.th}>Visibility</th>
-              <th className={settingsTable.th}>Last used</th>
-              <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
-              <th className={cn(settingsTable.th, 'w-24')}>Actions</th>
-            </tr>
-          </thead>
+      <div className="org-settings-users-table-wrap">
+        <table className="org-settings-users-table">
+          <SettingsTableHead
+            table={table}
+            leading={
+              <SelectAllCell
+                selection={selection}
+                keys={table.shown.filter(canModifySkill).map((skill) => skill.id)}
+                noun="skill"
+                disabled={switching}
+              />
+            }
+            trailing={<th aria-label="Actions" className="w-24" />}
+          />
           <tbody>
-            {filteredSkills.length === 0 ? (
+            {skills.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                  {skills.length > 0
-                    ? 'No skills match the current search and filters'
-                    : 'No skills yet. Type /create-skill in the chat, or add one here.'}
+                <td colSpan={SKILL_COLUMNS.length + 2} className="org-settings-users-no-match">
+                  No skills yet. Type /create-skill in the chat, or create one here.
                 </td>
               </tr>
             ) : (
-              filteredSkills.map((skill) => {
-                const canModify = skill.scope !== 'user' || skill.userId === currentUserId;
-                return (
-                  <tr
-                    key={skill.id}
-                    onClick={() => router.push(`/workspace/${workspaceId}/settings/skills/${skill.id}`)}
-                    className={cn(settingsTable.row, 'cursor-pointer')}
-                  >
-                    <td className={settingsTable.td}>
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-muted">
-                          <Zap size={16} className="text-muted-foreground" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium">{skill.name}</p>
-                          {skill.description && (
-                            <p className="truncate text-xs text-muted-foreground">{skill.description}</p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className={cn(settingsTable.td, 'font-mono text-primary')}>/{skill.slug}</td>
-                    <td className={settingsTable.td}>
-                      <Badge variant="outline">{SCOPE_LABELS[skill.scope]}</Badge>
-                    </td>
-                    <td className={cn(settingsTable.td, 'text-muted-foreground')}>
-                      {skill.lastUsedAt ? new Date(skill.lastUsedAt).toLocaleDateString() : '—'}
-                    </td>
-                    <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                        checked={skill.enabled}
-                        onCheckedChange={(checked) => handleToggleEnabled(skill.id, checked)}
-                        disabled={!canModify}
-                        aria-label={skill.enabled ? 'Disable' : 'Enable'}
-                        title={skill.enabled ? 'Disable' : 'Enable'}
-                      />
-                    </td>
-                    <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
-                      {canModify && (
-                        <Button
-                          variant="destructive-ghost"
-                          size="icon"
-                          onClick={() => handleDelete(skill.id, skill.slug)}
-                          title="Delete"
-                        >
-                          <Trash2 size={14} />
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
+              table.shown.length === 0 && <SettingsTableNoMatch colSpan={SKILL_COLUMNS.length + 2} noun="skills" />
             )}
+            {table.paged.pageRows.map((skill) => {
+              const canModify = skill.scope !== 'user' || skill.userId === currentUserId;
+              return (
+                <tr
+                  key={skill.id}
+                  data-skill={skill.slug}
+                  onClick={() => router.push(policyHref(`/workspace/${workspaceId}/settings/skills/${skill.id}`))}
+                  className="cursor-pointer"
+                >
+                  <SelectRowCell
+                    selection={selection}
+                    rowKey={skill.id}
+                    label={skill.name}
+                    disabled={switching || !canModify}
+                  />
+                  <td>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-muted">
+                        <Zap size={16} className="text-muted-foreground" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium">{skill.name}</p>
+                        {skill.description && (
+                          <p className="truncate text-xs text-muted-foreground">{skill.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="font-mono text-primary">/{skill.slug}</td>
+                  <td>
+                    <Badge variant="outline">{SCOPE_LABELS[skill.scope]}</Badge>
+                  </td>
+                  <td className="text-muted-foreground">{lastUsedDay(skill) || '—'}</td>
+                  <td data-field="enabled" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={skill.enabled}
+                      onCheckedChange={(checked) => handleToggleEnabled(skill.id, checked)}
+                      disabled={!canModify}
+                      aria-label={skill.enabled ? 'Disable' : 'Enable'}
+                      title={skill.enabled ? 'Disable' : 'Enable'}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                    {canModify && (
+                      <Button
+                        variant="destructive-ghost"
+                        size="icon"
+                        onClick={() => handleDelete(skill.id, skill.slug)}
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
+      <TablePager total={table.shown.length} paged={table.paged} />
       {confirmDialog}
     </div>
   );

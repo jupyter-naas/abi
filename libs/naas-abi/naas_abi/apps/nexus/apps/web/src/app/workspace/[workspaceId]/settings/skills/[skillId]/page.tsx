@@ -1,24 +1,36 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useParams } from 'next/navigation';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input, Select, Textarea } from '@/components/ui/input';
-import {
-  SettingsField,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsSection,
-} from '@/components/settings/settings-ui';
+import { usePageDraft } from '@/hooks/use-page-state';
+import { InstanceHeader } from '@/components/access/instance-header';
+import { FormSaveButton, InstanceBack, UnsavedBar } from '@/components/settings/instance-form';
+import { Field } from '@/components/ui/field';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import { useSkillsStore, type SkillScope } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
+import { SCOPE_LABELS } from '../skills-model';
 
+const FIELD_LABELS: Record<string, string> = {
+  name: 'Name',
+  slug: 'Slug',
+  description: 'Description',
+  prompt: 'Prompt',
+  scope: 'Visibility',
+  enabled: 'Enabled',
+};
+
+/**
+ * A skill's page under Workspace settings › Skills: the header of an instance's page (its name, its
+ * /slug and id), Save at its right, faded until something changes, the unsaved bar; the edits are
+ * kept for a return to the page (`usePageDraft`).
+ */
 export default function SkillEditorPage() {
   const params = useParams();
-  const router = useRouter();
   const workspaceId = params.workspaceId as string;
   const skillId = params.skillId as string;
 
@@ -29,14 +41,6 @@ export default function SkillEditorPage() {
     () => (skillsByWorkspace[workspaceId] ?? []).find((s) => s.id === skillId),
     [skillsByWorkspace, workspaceId, skillId]
   );
-
-  const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
-  const [description, setDescription] = useState('');
-  const [prompt, setPrompt] = useState('');
-  const [scope, setScope] = useState<SkillScope>('user');
-  const [enabled, setEnabled] = useState(true);
-  const [loadedId, setLoadedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -45,35 +49,50 @@ export default function SkillEditorPage() {
     if (workspaceId) void fetchSkills(workspaceId, true);
   }, [workspaceId, fetchSkills]);
 
-  // Seed the form once per skill load.
-  useEffect(() => {
-    if (skill && loadedId !== skill.id) {
-      setName(skill.name);
-      setSlug(skill.slug);
-      setDescription(skill.description);
-      setPrompt(skill.prompt);
-      setScope(skill.scope);
-      setEnabled(skill.enabled);
-      setLoadedId(skill.id);
-    }
-  }, [skill, loadedId]);
+  // The skill as the store holds it, and the edits over it.
+  const server = useMemo(
+    () =>
+      skill
+        ? {
+            name: skill.name,
+            slug: skill.slug,
+            description: skill.description ?? '',
+            prompt: skill.prompt,
+            scope: skill.scope as string,
+            enabled: skill.enabled,
+          }
+        : null,
+    [skill]
+  );
+  const draft = usePageDraft(
+    workspaceId && skillId ? { scope: `workspace:${workspaceId}`, page: 'skills', detail: skillId } : null,
+    server
+  );
+  const values = draft.values ?? server;
+  const dirty =
+    !!server && !!values && (Object.keys(server) as (keyof typeof server)[]).some((key) => server[key] !== values[key]);
+  const set = (changes: Partial<NonNullable<typeof server>>) => {
+    setSaved(false);
+    draft.set(changes);
+  };
 
   const canModify = skill ? skill.scope !== 'user' || skill.userId === currentUserId : false;
 
   const handleSave = async () => {
-    if (!skill) return;
+    if (!skill || !values) return;
     setSaving(true);
     setError(null);
     setSaved(false);
     try {
       await updateSkill(skill.id, {
-        name: name.trim(),
-        slug: slug.trim(),
-        description: description.trim(),
-        prompt,
-        scope,
-        enabled,
+        name: values.name.trim(),
+        slug: values.slug.trim(),
+        description: values.description.trim(),
+        prompt: values.prompt,
+        scope: values.scope as SkillScope,
+        enabled: values.enabled,
       });
+      draft.discard();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -83,69 +102,79 @@ export default function SkillEditorPage() {
     }
   };
 
-  if (!skill) {
-    return <SettingsLoading label="Loading skill…" />;
+  if (!skill || !values) {
+    return <Loading label="Loading skill…" />;
   }
 
   return (
     <div className="space-y-6">
-      <SettingsPageHeader
-        leading={
-          <Button
-            variant="secondary"
-            size="icon"
-            className="h-9 w-9"
-            onClick={() => router.push(`/workspace/${workspaceId}/settings/skills`)}
-            title="Back to skills"
-          >
-            <ArrowLeft size={16} />
-          </Button>
-        }
-        title={skill.name}
-        description={<span className="font-mono text-primary">/{skill.slug}</span>}
+      <InstanceBack href={`/workspace/${workspaceId}/settings/skills`} label="skills" />
+      <InstanceHeader
+        name={skill.name}
+        id={skill.id}
+        slug={skill.slug}
+        meta={<span>{SCOPE_LABELS[skill.scope]}</span>}
         actions={
-          <Button onClick={handleSave} disabled={saving || !canModify}>
-            {saving && <Loader2 size={14} className="animate-spin" />}
-            {saved ? 'Saved' : 'Save'}
-          </Button>
+          <FormSaveButton dirty={dirty} saving={saving} saved={saved} onSave={() => void handleSave()} disabled={!canModify} />
         }
       />
 
-      {!canModify && <SettingsNotice>Only the creator can modify this private skill.</SettingsNotice>}
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+      {!canModify && <Notice>Only the creator can modify this private skill.</Notice>}
+      {error && <Notice tone="error">{error}</Notice>}
+      <UnsavedBar
+        show={dirty}
+        conflicts={draft.conflicts.map((field) => FIELD_LABELS[field] ?? field)}
+        onDiscard={draft.discard}
+        disabled={saving}
+      />
 
-      <SettingsSection>
+      <Card>
         <div className="grid gap-4">
           <div className="grid grid-cols-2 gap-4">
-            <SettingsField label="Name">
-              <Input type="text" value={name} onChange={(e) => setName(e.target.value)} disabled={!canModify} />
-            </SettingsField>
-            <SettingsField label="Slug">
+            <Field label="Name">
               <Input
                 type="text"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
+                aria-label="Name"
+                value={values.name}
+                onChange={(e) => set({ name: e.target.value })}
+                disabled={!canModify}
+              />
+            </Field>
+            <Field label="Slug">
+              <Input
+                type="text"
+                aria-label="Slug"
+                value={values.slug}
+                onChange={(e) => set({ slug: e.target.value })}
                 disabled={!canModify}
                 className="font-mono"
               />
-            </SettingsField>
+            </Field>
           </div>
-          <SettingsField label="Description">
+          <Field label="Description">
             <Input
               type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              aria-label="Description"
+              value={values.description}
+              onChange={(e) => set({ description: e.target.value })}
               disabled={!canModify}
             />
-          </SettingsField>
-          <SettingsField label="Prompt">
-            <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={!canModify} rows={12} />
-          </SettingsField>
+          </Field>
+          <Field label="Prompt">
+            <Textarea
+              aria-label="Prompt"
+              value={values.prompt}
+              onChange={(e) => set({ prompt: e.target.value })}
+              disabled={!canModify}
+              rows={12}
+            />
+          </Field>
           <div className="flex items-end gap-6">
-            <SettingsField label="Visibility">
+            <Field label="Visibility">
               <Select
-                value={scope}
-                onChange={(e) => setScope(e.target.value as SkillScope)}
+                aria-label="Visibility"
+                value={values.scope}
+                onChange={(e) => set({ scope: e.target.value })}
                 disabled={!canModify}
                 className="w-auto"
               >
@@ -153,17 +182,17 @@ export default function SkillEditorPage() {
                 <option value="workspace">Workspace</option>
                 <option value="organization">Organization</option>
               </Select>
-            </SettingsField>
+            </Field>
             <Checkbox
-              checked={enabled}
-              onCheckedChange={setEnabled}
+              checked={values.enabled}
+              onCheckedChange={(checked) => set({ enabled: checked })}
               disabled={!canModify}
               label="Enabled"
               className="h-9"
             />
           </div>
         </div>
-      </SettingsSection>
+      </Card>
     </div>
   );
 }

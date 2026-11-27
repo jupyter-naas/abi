@@ -1,83 +1,86 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Search, CheckCircle, XCircle, Server } from 'lucide-react';
+import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Bot, Plus, Pencil, Trash2, CheckCircle, XCircle, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getLogoUrl } from '@/lib/logo-url';
 import { useIntegrationsStore } from '@/stores/integrations';
-import { SETTINGS_RECONCILE_MS, ensureAgentsSynced, useAgentsStore, type Agent } from '@/stores/agents';
+import { SETTINGS_RECONCILE_MS, ensureAgentsSynced, useAgentsStore } from '@/stores/agents';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
-import { Input, Textarea } from '@/components/ui/input';
 import { useSettingsReloadGeneration } from '@/components/settings/settings-reload';
+import { ModuleLink } from '@/components/settings/module-link';
 import { usePageState } from '@/hooks/use-page-state';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
 import {
-  SettingsEmpty,
-  SettingsField,
-  SettingsLoading,
-  SettingsPageHeader,
-  SettingsFilterSelect,
-  SettingsSection,
-  SettingsTableToolbar,
-  countLabel,
-  settingsTable,
-} from '@/components/settings/settings-ui';
+  SettingsTableClear,
+  SettingsTableHead,
+  SettingsTableNoMatch,
+  useSettingsTable,
+} from '@/components/settings/users-table/settings-table';
+import { TablePager } from '@/components/settings/users-table/table-pager';
+import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
+import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
+import type { ColumnFilterState } from '@/lib/graph-query/filters';
+import { SelectAllCell, SelectRowCell, useRowSelection } from '@/components/settings/bulk-access';
+import { EnableBulkBar, EnabledCell, ModuleItemsStatus } from '@/components/settings/module-items';
+import { moduleItemKey } from '@/components/settings/module-items-model';
+import { policyOfSearch } from '@/components/settings/settings-policy';
+import { useModuleItems } from '@/components/settings/use-module-items';
+import type { OfferKind } from '@/lib/access-model/workspace-offer';
+import {
+  AGENT_COLUMNS,
+  AGENT_EXPORT_HEADERS,
+  agentCellValues,
+  agentExportRow,
+  agentModule,
+  agentRows,
+  agentSearchTexts,
+  builtHere,
+  noModelLabel,
+  type AgentColumnId,
+} from './agents-model';
 
-const iconMap = {
-  bot: Bot,
-  user: User,
-  cpu: Cpu,
-  brain: Brain,
-  sparkles: Sparkles,
-  zap: Zap,
-  target: Target,
-  search: Search,
-};
+import { AgentAvatar } from './agent-icons';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
-const iconOptions: Agent['icon'][] = ['user', 'bot', 'cpu', 'brain', 'sparkles', 'zap', 'target', 'search'];
-
-const NEW_AGENT = {
-  name: '',
-  description: '',
-  icon: 'sparkles' as Agent['icon'],
-  systemPrompt: 'You are a helpful AI assistant.',
-  providerId: null as string | null,
-};
-
-function AgentAvatar({ agent, size = 18 }: { agent: Agent; size?: number }) {
-  if (agent.logoUrl) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={getLogoUrl(agent.logoUrl)} alt={agent.name} className="h-full w-full object-cover" />;
-  }
-  const Icon = iconMap[agent.icon] || Sparkles;
-  return <Icon size={size} />;
-}
+const AGENT_KINDS: OfferKind[] = ['agents'];
 
 export default function AgentsPage() {
+  // Links keep the policy picked in the Settings column (`?policy=`).
+  const policyHref = usePolicyHref();
   const params = useParams();
   const router = useRouter();
   const workspaceId = params.workspaceId as string;
   const [mounted, setMounted] = useState(false);
-  // Kept for a return to the page (lib/page-state.ts): the filters and an unsaved new agent.
+  // Kept for a return to the page (lib/page-state.ts): the search and the filters.
   const pageKey = workspaceId ? { scope: `workspace:${workspaceId}`, page: 'agents' } : null;
-  const [showAddForm, setShowAddForm] = usePageState(pageKey && { ...pageKey, detail: 'add-form' }, false);
-  const [searchQuery, setSearchQuery] = usePageState(pageKey && { ...pageKey, detail: 'search' }, '');
-  const [modelFilter, setModelFilter] = usePageState(pageKey && { ...pageKey, detail: 'model' }, 'all');
-  const [newAgent, setNewAgent] = usePageState(pageKey && { ...pageKey, detail: 'new-agent' }, NEW_AGENT);
+  const [keptSearch, setKeptSearch] = usePageState(pageKey && { ...pageKey, detail: 'search' }, '');
+  const [keptFilters, setKeptFilters] = usePageState<Partial<Record<AgentColumnId, ColumnFilterState>>>(
+    pageKey && { ...pageKey, detail: 'filters' },
+    {}
+  );
   // Reload reads the roster and the models again here, without remounting the page.
   const reloadGeneration = useSettingsReloadGeneration();
 
   const { providers } = useIntegrationsStore();
-  const {
-    agents,
-    addAgent,
-    deleteAgent,
-    fetchAgents,
-  } = useAgentsStore();
+  const { agents, deleteAgent, fetchAgents } = useAgentsStore();
   const { models, fetchModels } = useModelsStore();
   const { confirm: confirmDelete, dialog: confirmDialog } = useConfirm();
+  // Every agent the workspace's modules bring, enabled or not by the policy picked in the Settings
+  // column (`?policy=`); a change is saved at once, then the roster is read again.
+  const policyId = policyOfSearch(useSearchParams());
+  const catalog = useModuleItems({
+    workspaceId,
+    policyId,
+    kinds: AGENT_KINDS,
+    generation: reloadGeneration,
+    onSaved: () => void fetchAgents(workspaceId, false, { reread: true }),
+  });
 
   // The roster, reconciled with the code's agents when the last reconciliation is older
   // than SETTINGS_RECONCILE_MS (or Reload was pressed), else as held.
@@ -103,32 +106,9 @@ export default function AgentsPage() {
     fetchModels();
   }, [fetchModels, reloadGeneration]);
 
-  const enabledProviders = mounted ? providers.filter((p) => p.enabled) : [];
-  const displayAgents = mounted ? agents : [];
-
-
-  const handleAddAgent = () => {
-    if (!newAgent.name.trim()) return;
-    void addAgent({
-      name: newAgent.name.trim(),
-      description: newAgent.description.trim(),
-      icon: newAgent.icon,
-      systemPrompt: newAgent.systemPrompt,
-      providerId: newAgent.providerId,
-      provider: null,
-      modelId: null,
-      logoUrl: null,
-      tools: ['search_knowledge', 'search_files', 'read_ontology'],
-      capabilities: { memory: true, reasoning: false, vision: false },
-      intentMappings: [],
-    });
-    setNewAgent(NEW_AGENT);
-    setShowAddForm(false);
-  };
-
   const handleOpenAgentEditor = (agentId: string) => {
     if (!workspaceId) return;
-    router.push(`/workspace/${workspaceId}/settings/agents/${agentId}`);
+    router.push(policyHref(`/workspace/${workspaceId}/settings/agents/${agentId}`));
   };
 
   const handleDeleteAgent = async (id: string) => {
@@ -141,277 +121,234 @@ export default function AgentsPage() {
     if (ok) deleteAgent(id);
   };
 
-  const getAssignedProvider = (providerId: string | null) => {
-    if (!providerId) return null;
-    return enabledProviders.find((p) => p.id === providerId);
-  };
+  // The rows, A to Z (rows that tie on the sorted column stay so), and the table over them.
+  const rows = useMemo(
+    () =>
+      mounted
+        ? agentRows(
+            agents,
+            providers.filter((p) => p.enabled),
+            (id) => modelDisplayName(models, id) ?? id,
+            catalog.items
+          )
+        : [],
+    [mounted, agents, providers, models, catalog.items]
+  );
+  const table = useSettingsTable({
+    rows,
+    columns: AGENT_COLUMNS,
+    cellValues: agentCellValues,
+    searchTexts: agentSearchTexts,
+    initialSort: 'agent',
+  });
+  // The module agents shown, checked for a batch change (select all takes the rows shown).
+  const selectable = useMemo(
+    () => table.shown.flatMap((row) => (row.item ? [moduleItemKey(row.item)] : [])),
+    [table.shown]
+  );
+  const selection = useRowSelection(selectable);
+  const locked = !catalog.editable || catalog.saving;
 
-  const getModelIds = (agent: Agent): string[] => {
-    const declared = (agent.modelIds || []).map((id) => id.trim()).filter(Boolean);
-    if (declared.length > 0) return Array.from(new Set(declared));
-
-    let rawId: string | null = null;
-    if (agent.provider === 'abi') {
-      rawId = agent.modelId || agent.resolvedModelId || null;
-    } else if (agent.provider) {
-      const provider = enabledProviders.find((p) => p.type === agent.provider && p.enabled);
-      rawId = agent.modelId || provider?.model || agent.resolvedModelId || null;
-    } else if (agent.providerId) {
-      rawId =
-        getAssignedProvider(agent.providerId)?.model ||
-        agent.modelId ||
-        agent.resolvedModelId ||
-        null;
-    } else {
-      rawId = agent.modelId || agent.resolvedModelId || null;
+  // A return to the page finds the search and the filters again: restored once a workspace, then
+  // kept.
+  const restoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (restoredFor.current !== workspaceId) {
+      restoredFor.current = workspaceId;
+      table.clear();
+      table.setSearch(keptSearch);
+      for (const column of AGENT_COLUMNS) {
+        const state = keptFilters[column.id];
+        if (state) table.setFilter(column.id, state);
+      }
+      return;
     }
-    return rawId ? [rawId] : [];
-  };
+    setKeptSearch(table.search);
+    setKeptFilters(table.filters);
+    // The kept values are read once; the table's state decides after.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, table.search, table.filters]);
 
-  // Search + filters, sorted alphabetically by name. Declared after getModelIds, which it uses.
-  const query = searchQuery.trim().toLowerCase();
-  const filteredAgents = displayAgents
-    .filter((agent) => {
-      const hasModel = getModelIds(agent).length > 0;
-      if (modelFilter === 'assigned' && !hasModel) return false;
-      if (modelFilter === 'unassigned' && hasModel) return false;
-      return (
-        !query ||
-        agent.name.toLowerCase().includes(query) ||
-        agent.description.toLowerCase().includes(query)
-      );
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const exportShown = (format: UsersExportFormat) => {
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTableExport(AGENT_EXPORT_HEADERS, table.shown.map(agentExportRow), format, `agents_${date}`, 'Agents');
+  };
 
   if (!mounted) {
-    return <SettingsLoading label="Loading agents…" />;
+    return <Loading label="Loading agents…" />;
   }
-
-  const resetNewAgent = () => {
-    setShowAddForm(false);
-    setNewAgent(NEW_AGENT);
-  };
 
   return (
     <div className="space-y-6">
       <SettingsPageHeader
         title="Agents"
-        badge={`${displayAgents.length} ${displayAgents.length === 1 ? 'agent' : 'agents'}`}
-        description="The agents of this workspace you may use, from its modules and those it builds. Who uses each is decided by policies, on Roles & permissions."
+        badge={`${rows.length} ${rows.length === 1 ? 'agent' : 'agents'}`}
+        description={WORKSPACE_PAGE_DESCRIPTIONS['/settings/agents']}
         actions={
-          <Button onClick={() => setShowAddForm(true)}>
-            <Plus size={16} />
-            Add Agent
-          </Button>
+          <>
+            <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
+            {/* A page, as Create workspace: the agent's page opens once it is created. */}
+            <Button onClick={() => router.push(policyHref(`/workspace/${workspaceId}/settings/agents/new`))} data-action="create">
+              <Plus size={16} />
+              Create agent
+            </Button>
+          </>
         }
       />
 
-      {showAddForm && (
-        <SettingsSection title="Add New Agent">
-          <div className="grid gap-4">
-            <div className="grid grid-cols-2 gap-4">
-              <SettingsField label="Name *">
-                <Input
-                  type="text"
-                  value={newAgent.name}
-                  onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
-                  placeholder="Agent name"
-                />
-              </SettingsField>
-              <SettingsField label="Icon">
-                <div className="flex gap-2">
-                  {iconOptions.map((icon) => {
-                    const IconComp = iconMap[icon];
-                    return (
-                      <Button
-                        key={icon}
-                        variant="secondary"
-                        size="icon"
-                        onClick={() => setNewAgent({ ...newAgent, icon })}
-                        className={cn(
-                          'h-9 w-9',
-                          newAgent.icon === icon && 'border-primary bg-primary/10 text-primary hover:bg-primary/10'
-                        )}
-                      >
-                        <IconComp size={16} />
-                      </Button>
-                    );
-                  })}
-                </div>
-              </SettingsField>
-            </div>
-            <SettingsField label="Description">
-              <Input
-                type="text"
-                value={newAgent.description}
-                onChange={(e) => setNewAgent({ ...newAgent, description: e.target.value })}
-                placeholder="Brief description"
-              />
-            </SettingsField>
-            <SettingsField label="System Prompt">
-              <Textarea
-                value={newAgent.systemPrompt}
-                onChange={(e) => setNewAgent({ ...newAgent, systemPrompt: e.target.value })}
-                placeholder="You are a helpful AI assistant..."
-                rows={3}
-                className="resize-none"
-              />
-            </SettingsField>
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={resetNewAgent}>
-                Cancel
-              </Button>
-              <Button onClick={handleAddAgent} disabled={!newAgent.name.trim()}>
-                Add Agent
-              </Button>
-            </div>
-          </div>
-        </SettingsSection>
-      )}
+      <ModuleItemsStatus state={catalog} />
 
-      {displayAgents.length === 0 ? (
-        <SettingsEmpty
+      {rows.length === 0 ? (
+        <EmptyState framed
           icon={<Bot size={40} className="opacity-40" />}
           title="No agents configured"
-          description="Use Add Agent at the top right to create your first agent."
+          description="Use Create agent at the top right to create your first agent."
         />
       ) : (
         <div className="space-y-4">
           <SettingsTableToolbar
-            search={searchQuery}
-            onSearchChange={setSearchQuery}
+            search={table.search}
+            onSearchChange={table.setSearch}
             searchPlaceholder="Search agents..."
-            filters={
-              <SettingsFilterSelect
-                label="Model"
-                value={modelFilter}
-                onChange={setModelFilter}
-                options={[
-                  { value: 'all', label: 'All models' },
-                  { value: 'assigned', label: 'Model assigned' },
-                  { value: 'unassigned', label: 'No model' },
-                ]}
-              />
-            }
-            meta={countLabel(filteredAgents.length, displayAgents.length, 'agent')}
+            // No count above the search: the badge says how many, the pager how many are shown.
+            meta={<SettingsTableClear table={table} />}
           />
+          <EnableBulkBar state={catalog} selection={selection} noun="agent" />
 
-          <div className={settingsTable.wrapper}>
-            <table className={settingsTable.table}>
-              <thead>
-                <tr className={settingsTable.headRow}>
-                  <th className={settingsTable.th}>Agent</th>
-                  <th className={settingsTable.th}>Models</th>
-                  <th className={cn(settingsTable.th, 'w-24')}>Actions</th>
-                </tr>
-              </thead>
+          <div className="org-settings-users-table-wrap">
+            <table className="org-settings-users-table">
+              <SettingsTableHead
+                table={table}
+                leading={<SelectAllCell selection={selection} keys={selectable} noun="agent" disabled={locked} />}
+                trailing={<th aria-label="Actions" className="w-24" />}
+              />
               <tbody>
-                {filteredAgents.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="p-8 text-center text-muted-foreground">
-                      No agents match the current search and filters
-                    </td>
-                  </tr>
-                ) : (
-                  filteredAgents.map((agent) => (
+                {table.shown.length === 0 && (
+                  <SettingsTableNoMatch colSpan={AGENT_COLUMNS.length + 2} noun="agents" />
+                )}
+                {table.paged.pageRows.map((row) => {
+                  const { agent, models: agentModels, item } = row;
+                  return (
                     <tr
-                      key={agent.id}
-                      onClick={() => handleOpenAgentEditor(agent.id)}
-                      className={cn(settingsTable.row, 'cursor-pointer')}
+                      key={row.key}
+                      data-agent={row.key}
+                      onClick={agent ? () => handleOpenAgentEditor(agent.id) : undefined}
+                      className={agent ? 'cursor-pointer' : undefined}
                     >
-                      <td className={cn(settingsTable.td, 'align-top')}>
-                        <div className="flex min-h-[3.25rem] items-center gap-3">
-                          <div
-                            className={cn(
-                              'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden',
-                              agent.logoUrl ? 'bg-transparent' : 'bg-muted'
-                            )}
-                          >
-                            <AgentAvatar agent={agent} />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium">{agent.name}</p>
-                            {agent.class_name ? (
-                              <p className="pb-0.5 text-micro italic text-muted-foreground">
-                                {agent.class_name.split('/')[0]}
-                              </p>
-                            ) : null}
-                            <p
-                              className="line-clamp-2 min-h-[2rem] text-xs text-muted-foreground"
-                              title={agent.description || undefined}
-                            >
-                              {agent.description || '\u00A0'}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className={settingsTable.td}>
-                        {(() => {
-                          const modelIds = getModelIds(agent);
-                          if (modelIds.length === 0) {
-                            return (
+                      <SelectRowCell
+                        selection={selection}
+                        rowKey={item ? moduleItemKey(item) : row.key}
+                        label={row.name}
+                        // An agent the workspace builds is always enabled: nothing to select.
+                        disabled={!item || locked}
+                      />
+                      {!agent ? (
+                        <>
+                          {/* A module agent the roster does not hold: what the catalog says of it. */}
+                          <td className="align-top">
+                            <div className="flex min-h-[3.25rem] items-center gap-3">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden bg-muted">
+                                <Bot size={18} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium">{row.name}</p>
+                                <p className="pb-0.5 text-micro italic text-muted-foreground">
+                                  <ModuleLink workspaceId={workspaceId} module={row.module} />
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td data-field="models" />
+                          <EnabledCell state={catalog} item={item} label={row.name} />
+                          <td />
+                        </>
+                      ) : (
+                        <>
+                          <td className="align-top">
+                            <div className="flex min-h-[3.25rem] items-center gap-3">
+                              <div
+                                className={cn(
+                                  'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden',
+                                  agent.logoUrl ? 'bg-transparent' : 'bg-muted'
+                                )}
+                              >
+                                <AgentAvatar agent={agent} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium">{agent.name}</p>
+                                {agent.class_name ? (
+                                  <p className="pb-0.5 text-micro italic text-muted-foreground">
+                                    <ModuleLink workspaceId={workspaceId} module={agentModule(agent)} />
+                                  </p>
+                                ) : null}
+                                <p
+                                  className="line-clamp-2 min-h-[2rem] text-xs text-muted-foreground"
+                                  title={agent.description || undefined}
+                                >
+                                  {agent.description || '\u00A0'}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td data-field="models">
+                            {agentModels.length === 0 ? (
                               <div className="flex items-center gap-2 text-muted-foreground">
                                 <XCircle size={14} />
-                                <span>{agent.provider === 'abi' ? 'Not exposed' : 'Not assigned'}</span>
+                                <span>{noModelLabel(agent)}</span>
                               </div>
-                            );
-                          }
-                          return (
-                            <div className="flex flex-col gap-1">
-                              {modelIds.map((id) => {
-                                const label = modelDisplayName(models, id) ?? id;
-                                return (
+                            ) : (
+                              <div className="flex flex-col gap-1">
+                                {agentModels.map(({ id, label }) => (
                                   <div key={id} className="flex items-center gap-2">
                                     {agent.provider === 'abi' ? (
                                       <Server size={14} className="shrink-0 text-muted-foreground" />
                                     ) : (
                                       <CheckCircle size={14} className="shrink-0 text-primary" />
                                     )}
-                                    <span
-                                      className={cn(agent.provider === 'abi' && 'italic text-muted-foreground')}
-                                      title={id}
-                                    >
+                                    <span className={cn(agent.provider === 'abi' && 'italic text-muted-foreground')} title={id}>
                                       {label}
                                     </span>
                                   </div>
-                                );
-                              })}
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <EnabledCell state={catalog} item={item} label={row.name} builtHere={builtHere(row)} />
+                          <td className="whitespace-nowrap text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenAgentEditor(agent.id);
+                                }}
+                                title="Edit"
+                              >
+                                <Pencil size={14} />
+                              </Button>
+                              <Button
+                                variant="destructive-ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteAgent(agent.id);
+                                }}
+                                title="Delete"
+                              >
+                                <Trash2 size={14} />
+                              </Button>
                             </div>
-                          );
-                        })()}
-                      </td>
-                      <td className={settingsTable.td}>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenAgentEditor(agent.id);
-                            }}
-                            title="Edit"
-                          >
-                            <Pencil size={14} />
-                          </Button>
-                          <Button
-                            variant="destructive-ghost"
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteAgent(agent.id);
-                            }}
-                            title="Delete"
-                          >
-                            <Trash2 size={14} />
-                          </Button>
-                        </div>
-                      </td>
+                          </td>
+                        </>
+                      )}
                     </tr>
-                  ))
-                )}
+                  );
+                })}
               </tbody>
             </table>
           </div>
+          <TablePager total={table.shown.length} paged={table.paged} />
         </div>
       )}
       {confirmDialog}

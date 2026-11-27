@@ -17,12 +17,12 @@ const SCOPES = [PLATFORM_ACCESS_SCOPE];
 
 /** What each page of Access is for, under its title. */
 export const ACCESS_SUBTITLES: Record<AccessSection, string> = {
-  policies: 'Where rights come from: every policy, the built-in roles among them, and who holds each at which level',
-  groups: 'Groups of people, what each holds at every level, and the identity provider claims that fill them',
-  'service-accounts': 'The accounts modules and scripts act as, their policies and their keys',
+  policies: 'Every policy, built-in roles included, and who holds each at which level',
+  groups: 'Groups of people, what each holds, and the sign-in claims that fill them',
+  'service-accounts': 'The accounts modules and scripts act as, with their policies and keys',
   approvals: 'What each module asks to do, approved or narrowed before it runs',
   simulator: 'Ask IAM whether someone may do something, and which statement decides',
-  audit: 'Every change made to access: who made it, on what, and when',
+  audit: 'Every change made to access: who, on what, when',
 };
 
 /**

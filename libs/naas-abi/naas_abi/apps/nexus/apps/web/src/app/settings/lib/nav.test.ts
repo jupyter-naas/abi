@@ -44,24 +44,30 @@ const driveLister: PlatformActions = { ...none(), 'nexus:ListDrives': true };
 const ids = (actions: PlatformActions | null) =>
   visiblePlatformSettingsGroups(actions).flatMap((group) => group.items.map((item) => item.id));
 
-const GROUPS = ['Administration', 'Access', 'System', 'Activity', 'Resources', 'Data'];
-const items = (label: string) =>
+// The first group has no heading: the Platform tab names it.
+const GROUPS = [null, 'Access', 'System', 'Activity', 'Resources', 'Data'];
+const items = (label: string | null) =>
   (platformSettingsGroups.find((group) => group.label === label)?.items ?? []).map((item) => [
     item.label,
     item.href,
   ]);
 
 describe('platformSettingsGroups', () => {
-  it('is Administration, then Access, System, Activity, Resources and Data', () => {
+  it('is its pages (no heading), then Access, System, Activity, Resources and Data', () => {
     expect(platformSettingsGroups.map((group) => group.label)).toEqual(GROUPS);
-    expect(items('Administration')).toEqual([
+    expect(items(null)).toEqual([
       ['General', '/settings/general'],
+      ['Theme', '/settings/theme'],
       ['Organizations', '/settings/organizations'],
       ['Users', '/settings/users'],
-    ]);
-    expect(items('Access')).toEqual([
       ['Groups', '/settings/access/groups'],
+    ]);
+    // Features, Services and Modules open an organization's, picked atop each page.
+    expect(items('Access')).toEqual([
       ['Policies', '/settings/access/policies'],
+      ['Features', '/settings/access/features'],
+      ['Core Services', '/settings/access/core-services'],
+      ['Modules', '/settings/access/modules'],
       ['Service accounts', '/settings/access/service-accounts'],
       ['Module approvals', '/settings/access/approvals'],
       ['Simulator', '/settings/access/simulator'],
@@ -107,9 +113,10 @@ describe('platformSettingsGroups', () => {
     ]);
   });
 
-  it('gives every group a heading of its own (the layout keys groups by it)', () => {
+  it('gives every group but the first a heading of its own (the layout keys groups by it)', () => {
     const labels = platformSettingsGroups.map((group) => group.label);
-    expect(labels.every((label) => label.length > 0)).toBe(true);
+    expect(labels[0]).toBeNull();
+    expect(labels.slice(1).every((label) => !!label && label.length > 0)).toBe(true);
     expect(new Set(labels).size).toBe(labels.length);
   });
 
@@ -147,7 +154,7 @@ describe('platformSettingsGroups', () => {
 
 describe('what the caller sees', () => {
   it('shows a platform admin everything, General first', () => {
-    expect(ids(platformAdmin)).toHaveLength(39);
+    expect(ids(platformAdmin)).toHaveLength(43);
     expect(ids(platformAdmin)).toContain('users');
     expect(ids(platformAdmin)).toContain('drives');
     expect(visiblePlatformSettingsGroups(platformAdmin).map((group) => group.label)).toEqual(GROUPS);
@@ -167,7 +174,12 @@ describe('what the caller sees', () => {
   });
 
   it('shows a reader of the system everything but Users and the IAM pages of Access, its Audit included', () => {
-    expect(ids(systemReader).filter((id) => id.startsWith('access-'))).toEqual(['access-audit']);
+    expect(ids(systemReader).filter((id) => id.startsWith('access-'))).toEqual([
+      'access-features',
+      'access-core-services',
+      'access-modules',
+      'access-audit',
+    ]);
     expect(ids(systemReader)).not.toContain('users');
     expect(ids(systemReader)).not.toContain('drives');
     expect(ids(systemReader)).toContain('tables');
@@ -176,13 +188,13 @@ describe('what the caller sees', () => {
     expect(ids(systemReader)).toEqual(expect.arrayContaining(['system-layers', 'system-diagrams']));
     const groups = visiblePlatformSettingsGroups(systemReader);
     expect(groups.map((group) => group.label)).toEqual(GROUPS);
-    expect(groups[0].items.map((item) => item.label)).toEqual(['General', 'Organizations']);
-    expect(groups[1].items.map((item) => item.label)).toEqual(['Audit']);
+    expect(groups[0].items.map((item) => item.label)).toEqual(['General', 'Theme', 'Organizations']);
+    expect(groups[1].items.map((item) => item.label)).toEqual(['Features', 'Core Services', 'Modules', 'Audit']);
   });
 
   it('shows Users to whoever IAM lets list the users, and nothing else to them', () => {
     expect(ids(userLister)).toEqual(['users']);
-    expect(visiblePlatformSettingsGroups(userLister).map((group) => group.label)).toEqual(['Administration']);
+    expect(visiblePlatformSettingsGroups(userLister).map((group) => group.label)).toEqual([null]);
     expect(firstPlatformSettingsPath(userLister)).toBe('/settings/users');
   });
 

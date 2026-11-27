@@ -5,7 +5,7 @@ import './keyvalue.css';
 import { Binary, Braces, Fingerprint, Hash, KeyRound, ListOrdered, Lock, Timer, type LucideIcon } from 'lucide-react';
 import { absoluteTime, detectLanguage, formatBytes } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
-import { Notice } from '../data-ui';
+import { Notice } from '@/components/ui/notice';
 import { Preview, type PreviewContext } from '../viewers/preview';
 import { EncodingBadge, PrefixBadge, TtlBadge, ValueLine, keyFamily, keyPrefix } from './keyvalue-parts';
 import type { ServiceView } from './types';
@@ -39,7 +39,7 @@ export function KeyValuePreview({ detail, ctx }: { detail: ResourceDetail; ctx: 
           </span>
         </Notice>
       )}
-      {family && family !== 'other' && <Notice tone="warn">{FAMILY_NOTES[family]}</Notice>}
+      {family && family !== 'other' && <Notice tone="warning">{FAMILY_NOTES[family]}</Notice>}
       <Preview detail={detail} ctx={ctx} />
     </div>
   );
