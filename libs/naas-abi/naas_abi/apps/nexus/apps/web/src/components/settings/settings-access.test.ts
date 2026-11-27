@@ -151,8 +151,8 @@ describe('who sees what in Settings', () => {
     expect(seen.settings).toBe('/workspace/ws-1/settings/general');
     expect(seen.level).toBe('Workspace');
     expect(Object.keys(seen.column)).toEqual(['Workspace', 'Access', 'Features']);
-    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users']));
-    expect(seen.column.Access).toEqual(['Groups', 'Policies', 'Features', 'Services', 'Modules']);
+    expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users', 'Groups']));
+    expect(seen.column.Access).toEqual(['Features', 'Services', 'Modules', 'Policies']);
 
     const platform = await seenBy(root, seen.opens.Platform);
     expect(seen.opens.Platform).toBe('/settings/general');
@@ -168,8 +168,8 @@ describe('who sees what in Settings', () => {
 
     const organization = await seenBy(root, seen.opens.Organization);
     expect(organization.column).toEqual({
-      Organization: ['General', 'Branding', 'Workspaces', 'Users'],
-      Access: ['Groups', 'Policies', 'Features', 'Services', 'Modules'],
+      Organization: ['General', 'Branding', 'Workspaces', 'Users', 'Groups'],
+      Access: ['Features', 'Services', 'Modules', 'Policies'],
     });
   });
 
@@ -201,12 +201,12 @@ describe('who sees what in Settings', () => {
     };
     const seen = await seenBy(olivia);
     expect(seen.tabs).toEqual(['Organization', 'Workspace', 'Account']);
-    expect(seen.column.Access).toEqual(['Policies', 'Features', 'Services', 'Modules']);
+    expect(seen.column.Access).toEqual(['Features', 'Services', 'Modules', 'Policies']);
     const organization = await seenBy(olivia, seen.opens.Organization);
     expect(organization.level).toBe('Organization');
     expect(organization.column).toEqual({
       Organization: ['General', 'Branding', 'Workspaces', 'Users'],
-      Access: ['Policies', 'Features', 'Services', 'Modules'],
+      Access: ['Features', 'Services', 'Modules', 'Policies'],
     });
   });
 
@@ -220,7 +220,7 @@ describe('who sees what in Settings', () => {
     expect(seen.tabs).toEqual(['Workspace', 'Account']);
     expect(seen.settings).toBe('/workspace/ws-1/settings/general');
     expect(seen.column.Workspace).toEqual(expect.arrayContaining(['General', 'Users']));
-    expect(seen.column.Access).toEqual(['Policies', 'Features', 'Services', 'Modules']);
+    expect(seen.column.Access).toEqual(['Features', 'Services', 'Modules', 'Policies']);
   });
 
   it('a workspace owner IAM gives no right over access: the workspace with Members, Access with the offer alone', async () => {

@@ -50,12 +50,14 @@ describe('the levels of Settings', () => {
     const organization = settingsLevels(all).find((level) => level.id === 'organization');
     expect(organization?.groups.map((group) => group.label)).toEqual([null, 'Access']);
     expect(organization?.groups[1].links.map((link) => [link.label, link.href])).toEqual([
-      ['Groups', '/organizations/acme/settings/groups'],
-      ['Policies', '/organizations/acme/settings/policies'],
       ['Features', '/organizations/acme/settings/features'],
       ['Services', '/organizations/acme/settings/core-services'],
       ['Modules', '/organizations/acme/settings/modules'],
+      ['Policies', '/organizations/acme/settings/policies'],
     ]);
+    // Groups sit with the people, right under Users.
+    const own = organization?.groups[0].links.map((link) => link.label) ?? [];
+    expect(own.slice(own.indexOf('Users'), own.indexOf('Users') + 2)).toEqual(['Users', 'Groups']);
   });
 
   it('keeps every group of the platform, each under its heading, Layers and Diagrams in System', () => {

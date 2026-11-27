@@ -35,7 +35,7 @@ import {
   Table2,
   TerminalSquare,
   Users,
-  UsersRound,
+  Group,
   Waypoints,
   Workflow,
   Zap,
@@ -194,7 +194,7 @@ export const DRIVES_ITEM: PlatformSettingsNavItem = {
 
 const ACCESS_ICONS: Record<AccessSection, LucideIcon> = {
   policies: KeyRound,
-  groups: UsersRound,
+  groups: Group,
   'service-accounts': IdCardLanyard,
   approvals: PackageCheck,
   simulator: FlaskConical,

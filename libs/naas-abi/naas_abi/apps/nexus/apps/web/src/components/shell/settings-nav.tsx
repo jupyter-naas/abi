@@ -10,7 +10,7 @@ import {
   Cpu,
   KeyRound,
   Users,
-  UsersRound,
+  Group,
   Workflow,
   Zap,
   Search,
@@ -58,20 +58,21 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     items: [
       { href: '/settings/general', label: 'General', icon: Globe }, // the Organization's and Platform's icon
       { href: '/settings/users', label: 'Users', icon: Users },
+      // Groups of people sit with the people; still a page of Access for whoever IAM lets open it.
+      { href: '/settings/groups', label: 'Groups', icon: Group, needs: 'groups' },
       { href: '/settings/analytics', label: 'Analytics', icon: BarChart3, needs: 'analytics' },
     ],
   },
   {
     label: 'Access',
     items: [
-      { href: '/settings/groups', label: 'Groups', icon: UsersRound, needs: 'groups' },
-      { href: '/settings/policies', label: 'Policies', icon: KeyRound, needs: 'policies' },
       // The workspace's offer ("<W> access"): which features and which modules it offers; the
       // pages under Features then show what is offered.
       { href: '/settings/features', label: 'Features', icon: SlidersHorizontal },
       // How far people go with each core service of the engine (graphs, files, vectors...).
       { href: '/settings/core-services', label: 'Services', icon: Database },
       { href: '/settings/modules', label: 'Modules', icon: Package },
+      { href: '/settings/policies', label: 'Policies', icon: KeyRound, needs: 'policies' },
     ],
   },
   {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
-import { Search, UsersRound, X, KeyRound } from 'lucide-react';
+import { Search, Group, X, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ModalBackdrop } from '@/components/ui/dialogs';
 import { Input } from '@/components/ui/input';
@@ -128,7 +128,7 @@ export function AttachDialog({
               >
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted text-sm text-muted-foreground">
                   {candidate.kind === 'group' ? (
-                    <UsersRound size={14} />
+                    <Group size={14} />
                   ) : candidate.kind === 'service_account' ? (
                     <KeyRound size={14} />
                   ) : (
