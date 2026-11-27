@@ -43,7 +43,7 @@ print(
 )
 
 # Docs
-from naas_abi_core.apps.api.openapi_doc import API_LANDING_HTML
+from naas_abi_core.apps.api.openapi_doc import API_LANDING_DOCS_LINK, API_LANDING_HTML
 from naas_abi_core.engine.Engine import Engine
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     ApiConfiguration,
@@ -429,17 +429,24 @@ def mount_api_docs(target: FastAPI, *, title: str, favicon_url: str) -> None:
         )
 
 
-if api_docs_enabled(api_runtime_configuration, os.getenv("ENV")):
+DOCS_ENABLED = api_docs_enabled(api_runtime_configuration, os.getenv("ENV"))
+if DOCS_ENABLED:
     mount_api_docs(app, title=TITLE, favicon_url=favicon_url)
 else:
     # No pages, but callers holding the API key still read the schema.
     mount_openapi_schema(app, dependencies=[Depends(is_token_valid)])
 
 
-def render_landing_html(title: str, description: str, logo: str, favicon: str) -> str:
-    """Fill the landing template. Config values are escaped; URLs are attribute-escaped."""
+def render_landing_html(
+    title: str, description: str, logo: str, favicon: str, *, docs: bool = True
+) -> str:
+    """Fill the landing template. Config values are escaped; URLs are attribute-escaped.
+
+    ``docs``: whether the API serves ``/redoc``; without it the page links no documentation.
+    """
     return (
-        API_LANDING_HTML.replace("[TITLE]", html.escape(title))
+        API_LANDING_HTML.replace("[DOCS_LINK]", API_LANDING_DOCS_LINK if docs else "")
+        .replace("[TITLE]", html.escape(title))
         .replace("[DESCRIPTION]", html.escape(description))
         .replace("[LOGO_URL]", html.escape(logo, quote=True))
         .replace("[FAVICON_URL]", html.escape(favicon, quote=True))
@@ -448,7 +455,9 @@ def render_landing_html(title: str, description: str, logo: str, favicon: str) -
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def root():
-    return render_landing_html(TITLE, DESCRIPTION, logo_url, favicon_url)
+    return render_landing_html(
+        TITLE, DESCRIPTION, logo_url, favicon_url, docs=DOCS_ENABLED
+    )
 
 
 def _load_runtime_routes():

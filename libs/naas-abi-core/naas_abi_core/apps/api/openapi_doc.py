@@ -93,6 +93,11 @@ LangChain-only tools stay agent-internal and are not listed here.
     },
 ]
 
+# The landing's link to the docs, shown only when the API serves them (api_docs_enabled).
+API_LANDING_DOCS_LINK = """        <div class="buttons">
+            <a href="/redoc">Go to Documentation</a>
+        </div>"""
+
 API_LANDING_HTML = """
 <!DOCTYPE html>
 <html>
@@ -143,9 +148,7 @@ API_LANDING_HTML = """
         <img src="[LOGO_URL]" alt="Logo" class="logo">
         <h1>Welcome to [TITLE]!</h1>
         <p>[DESCRIPTION]</p>
-        <div class="buttons">
-            <a href="/redoc">Go to Documentation</a>
-        </div>
+[DOCS_LINK]
     </body>
 </html>
 """
