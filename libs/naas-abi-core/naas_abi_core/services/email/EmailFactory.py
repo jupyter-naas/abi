@@ -25,6 +25,7 @@ class EmailFactory:
         use_tls: bool = False,
         use_ssl: bool = False,
         timeout: int = 10,
+        from_email: str | None = None,
     ) -> EmailService:
         return EmailService(
             SMTPAdapter(
@@ -35,12 +36,17 @@ class EmailFactory:
                 use_tls=use_tls,
                 use_ssl=use_ssl,
                 timeout=timeout,
+                from_email=from_email,
             )
         )
 
     @staticmethod
-    def EmailServiceFilesystem(*, directory: str) -> EmailService:
-        return EmailService(FilesystemAdapter(directory=directory))
+    def EmailServiceFilesystem(
+        *, directory: str, from_email: str = "no-reply@localhost"
+    ) -> EmailService:
+        return EmailService(
+            FilesystemAdapter(directory=directory, from_email=from_email)
+        )
 
     @staticmethod
     def EmailServiceSES(
@@ -49,6 +55,7 @@ class EmailFactory:
         aws_access_key_id: str | None = None,
         aws_secret_access_key: str | None = None,
         aws_session_token: str | None = None,
+        from_email: str | None = None,
     ) -> EmailService:
         return EmailService(
             SESAdapter(
@@ -56,6 +63,7 @@ class EmailFactory:
                 aws_access_key_id=aws_access_key_id,
                 aws_secret_access_key=aws_secret_access_key,
                 aws_session_token=aws_session_token,
+                from_email=from_email,
             )
         )
 
@@ -64,11 +72,13 @@ class EmailFactory:
         *,
         api_key: str,
         base_url: str = "https://api.sendgrid.com/v3",
+        from_email: str | None = None,
     ) -> EmailService:
         return EmailService(
             SendGridAdapter(
                 api_key=api_key,
                 base_url=base_url,
+                from_email=from_email,
             )
         )
 

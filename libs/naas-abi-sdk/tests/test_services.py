@@ -457,3 +457,15 @@ def test_dataset_write_stream_takes_plain_iterables_and_raises_domain_errors():
 
     with pytest.raises(ValueError):
         asyncio.run(service.write_stream("t", [{"x": float("nan")}]))
+
+
+def test_an_email_delivery_failure_keeps_its_cause():
+    """The engine says why a mail did not leave (#1643): the caller gets a named
+    error with the provider's answer, not a bare ServiceError."""
+    from naas_abi_sdk.services.errors import EmailDeliveryFailed, domain_error
+
+    error = domain_error(
+        RPCError("EMAIL_DELIVERY_FAILED", "Graph (404): ErrorInvalidUser")
+    )
+    assert isinstance(error, EmailDeliveryFailed)
+    assert "ErrorInvalidUser" in str(error)

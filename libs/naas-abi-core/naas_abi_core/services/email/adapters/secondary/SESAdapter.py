@@ -7,6 +7,7 @@ from naas_abi_core.services.email.EmailPorts import (
     EmailAttachment,
     IEmailAdapter,
     resolve_recipients,
+    resolve_sender,
 )
 
 
@@ -18,12 +19,15 @@ class SESAdapter(IEmailAdapter):
         aws_access_key_id: str | None = None,
         aws_secret_access_key: str | None = None,
         aws_session_token: str | None = None,
+        from_email: str | None = None,
         client: Any | None = None,
     ) -> None:
         self._region_name = region_name
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
         self._aws_session_token = aws_session_token
+        # The sender of a send that names none (``from_email=""``).
+        self._default_from_email = from_email
         self._client = client
 
     def _get_client(self) -> Any:
@@ -59,6 +63,7 @@ class SESAdapter(IEmailAdapter):
         to_emails: list[str] | str | None = None,
         cc_emails: list[str] | str | None = None,
     ) -> None:
+        sender = resolve_sender(from_email, self._default_from_email)
         destinations = resolve_recipients(to_email, to_emails)
         if cc_emails:
             destinations.extend(
@@ -71,7 +76,7 @@ class SESAdapter(IEmailAdapter):
             subject=subject,
             text_body=text_body,
             html_body=html_body,
-            from_email=from_email,
+            from_email=sender,
             from_name=from_name,
             reply_to=reply_to,
             attachments=attachments,
@@ -80,7 +85,7 @@ class SESAdapter(IEmailAdapter):
         )
 
         self._get_client().send_raw_email(
-            Source=from_email,
+            Source=sender,
             Destinations=destinations,
             RawMessage={"Data": bytes(msg)},
         )

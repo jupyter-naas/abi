@@ -23,12 +23,17 @@ class EmailAdapterSMTPConfiguration(BaseModel):
     use_tls: bool = False
     use_ssl: bool = False
     timeout: int = 10
+    # The sender of a send that names none, the built-in IdP's sign-in codes
+    # included (its own from_email is empty unless ABI_IDP_FROM_EMAIL is set).
+    from_email: str | None = None
 
 
 class EmailAdapterFilesystemConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     directory: str = "storage/email"
+    # The sender of a send that names none (kept, not sent).
+    from_email: str = "no-reply@localhost"
 
 
 class EmailAdapterSESConfiguration(BaseModel):
@@ -38,6 +43,9 @@ class EmailAdapterSESConfiguration(BaseModel):
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
     aws_session_token: str | None = None
+    # The sender of a send that names none, the built-in IdP's sign-in codes
+    # included (its own from_email is empty unless ABI_IDP_FROM_EMAIL is set).
+    from_email: str | None = None
 
 
 class EmailAdapterSendGridConfiguration(BaseModel):
@@ -45,6 +53,9 @@ class EmailAdapterSendGridConfiguration(BaseModel):
 
     api_key: str
     base_url: str = "https://api.sendgrid.com/v3"
+    # The sender of a send that names none, the built-in IdP's sign-in codes
+    # included (its own from_email is empty unless ABI_IDP_FROM_EMAIL is set).
+    from_email: str | None = None
 
 
 class EmailAdapterMicrosoftOutlookConfiguration(BaseModel):
@@ -53,6 +64,8 @@ class EmailAdapterMicrosoftOutlookConfiguration(BaseModel):
     tenant_id: str
     client_id: str
     client_secret: str
+    # The sender of a send that names none (the built-in IdP's sign-in codes
+    # included): a mailbox the app registration may send as.
     user: str
 
 

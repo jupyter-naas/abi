@@ -6,8 +6,10 @@ from urllib.parse import quote
 
 from naas_abi_core.services.email.EmailPorts import (
     EmailAttachment,
+    EmailDeliveryError,
     IEmailAdapter,
     resolve_recipients,
+    resolve_sender,
 )
 
 _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
@@ -69,7 +71,7 @@ class MicrosoftOutlookAdapter(IEmailAdapter):
         )
         result = app.acquire_token_for_client(scopes=_SCOPE)
         if "access_token" not in result:
-            raise RuntimeError(
+            raise EmailDeliveryError(
                 f"Microsoft Graph token error: {result.get('error')} — "
                 f"{result.get('error_description')}"
             )
@@ -96,7 +98,7 @@ class MicrosoftOutlookAdapter(IEmailAdapter):
         )
         if response.status_code >= 400:
             detail = response.text.strip() or response.reason
-            raise RuntimeError(
+            raise EmailDeliveryError(
                 f"Microsoft Graph API request failed ({response.status_code}): {detail}"
             )
 
@@ -116,7 +118,7 @@ class MicrosoftOutlookAdapter(IEmailAdapter):
         to_emails: list[str] | str | None = None,
         cc_emails: list[str] | str | None = None,
     ) -> None:
-        mailbox = quote(from_email or self._user)
+        mailbox = quote(resolve_sender(from_email, self._user))
         url = f"{_GRAPH_BASE}/users/{mailbox}/sendMail"
 
         body_payload = (

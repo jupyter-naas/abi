@@ -45,6 +45,32 @@ def resolve_recipients(
     return recipients
 
 
+class EmailDeliveryError(RuntimeError):
+    """The mail did not leave: no sender, or the provider refused it.
+
+    The message names the cause (the provider's answer, never a credential), so
+    it travels to the caller as is, over NATS included: a module that sends mail
+    logs why it failed, not only that it did.
+    """
+
+
+def resolve_sender(from_email: str | None, default: str | None) -> str:
+    """The address a send leaves from: ``from_email``, else the adapter's default.
+
+    A caller that names no sender (``from_email=""``) gets the mailbox the
+    deployment configured on its email adapter. Raises ``EmailDeliveryError``
+    when neither is set, before anything reaches the provider.
+    """
+
+    sender = (from_email or "").strip() or (default or "").strip()
+    if not sender:
+        raise EmailDeliveryError(
+            "No sender: the send names no from_email and the email adapter has "
+            "no default (from_email in services.email.email_adapter.config)."
+        )
+    return sender
+
+
 class SentEmailsNotKept(NotImplementedError):
     """The adapter hands mail off without keeping a copy (SMTP, SES, ...)."""
 

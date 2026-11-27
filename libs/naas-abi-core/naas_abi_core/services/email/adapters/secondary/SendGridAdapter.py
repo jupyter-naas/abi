@@ -5,8 +5,10 @@ from typing import Any
 
 from naas_abi_core.services.email.EmailPorts import (
     EmailAttachment,
+    EmailDeliveryError,
     IEmailAdapter,
     resolve_recipients,
+    resolve_sender,
 )
 
 
@@ -16,10 +18,13 @@ class SendGridAdapter(IEmailAdapter):
         *,
         api_key: str,
         base_url: str = "https://api.sendgrid.com/v3",
+        from_email: str | None = None,
         client: Any | None = None,
     ) -> None:
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
+        # The sender of a send that names none (``from_email=""``).
+        self._default_from_email = from_email
         self._client = client
 
     def _post(self, endpoint: str, payload: dict[str, Any]) -> None:
@@ -40,7 +45,7 @@ class SendGridAdapter(IEmailAdapter):
         )
         if response.status_code >= 400:
             detail = response.text.strip() or response.reason
-            raise RuntimeError(
+            raise EmailDeliveryError(
                 f"SendGrid API request failed ({response.status_code}): {detail}"
             )
 
@@ -82,7 +87,9 @@ class SendGridAdapter(IEmailAdapter):
         if not content:
             content.append({"type": "text/plain", "value": ""})
 
-        from_payload: dict[str, str] = {"email": from_email}
+        from_payload: dict[str, str] = {
+            "email": resolve_sender(from_email, self._default_from_email)
+        }
         if from_name:
             from_payload["name"] = from_name
 

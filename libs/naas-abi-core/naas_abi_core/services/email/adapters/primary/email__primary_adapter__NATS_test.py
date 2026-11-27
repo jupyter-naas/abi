@@ -408,3 +408,26 @@ def test_list_get_and_delete_kept_mail(tmp_path):
     assert got.message.summary.message_id == message_id and b"Hello" in got.message.raw
     assert not deleted.HasField("error")
     assert missing.error.code == "SENT_EMAIL_NOT_FOUND"
+
+
+def test_a_delivery_error_reaches_the_caller_with_its_cause():
+    """No sender, or the provider's refusal: the caller (a module such as the
+    identity provider) is told why, not only INTERNAL (#1643)."""
+    from naas_abi_core.services.email.EmailPorts import EmailDeliveryError
+
+    class _RefusingAdapter(_StubAdapter):
+        def send(self, **kwargs) -> None:  # type: ignore[override]
+            raise EmailDeliveryError(
+                "Microsoft Graph API request failed (404): ErrorInvalidUser"
+            )
+
+    adapter = EmailPrimaryAdapterNATS(_RefusingAdapter(), SECRET)
+    request = _FakeRequest(data=_send_request(), headers={AUTH_HEADER: _valid_token()})
+
+    asyncio.run(adapter._handle_send(request))
+
+    response = email_pb2.SendResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "EMAIL_DELIVERY_FAILED"
+    assert response.error.retryable is False
+    assert "ErrorInvalidUser" in response.error.message

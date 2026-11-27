@@ -53,6 +53,22 @@ endpoints, error codes `SENT_EMAILS_NOT_KEPT` and `SENT_EMAIL_NOT_FOUND`;
 `SendResponse.message_id` carries the kept id. Deleting a kept copy never
 recalls the message.
 
+### Sender and delivery errors
+
+A send with `from_email=""` leaves from the adapter's default sender
+(`resolve_sender`): Outlook's `user`, the optional `from_email` of the SMTP,
+SES and SendGrid configs, `no-reply@localhost` for `FilesystemAdapter` (kept,
+not sent). The built-in identity provider sends its sign-in codes this way
+unless `ABI_IDP_FROM_EMAIL` names a sender, so a deployment's one mailbox is
+configured once, here (#1643).
+
+The mail did not leave → `EmailDeliveryError` (a `RuntimeError`): no sender at
+all (raised before the provider is called), or the provider's refusal (Graph,
+SendGrid, an SMTP relay), with the provider's answer and never a credential.
+Over NATS it is `EMAIL_DELIVERY_FAILED` with that message, so the calling
+module logs the cause (the SDK raises `EmailDeliveryFailed`); every other
+failure stays `INTERNAL` with no detail.
+
 ## Service API (`EmailService.py`)
 
 ```python
@@ -101,20 +117,25 @@ placed: the id of a kept copy).
 
 | Adapter | Backend / Notes |
 |---|---|
-| `SMTPAdapter` | SMTP — TLS/SSL, auth, custom timeout |
-| `SESAdapter` | AWS SES — lazy-loads boto3 |
-| `SendGridAdapter` | SendGrid Mail Send API — lazy-loads requests |
-| `FilesystemAdapter` | Writes `.eml` files to disk (dev / test) |
+| `SMTPAdapter` | SMTP — TLS/SSL, auth, custom timeout, default `from_email` |
+| `SESAdapter` | AWS SES — lazy-loads boto3, default `from_email` |
+| `SendGridAdapter` | SendGrid Mail Send API — lazy-loads requests, default `from_email` |
+| `MicrosoftOutlookAdapter` | Microsoft Graph (app-only) — `user` is the default sender mailbox |
+| `FilesystemAdapter` | Writes `.eml` files to disk (dev / test), default `from_email` `no-reply@localhost` |
 
 ## Factory (`EmailFactory.py`)
 
 ```python
 EmailFactory.EmailServiceSMTP(host, port, username=None, password=None,
-                              use_tls=False, use_ssl=False, timeout=10)
-EmailFactory.EmailServiceFilesystem(directory)
+                              use_tls=False, use_ssl=False, timeout=10,
+                              from_email=None)
+EmailFactory.EmailServiceFilesystem(directory, from_email="no-reply@localhost")
 EmailFactory.EmailServiceSES(region_name=None, aws_access_key_id=None,
-                             aws_secret_access_key=None, aws_session_token=None)
-EmailFactory.EmailServiceSendGrid(api_key, base_url="https://api.sendgrid.com/v3")
+                             aws_secret_access_key=None, aws_session_token=None,
+                             from_email=None)
+EmailFactory.EmailServiceSendGrid(api_key, base_url="https://api.sendgrid.com/v3",
+                                  from_email=None)
+EmailFactory.EmailServiceMicrosoftOutlook(tenant_id, client_id, client_secret, user)
 ```
 
 ## Tests
@@ -123,11 +144,12 @@ EmailFactory.EmailServiceSendGrid(api_key, base_url="https://api.sendgrid.com/v3
 uv run pytest libs/naas-abi-core/naas_abi_core/services/email/tests/
 uv run pytest libs/naas-abi-core/naas_abi_core/services/email/tests/EmailService_events_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/email/tests/email__secondary_adapter__generic_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/email/tests/email_default_sender_test.py
 ```
 
 ## Adding a new adapter
 
-1. Implement `IEmailAdapter.send` in `adapters/secondary/<Name>Adapter.py`. Match the exact keyword-only signature for `from_email`, `from_name`, `reply_to`.
+1. Implement `IEmailAdapter.send` in `adapters/secondary/<Name>Adapter.py`. Match the exact keyword-only signature for `from_email`, `from_name`, `reply_to`. Take an optional default sender and pass `resolve_sender(from_email, default)` to the provider; raise `EmailDeliveryError` for a provider's refusal.
 2. Run the generic contract tests against it.
 3. Add a `EmailFactory.<Name>(...)` builder for zero-config setup.
 

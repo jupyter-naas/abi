@@ -119,7 +119,11 @@ class IdPConfiguration(ModuleConfiguration):
     # Overrides by email domain, shown once the address is known (an organization's
     # people see their organization's page).
     domain_branding: dict[str, Branding] = field(default_factory=dict)
-    from_email: str = "no-reply@abi.local"
+    # The sender of the sign-in mail. Empty: the engine's email adapter sends
+    # from its own configured sender (Outlook's ``user``, the ``from_email`` of
+    # SMTP / SES / SendGrid), the one mailbox a deployment already set up.
+    # ABI_IDP_FROM_EMAIL overrides it.
+    from_email: str = ""
     from_name: str | None = None
     # A local stack's catch-all mailbox (Mailpit, say): the code page links to it.
     # http(s) only, http included since a local mailbox has no TLS. Unset in
