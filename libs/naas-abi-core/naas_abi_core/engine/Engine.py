@@ -384,13 +384,24 @@ class Engine(IEngine):
             IDP_MODULE,
         )
 
+        project = nats.discovery.project
         key = self.__configuration.services.secret.local_value(IDP_SERVICE_KEY_ENV)
         manifest = _builtin_idp_manifest()
+        if manifest is None:
+            # A project made before `abi new project` added naas-abi-idp: the
+            # engine cannot compute the IdP's manifest, which then waits.
+            logger.warning(
+                "naas-abi-idp is not installed where the engine runs, so the "
+                "built-in IdP's permission manifest waits for "
+                f"`abi iam module approve module/{project}/{IDP_MODULE}`. "
+                "Add it to the project (uv add naas-abi-idp) to have it approved "
+                "at boot."
+            )
         if not key and manifest is None:
             return
         try:
             iam.provision_first_party_module(
-                nats.discovery.project, IDP_MODULE, key=key, manifest=manifest
+                project, IDP_MODULE, key=key, manifest=manifest
             )
         except Exception as exc:  # noqa: BLE001 - sign-in waits, the engine serves
             logger.warning(

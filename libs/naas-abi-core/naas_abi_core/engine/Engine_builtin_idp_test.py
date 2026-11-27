@@ -42,3 +42,12 @@ def test_the_idp_finds_its_key_and_permissions_ready() -> None:
         submitted = iam.submit_manifest("idp", "demo", module_manifest(ABIModule))
     assert submitted.manifest.status == "approved"
     assert submitted.in_force and not submitted.approved_now
+
+
+def test_no_manifest_without_the_idp_package(monkeypatch) -> None:
+    # A project made before `abi new project` added naas-abi-idp: the engine
+    # cannot compute the manifest (it then warns, and the IdP's one waits).
+    import sys
+
+    monkeypatch.setitem(sys.modules, "naas_abi_idp.module", None)
+    assert _builtin_idp_manifest() is None
