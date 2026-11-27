@@ -109,4 +109,6 @@ export const SCOPE_PICKER_DESCRIPTIONS = {
   workspace: 'The workspace every page below sets. Another one opens the same page there',
   /** In an organization's Settings. */
   organization: 'The organization every page below sets. Another one opens the same page there',
+  /** Under the Features heading of a workspace's Settings. */
+  policy: 'The policy the Access and Features pages below set',
 };

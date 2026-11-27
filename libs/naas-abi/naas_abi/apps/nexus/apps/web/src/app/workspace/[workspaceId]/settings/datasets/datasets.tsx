@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { ownerHref } from '@/components/access/policies/policy-owners';
-import { Button } from '@/components/ui/button';
-import { SettingsPageHeader, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
+import { Checkbox } from '@/components/ui/checkbox';
+import { BulkBar, SelectAllCell, SelectRowCell, onOffActions, useRowSelection } from '@/components/settings/bulk-access';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Loading } from '@/components/ui/spinner';
 import { Notice } from '@/components/ui/notice';
@@ -23,7 +24,7 @@ import { createDatasetsOfferApi, type DatasetsOfferApi } from './datasets-api';
 import {
   DATASET_COLUMNS,
   DATASET_EXPORT_HEADERS,
-  changesFrom,
+  bulkChanges,
   datasetCellValues,
   datasetExportRow,
   datasetSearchTexts,
@@ -39,34 +40,49 @@ function message(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+/** The batch actions: offer the namespaces selected, or take them back. */
+const BULK_ACTIONS = onOffActions({ on: 'Offer', off: 'Take back' }, (on) =>
+  on ? 'Their datasets come back, in one save.' : 'Their datasets are hidden, agents included, in one save.'
+);
+
 /**
  * Settings › Datasets: the dataset namespaces a workspace uses (or, on an organization, that its
  * workspaces may use), laid out as Settings › Users. Unchecking closes a namespace in "<W> access"
- * ("<O> access"); a namespace closed above stays read-only.
+ * ("<O> access"); a namespace closed above stays read-only. A table of switches: each change is
+ * saved at once, and said; the namespaces selected change together, asked first.
  */
-export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; api?: DatasetsOfferApi }) {
+export function DatasetsOffer({
+  target,
+  policyId = null,
+  api = DEFAULT_API,
+}: {
+  target: string;
+  /** The policy picked in the Settings column (`?policy=`); "<W> access" when null. */
+  policyId?: string | null;
+  api?: DatasetsOfferApi;
+}) {
   const [state, setState] = useState<DatasetsState | null>(null);
   const [error, setError] = useState('');
-  const [drafts, setDrafts] = useState<Record<string, boolean>>({});
+  const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setState(await api.read(target));
+      setState(await api.read(target, policyId));
       setError('');
     } catch (e) {
       setError(message(e, 'Could not read the datasets.'));
     }
-  }, [api, target]);
+  }, [api, target, policyId]);
 
   useEffect(() => {
     setState(null);
-    setDrafts({});
+    setNotice('');
     void load();
   }, [load]);
 
   const org = isOrgTarget(target);
-  const rows = state?.rows ?? [];
+  const rows = useMemo(() => state?.rows ?? [], [state]);
   const table = useSettingsTable({
     rows,
     columns: DATASET_COLUMNS,
@@ -76,24 +92,24 @@ export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; a
     initialSort: 'namespace',
   });
   const shown = table.shown;
-  const changes = changesFrom(rows, drafts);
-  const unsavedCount = Object.keys(changes).length;
-  const offeredCount = rows.filter((row) => row.offered).length;
-  const access = state?.access_policy ?? null;
+  // The policy set here: the one picked in the column, else "<W> access".
+  const access = state?.policy ?? state?.access_policy ?? null;
   const accessHref = access ? ownerHref(access.owner_scope, access.id) : null;
+  // The namespaces checked for a batch change (the rows shown: select all takes them).
+  const selection = useRowSelection(useMemo(() => shown.map((row) => row.namespace), [shown]));
 
-  const toggle = (row: DatasetRow, on: boolean) =>
-    setDrafts((current) => {
-      const { [row.namespace]: _dropped, ...rest } = current;
-      return on === row.offered ? rest : { ...rest, [row.namespace]: on };
-    });
-
-  const save = async () => {
+  /** One write of the offer for `changes`, then what it did said in `done`. */
+  const save = async (changes: Record<string, boolean>, done: string) => {
+    if (Object.keys(changes).length === 0) {
+      setNotice(done);
+      return;
+    }
     setSaving(true);
+    setNotice('');
     try {
-      setState(await api.save(target, changes));
-      setDrafts({});
+      setState(await api.save(target, changes, policyId));
       setError('');
+      setNotice(done);
     } catch (e) {
       setError(message(e, 'Could not save.'));
     } finally {
@@ -101,19 +117,29 @@ export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; a
     }
   };
 
+  const toggle = (row: DatasetRow, on: boolean) =>
+    void save({ [row.namespace]: on }, `${row.namespace}: ${on ? 'offered' : 'not offered'}.`);
+
+  const applyBulk = async (id: string) => {
+    const on = id === 'on';
+    const changes = bulkChanges(rows, selection.selected, on);
+    const count = Object.keys(changes).length;
+    await save(changes, `${count} namespace${count === 1 ? '' : 's'} ${on ? 'offered' : 'taken back'}.`);
+  };
+  /** The selected namespaces a batch change does not fit: those that cannot change here. */
+  const skipped = () => rows.filter((row) => selection.selected.has(row.namespace) && !row.editable).length;
+
   const exportShown = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
     downloadTableExport(DATASET_EXPORT_HEADERS, shown.map(datasetExportRow), format, `datasets_${date}`, 'Datasets');
   };
 
-  const unsaved =
-    unsavedCount === 0 ? 'No unsaved change' : `${unsavedCount} unsaved change${unsavedCount === 1 ? '' : 's'}`;
-
   return (
     <div className="space-y-6">
       <SettingsPageHeader
         title="Datasets"
-        badge={state ? `${offeredCount} offered · ${rows.length - offeredCount} not offered` : undefined}
+        // One total: how many namespaces (the Offered column says which are used).
+        badge={state ? `${rows.length} namespace${rows.length === 1 ? '' : 's'}` : undefined}
         description={
           <>
             The dataset namespaces {org ? 'the workspaces of this organization may use' : 'this workspace uses'}
@@ -129,17 +155,6 @@ export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; a
         actions={
           <>
             <UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />
-            <Button
-              variant="secondary"
-              data-action="discard"
-              disabled={saving || unsavedCount === 0}
-              onClick={() => setDrafts({})}
-            >
-              Discard
-            </Button>
-            <Button disabled={saving || unsavedCount === 0} onClick={() => void save()} data-action="save">
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
           </>
         }
       />
@@ -148,6 +163,11 @@ export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; a
         <Notice tone="error" icon={<AlertCircle size={14} />}>
           {error}
         </Notice>
+      )}
+      {notice && (
+        <p className="text-xs text-muted-foreground" role="status" data-datasets-notice="">
+          {notice}
+        </p>
       )}
       {state?.error && (
         <Notice tone="error" icon={<AlertCircle size={14} />}>
@@ -165,41 +185,61 @@ export function DatasetsOffer({ target, api = DEFAULT_API }: { target: string; a
             search={table.search}
             onSearchChange={table.setSearch}
             searchPlaceholder="Search namespace, offered, not offered…"
-            meta={
-              <>
-                {`${countLabel(shown.length, rows.length, 'namespace')} · ${unsaved}`}
-                <SettingsTableClear table={table} />
-              </>
-            }
+            // No count above the search: the badge says how many, the pager how many are shown.
+            meta={<SettingsTableClear table={table} />}
           />
           <p className="text-xs text-muted-foreground" data-datasets-legend="">
             Unchecking a namespace hides its datasets {org ? 'in every workspace of the organization' : 'in this workspace'},
             agents included. Only the platform admin reopens a namespace closed here.
           </p>
+          <BulkBar
+            selection={selection}
+            noun="namespace"
+            actions={BULK_ACTIONS}
+            onApply={applyBulk}
+            skippedFor={skipped}
+            change="this change"
+            disabled={saving}
+          />
           <div className="org-settings-users-table-wrap">
             <table className="org-settings-users-table">
-              <SettingsTableHead table={table} />
+              <SettingsTableHead
+                table={table}
+                leading={
+                  <SelectAllCell
+                    selection={selection}
+                    keys={shown.filter((row) => row.editable).map((row) => row.namespace)}
+                    noun="namespace"
+                    disabled={saving}
+                  />
+                }
+              />
               <tbody>
-                {shown.length === 0 && <SettingsTableNoMatch colSpan={DATASET_COLUMNS.length} noun="namespaces" />}
+                {shown.length === 0 && <SettingsTableNoMatch colSpan={DATASET_COLUMNS.length + 1} noun="namespaces" />}
                 {table.paged.pageRows.map((row) => {
-                  const on = drafts[row.namespace] ?? row.offered;
+                  const on = row.offered;
                   const note = rowNote(row);
                   return (
                     <tr key={row.namespace} data-namespace={row.namespace} className="align-top">
+                      <SelectRowCell
+                        selection={selection}
+                        rowKey={row.namespace}
+                        label={row.namespace}
+                        disabled={saving || !row.editable}
+                      />
                       <td className="font-medium text-foreground">{row.namespace}</td>
                       <td className="tabular-nums text-muted-foreground">{row.tables}</td>
                       <td>
-                        <label className="inline-flex items-center gap-2">
-                          <input
-                            type="checkbox"
+                        <span className="inline-flex items-center gap-2">
+                          <Checkbox
                             checked={on}
                             disabled={!row.editable || saving}
                             aria-label={`Offer ${row.namespace}`}
                             data-offered={row.namespace}
-                            onChange={(event) => toggle(row, event.target.checked)}
+                            onCheckedChange={(checked) => toggle(row, checked)}
                           />
                           <span className="text-xs text-muted-foreground">{on ? 'Offered' : 'Not offered'}</span>
-                        </label>
+                        </span>
                         {note ? <p className="workspace-features-note">{note}</p> : null}
                       </td>
                     </tr>

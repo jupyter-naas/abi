@@ -28,16 +28,18 @@ async function failure(response: Response, fallback: string): Promise<DatasetsOf
 }
 
 export function createDatasetsOfferApi(fetcher: Fetcher = authFetch) {
-  const path = (target: string) => `${targetApiPath(target)}/offer/datasets`;
+  // `?policy=`: another policy of the workspace, picked in the Settings column.
+  const path = (target: string, policyId?: string | null) =>
+    `${targetApiPath(target)}/offer/datasets${policyId ? `?policy=${encodeURIComponent(policyId)}` : ''}`;
   return {
-    read: async (target: string): Promise<DatasetsState> => {
-      const response = await fetcher(path(target));
+    read: async (target: string, policyId?: string | null): Promise<DatasetsState> => {
+      const response = await fetcher(path(target, policyId));
       if (!response.ok) throw await failure(response, `Could not read the datasets (HTTP ${response.status}).`);
       return (await response.json()) as DatasetsState;
     },
     /** `{namespace: offered}`, in one write; answers the datasets after. */
-    save: async (target: string, changes: Record<string, boolean>): Promise<DatasetsState> => {
-      const response = await fetcher(path(target), {
+    save: async (target: string, changes: Record<string, boolean>, policyId?: string | null): Promise<DatasetsState> => {
+      const response = await fetcher(path(target, policyId), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ changes }),

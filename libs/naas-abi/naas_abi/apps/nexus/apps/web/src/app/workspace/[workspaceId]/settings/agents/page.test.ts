@@ -15,11 +15,15 @@ const AGENTS = vi.hoisted(() =>
       providerId: null,
       // The first four have no model: the Models column filtered on gpt-test keeps 41.
       modelId: i < 4 ? null : 'gpt-test',
+      // The first one comes from a module: its row links to the module in Access › Modules.
+      class_name: i === 0 ? 'acme.people/Coach' : undefined,
     };
   }),
 );
 
 vi.mock('next/navigation', () => ({
+  // No policy picked: "<W> access" (`usePolicyHref` reads the URL).
+  useSearchParams: () => new URLSearchParams(),
   useParams: () => ({ workspaceId: 'ws-1' }),
   useRouter: () => ({ push: () => undefined }),
   usePathname: () => '/workspace/ws-1/settings/agents',
@@ -70,7 +74,8 @@ describe('Workspace settings › Agents', () => {
     // The search reaches every agent, not only the page shown.
     await m.type(q('input[placeholder="Search agents..."]'), 'zebra');
     expect(rows()).toEqual(['agent-37']);
-    expect(m.host.textContent).toContain('1 of 45 agents');
+    // No count above the search: the badge says how many agents, the pager how many are shown.
+    expect(m.host.textContent).not.toContain('1 of 45 agents');
 
     // The Models column filters on the model, and goes back to the first page.
     await m.type(q('input[placeholder="Search agents..."]'), '');
@@ -78,7 +83,6 @@ describe('Workspace settings › Agents', () => {
     expect(shown()).toMatch(/^Rows 21–/);
     await filterColumn(m, 'models', 'gpt-test');
     expect(shown()).toBe('Rows 1–20 of 41');
-    expect(m.host.textContent).toContain('41 of 45 agents');
     expect(rows()).not.toContain('agent-01');
 
     await m.click(q('[data-action="clear-filters"]'));
@@ -100,5 +104,17 @@ describe('Workspace settings › Agents', () => {
       'Not assigned',
     );
     expect(mounted.host.querySelector('[data-action="export"]')).not.toBeNull();
+  });
+
+  it('says one total, creates with Create agent, and links a module agent to its row in Access › Modules', async () => {
+    mounted = await mount(AgentsPage, {});
+    await mounted.flush();
+    expect(mounted.host.textContent).toContain('45 agents');
+    const buttons = [...mounted.host.querySelectorAll('button')].map((b) => b.textContent);
+    expect(buttons).toContain('Create agent');
+    expect(buttons).not.toContain('Add Agent');
+    const link = mounted.host.querySelector('[data-agent="agent-01"] a[data-module-link]');
+    expect(link?.getAttribute('href')).toBe('/workspace/ws-1/settings/modules?module=acme.people');
+    expect(link?.textContent).toBe('acme.people');
   });
 });

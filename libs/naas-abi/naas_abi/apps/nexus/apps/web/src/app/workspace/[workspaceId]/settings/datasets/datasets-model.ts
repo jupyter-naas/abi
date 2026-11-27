@@ -26,6 +26,8 @@ export type DatasetsState = {
   workspace_id: string;
   scope: string;
   access_policy: PolicyRef | null;
+  /** The policy read: "<W> access" by default, or another policy of the workspace. */
+  policy?: PolicyRef | null;
   ceiling: PolicyRef | null;
   editable: boolean;
   rows: DatasetRow[];
@@ -39,6 +41,14 @@ export function changesFrom(rows: DatasetRow[], drafts: Record<string, boolean>)
       const draft = drafts[row.namespace];
       return draft === undefined || draft === row.offered ? [] : [[row.namespace, draft]];
     })
+  );
+}
+
+/** What a batch change sends: each editable row of `keys` not yet `on` (`{namespace: on}`). */
+export function bulkChanges(rows: DatasetRow[], keys: Iterable<string>, on: boolean): Record<string, boolean> {
+  const picked = new Set(keys);
+  return Object.fromEntries(
+    rows.filter((row) => picked.has(row.namespace) && row.editable && row.offered !== on).map((row) => [row.namespace, on])
   );
 }
 

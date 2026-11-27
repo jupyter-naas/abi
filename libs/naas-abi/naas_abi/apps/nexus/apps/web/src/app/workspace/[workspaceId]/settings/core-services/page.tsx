@@ -5,7 +5,7 @@
  * policy picked in the header ("<W> access" by default, `?policy=`). `CoreServices`.
  */
 import { Suspense } from 'react';
-import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Loading } from '@/components/ui/spinner';
 import { CoreServices } from './core-services';
 // The level choices (General's CSS).
@@ -13,15 +13,14 @@ import '../general/general.css';
 
 function Services() {
   const workspaceId = useParams().workspaceId as string;
-  const router = useRouter();
-  const pathname = usePathname();
   const policy = useSearchParams().get('policy');
   return (
     <CoreServices
-      key={workspaceId}
+      // The policy is picked in the Settings column (`?policy=`): another one opens the page afresh.
+      key={`${workspaceId}:${policy ?? ''}`}
       workspaceId={workspaceId}
+      policyPicker={false}
       initialPolicy={policy}
-      onPolicyChange={(next) => router.replace(next ? `${pathname}?policy=${encodeURIComponent(next)}` : pathname)}
     />
   );
 }

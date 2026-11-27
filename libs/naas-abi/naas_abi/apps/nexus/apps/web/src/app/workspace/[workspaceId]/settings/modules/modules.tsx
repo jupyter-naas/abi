@@ -1,9 +1,9 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
-import { OfferSwitch } from '@/components/access/offer/offer-editor';
+import { Checkbox } from '@/components/ui/checkbox';
 import { draftKey, isOffered, itemName, itemsWithOffered, offerChanges } from '@/components/access/offer/offer-model';
 import '@/components/access/offer/offer.css';
 import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
@@ -97,6 +97,8 @@ export function WorkspaceModules({
   initialPolicy = null,
   onPolicyChange,
   pickerPrefix,
+  policyPicker = true,
+  initialSearch = null,
 }: {
   workspaceId: string;
   api?: IamAdminApi;
@@ -107,6 +109,11 @@ export function WorkspaceModules({
   onPolicyChange?: (policyId: string | null) => void;
   /** Before the Policy dropdown, in its row: Platform settings' Organization picker. */
   pickerPrefix?: ReactNode;
+  /** The Policy dropdown in the page; a workspace's Settings pick the policy in their column
+   *  (`SettingsPolicyPicker`, `?policy=`) and leave it out. */
+  policyPicker?: boolean;
+  /** The search the table opens with (`?module=`: a page under Features linking to a module's row). */
+  initialSearch?: string | null;
 }) {
   const [policyId, setPolicyId] = useState<string | null>(initialPolicy);
   const [offer, setOffer] = useState<OfferState | null>(null);
@@ -148,6 +155,13 @@ export function WorkspaceModules({
     searchTexts: groupSearchTexts,
     initialSort: 'module',
   });
+  // A link from Agents, Apps or Workflows opens on its module's row: the search set once.
+  const searched = useRef(false);
+  useEffect(() => {
+    if (searched.current || !initialSearch) return;
+    searched.current = true;
+    table.setSearch(initialSearch);
+  }, [initialSearch, table]);
 
   const loadItems = async (row: ModuleRow) => {
     if (!offer) return;
@@ -261,10 +275,12 @@ export function WorkspaceModules({
       />
 
       {/* The policy edited, under the page's words, at its left. */}
-      <div className="-mt-3 flex flex-wrap items-center justify-start gap-4" data-policy-picker="">
-        {pickerPrefix}
-        <PolicyPicker policies={offer?.policies} current={edited} value={edited?.id} onChange={pick} disabled={saving} />
-      </div>
+      {policyPicker ? (
+        <div className="-mt-3 flex flex-wrap items-center justify-start gap-4" data-policy-picker="">
+          {pickerPrefix}
+          <PolicyPicker policies={offer?.policies} current={edited} value={edited?.id} onChange={pick} disabled={saving} />
+        </div>
+      ) : null}
 
       {error && (
         <Notice tone="error" icon={<AlertCircle size={14} />}>
@@ -361,7 +377,7 @@ export function WorkspaceModules({
                               <td />
                               <td data-field="offer">
                                 <div className="flex items-center gap-2">
-                                  <OfferSwitch
+                                  <OfferBox
                                     label={`Offer every ${single} of ${row.module}`}
                                     on={whole}
                                     disabled={!editable || saving || (!row.grantable && !whole)}
@@ -400,7 +416,7 @@ export function WorkspaceModules({
                                       <td className="access-offer-indent-2 text-sm text-foreground">{item.label}</td>
                                       <td />
                                       <td data-field="offer">
-                                        <OfferSwitch
+                                        <OfferBox
                                           label={`Offer ${item.label}`}
                                           on={isOffered(offer.offered, row.kind, row.module, item.name)}
                                           disabled={!editable || saving || whole}
@@ -470,7 +486,7 @@ function ModuleLine({
       <td className="text-muted-foreground">{group.kinds.map((k) => k.kindLabel).join(', ')}</td>
       <td data-field="offer">
         <div className="flex items-center gap-2">
-          <OfferSwitch
+          <OfferBox
             label={`Offer all of ${group.module}`}
             on={whole}
             disabled={disabled || (!group.grantable && !whole)}
@@ -480,5 +496,29 @@ function ModuleLine({
         </div>
       </td>
     </tr>
+  );
+}
+
+/** The on/off control of Settings, the square checkbox (Access › Modules' sliders are gone). */
+function OfferBox({
+  label,
+  on,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  on: boolean;
+  disabled?: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <Checkbox
+      aria-label={label}
+      title={label}
+      checked={on}
+      disabled={disabled}
+      data-offer-switch=""
+      onCheckedChange={onChange}
+    />
   );
 }

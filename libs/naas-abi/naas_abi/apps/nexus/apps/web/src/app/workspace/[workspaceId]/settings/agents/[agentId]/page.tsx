@@ -1,20 +1,23 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Bot, CheckCircle, Save, XCircle } from 'lucide-react';
-import { useParams, useRouter } from 'next/navigation';
+import { XCircle } from 'lucide-react';
+import { useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { getLogoUrl } from '@/lib/logo-url';
 import { readAgentRoster, useAgentsStore } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
-import { Button } from '@/components/ui/button';
+import { usePageDraft } from '@/hooks/use-page-state';
 import { Input, Textarea } from '@/components/ui/input';
-import { SettingsPageHeader } from '@/components/settings/settings-ui';
-import { Notice } from '@/components/ui/notice';
+import { InstanceHeader } from '@/components/access/instance-header';
+import { FormSaveButton, InstanceBack, UnsavedBar } from '@/components/settings/instance-form';
+import { ModuleLink } from '@/components/settings/module-link';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Loading } from '@/components/ui/spinner';
 import { Field } from '@/components/ui/field';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
 import { Card } from '@/components/ui/card';
+import { agentModule } from '../agents-model';
 
 type ServiceIntent = {
   intent_value: string;
@@ -44,9 +47,22 @@ type ServiceAgent = {
   intents?: ServiceIntent[] | null;
 };
 
+const FIELD_LABELS: Record<string, string> = {
+  name: 'Name',
+  description: 'Description',
+  systemPrompt: 'System Prompt',
+  provider: 'Provider',
+  modelId: 'Model ID',
+  logoUrl: 'Logo URL',
+};
+
+/**
+ * An agent's page under Workspace settings › Agents: the header of an instance's page (its logo,
+ * name, id, its module linked to Access › Modules), Save at its right, faded until something
+ * changes, the unsaved bar; the edits are kept for a return to the page (`usePageDraft`).
+ */
 export default function AgentEditPage() {
   const params = useParams();
-  const router = useRouter();
   const workspaceId = params.workspaceId as string;
   const agentId = params.agentId as string;
 
@@ -59,12 +75,31 @@ export default function AgentEditPage() {
   const [saved, setSaved] = useState(false);
   const [serviceAgent, setServiceAgent] = useState<ServiceAgent | null>(null);
 
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [systemPrompt, setSystemPrompt] = useState('');
-  const [provider, setProvider] = useState('');
-  const [modelId, setModelId] = useState('');
-  const [logoUrl, setLogoUrl] = useState('');
+  // The agent as the service holds it, and the edits over it.
+  const server = useMemo(
+    () =>
+      serviceAgent
+        ? {
+            name: serviceAgent.name || '',
+            description: serviceAgent.description || '',
+            systemPrompt: serviceAgent.system_prompt || '',
+            provider: serviceAgent.provider || '',
+            modelId: serviceAgent.model_id || '',
+            logoUrl: serviceAgent.logo_url || '',
+          }
+        : null,
+    [serviceAgent]
+  );
+  const draft = usePageDraft(
+    workspaceId && agentId ? { scope: `workspace:${workspaceId}`, page: 'agents', detail: agentId } : null,
+    server
+  );
+  const values = draft.values ?? server;
+  const dirty = !!server && !!values && Object.keys(server).some((key) => server[key as keyof typeof server] !== values[key as keyof typeof values]);
+  const set = (key: keyof NonNullable<typeof server>) => (value: string) => {
+    setSaved(false);
+    draft.set({ [key]: value });
+  };
 
   const storeAgent = useMemo(() => agents.find((agent) => agent.id === agentId), [agents, agentId]);
   const tools = storeAgent?.tools ?? [];
@@ -102,12 +137,6 @@ export default function AgentEditPage() {
         }
 
         setServiceAgent(selectedServiceAgent);
-        setName(selectedServiceAgent.name || '');
-        setDescription(selectedServiceAgent.description || '');
-        setSystemPrompt(selectedServiceAgent.system_prompt || '');
-        setProvider(selectedServiceAgent.provider || '');
-        setModelId(selectedServiceAgent.model_id || '');
-        setLogoUrl(selectedServiceAgent.logo_url || '');
 
       } catch (err) {
         if (cancelled) return;
@@ -125,20 +154,33 @@ export default function AgentEditPage() {
   }, [workspaceId, agentId, refreshProviders]);
 
   const handleSave = async () => {
-    if (!storeAgent) return;
+    if (!storeAgent || !values || !serviceAgent) return;
     setSaving(true);
     setSaved(false);
     setError(null);
     try {
-      await updateAgent(storeAgent.id, {
-        name: name.trim(),
-        description: description.trim(),
-        systemPrompt,
-        provider: provider || null,
-        modelId: modelId || null,
-        logoUrl: logoUrl || null,
+      const next = {
+        name: values.name.trim(),
+        description: values.description.trim(),
+        systemPrompt: values.systemPrompt,
+        provider: values.provider || null,
+        modelId: values.modelId || null,
+        logoUrl: values.logoUrl || null,
+      };
+      await updateAgent(storeAgent.id, next);
+      // What the service now holds: the edits are no longer edits.
+      setServiceAgent({
+        ...serviceAgent,
+        name: next.name,
+        description: next.description,
+        system_prompt: next.systemPrompt,
+        provider: next.provider,
+        model_id: next.modelId,
+        logo_url: next.logoUrl,
       });
+      draft.discard();
       setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : 'Failed to save agent');
@@ -147,18 +189,13 @@ export default function AgentEditPage() {
     }
   };
 
-  const backButton = (
-    <Button variant="secondary" onClick={() => router.push(`/workspace/${workspaceId}/settings/agents`)}>
-      <ArrowLeft size={16} />
-      Back to agents
-    </Button>
-  );
+  const backButton = <InstanceBack href={`/workspace/${workspaceId}/settings/agents`} label="agents" />;
 
   if (loading) {
     return <Loading label="Loading agent…" />;
   }
 
-  if (error) {
+  if (error && !serviceAgent) {
     return (
       <div className="space-y-4">
         {backButton}
@@ -169,7 +206,7 @@ export default function AgentEditPage() {
     );
   }
 
-  if (!storeAgent || !serviceAgent) {
+  if (!storeAgent || !serviceAgent || !values) {
     return (
       <div className="space-y-4">
         {backButton}
@@ -197,67 +234,73 @@ export default function AgentEditPage() {
     </Card>
   );
 
+  const moduleName = agentModule({ class_name: serviceAgent.class_name ?? undefined } as Parameters<typeof agentModule>[0]);
+
   return (
     <div className="space-y-6">
-      <div>{backButton}</div>
-      <SettingsPageHeader
-        leading={
-          <div
-            className={cn(
-              'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden',
-              serviceAgent.logo_url ? 'bg-transparent' : 'bg-muted'
-            )}
-          >
-            {serviceAgent.logo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={getLogoUrl(serviceAgent.logo_url)} alt={serviceAgent.name} className="h-full w-full object-cover" />
-            ) : (
-              <Bot size={16} />
-            )}
-          </div>
+      {backButton}
+      <InstanceHeader
+        name={serviceAgent.name}
+        id={serviceAgent.id}
+        image={serviceAgent.logo_url ? getLogoUrl(serviceAgent.logo_url) : null}
+        imageAlt={serviceAgent.name}
+        meta={
+          moduleName ? (
+            <span>
+              From the module <ModuleLink workspaceId={workspaceId} module={moduleName} />
+            </span>
+          ) : (
+            <span>Built in this workspace</span>
+          )
         }
-        title="Edit Agent"
-        description={serviceAgent.name}
-        actions={
-          <Button onClick={handleSave} disabled={saving}>
-            <Save size={16} />
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-        }
+        actions={<FormSaveButton dirty={dirty} saving={saving} saved={saved} onSave={() => void handleSave()} />}
       />
 
-      {saved && (
-        <Notice tone="success" icon={<CheckCircle size={14} />}>
-          Agent updated
+      {error && (
+        <Notice tone="error" icon={<XCircle size={14} />}>
+          {error}
         </Notice>
       )}
+      <UnsavedBar
+        show={dirty}
+        conflicts={draft.conflicts.map((field) => FIELD_LABELS[field] ?? field)}
+        onDiscard={draft.discard}
+        disabled={saving}
+      />
 
       <Card title="General">
         <div className="space-y-4">
           <Field label="Name">
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
+            <Input aria-label="Name" value={values.name} onChange={(e) => set('name')(e.target.value)} />
           </Field>
           <Field label="Description">
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="resize-none" />
+            <Textarea
+              aria-label="Description"
+              value={values.description}
+              onChange={(e) => set('description')(e.target.value)}
+              rows={3}
+              className="resize-none"
+            />
           </Field>
           <Field label="System Prompt">
             <Textarea
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
+              aria-label="System Prompt"
+              value={values.systemPrompt}
+              onChange={(e) => set('systemPrompt')(e.target.value)}
               rows={12}
               className="min-h-[14rem] resize-y"
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Provider">
-              <Input value={provider} onChange={(e) => setProvider(e.target.value)} />
+              <Input aria-label="Provider" value={values.provider} onChange={(e) => set('provider')(e.target.value)} />
             </Field>
             <Field label="Model ID">
-              <Input value={modelId} onChange={(e) => setModelId(e.target.value)} />
+              <Input aria-label="Model ID" value={values.modelId} onChange={(e) => set('modelId')(e.target.value)} />
             </Field>
           </div>
           <Field label="Logo URL">
-            <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} />
+            <Input aria-label="Logo URL" value={values.logoUrl} onChange={(e) => set('logoUrl')(e.target.value)} />
           </Field>
         </div>
       </Card>

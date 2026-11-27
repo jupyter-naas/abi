@@ -91,21 +91,30 @@ export function mapsLayerPath(workspaceId: string | null, layerId: string): stri
 }
 
 /**
- * Settings → Maps: the overview, one feed (`?feed=`), one layer (`?layer=`), or
- * a new one (`new`; a new layer can start on a feed with `&for=`).
+ * Settings → Maps: the overview, a feed's page (`/feeds/<id>`), a layer's page (`/layers/<id>`),
+ * or a new one (`new`; a new layer can start on a feed with `?for=`).
  */
 export function mapsSettingsPath(
   workspaceId: string | null,
   options: { layer?: string; feed?: string; create?: boolean; forFeed?: string } = {},
 ): string {
   const base = workspaceId ? `/workspace/${encodeURIComponent(workspaceId)}/settings/maps` : '/settings/maps';
-  const params = new URLSearchParams();
-  if (options.feed) params.set('feed', options.feed);
-  else if (options.create) params.set('layer', 'new');
-  else if (options.layer) params.set('layer', options.layer);
-  if (options.forFeed) params.set('for', options.forFeed);
-  const query = params.toString();
-  return query ? `${base}?${query}` : base;
+  let path = base;
+  if (options.feed) path = `${base}/feeds/${encodeURIComponent(options.feed)}`;
+  else if (options.create) path = `${base}/layers/new`;
+  else if (options.layer) path = `${base}/layers/${encodeURIComponent(options.layer)}`;
+  return options.forFeed ? `${path}?for=${encodeURIComponent(options.forFeed)}` : path;
+}
+
+/** Where a former link to Settings → Maps (`?feed=`, `?layer=`, `?layout=`) now goes; null for none. */
+export function mapsSettingsLegacyPath(
+  workspaceId: string | null,
+  params: { get(name: string): string | null } | null,
+): string | null {
+  const feed = mapsSettingsSelectedFeed(params);
+  const layer = mapsSettingsSelectedLayer(params);
+  if (!feed && !layer) return null;
+  return mapsSettingsPath(workspaceId, feed ? { feed } : { layer: layer!, forFeed: params?.get('for') ?? undefined });
 }
 
 /** The feed selected in Settings → Maps (`?feed=`). */

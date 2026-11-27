@@ -6,7 +6,8 @@ import { useParams } from 'next/navigation';
 import { AppWindow, Globe, Tag, ExternalLink } from 'lucide-react';
 import { useAppsStore, type AppItem } from '@/stores/apps';
 import { Badge } from '@/components/ui/badge';
-import { SettingsPageHeader, SettingsTableToolbar, countLabel } from '@/components/settings/settings-ui';
+import { ModuleLink } from '@/components/settings/module-link';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Loading } from '@/components/ui/spinner';
 import {
@@ -114,7 +115,7 @@ export default function AppsSettingsPage() {
         <EmptyState framed
           icon={<AppWindow size={40} className="opacity-40" />}
           title="No apps in this workspace"
-          description="No module of this workspace has an app you may open. Policies on Roles & permissions decide who opens which app."
+          description="No module of this workspace has an app you may open. Policies, in Access › Policies, decide who opens which app."
         />
       ) : (
         <div className="space-y-4">
@@ -122,12 +123,8 @@ export default function AppsSettingsPage() {
             search={table.search}
             onSearchChange={table.setSearch}
             searchPlaceholder="Search apps..."
-            meta={
-              <>
-                {countLabel(shown.length, installedApps.length, 'app')}
-                <SettingsTableClear table={table} />
-              </>
-            }
+            // No count above the search: the badge says how many, the pager how many are shown.
+            meta={<SettingsTableClear table={table} />}
           />
 
           <div className="org-settings-users-table-wrap">
@@ -170,7 +167,21 @@ export default function AppsSettingsPage() {
                         {app.category}
                       </Badge>
                     </td>
-                    <td className="truncate text-muted-foreground">{appSource(app)}</td>
+                    <td className="truncate text-muted-foreground">
+                      {/* Its module links to its row in Access › Modules, where the workspace offers it. */}
+                      {app.module_name && app.module_name === appSource(app) ? (
+                        <ModuleLink workspaceId={workspaceId ?? ''} module={app.module_name} />
+                      ) : (
+                        <>
+                          {appSource(app)}
+                          {app.module_name ? (
+                            <p className="text-micro italic">
+                              <ModuleLink workspaceId={workspaceId ?? ''} module={app.module_name} />
+                            </p>
+                          ) : null}
+                        </>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

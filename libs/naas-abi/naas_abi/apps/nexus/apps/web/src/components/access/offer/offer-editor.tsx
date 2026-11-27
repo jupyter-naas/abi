@@ -128,6 +128,9 @@ export type WorkspaceOfferEditorProps = {
   scope?: string;
   /** Only this policy's page shows it: the editor stays empty when "<W> access" is another. */
   policyId?: string;
+  /** The policy read and written: "<W> access" by default, or another policy of the workspace
+   *  picked in the Settings column (`?policy=`, the pages under Features). */
+  editedPolicy?: string | null;
   /** The workspace's name, for the words. */
   workspaceName?: string;
   api?: IamAdminApi;
@@ -156,6 +159,7 @@ export function WorkspaceOfferEditor({
   workspaceId,
   scope,
   policyId,
+  editedPolicy,
   workspaceName,
   api = DEFAULT_IAM_API,
   offerApi = DEFAULT_OFFER_API,
@@ -182,7 +186,7 @@ export function WorkspaceOfferEditor({
   const loadFeatures = useCallback(async () => {
     setFeaturesFailure(null);
     try {
-      setFeatures(await answered(featureApi.read(workspaceId)));
+      setFeatures(await answered(editedPolicy ? featureApi.read(workspaceId, editedPolicy) : featureApi.read(workspaceId)));
     } catch (e) {
       setFeatures(null);
       const refused = (e as { status?: number }).status === 403;
@@ -193,7 +197,7 @@ export function WorkspaceOfferEditor({
           : `The features could not be read: ${message(e, 'the platform did not answer')}.`,
       });
     }
-  }, [featureApi, workspaceId]);
+  }, [featureApi, workspaceId, editedPolicy]);
 
   // The offer shows as soon as it is read; its features and its modules' names follow (each
   // waited for at most READ_TIMEOUT_MS), never holding it back (UX-24).
@@ -207,7 +211,7 @@ export function WorkspaceOfferEditor({
       needsModules && scope ? publishersAt(scope) : Promise.resolve(),
     ]);
     try {
-      const read = await answered(offerApi.read(workspaceId));
+      const read = await answered(editedPolicy ? offerApi.read(workspaceId, editedPolicy) : offerApi.read(workspaceId));
       setOffer(read);
       setError(null);
       if (needsModules && !scope) await publishersAt(read.scope);
@@ -215,7 +219,7 @@ export function WorkspaceOfferEditor({
       setError(message(e, 'Could not read what this workspace offers.'));
     }
     await rest;
-  }, [api, loadFeatures, offerApi, scope, workspaceId, partsKey]);
+  }, [api, loadFeatures, offerApi, scope, workspaceId, partsKey, editedPolicy]);
 
   useEffect(() => {
     setNotice(null);
@@ -297,14 +301,18 @@ export function WorkspaceOfferEditor({
     void saveNow(async () => {
       const changes = offerChanges(offer.offered, { [draftKey(kind, module, name)]: on });
       if (changes.length === 0) return false;
-      setOffer(await offerApi.save(workspaceId, changes));
+      setOffer(await (editedPolicy ? offerApi.save(workspaceId, changes, editedPolicy) : offerApi.save(workspaceId, changes)));
       return true;
     }, `${label} ${on ? 'added to' : 'removed from'} the offer.`);
 
   const toggleSource = (id: string, label: string, on: boolean) =>
     void saveNow(async () => {
       if ((offer.offered.search_sources ?? []).includes(id) === on) return false;
-      setOffer(await offerApi.saveSearchSources(workspaceId, { [id]: on }));
+      setOffer(
+        await (editedPolicy
+          ? offerApi.saveSearchSources(workspaceId, { [id]: on }, editedPolicy)
+          : offerApi.saveSearchSources(workspaceId, { [id]: on })),
+      );
       return true;
     }, `${label} ${on ? 'added to' : 'removed from'} the offer.`);
 
@@ -312,7 +320,7 @@ export function WorkspaceOfferEditor({
     void saveNow(async () => {
       const changes = featureChanges(allFeatureRows, { [key]: on });
       if (changes.length === 0) return false;
-      const next = await featureApi.save(workspaceId, changes);
+      const next = await (editedPolicy ? featureApi.save(workspaceId, changes, editedPolicy) : featureApi.save(workspaceId, changes));
       const refused = next.errors ?? {};
       setFeatures(next);
       setFeatureErrors(refused);
@@ -322,7 +330,11 @@ export function WorkspaceOfferEditor({
   const chooseFileMode = (row: FileRow, mode: FileMode) =>
     void saveNow(async () => {
       if (mode === row.mode) return false;
-      setOffer(await offerApi.saveFiles(workspaceId, { [row.key]: mode }));
+      setOffer(
+        await (editedPolicy
+          ? offerApi.saveFiles(workspaceId, { [row.key]: mode }, editedPolicy)
+          : offerApi.saveFiles(workspaceId, { [row.key]: mode })),
+      );
       return true;
     }, `${row.label}: ${FILE_MODE_LABELS[mode]}.`);
 
@@ -333,7 +345,11 @@ export function WorkspaceOfferEditor({
   ) =>
     void saveNow(async () => {
       const next = modelsAfter(part, change);
-      setOffer(await offerApi.saveModels(workspaceId, next.models, next.default));
+      setOffer(
+        await (editedPolicy
+          ? offerApi.saveModels(workspaceId, next.models, next.default, editedPolicy)
+          : offerApi.saveModels(workspaceId, next.models, next.default)),
+      );
       return true;
     }, done);
 

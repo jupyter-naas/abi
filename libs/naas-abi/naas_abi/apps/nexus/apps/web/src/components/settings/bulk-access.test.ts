@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement, useState } from 'react';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { BulkAccessBar, SelectAllCell, SelectRowCell, bulkSkipped, useRowSelection } from './bulk-access';
+import { BulkAccessBar, BulkBar, SelectAllCell, SelectRowCell, bulkSkipped, onOffActions, useRowSelection } from './bulk-access';
 
 let mounted: Mounted | null = null;
 afterEach(async () => {
@@ -79,5 +79,47 @@ describe('batch changes of access', () => {
   it('says which rows a level does not fit', () => {
     expect(bulkSkipped(3, 1, 'feature')).toBe('1 of the 3 features cannot take this level and stays as it is.');
     expect(bulkSkipped(3, 0, 'feature')).toBeNull();
+    expect(bulkSkipped(2, 1, 'skill', 'this change')).toBe('1 of the 2 skills cannot take this change and stays as it is.');
+  });
+
+  it('switches the selected rows of an on/off column on or off, asked first, in the words of the page', async () => {
+    const actions = onOffActions({ on: 'Enable', off: 'Disable' });
+    expect(actions.map((a) => [a.id, a.label, a.confirm])).toEqual([
+      ['on', 'Enable', 'Enable'],
+      ['off', 'Disable', 'Disable'],
+    ]);
+    expect(actions[1].question(2, 'skills')).toBe('Disable 2 skills?');
+
+    const applied: string[] = [];
+    function OnOff() {
+      const selection = useRowSelection(['a', 'b']);
+      return createElement(
+        'div',
+        null,
+        createElement('table', null, createElement('tbody', null, createElement('tr', null, createElement(SelectRowCell, { selection, rowKey: 'a', label: 'a' }), createElement(SelectRowCell, { selection, rowKey: 'b', label: 'b' })))),
+        createElement(BulkBar, {
+          selection,
+          noun: 'skill',
+          actions,
+          onApply: (id: string) => {
+            applied.push(id);
+          },
+          skippedFor: () => 1,
+          change: 'this change',
+        }),
+      );
+    }
+    mounted = await mount(OnOff, {});
+    await mounted.click(mounted.host.querySelector('[data-select-row="a"]'));
+    await mounted.click(mounted.host.querySelector('[data-select-row="b"]'));
+    await mounted.click(mounted.host.querySelector('[data-bulk-action="off"]'));
+    const dialog = document.querySelector('[data-bulk-confirm]');
+    expect(dialog?.textContent).toContain('Disable 2 skills?');
+    expect(dialog?.textContent).toContain('1 of the 2 skills cannot take this change');
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('[data-bulk-confirm] button')].find((b) => b.textContent === 'Disable')!;
+    await mounted.click(confirm);
+    await mounted.flush();
+    expect(applied).toEqual(['off']);
+    expect(mounted.host.querySelector('[data-bulk-bar]')).toBeNull();
   });
 });

@@ -1,10 +1,12 @@
 'use client';
 
+import { Suspense } from 'react';
 import { usePathname } from 'next/navigation';
 import { activeSettingsHref, type SettingsLevel } from './settings-levels';
 import { SettingsLayoutNav } from './settings-layout-nav';
 import { SettingsNavItem } from './settings-shell';
 import { SettingsScopeSwitcher } from './settings-scope-switcher';
+import { WorkspacePolicyNav, type PolicyNav } from './settings-policy-picker';
 
 /** A count on a link that wants attention, and what it counts. */
 export type SettingsLinkBadge = { text: string; title: string };
@@ -24,18 +26,20 @@ export function SettingsLevelsNav({
 }) {
   const pathname = usePathname() ?? '';
   const active = level ? activeSettingsHref([level], pathname) : null;
+  // A workspace's column: the policy its Features and Access pages set (`?policy=`), picked under
+  // the Features heading and carried by their links.
+  const workspaceId = level?.id === 'workspace' ? level.index.split('/')[2] : null;
 
-  return (
-    <SettingsLayoutNav title={level?.label ?? 'Settings'} resizable={!mobileList}>
-      {(level?.id === 'workspace' || level?.id === 'organization') && <SettingsScopeSwitcher />}
-      {level?.groups.map((group, index) => (
+  const groups = (policy: PolicyNav | null) =>
+    level?.groups.map((group, index) => (
         <div key={group.label ?? index} className="settings-level-group">
           {group.label && <h2 className="settings-level-group-title">{group.label}</h2>}
+          {policy?.picker(group)}
           <ul className="settings-layout-nav-list">
-            {group.links.map((link) => (
+            {(policy ? policy.links(group) : group.links).map((link) => (
               <SettingsNavItem
                 key={link.href}
-                href={link.href}
+                href={policy ? policy.href(link.href) : link.href}
                 label={link.label}
                 icon={link.icon}
                 active={link.href === active}
@@ -47,7 +51,18 @@ export function SettingsLevelsNav({
             ))}
           </ul>
         </div>
-      ))}
+      ));
+
+  return (
+    <SettingsLayoutNav title={level?.label ?? 'Settings'} resizable={!mobileList}>
+      {(level?.id === 'workspace' || level?.id === 'organization') && <SettingsScopeSwitcher />}
+      {workspaceId ? (
+        <Suspense fallback={groups(null)}>
+          <WorkspacePolicyNav workspaceId={workspaceId}>{(policy) => groups(policy)}</WorkspacePolicyNav>
+        </Suspense>
+      ) : (
+        groups(null)
+      )}
     </SettingsLayoutNav>
   );
 }

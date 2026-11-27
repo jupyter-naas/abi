@@ -109,3 +109,46 @@ export function resourceExportRow(kind: ResourceKind, row: ResourceRow): string[
   const access = kind === 'ontologies' ? [yesNo(row.enabled)] : [yesNo(row.readable), yesNo(row.editable)];
   return [row.name, row.id, row.description, ...access, availabilityLabel(row)];
 }
+
+/** What a graph is given: to read, to read and edit, or nothing. */
+export type GraphLevel = 'read' | 'edit' | 'none';
+export const GRAPH_LEVEL_LABELS: Record<GraphLevel, string> = {
+  read: 'Read',
+  edit: 'Read and edit',
+  none: 'No access',
+};
+
+/** The policy with each of `ids` enabled (or not): Settings › Ontologies. */
+export function withOntologies(policy: ResourcePolicy, ids: readonly string[], on: boolean): ResourcePolicy {
+  const enabled = new Set(policy.enabled ?? []);
+  for (const id of ids) {
+    if (on) enabled.add(id);
+    else enabled.delete(id);
+  }
+  return { ...policy, enabled: [...enabled] };
+}
+
+/** The policy with each of `ids` given `level`: editing reads too, and reading no more stops editing. */
+export function withGraphLevel(policy: ResourcePolicy, ids: readonly string[], level: GraphLevel): ResourcePolicy {
+  const read = new Set(policy.read ?? []);
+  const write = new Set(policy.write ?? []);
+  for (const id of ids) {
+    if (level === 'none') {
+      read.delete(id);
+      write.delete(id);
+    } else {
+      read.add(id);
+      if (level === 'edit') write.add(id);
+      else write.delete(id);
+    }
+  }
+  return { ...policy, read: [...read], write: [...write] };
+}
+
+/** Whether a row can take `level` here: a graph read through "every graph" or as the
+ *  workspace's own is not given one by one, and the schema graph is never edited. */
+export function graphLevelFits(row: ResourceRow, level: GraphLevel, policy: ResourcePolicy): boolean {
+  if (row.ownedIncluded) return false;
+  if (level === 'edit') return !row.read_only;
+  return !policy.read_all;
+}

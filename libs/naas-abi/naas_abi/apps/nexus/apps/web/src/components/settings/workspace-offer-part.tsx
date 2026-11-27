@@ -13,17 +13,27 @@ export function WorkspaceOfferPart({
   parts,
   description,
   onChanged,
+  policyId = null,
 }: {
   workspaceId: string;
   parts: readonly OfferPart[];
-  description: string;
+  /** Under the section's title; the page's header says it when left out. */
+  description?: string;
   /** Told after each change, e.g. to read the page's list again. */
   onChanged?: () => void;
+  /** The policy picked in the Settings column (`?policy=`); "<W> access" when null. */
+  policyId?: string | null;
 }) {
   return (
-    <Card title="Offered in this workspace" description={description}>
+    <Card title={policyId ? 'Granted by the policy picked' : 'Offered in this workspace'} description={description}>
       <div data-offer-part={parts.join(' ')}>
-        <WorkspaceOfferEditor workspaceId={workspaceId} parts={parts} bare onChanged={onChanged} />
+        <WorkspaceOfferEditor
+          workspaceId={workspaceId}
+          parts={parts}
+          bare
+          onChanged={onChanged}
+          editedPolicy={policyId}
+        />
       </div>
     </Card>
   );

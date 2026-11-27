@@ -957,14 +957,29 @@ class FeatureAccessService:
         _log.info(f"Offer of {workspace_id} changed: {detail}")
         return state
 
+    async def _edited_id(self, container: str, record: Any, policy_id: str | None) -> str | None:
+        """The id of the policy a page writes: "<W> access" by default, or another policy
+        of the workspace (``_target``: the settings column's Policy picker)."""
+        access_id = getattr(record, "access_policy_id", None)
+        if not policy_id or policy_id == access_id:
+            return access_id
+        target = await run_in_threadpool(self._target, container, access_id, policy_id)
+        return target.id if target is not None else None
+
     async def save_search_sources(
-        self, user: Any, workspace_id: str, changes: Mapping[str, bool]
+        self,
+        user: Any,
+        workspace_id: str,
+        changes: Mapping[str, bool],
+        policy_id: str | None = None,
     ) -> dict[str, Any]:
         """Offer (or stop offering) search sources (``search.sources``), in one write
-        of "<W> access" as the caller: as ``save_offer``, IAM refuses a source the
-        caller does not hold (403) or one beyond the organization's offer (422)."""
+        of "<W> access" (or ``policy_id``, another policy of the workspace) as the
+        caller: as ``save_offer``, IAM refuses a source the caller does not hold (403)
+        or one beyond the organization's offer (422)."""
         check_source_changes(changes)
-        _container, record = await self._where(workspace_id)
+        container, record = await self._where(workspace_id)
+        edited = await self._edited_id(container, record, policy_id)
 
         def apply(offer: Offer) -> Offer:
             on = {s for s, offered in changes.items() if offered}
@@ -974,24 +989,30 @@ class FeatureAccessService:
         await self._set_offer(
             user,
             workspace_id,
-            getattr(record, "access_policy_id", None),
+            edited,
             "workspace-offer.search-sources",
             workspace_id,
             apply,
         )
         detail = ",".join(f"{'+' if v else '-'}{k}" for k, v in sorted(changes.items()))
         _log.info(f"Search sources of {workspace_id} changed: {detail}")
-        return await self.read_offer(user, workspace_id)
+        return await self.read_offer(user, workspace_id, policy_id)
 
     async def set_files(
-        self, user: Any, workspace_id: str, changes: Mapping[str, str]
+        self,
+        user: Any,
+        workspace_id: str,
+        changes: Mapping[str, str],
+        policy_id: str | None = None,
     ) -> dict[str, Any]:
         """Give the workspace's people Organization, Platform or System Files
         (``{section: mode}``), in one write of "<W> access" as the caller: IAM refuses
         a section the change widens that the caller does not hold (403); narrowing or
-        removing one needs only the right to change the policy. Answers the offer after."""
+        removing one needs only the right to change the policy. ``policy_id``: another
+        policy of the workspace, written so instead. Answers the offer after."""
         check_file_changes(changes)
         container, record = await self._where(workspace_id)
+        edited = await self._edited_id(container, record, policy_id)
         organization = org_of(container)
         if organization is None and changes.get(ORG_FILES, OFF) != OFF:
             raise ValueError(
@@ -1006,17 +1027,22 @@ class FeatureAccessService:
         await self._set_offer(
             user,
             workspace_id,
-            getattr(record, "access_policy_id", None),
+            edited,
             "workspace-offer.files",
             workspace_id,
             apply,
             detail=",".join(f"{k}={v}" for k, v in sorted(changes.items())),
         )
         _log.info(f"Files given by {workspace_id}: {dict(sorted(changes.items()))}")
-        return await self.read_offer(user, workspace_id)
+        return await self.read_offer(user, workspace_id, policy_id)
 
     async def set_models(
-        self, user: Any, workspace_id: str, models: Sequence[str], default: str | None
+        self,
+        user: Any,
+        workspace_id: str,
+        models: Sequence[str],
+        default: str | None,
+        policy_id: str | None = None,
     ) -> dict[str, Any]:
         """The chat models the workspace uses (``*``: every model its people's model
         sets allow) and its default model, which a model it does not offer is switched
@@ -1027,18 +1053,19 @@ class FeatureAccessService:
         from naas_abi.apps.nexus.apps.api.app.services.iam.workspace_models import validated
 
         wanted, wanted_default = validated(models, default)
-        _container, record = await self._where(workspace_id)
+        container, record = await self._where(workspace_id)
+        edited = await self._edited_id(container, record, policy_id)
         await self._set_offer(
             user,
             workspace_id,
-            getattr(record, "access_policy_id", None),
+            edited,
             "workspace-offer.models",
             workspace_id,
             lambda offer: replace(offer, models=wanted, default_model=wanted_default),
             detail=f"models={','.join(sorted(wanted))},default={wanted_default or '-'}",
         )
         _log.info(f"Models of {workspace_id}: {sorted(wanted)}, default {wanted_default}")
-        return await self.read_offer(user, workspace_id)
+        return await self.read_offer(user, workspace_id, policy_id)
 
     async def set_ontologies(self, user: Any, workspace_id: str, refs: Sequence[str]) -> Offer:
         """The ontology files the workspace offers (Settings › Ontologies, by ref), in one
@@ -1072,13 +1099,18 @@ class FeatureAccessService:
         record = await self._defaults_of(org_container(org))
         return getattr(record, "access_policy_id", None)
 
-    async def read_datasets(self, user: Any, workspace_id: str) -> dict[str, Any]:
+    async def read_datasets(
+        self, user: Any, workspace_id: str, policy_id: str | None = None
+    ) -> dict[str, Any]:
         """The dataset namespaces of the deployment and whether the workspace (or the
         organization: ``workspace_id`` its container) uses each: every one unless "<W>
         access" (or "<O> access" above it) closes it; and whether the caller may change
-        them."""
+        them. ``policy_id``: another policy of the workspace, what it closes for its
+        holders; the namespaces "<W> access" (or the organization) closes are closed above
+        it."""
         container, record = await self._where(workspace_id)
         access_id = getattr(record, "access_policy_id", None)
+        edited_id = await self._edited_id(container, record, policy_id)
         ceiling_id = await self._ceiling_id(container, workspace_id)
         session = self._gateway.bind(user)
         tables: list[tuple[str, str]] = []
@@ -1094,19 +1126,33 @@ class FeatureAccessService:
 
         def snapshot() -> dict[str, Any]:
             access = self._gateway.policy(access_id) if access_id else None
-            above = self._gateway.policy(ceiling_id) if ceiling_id else None
-            offer = offer_of(access.document) if access is not None else Offer()
-            above_closed = offer_of(above.document).datasets_closed if above else frozenset()
+            org_above = self._gateway.policy(ceiling_id) if ceiling_id else None
+            if not edited_id:
+                edited = None
+            elif edited_id == access_id:
+                edited = access
+            else:
+                edited = self._gateway.policy(edited_id)
+            offer = offer_of(edited.document) if edited is not None else Offer()
+            above_closed = (
+                offer_of(org_above.document).datasets_closed if org_above else frozenset()
+            )
+            # Another policy works within "<W> access": what the workspace closes is closed above.
+            above = org_above
+            if edited is not None and access is not None and edited.id != access.id:
+                above_closed = above_closed | offer_of(access.document).datasets_closed
+                above = access
             editable = (
-                access is not None
+                edited is not None
                 and session.authorize(
-                    "iam:UpdatePolicy", policy_resource(access.id, container)
+                    "iam:UpdatePolicy", policy_resource(edited.id, container)
                 ).allowed
             )
             return {
                 "workspace_id": workspace_id,
                 "scope": container,
                 "access_policy": _ref(access) if access is not None else None,
+                "policy": _ref(edited) if edited is not None else None,
                 "ceiling": _ref(above) if above is not None else None,
                 "editable": editable,
                 "rows": dataset_rows(
@@ -1122,13 +1168,19 @@ class FeatureAccessService:
         return await run_in_threadpool(snapshot)
 
     async def set_datasets(
-        self, user: Any, workspace_id: str, changes: Mapping[str, bool]
+        self,
+        user: Any,
+        workspace_id: str,
+        changes: Mapping[str, bool],
+        policy_id: str | None = None,
     ) -> dict[str, Any]:
         """Use (or stop using) dataset namespaces (``{namespace: offered}``), in one write
         of "<W> access" (or "<O> access") as the caller: closing writes the namespace in
         ``OfferDatasetsDeny``, reopening takes it out (any spelling). A namespace the
         organization closes is not reopened here (``ValueError``: 422); IAM's own rules
-        apply to the write. Answers the datasets after."""
+        apply to the write. ``policy_id``: another policy of the workspace, within "<W>
+        access" (a namespace it closes is not reopened there either). Answers the datasets
+        after."""
         if not changes:
             raise ValueError("Name a dataset namespace to change")
         bad = [ns for ns in changes if not given_datasets.valid_namespace(ns)]
@@ -1136,15 +1188,23 @@ class FeatureAccessService:
             raise ValueError(f"Not a dataset namespace: {', '.join(sorted(bad))}")
         container, record = await self._where(workspace_id)
         access_id = getattr(record, "access_policy_id", None)
+        edited_id = await self._edited_id(container, record, policy_id)
         ceiling_id = await self._ceiling_id(container, workspace_id)
-        if ceiling_id and any(changes.values()):
-            above = await run_in_threadpool(self._gateway.policy, ceiling_id)
-            closed_above = {ns.lower() for ns in offer_of(above.document).datasets_closed}
-            blocked = sorted(ns for ns, on in changes.items() if on and ns.lower() in closed_above)
-            if blocked:
-                raise ValueError(
-                    f"{', '.join(blocked)}: not offered by {above.name}; open it there first."
+        # The policies above the one written: the organization's, and "<W> access" for another.
+        ceilings = [ceiling_id] if ceiling_id else []
+        if access_id and edited_id != access_id:
+            ceilings.append(access_id)
+        if ceilings and any(changes.values()):
+            for above_id in ceilings:
+                above = await run_in_threadpool(self._gateway.policy, above_id)
+                closed_above = {ns.lower() for ns in offer_of(above.document).datasets_closed}
+                blocked = sorted(
+                    ns for ns, on in changes.items() if on and ns.lower() in closed_above
                 )
+                if blocked:
+                    raise ValueError(
+                        f"{', '.join(blocked)}: not offered by {above.name}; open it there first."
+                    )
 
         def change(offer: Offer) -> Offer:
             closed = set(offer.datasets_closed)
@@ -1157,14 +1217,14 @@ class FeatureAccessService:
         await self._set_offer(
             user,
             workspace_id,
-            access_id,
+            edited_id,
             "workspace-offer.datasets",
             workspace_id,
             change,
             detail=",".join(f"{'+' if on else '-'}{ns}" for ns, on in sorted(changes.items())),
         )
         _log.info(f"Datasets of {workspace_id}: {dict(changes)}")
-        return await self.read_datasets(user, workspace_id)
+        return await self.read_datasets(user, workspace_id, policy_id)
 
     async def _ontology_listing(self, user: Any, workspace_id: str) -> OntologyListing | str | None:
         """The deployment's ontology files and those the caller may assign; None where

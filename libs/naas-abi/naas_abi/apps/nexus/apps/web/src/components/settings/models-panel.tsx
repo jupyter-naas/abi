@@ -38,6 +38,7 @@ import {
   type ModelRow,
   type Provider,
 } from './models-panel-model';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
 const getApiBase = () => getApiUrl();
 
@@ -51,6 +52,8 @@ const COLUMN_STORAGE_KEY = 'models-panel-visible-columns-v2';
  * Columns menu picks the columns shown; a row opens its model.
  */
 export function ModelsPanel() {
+  // Links keep the policy picked in the Settings column (`?policy=`).
+  const policyHref = usePolicyHref();
   const router = useRouter();
   const params = useParams();
   const workspaceId = (params?.workspaceId as string | undefined) ?? '';
@@ -159,7 +162,7 @@ export function ModelsPanel() {
     const base = workspaceId
       ? `/workspace/${workspaceId}/settings/models`
       : '/settings/models';
-    router.push(`${base}/${encodeURIComponent(model.canonical_id)}`);
+    router.push(policyHref(`${base}/${encodeURIComponent(model.canonical_id)}`));
   };
 
   const exportShown = (format: UsersExportFormat) => {

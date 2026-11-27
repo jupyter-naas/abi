@@ -59,9 +59,10 @@ afterEach(async () => {
   mounted = null;
 });
 
-async function render(offerApi: Partial<OfferApi>, featureApi: Partial<FeatureAccessApi>) {
+async function render(offerApi: Partial<OfferApi>, featureApi: Partial<FeatureAccessApi>, policyId: string | null = null) {
   mounted = await mount(WorkspaceFiles, {
     workspaceId: 'ws1',
+    policyId,
     offerApi: offerApi as OfferApi,
     featureApi: featureApi as FeatureAccessApi,
   });
@@ -71,6 +72,8 @@ async function render(offerApi: Partial<OfferApi>, featureApi: Partial<FeatureAc
 
 const choice = (m: Mounted, files: string, value: string) =>
   m.host.querySelector(`[data-files="${files}"] [data-choice="${value}"]`) as HTMLButtonElement | null;
+const saveButton = (m: Mounted) => m.host.querySelector('[data-action="save"]') as HTMLButtonElement;
+const bar = (m: Mounted) => m.host.querySelector('.org-settings-general-draft');
 
 describe('WorkspaceFiles', () => {
   it('shows every kind of files in one place: Workspace, Organization, Platform, System and My Files', async () => {
@@ -91,9 +94,12 @@ describe('WorkspaceFiles', () => {
     expect(choice(m, 'system_files', 'write')).toBeNull();
     expect(choice(m, 'system_files', 'read')?.disabled).toBe(true);
     expect(m.host.textContent).toContain('Viewers read theirs');
+    // The header of the pages under Features: its title and one total.
+    expect(m.host.querySelector('h2')?.textContent).toBe('Files');
+    expect(m.host.textContent).toContain('5 kinds of files');
   });
 
-  it('turns Workspace Files off through the feature, and a file section to another mode through the offer', async () => {
+  it('is a form: changes wait for Save, faded until something changes, with the unsaved bar', async () => {
     const saveFeatures = vi.fn().mockResolvedValue(features([featureRow({ choice: 'nobody' })]));
     const saveFiles = vi.fn().mockResolvedValue(
       offer([FILES[0], { ...FILES[1], mode: 'write' }, FILES[2]]),
@@ -102,16 +108,50 @@ describe('WorkspaceFiles', () => {
       { read: vi.fn().mockResolvedValue(offer(FILES)), saveFiles },
       { read: vi.fn().mockResolvedValue(features([featureRow()])), save: saveFeatures },
     );
-    await m.click(choice(m, 'workspace', 'nobody'));
-    await m.flush();
-    expect(saveFeatures).toHaveBeenCalledWith('ws1', [{ feature: 'files', choice: 'nobody' }]);
-    expect(choice(m, 'workspace', 'nobody')?.getAttribute('aria-checked')).toBe('true');
+    expect(saveButton(m).disabled).toBe(true);
+    expect(saveButton(m).className).toContain('org-settings-primary-button');
+    expect(bar(m)).toBeNull();
 
+    await m.click(choice(m, 'workspace', 'nobody'));
     await m.click(choice(m, 'platform_files', 'write'));
-    await m.flush();
-    expect(saveFiles).toHaveBeenCalledWith('ws1', { platform_files: 'write' });
+    expect(choice(m, 'workspace', 'nobody')?.getAttribute('aria-checked')).toBe('true');
     expect(choice(m, 'platform_files', 'write')?.getAttribute('aria-checked')).toBe('true');
-    expect(m.host.querySelector('[data-files-notice]')?.textContent).toBe('Platform Files: Read and write.');
+    expect(saveFeatures).not.toHaveBeenCalled();
+    expect(bar(m)?.textContent).toContain('Unsaved changes.');
+    expect(saveButton(m).disabled).toBe(false);
+
+    await m.click(saveButton(m));
+    await m.flush();
+    expect(saveFeatures).toHaveBeenCalledWith('ws1', [{ feature: 'files', choice: 'nobody' }], null);
+    expect(saveFiles).toHaveBeenCalledWith('ws1', { platform_files: 'write' }, null);
+    expect(choice(m, 'platform_files', 'write')?.getAttribute('aria-checked')).toBe('true');
+    expect(bar(m)).toBeNull();
+    expect(saveButton(m).disabled).toBe(true);
+  });
+
+  it('reads and saves the policy picked in the Settings column', async () => {
+    const read = vi.fn().mockResolvedValue(offer(FILES));
+    const readFeatures = vi.fn().mockResolvedValue(features([featureRow()]));
+    const saveFiles = vi.fn().mockResolvedValue(offer(FILES));
+    const m = await render({ read, saveFiles }, { read: readFeatures }, 'pol_g');
+    expect(read).toHaveBeenCalledWith('ws1', 'pol_g');
+    expect(readFeatures).toHaveBeenCalledWith('ws1', 'pol_g');
+    await m.click(choice(m, 'org_files', 'off'));
+    await m.click(saveButton(m));
+    await m.flush();
+    expect(saveFiles).toHaveBeenCalledWith('ws1', { org_files: 'off' }, 'pol_g');
+  });
+
+  it('discards the changes, back to what the workspace holds', async () => {
+    const m = await render(
+      { read: vi.fn().mockResolvedValue(offer(FILES)) },
+      { read: vi.fn().mockResolvedValue(features([featureRow()])) },
+    );
+    await m.click(choice(m, 'org_files', 'off'));
+    expect(choice(m, 'org_files', 'off')?.getAttribute('aria-checked')).toBe('true');
+    await m.click(m.host.querySelector('.org-settings-general-draft-discard'));
+    expect(choice(m, 'org_files', 'read')?.getAttribute('aria-checked')).toBe('true');
+    expect(bar(m)).toBeNull();
   });
 
   it('says why a change was refused, and keeps what IAM did not let the caller change read-only', async () => {
@@ -126,7 +166,11 @@ describe('WorkspaceFiles', () => {
     expect(choice(m, 'platform_files', 'read')?.disabled).toBe(true);
     expect(m.host.textContent).toContain('Only a platform admin widens it.');
     await m.click(choice(m, 'workspace', 'nobody'));
+    await m.click(saveButton(m));
     await m.flush();
     expect(m.host.textContent).toContain('IAM does not let you give Files here.');
+    // The change refused stays, unsaved, beside why.
+    expect(choice(m, 'workspace', 'nobody')?.getAttribute('aria-checked')).toBe('true');
+    expect(bar(m)).not.toBeNull();
   });
 });

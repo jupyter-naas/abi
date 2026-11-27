@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { blankTopic } from '@/lib/search-topics';
 import { FEATURE_SCOPES, WEB_ENGINES } from '@/lib/search-scopes';
 import {
+  entrySwitchable,
   searchCellValues,
   searchEntries,
   searchExportRow,
@@ -62,5 +63,16 @@ describe('the rows of Settings › Search', () => {
 
   it('exports a row as the table shows it', () => {
     expect(searchExportRow(entries()[0]!)).toEqual(['People', 'people', 'Custom', 'Built-in', 'Yes']);
+  });
+
+  it('switches a row only for an editor, a feature on here, a topic saved', () => {
+    const drafts = new Set(['project']);
+    const all = entries({ featureOn: false });
+    const byId = (id: string) => all.find((e) => e.id === id)!;
+    expect(entrySwitchable(byId('people'), { canEdit: true, drafts })).toBe(true);
+    expect(entrySwitchable(byId('project'), { canEdit: true, drafts })).toBe(false);
+    expect(entrySwitchable(byId(FEATURE_SCOPES[0].id), { canEdit: true, drafts })).toBe(false);
+    expect(entrySwitchable(byId(`web.${WEB_ENGINES[0].id}`), { canEdit: true, drafts })).toBe(true);
+    expect(entrySwitchable(byId('people'), { canEdit: false, drafts })).toBe(false);
   });
 });

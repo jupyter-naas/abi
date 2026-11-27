@@ -23,6 +23,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import '@/app/organizations/[orgId]/settings/general/general.css';
 import { reloadWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { PolicyPicker } from '@/components/settings/policy-picker';
+import { usePolicyViewStore } from '@/components/settings/settings-policy-picker';
 import { BulkAccessBar, SelectAllCell, SelectRowCell, useRowSelection } from '@/components/settings/bulk-access';
 import { isOrgTarget } from '@/lib/access-model/target';
 import { AccessLevelChoice } from '@/components/settings/access-level-choice';
@@ -51,6 +52,7 @@ import {
   featureDescription,
   type FeatureColumnId,
 } from './feature-access-model';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
 const DEFAULT_API = createFeatureAccessApi();
 const DEFAULT_LEVELS_API = createAccessLevelsApi();
@@ -77,6 +79,7 @@ export function FeatureAccess({
   initialPolicy = null,
   onPolicyChange,
   pickerPrefix,
+  policyPicker = true,
 }: {
   workspaceId: string;
   api?: FeatureAccessApi;
@@ -88,7 +91,12 @@ export function FeatureAccess({
   onPolicyChange?: (policyId: string | null) => void;
   /** Before the Policy dropdown, in its row: Platform settings' Organization picker. */
   pickerPrefix?: ReactNode;
+  /** The Policy dropdown in the page; a workspace's Settings pick the policy in their column
+   *  (`SettingsPolicyPicker`, `?policy=`) and leave it out. */
+  policyPicker?: boolean;
 }) {
+  // Links keep the policy picked in the Settings column (`?policy=`).
+  const policyHref = usePolicyHref();
   const [policyId, setPolicyId] = useState<string | null>(initialPolicy);
   const [state, setState] = useState<FeatureAccessState | null>(null);
   const [error, setError] = useState('');
@@ -206,6 +214,8 @@ export function FeatureAccess({
           void useWorkspaceStore.getState().fetchWorkspaces();
           void reloadWorkspaceResources(workspaceId);
         }
+        // The column's Features group follows what the policy picked there grants.
+        if (!org) usePolicyViewStore.getState().forget(workspaceId);
       }
       const wanted = Object.fromEntries(
         Object.entries(plan.levels).filter(([key]) => !refused[key.slice('feature:'.length)])
@@ -289,16 +299,18 @@ export function FeatureAccess({
       />
 
       {/* The policy edited, under the page's words, at its left. */}
-      <div className="-mt-3 flex flex-wrap items-center justify-start gap-4" data-policy-picker="">
-        {pickerPrefix}
-        <PolicyPicker
-          policies={state?.policies}
-          current={edited ?? access}
-          value={edited?.id ?? access?.id}
-          onChange={pick}
-          disabled={saving || unsavedCount > 0}
-        />
-      </div>
+      {policyPicker ? (
+        <div className="-mt-3 flex flex-wrap items-center justify-start gap-4" data-policy-picker="">
+          {pickerPrefix}
+          <PolicyPicker
+            policies={state?.policies}
+            current={edited ?? access}
+            value={edited?.id ?? access?.id}
+            onChange={pick}
+            disabled={saving || unsavedCount > 0}
+          />
+        </div>
+      ) : null}
 
       {error && (
         <Notice tone="error" icon={<AlertCircle size={14} />}>
@@ -418,7 +430,7 @@ export function FeatureAccess({
                         {(() => {
                           const href = org ? null : featurePage(workspaceId, row.key);
                           return href ? (
-                            <Link href={href} className="text-xs text-primary hover:underline" data-action="configure">
+                            <Link href={policyHref(href)} className="text-xs text-primary hover:underline" data-action="configure">
                               Configure {row.label} →
                             </Link>
                           ) : null;

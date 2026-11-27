@@ -24,7 +24,11 @@ const SKILLS = vi.hoisted(() =>
   }),
 );
 
+const UPDATE = vi.hoisted(() => vi.fn(async (_id: string, _patch: Record<string, unknown>) => undefined));
+
 vi.mock('next/navigation', () => ({
+  // No policy picked: "<W> access" (`usePolicyHref` reads the URL).
+  useSearchParams: () => new URLSearchParams(),
   useParams: () => ({ workspaceId: 'ws-1' }),
   useRouter: () => ({ push: () => undefined }),
   usePathname: () => '/workspace/ws-1/settings/skills',
@@ -34,7 +38,7 @@ vi.mock('@/stores/skills', () => ({
     skillsByWorkspace: { 'ws-1': SKILLS },
     fetchSkills: async () => undefined,
     createSkill: async () => undefined,
-    updateSkill: async () => undefined,
+    updateSkill: UPDATE,
     deleteSkill: async () => undefined,
   }),
 }));
@@ -72,7 +76,9 @@ describe('Workspace settings › Skills', () => {
     // The search reaches every skill, not only the page shown.
     await m.type(q('input[placeholder="Search skills..."]'), 'zebra');
     expect(rows()).toEqual(['skill-37']);
-    expect(m.host.textContent).toContain('1 of 45 skills');
+    // One total in the badge, no count above the search.
+    expect(m.host.textContent).toContain('45 skills');
+    expect(m.host.textContent).not.toContain('1 of 45 skills');
 
     // The Enabled column filters on the status, and goes back to the first page.
     await m.type(q('input[placeholder="Search skills..."]'), '');
@@ -80,7 +86,7 @@ describe('Workspace settings › Skills', () => {
     expect(shown()).toMatch(/^Rows 21–/);
     await filterColumn(m, 'enabled', 'Enabled');
     expect(shown()).toBe('Rows 1–20 of 41');
-    expect(m.host.textContent).toContain('41 of 45 skills · 41 enabled');
+    expect(m.host.textContent).not.toContain('41 enabled');
 
     await m.click(q('[data-action="clear-filters"]'));
     expect(shown()).toBe('Rows 1–20 of 45');
@@ -102,5 +108,26 @@ describe('Workspace settings › Skills', () => {
     expect(mounted.host.querySelectorAll('[data-skill]')).toHaveLength(0);
     expect(mounted.host.textContent).toContain('No skills match the current search and filters');
     expect(mounted.host.querySelector('[data-action="export"]')).not.toBeNull();
+    expect([...mounted.host.querySelectorAll('button')].map((b) => b.textContent)).toContain('Create skill');
+  });
+
+  it('enables the skills selected in one step, asked first, and says so', async () => {
+    UPDATE.mockClear();
+    mounted = await mount(SkillsSettingsPage, {});
+    await filterColumn(mounted, 'enabled', 'Disabled');
+    await mounted.click(mounted.host.querySelector('[data-select-row="skill-42"]'));
+    await mounted.click(mounted.host.querySelector('[data-select-row="skill-43"]'));
+    await mounted.click(mounted.host.querySelector('[data-bulk-action="on"]'));
+    expect(document.querySelector('[data-bulk-confirm]')?.textContent).toContain('Enable 2 skills?');
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('[data-bulk-confirm] button')].find(
+      (b) => b.textContent === 'Enable',
+    )!;
+    await mounted.click(confirm);
+    await mounted.flush();
+    expect(UPDATE.mock.calls).toEqual([
+      ['skill-42', { enabled: true }],
+      ['skill-43', { enabled: true }],
+    ]);
+    expect(mounted.host.querySelector('[data-skills-notice]')?.textContent).toBe('2 skills enabled.');
   });
 });

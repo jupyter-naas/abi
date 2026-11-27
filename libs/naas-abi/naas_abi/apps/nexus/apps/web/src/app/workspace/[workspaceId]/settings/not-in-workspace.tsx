@@ -12,7 +12,7 @@ export function NotInWorkspace({ label }: { label: string }) {
     <EmptyState framed
       icon={<Blocks size={40} className="opacity-40" />}
       title={`${label} is not available to you in this workspace`}
-      description="Policies decide what you may use here, on Roles & permissions."
+      description="Policies decide what you may use here, in Access › Policies."
     />
   );
 }

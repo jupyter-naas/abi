@@ -38,9 +38,11 @@ export const topicsApi = {
    * source beyond the organization's offer, or one the caller does not hold. Answers the
    * sources the workspace no longer offers.
    */
-  setScopeEnabled: async (workspaceId: string, scopeId: string, enabled: boolean) => {
+  setScopeEnabled: async (workspaceId: string, scopeId: string, enabled: boolean, policyId?: string | null) => {
+    // `?policy=`: another policy of the workspace, picked in the Settings column.
+    const policy = policyId ? `?policy=${encodeURIComponent(policyId)}` : '';
     const response = await authFetch(
-      `${getApiUrl()}/api/workspaces/${encodeURIComponent(workspaceId)}/offer/search-sources`,
+      `${getApiUrl()}/api/workspaces/${encodeURIComponent(workspaceId)}/offer/search-sources${policy}`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
