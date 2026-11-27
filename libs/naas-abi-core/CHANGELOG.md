@@ -24,6 +24,17 @@
 
 <!-- version list -->
 
+## v6.4.3 (2026-11-27)
+
+### Bug Fixes
+
+- **idp**: The engine readies the built-in IdP at boot, no step after start
+  ([`00303fb`](https://github.com/jupyter-naas/abi/commit/00303fb04d54916e2d0c8bed9e9695d6feb38bf0))
+
+- **idp**: Warn when the engine cannot compute the built-in IdP's manifest
+  ([`8b9ead2`](https://github.com/jupyter-naas/abi/commit/8b9ead2b960b7abf0b065df9b8a077d7093a1d18))
+
+
 ## v6.4.2 (2026-11-27)
 
 ### Bug Fixes
