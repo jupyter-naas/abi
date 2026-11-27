@@ -1,3 +1,4 @@
+from naas_abi.apps.nexus.tenant_login_config import DEFAULT_LOGO_HEIGHT
 from pydantic import BaseModel, Field
 
 
@@ -32,4 +33,8 @@ class TenantResponse(BaseModel):
     show_terms_footer: bool
     show_powered_by: bool
     login_footer_text: str | None = None
+    login_heading: str | None = None
+    logo_height: int = DEFAULT_LOGO_HEIGHT
+    login_footer_link_label: str | None = None
+    login_footer_link_url: str | None = None
     apps: list[ExternalAppResponse] = Field(default_factory=list)

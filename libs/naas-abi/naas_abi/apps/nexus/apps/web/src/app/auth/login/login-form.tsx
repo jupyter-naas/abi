@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
 import { getApiUrl } from '@/lib/config';
+import { TenantFooter, TenantLogo } from '@/components/tenant-branding';
 
 function isLightColor(hex: string): boolean {
   const c = hex.replace('#', '');
@@ -154,35 +155,14 @@ export default function LoginForm() {
           color: textColor,
         }}
       >
-        {(tenant.logo_rectangle_url || tenant.logo_url || tenant.logo_emoji) && (
-          <div className="mb-6 flex items-center justify-center">
-            {tenant.logo_rectangle_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={tenant.logo_rectangle_url}
-                alt={tenant.tab_title}
-                className="h-12 max-w-full object-contain"
-              />
-            ) : tenant.logo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={tenant.logo_url}
-                alt={tenant.tab_title}
-                className="h-12 w-12 object-contain"
-                style={{ borderRadius: cardRadius }}
-              />
-            ) : (
-              <div
-                className="flex h-12 w-12 items-center justify-center text-white font-bold text-xl"
-                style={{ backgroundColor: primaryColor, borderRadius: cardRadius }}
-              >
-                {tenant.logo_emoji || 'N'}
-              </div>
-            )}
-          </div>
-        )}
+        <TenantLogo tenant={tenant} radius={cardRadius} primaryColor={primaryColor} emojiFallback />
         <div className="mb-6 text-center">
-          <TypingWelcome textColor={textColor} mutedColor={mutedTextColor} />
+          <h1 className="text-2xl font-bold leading-none" style={{ color: textColor }}>
+            {tenant.login_heading?.trim() || <TypingWelcome caretColor={textColor} />}
+          </h1>
+          <p className="mt-2 text-sm" style={{ color: mutedTextColor }}>
+            Sign in to continue
+          </p>
         </div>
 
         {ssoError && !error && (
@@ -325,11 +305,7 @@ export default function LoginForm() {
           Powered by NEXUS
         </p>
       )}
-      {tenant.login_footer_text && (
-        <p className="mt-4 text-center text-caption" style={{ color: subtitleColor }}>
-          {tenant.login_footer_text}
-        </p>
-      )}
+      <TenantFooter tenant={tenant} color={subtitleColor} className="mt-4" />
     </div>
   );
 }
@@ -377,7 +353,8 @@ const TYPING_WELCOME_PHRASES = [
   'Bem-vindo',
 ];
 
-function TypingWelcome({ textColor, mutedColor }: { textColor: string; mutedColor: string }) {
+/** The Welcome typewriter, in the login heading when `login_heading` is unset. */
+function TypingWelcome({ caretColor }: { caretColor: string }) {
   const phrases = TYPING_WELCOME_PHRASES;
 
   const [phraseIndex, setPhraseIndex] = useState(0);
@@ -418,21 +395,16 @@ function TypingWelcome({ textColor, mutedColor }: { textColor: string; mutedColo
 
   return (
     <>
-      <h1 className="text-2xl font-bold leading-none" style={{ color: textColor }}>
-        <span className="inline-block align-baseline">{display}</span>
-        <span
-          className="ml-0.5 inline-block w-[2px] align-baseline"
-          style={{
-            backgroundColor: textColor,
-            height: '0.9em',
-            transform: 'translateY(0.08em)',
-            opacity: caretOn ? 0.9 : 0,
-          }}
-        />
-      </h1>
-      <p className="mt-2 text-sm" style={{ color: mutedColor }}>
-        Sign in to continue
-      </p>
+      <span className="inline-block align-baseline">{display}</span>
+      <span
+        className="ml-0.5 inline-block w-[2px] align-baseline"
+        style={{
+          backgroundColor: caretColor,
+          height: '0.9em',
+          transform: 'translateY(0.08em)',
+          opacity: caretOn ? 0.9 : 0,
+        }}
+      />
     </>
   );
 }

@@ -3,6 +3,8 @@
  * (the `tenant:` block of the configuration). No React: the middleware reads the path.
  */
 
+import { DEFAULT_LOGO_HEIGHT } from '@/lib/tenant-logo';
+
 export const PLATFORM_GENERAL_PATH = '/settings/general';
 
 /** What `GET /api/tenant` answers (the fields this page shows). */
@@ -30,6 +32,10 @@ export interface SiteIdentity {
   show_terms_footer: boolean;
   show_powered_by: boolean;
   login_footer_text?: string | null;
+  login_heading?: string | null;
+  logo_height?: number | null;
+  login_footer_link_label?: string | null;
+  login_footer_link_url?: string | null;
 }
 
 export type SiteValue =
@@ -66,6 +72,11 @@ function image(value: string | null | undefined): SiteValue {
 function color(value: string | null | undefined): SiteValue {
   const trimmed = value?.trim();
   return trimmed ? { kind: 'color', color: trimmed } : { kind: 'unset' };
+}
+
+function url(value: string | null | undefined): SiteValue {
+  const trimmed = value?.trim();
+  return trimmed ? { kind: 'url', url: trimmed } : { kind: 'unset' };
 }
 
 function px(value: string | null | undefined): SiteValue {
@@ -108,6 +119,8 @@ export function siteIdentitySections(
         { key: 'logo_url', label: 'Square logo', value: image(site.logo_url) },
         { key: 'logo_rectangle_url', label: 'Wide logo', value: image(site.logo_rectangle_url) },
         { key: 'logo_emoji', label: 'Emoji', value: text(site.logo_emoji) },
+        // The API always answers a height (48 when the configuration leaves it out).
+        { key: 'logo_height', label: 'Logo height', value: { kind: 'text', text: `${site.logo_height ?? DEFAULT_LOGO_HEIGHT}px` } },
       ],
     },
     {
@@ -125,7 +138,10 @@ export function siteIdentitySections(
         { key: 'login_card_padding', label: 'Card padding', value: text(site.login_card_padding) },
         { key: 'font_family', label: 'Font', value: text(site.font_family) },
         { key: 'login_bg_image_url', label: 'Background image', value: image(site.login_bg_image_url) },
+        { key: 'login_heading', label: 'Heading', value: text(site.login_heading) },
         { key: 'login_footer_text', label: 'Footer text', value: text(site.login_footer_text) },
+        { key: 'login_footer_link_label', label: 'Footer link label', value: text(site.login_footer_link_label) },
+        { key: 'login_footer_link_url', label: 'Footer link', value: url(site.login_footer_link_url) },
         { key: 'show_terms_footer', label: 'Terms line', value: { kind: 'flag', on: site.show_terms_footer } },
         { key: 'show_powered_by', label: '"Powered by" line', value: { kind: 'flag', on: site.show_powered_by } },
       ],

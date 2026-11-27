@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, Loader2, LogOut } from 'lucide-react';
+import { TenantFooter, TenantLogo } from '@/components/tenant-branding';
 import { useTenant } from '@/contexts/tenant-context';
 import { clearAuthFlagCookie } from '@/lib/auth-session';
 import { authFetch, selectSession, useAuthStore } from '@/stores/auth';
@@ -137,7 +138,6 @@ export default function NoWorkspacePage() {
   const textColor = tenant.login_text_color || (cardIsLight ? '#1a1a1a' : '#ffffff');
   const mutedTextColor = cardIsLight ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)';
   const subtitleColor = cardIsLight ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.45)';
-  const logoUrl = tenant.logo_rectangle_url || tenant.logo_url;
 
   if (!authReady || checking) {
     return (
@@ -171,12 +171,7 @@ export default function NoWorkspacePage() {
           color: textColor,
         }}
       >
-        {logoUrl && (
-          <div className="mb-6 flex items-center justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={logoUrl} alt={tenant.tab_title} className="h-12 max-w-full object-contain" />
-          </div>
-        )}
+        <TenantLogo tenant={tenant} radius={radius} primaryColor={primaryColor} />
         <div className="mb-6 text-center">
           <h1 className="text-2xl font-bold leading-tight">No workspace yet</h1>
           <p className="mt-2 text-sm" style={{ color: mutedTextColor }}>
@@ -255,11 +250,7 @@ export default function NoWorkspacePage() {
           Sign out
         </button>
       </div>
-      {tenant.login_footer_text && (
-        <p className="mt-8 text-center text-caption" style={{ color: subtitleColor }}>
-          {tenant.login_footer_text}
-        </p>
-      )}
+      <TenantFooter tenant={tenant} color={subtitleColor} className="mt-8" />
     </div>
   );
 }

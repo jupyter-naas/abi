@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useRef, useState, type Dispatch, 
 import { getApiUrl } from '@/lib/config';
 import { applyTenantShellBranding } from '@/lib/tenant-shell';
 
-interface TenantConfig {
+export interface TenantConfig {
   apps: {
     name: string;
     url: string;
@@ -37,6 +37,10 @@ interface TenantConfig {
   show_terms_footer: boolean;
   show_powered_by: boolean;
   login_footer_text?: string | null;
+  login_heading?: string | null;
+  logo_height?: number | null;
+  login_footer_link_label?: string | null;
+  login_footer_link_url?: string | null;
 }
 
 const DEFAULT_TENANT: TenantConfig = {
@@ -65,6 +69,10 @@ const DEFAULT_TENANT: TenantConfig = {
   show_terms_footer: false,
   show_powered_by: true,
   login_footer_text: null,
+  login_heading: null,
+  logo_height: 48,
+  login_footer_link_label: null,
+  login_footer_link_url: null,
 };
 
 const TenantContext = createContext<TenantConfig>(DEFAULT_TENANT);
