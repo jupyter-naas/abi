@@ -146,17 +146,55 @@ def test_a_started_idp_is_left_alone(tmp_path: Path) -> None:
     assert ["up", "-d", "idp"] not in stack.calls
 
 
-def test_a_new_manifest_of_a_running_idp_is_approved(tmp_path: Path) -> None:
+def test_a_new_manifest_of_a_running_idp_waits_for_review(
+    tmp_path: Path, capsys
+) -> None:
+    # Once a version is in force, a newer one is an operator's to review:
+    # approving without review is the abi dev overlay's only (auto_approve).
     project = _project(tmp_path, env=f"{IDP_SERVICE_KEY}={KEY}\n")
     stack = FakeStack(
         accounts=(ACCOUNT,),
-        manifests=[("superseded", "aaa"), ("pending", "bbb")],
+        manifests=[("approved", "aaa"), ("pending", "bbb")],
     )
 
     _run(project, stack)
 
-    assert stack.manifests[-1] == ("approved", "bbb")
-    assert ["up", "-d", "idp"] not in stack.calls
+    assert stack.manifests == [("approved", "aaa"), ("pending", "bbb")]
+    assert not [c for c in stack.iam_calls() if c[:2] == ["module", "approve"]]
+    out = capsys.readouterr().out
+    assert "waits for review" in out
+    assert f"abi iam module show {ACCOUNT}" in out
+
+
+def test_a_rejected_manifest_is_reported_at_once(tmp_path: Path, capsys) -> None:
+    project = _project(tmp_path, env=f"{IDP_SERVICE_KEY}={KEY}\n")
+    stack = FakeStack(accounts=(ACCOUNT,), manifests=[("rejected", "ccc")])
+
+    _run(project, stack)
+
+    assert stack.lists == 1  # no 2-min wait on an operator's decision
+    assert not [c for c in stack.iam_calls() if c[:2] == ["module", "approve"]]
+    out = capsys.readouterr().out
+    assert "rejected" in out and "no permission manifest" not in out
+
+
+def test_an_unwritable_env_does_not_stop_the_stack(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    from naas_abi_cli.cli import stack_idp
+
+    def refuse(path, lines):
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(stack_idp, "_write", refuse)
+    project = _project(tmp_path)
+
+    _run(project, FakeStack())
+
+    out = capsys.readouterr()
+    assert "identity provider is not started" in out.out
+    assert "Permission denied" in out.out
+    assert KEY not in out.out and KEY not in out.err
 
 
 def test_no_manifest_in_time_says_what_to_check(tmp_path: Path, capsys) -> None:

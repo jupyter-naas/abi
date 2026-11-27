@@ -10,7 +10,9 @@ be reached right now". `abi stack start` now does it:
    the `abi` container (``abi iam``, which reaches the stack's IAM store) and
    writes it there, never printing it;
 2. starts `idp` again, so it reads the key;
-3. approves the idp account's pending manifest, and no other account's.
+3. approves the idp account's first manifest, and no other account's. A
+   newer version is left pending for an operator to review, as for any
+   module: approving without review is the abi dev overlay's only.
 
 A later start finds the key and an approved manifest and does nothing.
 """
@@ -110,17 +112,38 @@ def _approve(
     timeout: float,
     poll: float,
 ) -> bool:
-    """Approve ``account``'s pending manifest, waiting for the idp to submit
-    one when it has none yet. True once one is in force."""
+    """Approve ``account``'s first manifest, waiting for the idp to submit it.
+
+    Only the first: once a version is in force, a newer one is left pending
+    for an operator to review (`abi iam module show`), as for any module.
+    Approving without review is the abi dev overlay's (``auto_approve``), not a
+    Docker stack's. False when the idp submitted nothing in ``timeout``.
+    """
     waited = 0.0
     while True:
         states = _manifest_states(compose, account)
         pending = [sha for status, sha in states if status == "pending"]
+        if any(status == "approved" for status, _ in states):
+            if pending:
+                click.secho(
+                    f"{account}: a new permission manifest ({pending[-1]}) waits "
+                    f"for review: `abi iam module show {account}`, then "
+                    f"`abi iam module approve {account}` (or reject).",
+                    fg="yellow",
+                )
+            return True
         if pending:
             _abi_iam(compose, "module", "approve", account)
             click.echo(f"{account}: permissions approved ({pending[-1]})")
             return True
-        if any(status == "approved" for status, _ in states):
+        if states and states[-1][0] == "rejected":
+            # An operator's decision: said once, not waited on.
+            click.secho(
+                f"{account}: its permission manifest ({states[-1][1]}) was "
+                "rejected, so sign-in stays off until a version is approved "
+                f"(`abi iam module approve {account} --sha256 <sha256>`).",
+                fg="yellow",
+            )
             return True
         if waited >= timeout:
             return False
@@ -160,9 +183,12 @@ def bootstrap_idp(
                 f"`abi iam module approve {account}`.",
                 fg="yellow",
             )
-    except click.ClickException as exc:
+    except (click.ClickException, OSError) as exc:
+        # OSError: .env not writable (a container's, say). Its message names
+        # the file, never the key.
+        reason = exc.message if isinstance(exc, click.ClickException) else str(exc)
         click.secho(
-            f"The identity provider is not started ({exc.message}). By hand: "
+            f"The identity provider is not started ({reason}). By hand: "
             f"`abi iam service-account create {account} --key`, the key into .env "
             f"as {IDP_SERVICE_KEY}, `docker compose up -d idp`, then "
             f"`abi iam module approve {account}`.",
