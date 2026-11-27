@@ -24,6 +24,25 @@
 
 <!-- version list -->
 
+## v6.5.0 (2026-11-27)
+
+### Bug Fixes
+
+- **api**: The landing page links the docs only when the API serves them
+  ([`8477594`](https://github.com/jupyter-naas/abi/commit/84775949387f46bfdf79bf1409995b1c8879ef55))
+
+- **iam**: An organization's people see it, and nothing it holds
+  ([`a4b93eb`](https://github.com/jupyter-naas/abi/commit/a4b93eba8d7553aadb4a5955136991bc658a2d35))
+
+### Features
+
+- **iam**: A bound gives its container's people what it names outside it
+  ([`3ceb2d8`](https://github.com/jupyter-naas/abi/commit/3ceb2d84abf39658df492e4eb9451c4f2bbdfadd))
+
+- **nexus**: A workspace's offer names the chat models it uses, and its default
+  ([`a1f6bc8`](https://github.com/jupyter-naas/abi/commit/a1f6bc8ff71aaadf52279654710092a6b6f77152))
+
+
 ## v6.4.3 (2026-11-27)
 
 ### Bug Fixes
