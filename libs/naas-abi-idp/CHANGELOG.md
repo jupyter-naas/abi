@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.3.2 (2026-11-27)
+
+### Bug Fixes
+
+- **idp**: Send sign-in codes from the deployment's own mailbox
+  ([`a636703`](https://github.com/jupyter-naas/abi/commit/a63670301009bfdd7d50c5f9b34b0f1327660654))
+
+
 ## v0.3.1 (2026-11-23)
 
 ### Bug Fixes

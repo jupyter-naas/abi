@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi-idp"
-version = "0.3.1"
+version = "0.3.2"
 description = "The built-in OIDC identity provider of ABI: an SDK module that runs over NATS"
 requires-python = ">=3.10"
 # Core-free: the SDK, the proto package and what the provider itself needs.
