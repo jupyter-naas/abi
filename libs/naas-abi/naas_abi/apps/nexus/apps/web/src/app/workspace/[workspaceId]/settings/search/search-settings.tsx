@@ -50,6 +50,7 @@ import {
   SEARCH_COLUMNS, SEARCH_EXPORT_HEADERS, SOURCE_LABEL, entrySwitchable, searchCellValues, searchEntries, searchExportRow, searchSearchTexts,
   searchSortValue, type SearchEntry, type SearchGroup,
 } from './search-settings-model';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
 
 /** The batch actions: enable or disable the entries selected. */
@@ -69,14 +70,16 @@ export function searchTopicPath(workspaceId: string, topicId: string): string {
 }
 
 function SearchSettings({ selectedId }: { selectedId: string | null }) {
+  // Links keep the policy picked in the Settings column (`?policy=`).
+  const policyHref = usePolicyHref();
   const workspaceId = useParams().workspaceId as string;
   const router = useRouter();
   const search = useSearchParams();
   // A former link (`?topic=`) opens the topic's page.
   const legacyTopic = !selectedId ? search?.get('topic') : null;
   useEffect(() => {
-    if (legacyTopic) router.replace(searchTopicPath(workspaceId, legacyTopic));
-  }, [legacyTopic, router, workspaceId]);
+    if (legacyTopic) router.replace(policyHref(searchTopicPath(workspaceId, legacyTopic)));
+  }, [legacyTopic, router, workspaceId, policyHref]);
   // The policy picked in the Settings column (`?policy=`): the sources it grants are set here.
   const policy = policyOfSearch(search);
   const [policyDisabled, setPolicyDisabled] = useState<string[] | null>(null);
@@ -117,7 +120,7 @@ function SearchSettings({ selectedId }: { selectedId: string | null }) {
   const graphs = useWorkspaceGraphs(workspaceId);
   const base = `/workspace/${encodeURIComponent(workspaceId)}/settings/search`;
   const selected = selectedId ? topics.find(t => t.id === selectedId) || null : null;
-  const select = (id: string | null) => router.push(id ? searchTopicPath(workspaceId, id) : base, { scroll: false });
+  const select = (id: string | null) => router.push(policyHref(id ? searchTopicPath(workspaceId, id) : base), { scroll: false });
 
   const [toggling, setToggling] = useState<string | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);

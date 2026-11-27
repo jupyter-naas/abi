@@ -55,6 +55,7 @@ import {
   featureDescription,
   type FeatureColumnId,
 } from './feature-access-model';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
 const DEFAULT_API = createFeatureAccessApi();
 const DEFAULT_LEVELS_API = createAccessLevelsApi();
@@ -97,6 +98,8 @@ export function FeatureAccess({
    *  (`SettingsPolicyPicker`, `?policy=`) and leave it out. */
   policyPicker?: boolean;
 }) {
+  // Links keep the policy picked in the Settings column (`?policy=`).
+  const policyHref = usePolicyHref();
   const [policyId, setPolicyId] = useState<string | null>(initialPolicy);
   const [state, setState] = useState<FeatureAccessState | null>(null);
   const [error, setError] = useState('');
@@ -430,7 +433,7 @@ export function FeatureAccess({
                         {(() => {
                           const href = org ? null : featurePage(workspaceId, row.key);
                           return href ? (
-                            <Link href={href} className="text-xs text-primary hover:underline" data-action="configure">
+                            <Link href={policyHref(href)} className="text-xs text-primary hover:underline" data-action="configure">
                               Configure {row.label} →
                             </Link>
                           ) : null;

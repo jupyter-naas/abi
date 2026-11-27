@@ -42,7 +42,8 @@ describe('Workspace settings › Models', () => {
     expect(mounted.host.querySelector('h2')?.textContent).toBe('Models');
     expect(mounted.host.textContent).toContain('2 models');
     expect(mounted.host.textContent).not.toContain('PLATFORM CATALOG');
-    expect(mounted.host.querySelector('a[data-action="platform-models"]')?.getAttribute('href')).toBe('/settings/models');
+    // The catalog the models are picked from, in the workspace (each model opens its page).
+    expect(mounted.host.querySelector('a[data-action="model-catalog"]')?.getAttribute('href')).toBe('/workspace/ws-1/settings/models/catalog');
   });
 
   it('reads the policy picked in the Settings column', async () => {

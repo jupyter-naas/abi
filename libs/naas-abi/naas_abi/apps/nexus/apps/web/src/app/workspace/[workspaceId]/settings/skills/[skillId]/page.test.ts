@@ -26,6 +26,8 @@ const STORE = vi.hoisted(() => {
 });
 
 vi.mock('next/navigation', () => ({
+  // No policy picked: "<W> access" (`usePolicyHref` reads the URL).
+  useSearchParams: () => new URLSearchParams(),
   useParams: () => ({ workspaceId: 'ws-1', skillId: 'skill-1' }),
   useRouter: () => ({ push: () => undefined }),
   usePathname: () => '/workspace/ws-1/settings/skills/skill-1',

@@ -43,7 +43,9 @@ export const usePolicyViewStore = create<{
   views: {},
   load: (workspaceId, policyId, api = createFeatureAccessApi()) => {
     const key = viewKey(workspaceId, policyId);
-    if (get().views[key]) return;
+    // A failed read is read again next time, not kept.
+    const known = get().views[key];
+    if (known && known.status !== 'failed') return;
     set((s) => ({ views: { ...s.views, [key]: { status: 'loading' } } }));
     api.read(workspaceId, policyId).then(
       (state) => set((s) => ({ views: { ...s.views, [key]: { status: 'ready', state } } })),

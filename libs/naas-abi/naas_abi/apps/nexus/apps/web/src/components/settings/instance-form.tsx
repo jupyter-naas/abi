@@ -11,6 +11,7 @@ import { SettingsBackButton } from '@/components/settings/settings-ui';
 // The unsaved-changes bar of the General pages, and their Save button.
 import '@/app/organizations/[orgId]/settings/general/general.css';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
 /** Save (or Create): faded until `dirty`, "Saved!" a moment after. */
 export function FormSaveButton({
@@ -76,9 +77,11 @@ export function UnsavedBar({
 
 /** Back to the list an instance's page was opened from, above its header. */
 export function InstanceBack({ href, label }: { href: string; label: string }) {
+  // Back keeps the policy picked in the column (`?policy=`).
+  const policyHref = usePolicyHref();
   return (
     <div className="-mb-2">
-      <SettingsBackButton href={href} label={label} />
+      <SettingsBackButton href={policyHref(href)} label={label} />
     </div>
   );
 }

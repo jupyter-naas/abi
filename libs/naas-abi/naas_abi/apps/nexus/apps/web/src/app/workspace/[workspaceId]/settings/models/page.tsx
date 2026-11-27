@@ -7,7 +7,7 @@ import { SettingsLoading, SettingsPageHeader } from '@/components/settings/setti
 import { policyOfSearch } from '@/components/settings/settings-policy';
 import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { WorkspaceOfferPart } from '@/components/settings/workspace-offer-part';
-import { PLATFORM_MODELS_PATH } from '@/app/settings/lib/nav';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 import { createOfferApi, type ModelsPart } from '@/lib/access-model/workspace-offer';
 // The secondary button of Settings › Users.
 import '@/app/organizations/[orgId]/settings/users/users.css';
@@ -23,8 +23,8 @@ function modelsBadge(part: ModelsPart | undefined): string | undefined {
 
 /**
  * Settings › Models: the chat models this workspace's chats use, its part of the offer (or what
- * the policy picked in the Settings column grants, `?policy=`). The platform's catalog of models
- * is Platform › Models, linked from here.
+ * the policy picked in the Settings column grants, `?policy=`). The models they are picked from
+ * are the Model catalog (`models/catalog`), each opening its page.
  */
 export default function ModelsPage() {
   return (
@@ -37,6 +37,7 @@ export default function ModelsPage() {
 function Models() {
   const workspaceId = useParams()?.workspaceId as string | undefined;
   const policy = policyOfSearch(useSearchParams());
+  const policyHref = usePolicyHref();
   const [part, setPart] = useState<ModelsPart | undefined>(undefined);
 
   const load = useCallback(async () => {
@@ -60,12 +61,12 @@ function Models() {
         description={WORKSPACE_PAGE_DESCRIPTIONS['/settings/models']}
         actions={
           <Link
-            href={PLATFORM_MODELS_PATH}
+            href={policyHref(`/workspace/${workspaceId}/settings/models/catalog`)}
             className="org-settings-users-secondary-button"
-            data-action="platform-models"
-            title="Every model of the platform: Platform › Models"
+            data-action="model-catalog"
+            title="Every model the platform's AI modules bring, each with its page"
           >
-            Platform models
+            Model catalog
           </Link>
         }
       />

@@ -17,6 +17,7 @@ import { InstanceHeader } from '@/components/access/instance-header';
 import { FormSaveButton, InstanceBack, UnsavedBar } from '@/components/settings/instance-form';
 import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
 import { AGENT_ICONS, AGENT_ICON_OPTIONS } from '../agent-icons';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
 const NEW_AGENT = {
   name: '',
@@ -26,6 +27,8 @@ const NEW_AGENT = {
 };
 
 export default function NewAgentPage() {
+  // Links keep the policy picked in the Settings column (`?policy=`).
+  const policyHref = usePolicyHref();
   const workspaceId = useParams().workspaceId as string;
   const router = useRouter();
   const { addAgent } = useAgentsStore();
@@ -55,7 +58,7 @@ export default function NewAgentPage() {
         intentMappings: [],
       });
       draft.discard();
-      router.push(`${list}/${id}`);
+      router.push(policyHref(`${list}/${id}`));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create the agent.');
     } finally {

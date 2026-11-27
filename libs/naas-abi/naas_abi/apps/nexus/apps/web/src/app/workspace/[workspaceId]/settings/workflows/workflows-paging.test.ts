@@ -17,6 +17,8 @@ const ITEMS = vi.hoisted(() =>
 );
 
 vi.mock('next/navigation', () => ({
+  // No policy picked: "<W> access" (`usePolicyHref` reads the URL).
+  useSearchParams: () => new URLSearchParams(),
   useParams: () => ({ workspaceId: 'ws-1' }),
   usePathname: () => '/workspace/ws-1/settings/workflows',
 }));

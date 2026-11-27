@@ -60,6 +60,7 @@ import {
   EVERY_FEATURE, FEED_COLUMNS, FEED_EXPORT_HEADERS, LAYER_COLUMNS, feedCellValues, feedExportRow, feedSearchTexts,
   feedSortValue, layerCellValues, layerSearchTexts, layerSortValue, mapsFeedEntries, mapsLayerEntries,
 } from './maps-settings-model';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
 const NEW = 'new';
 /** The batch actions of the feeds table, and of a feed's layers. */
@@ -111,6 +112,8 @@ function layerDeleteBlock(layer: WorkspaceFeedLayer, siblings: number): string |
 }
 
 function MapsSettings({ selectedFeed, selectedLayer }: { selectedFeed: string | null; selectedLayer: string | null }) {
+  // Links keep the policy picked in the Settings column (`?policy=`).
+  const policyHref = usePolicyHref();
   const workspaceId = useParams().workspaceId as string;
   const router = useRouter();
   const search = useSearchParams();
@@ -118,8 +121,8 @@ function MapsSettings({ selectedFeed, selectedLayer }: { selectedFeed: string | 
   // A former link (`?feed=`, `?layer=`) opens the page it names.
   const legacy = !selectedFeed && !selectedLayer ? mapsSettingsLegacyPath(workspaceId, search) : null;
   useEffect(() => {
-    if (legacy) router.replace(legacy);
-  }, [legacy, router]);
+    if (legacy) router.replace(policyHref(legacy));
+  }, [legacy, router, policyHref]);
   const {
     all, hidden, hiddenFeeds, canEdit, workspaceLayouts: feeds, feedLayers, loading, error, layerGroups,
   } = useMapLayers();
@@ -135,7 +138,7 @@ function MapsSettings({ selectedFeed, selectedLayer }: { selectedFeed: string | 
   useEffect(() => { if (workspaceId) void loadLayouts(workspaceId, true); }, [workspaceId, loadLayouts]);
 
   const go = (options: Parameters<typeof mapsSettingsPath>[1]) =>
-    router.push(mapsSettingsPath(workspaceId, options), { scroll: false });
+    router.push(policyHref(mapsSettingsPath(workspaceId, options)), { scroll: false });
   const reload = () => loadLayouts(workspaceId, true);
 
   const layersByFeed = useMemo(() => {
@@ -305,7 +308,7 @@ function MapsSettings({ selectedFeed, selectedLayer }: { selectedFeed: string | 
             canEdit={canEdit}
             layerGroups={layerGroups}
             busyId={busyId}
-            onSavedGeoJson={(layerId) => router.push(mapsLayerPath(workspaceId, layerId))}
+            onSavedGeoJson={(layerId) => router.push(policyHref(mapsLayerPath(workspaceId, layerId)))}
             onSaved={async (saved) => {
               await reload();
               if (creating) go({ feed: saved.id });

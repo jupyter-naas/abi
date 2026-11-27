@@ -27,6 +27,8 @@ const SKILLS = vi.hoisted(() =>
 const UPDATE = vi.hoisted(() => vi.fn(async (_id: string, _patch: Record<string, unknown>) => undefined));
 
 vi.mock('next/navigation', () => ({
+  // No policy picked: "<W> access" (`usePolicyHref` reads the URL).
+  useSearchParams: () => new URLSearchParams(),
   useParams: () => ({ workspaceId: 'ws-1' }),
   useRouter: () => ({ push: () => undefined }),
   usePathname: () => '/workspace/ws-1/settings/skills',

@@ -30,11 +30,14 @@ import {
   skillSearchTexts,
   skillSortValue,
 } from './skills-model';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
 /** The batch actions: enable or disable the skills selected. */
 const BULK_ACTIONS = onOffActions({ on: 'Enable', off: 'Disable' });
 
 export default function SkillsSettingsPage() {
+  // Links keep the policy picked in the Settings column (`?policy=`).
+  const policyHref = usePolicyHref();
   const params = useParams();
   const router = useRouter();
   const workspaceId = params.workspaceId as string;
@@ -134,7 +137,7 @@ export default function SkillsSettingsPage() {
           <>
             <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
             {/* A page, as Create workspace: the skill's page opens once it is created. */}
-            <Button onClick={() => router.push(`/workspace/${workspaceId}/settings/skills/new`)} data-action="create">
+            <Button onClick={() => router.push(policyHref(`/workspace/${workspaceId}/settings/skills/new`))} data-action="create">
               <Plus size={16} />
               Create skill
             </Button>
@@ -200,7 +203,7 @@ export default function SkillsSettingsPage() {
                 <tr
                   key={skill.id}
                   data-skill={skill.slug}
-                  onClick={() => router.push(`/workspace/${workspaceId}/settings/skills/${skill.id}`)}
+                  onClick={() => router.push(policyHref(`/workspace/${workspaceId}/settings/skills/${skill.id}`))}
                   className="cursor-pointer"
                 >
                   <SelectRowCell

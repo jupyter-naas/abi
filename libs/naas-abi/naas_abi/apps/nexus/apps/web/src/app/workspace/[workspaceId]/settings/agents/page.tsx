@@ -42,8 +42,11 @@ import {
 } from './agents-model';
 
 import { AgentAvatar } from './agent-icons';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
 export default function AgentsPage() {
+  // Links keep the policy picked in the Settings column (`?policy=`).
+  const policyHref = usePolicyHref();
   const params = useParams();
   const router = useRouter();
   const workspaceId = params.workspaceId as string;
@@ -89,7 +92,7 @@ export default function AgentsPage() {
 
   const handleOpenAgentEditor = (agentId: string) => {
     if (!workspaceId) return;
-    router.push(`/workspace/${workspaceId}/settings/agents/${agentId}`);
+    router.push(policyHref(`/workspace/${workspaceId}/settings/agents/${agentId}`));
   };
 
   const handleDeleteAgent = async (id: string) => {
@@ -161,7 +164,7 @@ export default function AgentsPage() {
           <>
             <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
             {/* A page, as Create workspace: the agent's page opens once it is created. */}
-            <Button onClick={() => router.push(`/workspace/${workspaceId}/settings/agents/new`)} data-action="create">
+            <Button onClick={() => router.push(policyHref(`/workspace/${workspaceId}/settings/agents/new`))} data-action="create">
               <Plus size={16} />
               Create agent
             </Button>

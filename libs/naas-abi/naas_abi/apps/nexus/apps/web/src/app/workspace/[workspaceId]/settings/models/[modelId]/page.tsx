@@ -16,6 +16,7 @@ import {
   SettingsPageHeader,
   SettingsSection,
 } from '@/components/settings/settings-ui';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
 const getApiBase = () => getApiUrl();
 
@@ -61,6 +62,8 @@ function toForm(model: Model): EditableFields {
 }
 
 export default function ModelDetailPage() {
+  // Links keep the policy picked in the Settings column (`?policy=`).
+  const policyHref = usePolicyHref();
   const router = useRouter();
   const params = useParams();
   const workspaceId = (params?.workspaceId as string | undefined) ?? '';
@@ -76,7 +79,8 @@ export default function ModelDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
-  const backToList = `/workspace/${workspaceId}/settings/models`;
+  // Opened from the Model catalog: back to it.
+  const backToList = `/workspace/${workspaceId}/settings/models/catalog`;
 
   const load = useCallback(async () => {
     if (!modelId) return;
@@ -167,9 +171,9 @@ export default function ModelDetailPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Button variant="secondary" onClick={() => router.push(backToList)}>
+        <Button variant="secondary" onClick={() => router.push(policyHref(backToList))}>
           <ArrowLeft size={16} />
-          Back to models
+          Back to the catalog
         </Button>
       </div>
 

@@ -6,6 +6,8 @@ const NAV = vi.hoisted(() => ({ pushed: [] as string[] }));
 const CREATE = vi.hoisted(() => vi.fn(async (_ws: string, _input: Record<string, unknown>) => ({ id: 'skill-new' })));
 
 vi.mock('next/navigation', () => ({
+  // No policy picked: "<W> access" (`usePolicyHref` reads the URL).
+  useSearchParams: () => new URLSearchParams(),
   useParams: () => ({ workspaceId: 'ws-1' }),
   useRouter: () => ({ push: (to: string) => NAV.pushed.push(to) }),
   usePathname: () => '/workspace/ws-1/settings/skills/new',

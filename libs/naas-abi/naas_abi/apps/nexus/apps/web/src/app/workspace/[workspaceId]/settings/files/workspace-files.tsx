@@ -17,6 +17,7 @@ import type { FeatureAccessState, FeatureRow } from '../features/feature-access-
 // The unsaved-changes bar of the General pages, and their Save button.
 import '@/app/organizations/[orgId]/settings/general/general.css';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
+import { usePolicyViewStore } from '@/components/settings/settings-policy-picker';
 
 const DEFAULT_OFFER_API = createOfferApi();
 const DEFAULT_FEATURE_API = createFeatureAccessApi();
@@ -120,6 +121,8 @@ export function WorkspaceFiles({
           policyId
         );
         setFeatures(next);
+        // The column's Features group follows what the policy grants: read again.
+        usePolicyViewStore.getState().forget(workspaceId);
         const refused = next.errors?.[FILES_FEATURE];
         if (refused) throw new Error(refused);
       }

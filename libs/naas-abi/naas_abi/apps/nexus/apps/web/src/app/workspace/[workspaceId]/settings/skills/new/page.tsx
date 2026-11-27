@@ -13,6 +13,7 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { InstanceHeader } from '@/components/access/instance-header';
 import { FormSaveButton, InstanceBack, UnsavedBar } from '@/components/settings/instance-form';
 import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
+import { usePolicyHref } from '@/components/settings/use-policy-href';
 
 const NEW_SKILL: { name: string; slug: string; description: string; prompt: string; scope: string } = {
   name: '',
@@ -23,6 +24,8 @@ const NEW_SKILL: { name: string; slug: string; description: string; prompt: stri
 };
 
 export default function NewSkillPage() {
+  // Links keep the policy picked in the Settings column (`?policy=`).
+  const policyHref = usePolicyHref();
   const workspaceId = useParams().workspaceId as string;
   const router = useRouter();
   const { createSkill } = useSkillsStore();
@@ -47,7 +50,7 @@ export default function NewSkillPage() {
         scope: values.scope as SkillScope,
       });
       draft.discard();
-      router.push(`${list}/${skill.id}`);
+      router.push(policyHref(`${list}/${skill.id}`));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create the skill.');
     } finally {
