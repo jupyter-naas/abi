@@ -446,6 +446,9 @@ async def test_a_persons_access_is_read_by_their_iam_id_without_the_directory(ap
     assert by_principal.json() == by_account.json()
     assert by_principal.json()["user_id"] == "member"
     assert by_principal.json()["principal_id"] == principal
+    # Who it is, from the account: their IAM principal may carry no name or email.
+    assert by_principal.json()["name"] == "Member"
+    assert by_principal.json()["email"] == "member@example.com"
     assert unknown.status_code == 404
     assert refused.status_code == 403
 
