@@ -2,25 +2,21 @@
 
 import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, User, Cpu, Plus, Pencil, Trash2, Brain, Sparkles, Zap, Target, Search, CheckCircle, XCircle, Server } from 'lucide-react';
+import { Bot, Plus, Pencil, Trash2, CheckCircle, XCircle, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getLogoUrl } from '@/lib/logo-url';
 import { useIntegrationsStore } from '@/stores/integrations';
-import { SETTINGS_RECONCILE_MS, ensureAgentsSynced, useAgentsStore, type Agent } from '@/stores/agents';
+import { SETTINGS_RECONCILE_MS, ensureAgentsSynced, useAgentsStore } from '@/stores/agents';
 import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
-import { Input, Textarea } from '@/components/ui/input';
 import { useSettingsReloadGeneration } from '@/components/settings/settings-reload';
 import { ModuleLink } from '@/components/settings/module-link';
 import { usePageState } from '@/hooks/use-page-state';
 import {
   SettingsEmpty,
-  SettingsField,
   SettingsLoading,
   SettingsPageHeader,
-  SettingsSection,
   SettingsTableToolbar,
 } from '@/components/settings/settings-ui';
 import {
@@ -45,60 +41,25 @@ import {
   type AgentColumnId,
 } from './agents-model';
 
-const iconMap = {
-  bot: Bot,
-  user: User,
-  cpu: Cpu,
-  brain: Brain,
-  sparkles: Sparkles,
-  zap: Zap,
-  target: Target,
-  search: Search,
-};
-
-const iconOptions: Agent['icon'][] = ['user', 'bot', 'cpu', 'brain', 'sparkles', 'zap', 'target', 'search'];
-
-const NEW_AGENT = {
-  name: '',
-  description: '',
-  icon: 'sparkles' as Agent['icon'],
-  systemPrompt: 'You are a helpful AI assistant.',
-  providerId: null as string | null,
-};
-
-function AgentAvatar({ agent, size = 18 }: { agent: Agent; size?: number }) {
-  if (agent.logoUrl) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={getLogoUrl(agent.logoUrl)} alt={agent.name} className="h-full w-full object-cover" />;
-  }
-  const Icon = iconMap[agent.icon] || Sparkles;
-  return <Icon size={size} />;
-}
+import { AgentAvatar } from './agent-icons';
 
 export default function AgentsPage() {
   const params = useParams();
   const router = useRouter();
   const workspaceId = params.workspaceId as string;
   const [mounted, setMounted] = useState(false);
-  // Kept for a return to the page (lib/page-state.ts): the search, the filters and an unsaved new agent.
+  // Kept for a return to the page (lib/page-state.ts): the search and the filters.
   const pageKey = workspaceId ? { scope: `workspace:${workspaceId}`, page: 'agents' } : null;
-  const [showAddForm, setShowAddForm] = usePageState(pageKey && { ...pageKey, detail: 'add-form' }, false);
   const [keptSearch, setKeptSearch] = usePageState(pageKey && { ...pageKey, detail: 'search' }, '');
   const [keptFilters, setKeptFilters] = usePageState<Partial<Record<AgentColumnId, ColumnFilterState>>>(
     pageKey && { ...pageKey, detail: 'filters' },
     {}
   );
-  const [newAgent, setNewAgent] = usePageState(pageKey && { ...pageKey, detail: 'new-agent' }, NEW_AGENT);
   // Reload reads the roster and the models again here, without remounting the page.
   const reloadGeneration = useSettingsReloadGeneration();
 
   const { providers } = useIntegrationsStore();
-  const {
-    agents,
-    addAgent,
-    deleteAgent,
-    fetchAgents,
-  } = useAgentsStore();
+  const { agents, deleteAgent, fetchAgents } = useAgentsStore();
   const { models, fetchModels } = useModelsStore();
   const { confirm: confirmDelete, dialog: confirmDialog } = useConfirm();
 
@@ -125,25 +86,6 @@ export default function AgentsPage() {
   useEffect(() => {
     fetchModels();
   }, [fetchModels, reloadGeneration]);
-
-  const handleAddAgent = () => {
-    if (!newAgent.name.trim()) return;
-    void addAgent({
-      name: newAgent.name.trim(),
-      description: newAgent.description.trim(),
-      icon: newAgent.icon,
-      systemPrompt: newAgent.systemPrompt,
-      providerId: newAgent.providerId,
-      provider: null,
-      modelId: null,
-      logoUrl: null,
-      tools: ['search_knowledge', 'search_files', 'read_ontology'],
-      capabilities: { memory: true, reasoning: false, vision: false },
-      intentMappings: [],
-    });
-    setNewAgent(NEW_AGENT);
-    setShowAddForm(false);
-  };
 
   const handleOpenAgentEditor = (agentId: string) => {
     if (!workspaceId) return;
@@ -209,11 +151,6 @@ export default function AgentsPage() {
     return <SettingsLoading label="Loading agents…" />;
   }
 
-  const resetNewAgent = () => {
-    setShowAddForm(false);
-    setNewAgent(NEW_AGENT);
-  };
-
   return (
     <div className="space-y-6">
       <SettingsPageHeader
@@ -223,76 +160,14 @@ export default function AgentsPage() {
         actions={
           <>
             <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
-            <Button onClick={() => setShowAddForm(true)}>
+            {/* A page, as Create workspace: the agent's page opens once it is created. */}
+            <Button onClick={() => router.push(`/workspace/${workspaceId}/settings/agents/new`)} data-action="create">
               <Plus size={16} />
               Create agent
             </Button>
           </>
         }
       />
-
-      {showAddForm && (
-        <SettingsSection title="Create agent">
-          <div className="grid gap-4">
-            <div className="grid grid-cols-2 gap-4">
-              <SettingsField label="Name *">
-                <Input
-                  type="text"
-                  value={newAgent.name}
-                  onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
-                  placeholder="Agent name"
-                />
-              </SettingsField>
-              <SettingsField label="Icon">
-                <div className="flex gap-2">
-                  {iconOptions.map((icon) => {
-                    const IconComp = iconMap[icon];
-                    return (
-                      <Button
-                        key={icon}
-                        variant="secondary"
-                        size="icon"
-                        onClick={() => setNewAgent({ ...newAgent, icon })}
-                        className={cn(
-                          'h-9 w-9',
-                          newAgent.icon === icon && 'border-primary bg-primary/10 text-primary hover:bg-primary/10'
-                        )}
-                      >
-                        <IconComp size={16} />
-                      </Button>
-                    );
-                  })}
-                </div>
-              </SettingsField>
-            </div>
-            <SettingsField label="Description">
-              <Input
-                type="text"
-                value={newAgent.description}
-                onChange={(e) => setNewAgent({ ...newAgent, description: e.target.value })}
-                placeholder="Brief description"
-              />
-            </SettingsField>
-            <SettingsField label="System Prompt">
-              <Textarea
-                value={newAgent.systemPrompt}
-                onChange={(e) => setNewAgent({ ...newAgent, systemPrompt: e.target.value })}
-                placeholder="You are a helpful AI assistant..."
-                rows={3}
-                className="resize-none"
-              />
-            </SettingsField>
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={resetNewAgent}>
-                Cancel
-              </Button>
-              <Button onClick={handleAddAgent} disabled={!newAgent.name.trim()}>
-                Create
-              </Button>
-            </div>
-          </div>
-        </SettingsSection>
-      )}
 
       {rows.length === 0 ? (
         <SettingsEmpty

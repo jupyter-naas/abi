@@ -8,14 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
-import { Input, Select, Textarea } from '@/components/ui/input';
-import {
-  SettingsField,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsSection,
-  SettingsTableToolbar,
-} from '@/components/settings/settings-ui';
+import { SettingsNotice, SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
 import {
   SettingsTableClear,
   SettingsTableHead,
@@ -25,7 +18,7 @@ import {
 import { TablePager } from '@/components/settings/users-table/table-pager';
 import { UsersExportMenu } from '@/components/settings/users-table/users-table-actions';
 import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
-import { useSkillsStore, type SkillScope } from '@/stores/skills';
+import { useSkillsStore } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
 import {
   SCOPE_LABELS,
@@ -46,24 +39,13 @@ export default function SkillsSettingsPage() {
   const router = useRouter();
   const workspaceId = params.workspaceId as string;
 
-  const { skillsByWorkspace, fetchSkills, createSkill, updateSkill, deleteSkill } =
-    useSkillsStore();
+  const { skillsByWorkspace, fetchSkills, updateSkill, deleteSkill } = useSkillsStore();
   const currentUserId = useAuthStore((s) => s.user?.id);
 
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [switching, setSwitching] = useState(false);
   const { confirm: confirmDelete, dialog: confirmDialog } = useConfirm();
-  const [newSkill, setNewSkill] = useState({
-    name: '',
-    slug: '',
-    description: '',
-    prompt: '',
-    scope: 'user' as SkillScope,
-  });
-
   useEffect(() => {
     if (workspaceId) void fetchSkills(workspaceId, true);
   }, [workspaceId, fetchSkills]);
@@ -85,27 +67,6 @@ export default function SkillsSettingsPage() {
   const exportShown = (format: UsersExportFormat) => {
     const date = new Date().toISOString().slice(0, 10);
     downloadTableExport(SKILL_EXPORT_HEADERS, table.shown.map(skillExportRow), format, `skills_${date}`, 'Skills');
-  };
-
-  const handleAddSkill = async () => {
-    if (!newSkill.name.trim() || !newSkill.prompt.trim()) {
-      setFormError('Name and prompt are required');
-      return;
-    }
-    setFormError(null);
-    try {
-      await createSkill(workspaceId, {
-        name: newSkill.name.trim(),
-        slug: newSkill.slug.trim() || undefined,
-        description: newSkill.description.trim() || undefined,
-        prompt: newSkill.prompt,
-        scope: newSkill.scope,
-      });
-      setNewSkill({ name: '', slug: '', description: '', prompt: '', scope: 'user' });
-      setShowAddForm(false);
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Failed to create skill');
-    }
   };
 
   // A table of switches: each change saved at once, and said.
@@ -172,79 +133,14 @@ export default function SkillsSettingsPage() {
         actions={
           <>
             <UsersExportMenu onExport={exportShown} disabled={table.shown.length === 0} />
-            <Button onClick={() => setShowAddForm(true)}>
+            {/* A page, as Create workspace: the skill's page opens once it is created. */}
+            <Button onClick={() => router.push(`/workspace/${workspaceId}/settings/skills/new`)} data-action="create">
               <Plus size={16} />
               Create skill
             </Button>
           </>
         }
       />
-
-      {showAddForm && (
-        <SettingsSection title="Create skill">
-          <div className="grid gap-4">
-            <div className="grid grid-cols-2 gap-4">
-              <SettingsField label="Name *">
-                <Input
-                  type="text"
-                  value={newSkill.name}
-                  onChange={(e) => setNewSkill({ ...newSkill, name: e.target.value })}
-                  placeholder="Weekly report"
-                />
-              </SettingsField>
-              <SettingsField label="Slug">
-                <Input
-                  type="text"
-                  value={newSkill.slug}
-                  onChange={(e) => setNewSkill({ ...newSkill, slug: e.target.value })}
-                  placeholder="weekly-report (defaults from name)"
-                  className="font-mono"
-                />
-              </SettingsField>
-            </div>
-            <SettingsField label="Description">
-              <Input
-                type="text"
-                value={newSkill.description}
-                onChange={(e) => setNewSkill({ ...newSkill, description: e.target.value })}
-                placeholder="One sentence describing what this skill does"
-              />
-            </SettingsField>
-            <SettingsField label="Prompt *">
-              <Textarea
-                value={newSkill.prompt}
-                onChange={(e) => setNewSkill({ ...newSkill, prompt: e.target.value })}
-                placeholder="The reusable prompt the agent will apply when this skill is invoked"
-                rows={5}
-              />
-            </SettingsField>
-            <SettingsField label="Visibility">
-              <Select
-                value={newSkill.scope}
-                onChange={(e) => setNewSkill({ ...newSkill, scope: e.target.value as SkillScope })}
-                className="w-auto"
-              >
-                <option value="user">Private (only me)</option>
-                <option value="workspace">Workspace</option>
-                <option value="organization">Organization</option>
-              </Select>
-            </SettingsField>
-            {formError && <SettingsNotice tone="error">{formError}</SettingsNotice>}
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setShowAddForm(false);
-                  setFormError(null);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button onClick={handleAddSkill}>Create</Button>
-            </div>
-          </div>
-        </SettingsSection>
-      )}
 
       {actionError && (
         <SettingsNotice tone="error" icon={<XCircle size={14} />}>
