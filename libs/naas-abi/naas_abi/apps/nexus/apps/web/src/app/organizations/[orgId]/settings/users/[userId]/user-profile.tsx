@@ -20,7 +20,8 @@ import {
 import '@/components/access/access-base.css';
 import '@/components/access/access.css';
 import { ViewAsControl } from '@/components/access/people/view-as-control';
-import { SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import { PersonBack } from '@/components/access/people/person-info';
 import { InstanceHeader } from '@/components/access/instance-header';
 import { MemberRoleSection } from '@/components/people/member-role-section';
@@ -151,9 +152,9 @@ export default function OrgUserProfilePage() {
         <PersonBack onClick={() => router.push(orgSettingsSectionPath(orgId, 'users'))} />
         {refused && <p className="text-sm text-muted-foreground">Only the organization’s admins see its people.</p>}
         {!refused && (
-          <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+          <Notice tone="error" icon={<AlertCircle size={14} />}>
             {loadError || 'User not found.'}
-          </SettingsNotice>
+          </Notice>
         )}
       </div>
     );
@@ -369,9 +370,9 @@ export default function OrgUserProfilePage() {
       />
 
       {(error || loadError) && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {error || loadError}
-        </SettingsNotice>
+        </Notice>
       )}
       {pageDraft.dirty.length > 0 ? (
         <div className="org-settings-general-draft" role="status">
@@ -390,7 +391,7 @@ export default function OrgUserProfilePage() {
 
       {/* Info and Profile in one section: their account's name and email once, read-only (their
           own profile changes them), then their profile in this organization. */}
-      <SettingsSection bodyClassName="space-y-6 p-4">
+      <Card bodyClassName="space-y-6 p-4">
         <div className="account-profile-form-grid" data-section="profile">
           {readOnlyField('name', 'Name', account.name ?? '', 'The account name (Account Settings > Profile)')}
           {readOnlyField('email', 'Email', account.email ?? '')}
@@ -421,7 +422,7 @@ export default function OrgUserProfilePage() {
             className="account-profile-field-textarea"
           />
         </div>
-      </SettingsSection>
+      </Card>
 
       {!isSelf && (
         <MemberRoleSection

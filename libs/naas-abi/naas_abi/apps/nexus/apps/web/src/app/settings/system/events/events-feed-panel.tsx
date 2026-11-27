@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Eraser, Pause, Play, Search } from 'lucide-react';
+import { Eraser, Pause, Play } from 'lucide-react';
+import { SearchBox } from '@/components/ui/search-box';
 import {
   EVENTS_PAGE_SIZE,
   EVENTS_POLL_INTERVAL_MS,
@@ -81,17 +82,15 @@ export function EventsFeedPanel() {
         </span>
       </SidebarToolbar>
 
-      {/* Search row and type picker match QuickOpen in the top nav. */}
+      {/* Search row (the kit search box) and type picker. */}
       <div className="mb-1 border-b border-border pb-1">
-        <div className="flex items-center gap-2 px-3 py-2">
-          <Search size={14} className="shrink-0 opacity-70 text-muted-foreground" />
-          <input
-            type="search"
+        <div className="px-3 py-2">
+          <SearchBox
+            size="sm"
             value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
+            onChange={setSearchInput}
             placeholder="Search payload (whole log)"
-            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none focus-visible:ring-0 placeholder:text-muted-foreground"
-            aria-label="Search event payloads"
+            label="Search event payloads"
           />
         </div>
         <div className="px-0.5">

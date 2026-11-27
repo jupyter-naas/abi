@@ -1,3 +1,4 @@
+import type { OfficeCoverFit } from '@/components/office/office-cover-thumb';
 import {
   SLIDES_PPTX_FROM_DOM_SCRIPT,
   SLIDES_PPTX_FROM_DOM_SCRIPT_ID,
@@ -898,3 +899,12 @@ export function applySlidesTextEdits(html: string, edits: SlidesTextEdit[]): str
   }
   return next;
 }
+
+/** Gallery covers and filmstrip thumbs: the 16:9 stage contained in the thumb. */
+export const SLIDES_COVER_FIT: OfficeCoverFit = {
+  width: SLIDES_STAGE_WIDTH,
+  height: SLIDES_STAGE_HEIGHT,
+  scale: (boxWidth, boxHeight) => computeSlidesPreviewScale(boxWidth, boxHeight),
+  readCoverHtml: readDeckCoverHtml,
+  prepareCoverHtml: prepareSlidesCoverHtml,
+};

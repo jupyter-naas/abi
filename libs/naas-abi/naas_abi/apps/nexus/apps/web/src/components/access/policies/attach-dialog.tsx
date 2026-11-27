@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
-import { Search, Group, X, KeyRound } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { ModalBackdrop } from '@/components/ui/dialogs';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Search, Group, KeyRound } from 'lucide-react';
+import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import type { PrincipalKind } from '@/lib/iam-admin/types';
 
@@ -47,7 +46,6 @@ export function AttachDialog({
   onClose: () => void;
   onAttach: (candidate: AttachCandidate) => Promise<void>;
 }) {
-  const titleId = useId();
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -79,79 +77,65 @@ export function AttachDialog({
   };
 
   return (
-    <ModalBackdrop open={open} onClose={onClose} widthClassName="max-w-2xl">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="border border-border bg-background p-6 shadow-2xl"
-        data-attach-dialog=""
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 id={titleId} className="text-base font-semibold text-foreground">
-              {title}
-            </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {description ?? <>Type a name, an email or an id. The policy is attached to whom you pick, at {where}.</>}
-            </p>
-          </div>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close" data-action="close">
-            <X size={16} />
-          </Button>
-        </div>
-        <div className="relative mt-4">
-          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            autoFocus
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search a person, a group or a service account"
-            aria-label="Search whom to attach it to"
-            className="pl-9"
-            data-field="attach-search"
-          />
-        </div>
-        <ul className="mt-3 max-h-80 overflow-y-auto border border-border" data-attach-options="">
-          {shown.length === 0 && (
-            <li className="px-3 py-4 text-sm text-muted-foreground">
-              {candidates.length === 0 ? 'Nobody it may be attached to here.' : 'Nobody matches.'}
-            </li>
-          )}
-          {shown.map((candidate) => (
-            <li key={candidate.id} className="border-b border-border last:border-b-0" data-attach-option={candidate.id}>
-              <button
-                type="button"
-                className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted/50 disabled:opacity-50"
-                disabled={busy !== null}
-                onClick={() => void pick(candidate)}
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted text-sm text-muted-foreground">
-                  {candidate.kind === 'group' ? (
-                    <Group size={14} />
-                  ) : candidate.kind === 'service_account' ? (
-                    <KeyRound size={14} />
-                  ) : (
-                    (candidate.label.charAt(0) || '?').toUpperCase()
-                  )}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-foreground">{candidate.label}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {candidate.email || (candidate.kind && KIND_LABEL[candidate.kind]) || candidate.id}
-                  </span>
-                </span>
-                {busy === candidate.id && <span className="text-xs text-muted-foreground">Attaching…</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-        {error && (
-          <p className="mt-3 text-xs text-destructive" role="alert" data-attach-error="">
-            {error}
-          </p>
-        )}
+    <Dialog
+      open={open}
+      size="lg"
+      title={title}
+      description={description ?? <>Type a name, an email or an id. The policy is attached to whom you pick, at {where}.</>}
+      onClose={onClose}
+      data-attach-dialog=""
+    >
+      <div className="relative">
+        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          autoFocus
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search a person, a group or a service account"
+          aria-label="Search whom to attach it to"
+          className="pl-9"
+          data-field="attach-search"
+        />
       </div>
-    </ModalBackdrop>
+      <ul className="max-h-80 overflow-y-auto border border-border" data-attach-options="">
+        {shown.length === 0 && (
+          <li className="px-3 py-4 text-sm text-muted-foreground">
+            {candidates.length === 0 ? 'Nobody it may be attached to here.' : 'Nobody matches.'}
+          </li>
+        )}
+        {shown.map((candidate) => (
+          <li key={candidate.id} className="border-b border-border last:border-b-0" data-attach-option={candidate.id}>
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted/50 disabled:opacity-50"
+              disabled={busy !== null}
+              onClick={() => void pick(candidate)}
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center bg-muted text-sm text-muted-foreground">
+                {candidate.kind === 'group' ? (
+                  <Group size={14} />
+                ) : candidate.kind === 'service_account' ? (
+                  <KeyRound size={14} />
+                ) : (
+                  (candidate.label.charAt(0) || '?').toUpperCase()
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-foreground">{candidate.label}</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {candidate.email || (candidate.kind && KIND_LABEL[candidate.kind]) || candidate.id}
+                </span>
+              </span>
+              {busy === candidate.id && <span className="text-xs text-muted-foreground">Attaching…</span>}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {error && (
+        <p className="text-xs text-destructive" role="alert" data-attach-error="">
+          {error}
+        </p>
+      )}
+    </Dialog>
   );
 }

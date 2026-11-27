@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
-import { SettingsSection } from '@/components/settings/settings-ui';
 import { orgSettingsSectionPath } from '@/app/organizations/[orgId]/settings/lib/nav';
 import { userAccess, type Fetcher } from './users-api';
 import type { UserAccess } from './users-model';
+import { Card } from '@/components/ui/card';
 
 type Loaded = { state: 'loading' } | { state: 'error'; error: string } | { state: 'ready'; access: UserAccess };
 
@@ -54,7 +54,7 @@ export function PlatformOrganizations({
   }, [personId, nonce, fetcher]);
 
   return (
-    <SettingsSection
+    <Card
       title="Organizations"
       description="The organizations they belong to. Their workspaces, groups and policies there are changed on their page in each."
     >
@@ -91,6 +91,6 @@ export function PlatformOrganizations({
             </ul>
           ))}
       </div>
-    </SettingsSection>
+    </Card>
   );
 }

@@ -7,12 +7,9 @@ import { AppWindow, Globe, Tag, ExternalLink } from 'lucide-react';
 import { useAppsStore, type AppItem } from '@/stores/apps';
 import { Badge } from '@/components/ui/badge';
 import { ModuleLink } from '@/components/settings/module-link';
-import {
-  SettingsEmpty,
-  SettingsLoading,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
 import {
   SettingsTableClear,
   SettingsTableHead,
@@ -100,7 +97,7 @@ export default function AppsSettingsPage() {
   };
 
   if (!mounted) {
-    return <SettingsLoading label="Loading apps…" />;
+    return <Loading label="Loading apps…" />;
   }
 
   return (
@@ -113,9 +110,9 @@ export default function AppsSettingsPage() {
       />
 
       {loading && installedApps.length === 0 ? (
-        <SettingsLoading label="Loading apps…" />
+        <Loading label="Loading apps…" />
       ) : installedApps.length === 0 ? (
-        <SettingsEmpty
+        <EmptyState framed
           icon={<AppWindow size={40} className="opacity-40" />}
           title="No apps in this workspace"
           description="No module of this workspace has an app you may open. Policies, in Access › Policies, decide who opens which app."

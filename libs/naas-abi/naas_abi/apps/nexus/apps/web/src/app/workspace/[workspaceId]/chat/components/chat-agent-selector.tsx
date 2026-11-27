@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { useAgentList } from '@/components/ui/dialogs';
+import { useAgentList } from '@/components/chat/use-agent-list';
 import { useWorkspaceStore } from '@/stores/workspace';
 import type { Agent } from '@/stores/agents';
 import { useModelsStore, modelDisplayName } from '@/stores/models';

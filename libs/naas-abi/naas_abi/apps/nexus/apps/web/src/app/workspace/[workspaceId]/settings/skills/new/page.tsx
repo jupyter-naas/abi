@@ -12,7 +12,9 @@ import { usePageDraft } from '@/hooks/use-page-state';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { InstanceHeader } from '@/components/access/instance-header';
 import { FormSaveButton, InstanceBack, UnsavedBar } from '@/components/settings/instance-form';
-import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
+import { Field } from '@/components/ui/field';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import { usePolicyHref } from '@/components/settings/use-policy-href';
 
 const NEW_SKILL: { name: string; slug: string; description: string; prompt: string; scope: string } = {
@@ -70,13 +72,13 @@ export default function NewSkillPage() {
           <FormSaveButton dirty={ready} saving={creating} onSave={() => void create()} label="Create skill" action="create" />
         }
       />
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+      {error && <Notice tone="error">{error}</Notice>}
       <UnsavedBar show={draft.dirty.length > 0} onDiscard={draft.discard} disabled={creating} />
 
-      <SettingsSection>
+      <Card>
         <div className="grid gap-4">
           <div className="grid grid-cols-2 gap-4">
-            <SettingsField label="Name *">
+            <Field label="Name *">
               <Input
                 type="text"
                 aria-label="Name"
@@ -85,8 +87,8 @@ export default function NewSkillPage() {
                 placeholder="Weekly report"
                 autoFocus
               />
-            </SettingsField>
-            <SettingsField label="Slug">
+            </Field>
+            <Field label="Slug">
               <Input
                 type="text"
                 aria-label="Slug"
@@ -95,9 +97,9 @@ export default function NewSkillPage() {
                 placeholder="weekly-report (defaults from name)"
                 className="font-mono"
               />
-            </SettingsField>
+            </Field>
           </div>
-          <SettingsField label="Description">
+          <Field label="Description">
             <Input
               type="text"
               aria-label="Description"
@@ -105,8 +107,8 @@ export default function NewSkillPage() {
               onChange={(e) => draft.set({ description: e.target.value })}
               placeholder="One sentence describing what this skill does"
             />
-          </SettingsField>
-          <SettingsField label="Prompt *">
+          </Field>
+          <Field label="Prompt *">
             <Textarea
               aria-label="Prompt"
               value={values.prompt}
@@ -114,8 +116,8 @@ export default function NewSkillPage() {
               placeholder="The reusable prompt the agent will apply when this skill is invoked"
               rows={8}
             />
-          </SettingsField>
-          <SettingsField label="Visibility">
+          </Field>
+          <Field label="Visibility">
             <Select
               aria-label="Visibility"
               value={values.scope}
@@ -126,9 +128,9 @@ export default function NewSkillPage() {
               <option value="workspace">Workspace</option>
               <option value="organization">Organization</option>
             </Select>
-          </SettingsField>
+          </Field>
         </div>
-      </SettingsSection>
+      </Card>
     </div>
   );
 }

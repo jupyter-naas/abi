@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DocumentsProjectTree } from '@/components/shell/sidebar/documents-tree';
+import type { OfficeProjectTree as DocumentsProjectTree } from '@/components/shell/sidebar/office-tree';
 import {
   flattenSectionsComposerFiles,
   sectionsComposerFallbackFiles,

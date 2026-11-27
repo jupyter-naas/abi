@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { SettingsLoading, SettingsPageHeader } from '@/components/settings/settings-ui';
+import { SettingsPageHeader } from '@/components/settings/settings-ui';
+import { Loading } from '@/components/ui/spinner';
 import { policyOfSearch } from '@/components/settings/settings-policy';
 import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { WorkspaceOfferPart } from '@/components/settings/workspace-offer-part';
@@ -28,7 +29,7 @@ function modelsBadge(part: ModelsPart | undefined): string | undefined {
  */
 export default function ModelsPage() {
   return (
-    <Suspense fallback={<SettingsLoading label="Loading models…" />}>
+    <Suspense fallback={<Loading label="Loading models…" />}>
       <Models />
     </Suspense>
   );

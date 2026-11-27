@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Archive, ArchiveRestore, CornerDownRight, Plus, Reply, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover } from '@/components/database-view/primitives';
+import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
 import { describeTaskEvent } from '@/lib/task-events';
 import { TASKS_CHANGED_EVENT } from '@/stores/tasks';
 import {
@@ -182,14 +184,6 @@ export function TaskDrawer({
     return () => window.removeEventListener(TASKS_CHANGED_EVENT, reload);
   }, [loadFeed]);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
-
   const save = (fields: TaskFields) => {
     void onUpdate(fields).catch(() => undefined);
   };
@@ -284,301 +278,301 @@ export function TaskDrawer({
   const iterationName = (id: string | null) => (id ? iterationLabel(id) : 'Backlog');
 
   return (
-    // Centered on the Tasks page, like the New task form (never over the shell bars).
-    <div className="tasks-create-overlay">
-      <div className="tasks-create-backdrop" onClick={onClose} />
-      <aside className="tasks-create-dialog tasks-task-dialog" role="dialog" aria-modal="true" aria-label={`Task ${task.title}`}>
-        <header className="tasks-drawer-header">
-          <input
-            className="tasks-drawer-title"
-            value={title}
-            maxLength={300}
-            aria-label="Title"
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-          />
-          <button type="button" className="tasks-icon-button" title="Close" onClick={onClose}>
-            <X size={14} />
-          </button>
-        </header>
-
-        <div className="tasks-drawer-body">
-          <div className="tasks-drawer-fields">
-            <label className="tasks-drawer-label" htmlFor="tasks-task-stage">Stage</label>
-            <select
-              id="tasks-task-stage"
-              className="tasks-drawer-select"
-              value={task.stage}
-              onChange={(e) => save({ stage: e.target.value })}
-            >
-              {settings.stages.map((stage) => (
-                <option key={stage.key} value={stage.key}>{stage.label}</option>
-              ))}
-              {!settings.stages.some((s) => s.key === task.stage) && <option value={task.stage}>{task.stage}</option>}
-            </select>
-
-            <span className="tasks-drawer-label">Assignees</span>
-            <div className="tasks-drawer-chips">
-              {task.assignee_ids.map((id) => (
-                <span key={id} className="tasks-drawer-chip">
-                  <Avatars names={[memberName(id)]} />
-                  {memberName(id)}
-                  <button
-                    type="button"
-                    className="tasks-drawer-chip-remove"
-                    title={`Unassign ${memberName(id)}`}
-                    onClick={() => toggleAssignee(id)}
-                  >
-                    <X size={11} />
-                  </button>
-                </span>
-              ))}
-              <Popover
-                width="w-72"
-                trigger={({ toggle }) => (
-                  <button type="button" className="tasks-column-add tasks-column-add-inline" onClick={toggle}>
-                    <Plus size={12} /> Assign
-                  </button>
-                )}
-              >
-                <div className="space-y-0.5">
-                  {members.length === 0 && (
-                    <p className="px-2 py-1 text-xs text-muted-foreground">No workspace members found.</p>
-                  )}
-                  {members.map((member) => {
-                    const assigned = task.assignee_ids.includes(member.user_id);
-                    return (
-                      <button
-                        key={member.user_id}
-                        type="button"
-                        className="tasks-drawer-member-option"
-                        onClick={() => toggleAssignee(member.user_id)}
-                      >
-                        <input type="checkbox" readOnly checked={assigned} tabIndex={-1} />
-                        <span className="truncate">{member.name || member.email}</span>
-                        {member.name && member.email && (
-                          <span className="tasks-drawer-member-email truncate">{member.email}</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </Popover>
-            </div>
-
-            <label className="tasks-drawer-label" htmlFor="tasks-task-iteration">Iteration</label>
-            <select
-              id="tasks-task-iteration"
-              className="tasks-drawer-select"
-              value={task.iteration_id ?? ''}
-              onChange={(e) => void moveToIteration(e.target.value)}
-            >
-              <option value="">Backlog</option>
-              {pendingScopes.map((scope) => (
-                <option key={scope} value={`${PENDING_SCOPE}${scope}`}>
-                  {SCOPE_LABELS[scope]}
-                </option>
-              ))}
-              {[...iterations].reverse().map((iteration) => (
-                <option key={iteration.id} value={iteration.id}>
-                  {iterationLabel(iteration.id)}
-                </option>
-              ))}
-            </select>
-
-            <span className="tasks-drawer-label">Workspace</span>
-            <span className="tasks-drawer-readonly" title={task.workspace_id}>{workspaceName(task.workspace_id)}</span>
-
-            <label className="tasks-drawer-label" htmlFor="tasks-task-priority">Priority</label>
-            <select
-              id="tasks-task-priority"
-              className="tasks-drawer-select"
-              value={task.priority ?? ''}
-              onChange={(e) => save({ priority: e.target.value || null })}
-            >
-              <option value="">No priority</option>
-              {settings.priorities.map((priority) => (
-                <option key={priority.key} value={priority.key}>{priority.label}</option>
-              ))}
-            </select>
-
-            <label className="tasks-drawer-label" htmlFor="tasks-task-due">Due date</label>
-            <input
-              id="tasks-task-due"
-              type="date"
-              className="tasks-drawer-input"
-              value={task.due_date ?? ''}
-              onChange={(e) => save({ due_date: e.target.value || null })}
-            />
-
-            <label className="tasks-drawer-label" htmlFor="tasks-task-github">GitHub issue</label>
-            <GithubIssueInput
-              id="tasks-task-github"
-              value={githubIssue}
-              onChange={setGithubIssue}
-              onCommit={() =>
-                githubIssue.trim() !== (task.github_issue_url ?? '') && save({ github_issue_url: githubIssue.trim() })
-              }
-            />
-
-            <span className="tasks-drawer-label">Labels</span>
-            <ChipEditor
-              values={task.labels}
-              suggestions={Array.from(new Set([...settings.suggested_labels, ...labels]))}
-              placeholder="Add a label"
-              onChange={(next) => save({ labels: next })}
-            />
-          </div>
-
-          <div>
-            <p className="tasks-drawer-section-title">Content</p>
-            <MarkdownEditor
-              value={content}
-              maxLength={20000}
-              ariaLabel="Content"
-              placeholder="Context, acceptance criteria, links… Markdown supported."
-              onChange={setContent}
-              onBlur={() => content !== task.content && save({ content })}
-            />
-          </div>
-
-          <div className="tasks-drawer-audit">
-            <span>Created by {task.created_by ? memberName(task.created_by) : '—'}</span>
-            <span>{formatTimestamp(task.created_at)}</span>
-            <span>Last updated by {task.updated_by ? memberName(task.updated_by) : '—'}</span>
-            <span>{formatTimestamp(task.updated_at)}</span>
-            {task.archived && <span>Archived {formatDate(task.archived_at)}</span>}
-          </div>
-
-          <div>
-            <div className="tasks-drawer-tabs">
-              {(['comments', 'activity'] as const).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={cn('tasks-drawer-tab', tab === key && 'tasks-drawer-tab-active')}
-                  onClick={() => setTab(key)}
-                >
-                  {key === 'comments' ? `Comments (${comments.length})` : 'Activity'}
-                </button>
-              ))}
-            </div>
-            {feedError && <p className="tasks-task-card-overdue mt-2 text-xs">{feedError}</p>}
-            {tab === 'comments' ? (
-              <div className="mt-3 space-y-3">
-                <ul className="tasks-drawer-feed">
-                  {threads.length === 0 && <li className="tasks-drawer-feed-meta">No comments yet.</li>}
-                  {threads.map((thread) => (
-                    <li key={thread.id} className="tasks-drawer-feed-item">
-                      {renderComment(thread, thread.id)}
-                      {(repliesOf(thread.id).length > 0 || replyTo === thread.id) && (
-                        <ul className="tasks-drawer-replies">
-                          {repliesOf(thread.id).map((reply) => (
-                            <li key={reply.id} className="tasks-drawer-feed-item">
-                              {renderComment(reply, thread.id)}
-                            </li>
-                          ))}
-                          {replyTo === thread.id && (
-                            <li className="tasks-drawer-comment-form">
-                              <textarea
-                                autoFocus
-                                className="tasks-drawer-textarea"
-                                value={replyDraft}
-                                maxLength={5000}
-                                placeholder="Write a reply…"
-                                onChange={(e) => setReplyDraft(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Escape') {
-                                    e.stopPropagation();
-                                    e.nativeEvent.stopImmediatePropagation();
-                                    setReplyTo(null);
-                                  }
-                                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                                    void postComment(replyDraft, thread.id).then((ok) => ok && setReplyTo(null));
-                                  }
-                                }}
-                              />
-                              <span className="tasks-drawer-comment-actions">
-                                <button type="button" className="tasks-button" onClick={() => setReplyTo(null)}>
-                                  Cancel
-                                </button>
-                                <button
-                                  type="button"
-                                  className="tasks-button tasks-button-accent"
-                                  disabled={posting || !replyDraft.trim()}
-                                  onClick={() =>
-                                    void postComment(replyDraft, thread.id).then((ok) => ok && setReplyTo(null))
-                                  }
-                                >
-                                  <CornerDownRight size={12} /> Reply
-                                </button>
-                              </span>
-                            </li>
-                          )}
-                        </ul>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                <div className="tasks-drawer-comment-form">
-                  <textarea
-                    className="tasks-drawer-textarea"
-                    value={commentDraft}
-                    maxLength={5000}
-                    placeholder="Write a comment…"
-                    onChange={(e) => setCommentDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                        void postComment(commentDraft).then((ok) => ok && setCommentDraft(''));
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="tasks-button tasks-button-accent"
-                    disabled={posting || !commentDraft.trim()}
-                    onClick={() => void postComment(commentDraft).then((ok) => ok && setCommentDraft(''))}
-                  >
-                    Comment
-                  </button>
-                </div>
-              </div>
+    <Dialog
+      size="lg"
+      aria-label={`Task ${task.title}`}
+      className="tasks-dialog"
+      title={
+        <input
+          className="tasks-drawer-title w-full"
+          value={title}
+          maxLength={300}
+          aria-label="Title"
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+        />
+      }
+      onClose={onClose}
+      footer={
+        <>
+          <span>
+            {task.archived ? (
+              <Button variant="secondary" size="sm" onClick={() => void onArchive(false).catch(() => undefined)}>
+                <ArchiveRestore size={13} /> Restore
+              </Button>
             ) : (
-              <ul className="tasks-drawer-feed mt-3">
-                {activity.map((entry) => (
-                  <li key={entry.id} className="tasks-drawer-feed-item">
-                    <strong>{entry.actor_id ? memberName(entry.actor_id) : 'Someone'}</strong>{' '}
-                    {describeTaskEvent(entry, {
-                      member: memberName,
-                      iteration: iterationName,
-                      stage: (key) => choiceLabel(settings.stages, key),
-                      priority: (key) => choiceLabel(settings.priorities, key),
-                    })}
-                    <span className="tasks-drawer-feed-meta">{formatTimestamp(entry.created_at)}</span>
-                  </li>
-                ))}
-              </ul>
+              <Button variant="secondary" size="sm" onClick={() => void onArchive(true).catch(() => undefined)}>
+                <Archive size={13} /> Archive
+              </Button>
             )}
-          </div>
+          </span>
+          <Button variant="destructive-ghost" size="sm" onClick={() => void onDelete()}>
+            <Trash2 size={13} /> Delete
+          </Button>
+        </>
+      }
+    >
+      <div className="tasks-drawer-fields">
+        <label className="tasks-drawer-label" htmlFor="tasks-task-stage">Stage</label>
+        {/* Opening a task focuses the stage, not the title: typing must not edit the title,
+            and a touch keyboard must not pop up. */}
+        <select
+          id="tasks-task-stage"
+          data-autofocus
+          className="tasks-drawer-select"
+          value={task.stage}
+          onChange={(e) => save({ stage: e.target.value })}
+        >
+          {settings.stages.map((stage) => (
+            <option key={stage.key} value={stage.key}>{stage.label}</option>
+          ))}
+          {!settings.stages.some((s) => s.key === task.stage) && <option value={task.stage}>{task.stage}</option>}
+        </select>
+
+        <span className="tasks-drawer-label">Assignees</span>
+        <div className="tasks-drawer-chips">
+          {task.assignee_ids.map((id) => (
+            <span key={id} className="tasks-drawer-chip">
+              <Avatars names={[memberName(id)]} />
+              {memberName(id)}
+              <button
+                type="button"
+                className="tasks-drawer-chip-remove"
+                title={`Unassign ${memberName(id)}`}
+                onClick={() => toggleAssignee(id)}
+              >
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+          <Popover
+            width="w-72"
+            trigger={({ toggle }) => (
+              <button type="button" className="tasks-column-add tasks-column-add-inline" onClick={toggle}>
+                <Plus size={12} /> Assign
+              </button>
+            )}
+          >
+            <div className="space-y-0.5">
+              {members.length === 0 && (
+                <p className="px-2 py-1 text-xs text-muted-foreground">No workspace members found.</p>
+              )}
+              {members.map((member) => {
+                const assigned = task.assignee_ids.includes(member.user_id);
+                return (
+                  <button
+                    key={member.user_id}
+                    type="button"
+                    className="tasks-drawer-member-option"
+                    onClick={() => toggleAssignee(member.user_id)}
+                  >
+                    <input type="checkbox" readOnly checked={assigned} tabIndex={-1} />
+                    <span className="truncate">{member.name || member.email}</span>
+                    {member.name && member.email && (
+                      <span className="tasks-drawer-member-email truncate">{member.email}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </Popover>
         </div>
 
-        <footer className="tasks-drawer-footer">
-          {task.archived ? (
-            <button type="button" className="tasks-button" onClick={() => void onArchive(false).catch(() => undefined)}>
-              <ArchiveRestore size={13} /> Restore
+        <label className="tasks-drawer-label" htmlFor="tasks-task-iteration">Iteration</label>
+        <select
+          id="tasks-task-iteration"
+          className="tasks-drawer-select"
+          value={task.iteration_id ?? ''}
+          onChange={(e) => void moveToIteration(e.target.value)}
+        >
+          <option value="">Backlog</option>
+          {pendingScopes.map((scope) => (
+            <option key={scope} value={`${PENDING_SCOPE}${scope}`}>
+              {SCOPE_LABELS[scope]}
+            </option>
+          ))}
+          {[...iterations].reverse().map((iteration) => (
+            <option key={iteration.id} value={iteration.id}>
+              {iterationLabel(iteration.id)}
+            </option>
+          ))}
+        </select>
+
+        <span className="tasks-drawer-label">Workspace</span>
+        <span className="tasks-drawer-readonly" title={task.workspace_id}>{workspaceName(task.workspace_id)}</span>
+
+        <label className="tasks-drawer-label" htmlFor="tasks-task-priority">Priority</label>
+        <select
+          id="tasks-task-priority"
+          className="tasks-drawer-select"
+          value={task.priority ?? ''}
+          onChange={(e) => save({ priority: e.target.value || null })}
+        >
+          <option value="">No priority</option>
+          {settings.priorities.map((priority) => (
+            <option key={priority.key} value={priority.key}>{priority.label}</option>
+          ))}
+        </select>
+
+        <label className="tasks-drawer-label" htmlFor="tasks-task-due">Due date</label>
+        <input
+          id="tasks-task-due"
+          type="date"
+          className="tasks-drawer-input"
+          value={task.due_date ?? ''}
+          onChange={(e) => save({ due_date: e.target.value || null })}
+        />
+
+        <label className="tasks-drawer-label" htmlFor="tasks-task-github">GitHub issue</label>
+        <GithubIssueInput
+          id="tasks-task-github"
+          value={githubIssue}
+          onChange={setGithubIssue}
+          onCommit={() =>
+            githubIssue.trim() !== (task.github_issue_url ?? '') && save({ github_issue_url: githubIssue.trim() })
+          }
+        />
+
+        <span className="tasks-drawer-label">Labels</span>
+        <ChipEditor
+          values={task.labels}
+          suggestions={Array.from(new Set([...settings.suggested_labels, ...labels]))}
+          placeholder="Add a label"
+          onChange={(next) => save({ labels: next })}
+        />
+      </div>
+
+      <div>
+        <p className="tasks-drawer-section-title">Content</p>
+        <MarkdownEditor
+          value={content}
+          maxLength={20000}
+          ariaLabel="Content"
+          placeholder="Context, acceptance criteria, links… Markdown supported."
+          onChange={setContent}
+          onBlur={() => content !== task.content && save({ content })}
+        />
+      </div>
+
+      <div className="tasks-drawer-audit">
+        <span>Created by {task.created_by ? memberName(task.created_by) : '—'}</span>
+        <span>{formatTimestamp(task.created_at)}</span>
+        <span>Last updated by {task.updated_by ? memberName(task.updated_by) : '—'}</span>
+        <span>{formatTimestamp(task.updated_at)}</span>
+        {task.archived && <span>Archived {formatDate(task.archived_at)}</span>}
+      </div>
+
+      <div>
+        <div className="tasks-drawer-tabs">
+          {(['comments', 'activity'] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              className={cn('tasks-drawer-tab', tab === key && 'tasks-drawer-tab-active')}
+              onClick={() => setTab(key)}
+            >
+              {key === 'comments' ? `Comments (${comments.length})` : 'Activity'}
             </button>
-          ) : (
-            <button type="button" className="tasks-button" onClick={() => void onArchive(true).catch(() => undefined)}>
-              <Archive size={13} /> Archive
-            </button>
-          )}
-          <span className="tasks-drawer-footer-spacer" />
-          <button type="button" className="tasks-button tasks-button-danger" onClick={() => void onDelete()}>
-            <Trash2 size={13} /> Delete
-          </button>
-        </footer>
-      </aside>
-    </div>
+          ))}
+        </div>
+        {feedError && <p className="tasks-task-card-overdue mt-2 text-xs">{feedError}</p>}
+        {tab === 'comments' ? (
+          <div className="mt-3 space-y-3">
+            <ul className="tasks-drawer-feed">
+              {threads.length === 0 && <li className="tasks-drawer-feed-meta">No comments yet.</li>}
+              {threads.map((thread) => (
+                <li key={thread.id} className="tasks-drawer-feed-item">
+                  {renderComment(thread, thread.id)}
+                  {(repliesOf(thread.id).length > 0 || replyTo === thread.id) && (
+                    <ul className="tasks-drawer-replies">
+                      {repliesOf(thread.id).map((reply) => (
+                        <li key={reply.id} className="tasks-drawer-feed-item">
+                          {renderComment(reply, thread.id)}
+                        </li>
+                      ))}
+                      {replyTo === thread.id && (
+                        <li className="tasks-drawer-comment-form">
+                          <textarea
+                            autoFocus
+                            className="tasks-drawer-textarea"
+                            value={replyDraft}
+                            maxLength={5000}
+                            placeholder="Write a reply…"
+                            onChange={(e) => setReplyDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') {
+                                e.stopPropagation();
+                                e.nativeEvent.stopImmediatePropagation();
+                                setReplyTo(null);
+                              }
+                              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                void postComment(replyDraft, thread.id).then((ok) => ok && setReplyTo(null));
+                              }
+                            }}
+                          />
+                          <span className="tasks-drawer-comment-actions">
+                            <button type="button" className="tasks-button" onClick={() => setReplyTo(null)}>
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="tasks-button tasks-button-accent"
+                              disabled={posting || !replyDraft.trim()}
+                              onClick={() =>
+                                void postComment(replyDraft, thread.id).then((ok) => ok && setReplyTo(null))
+                              }
+                            >
+                              <CornerDownRight size={12} /> Reply
+                            </button>
+                          </span>
+                        </li>
+                      )}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="tasks-drawer-comment-form">
+              <textarea
+                className="tasks-drawer-textarea"
+                value={commentDraft}
+                maxLength={5000}
+                placeholder="Write a comment…"
+                onChange={(e) => setCommentDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    void postComment(commentDraft).then((ok) => ok && setCommentDraft(''));
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="tasks-button tasks-button-accent"
+                disabled={posting || !commentDraft.trim()}
+                onClick={() => void postComment(commentDraft).then((ok) => ok && setCommentDraft(''))}
+              >
+                Comment
+              </button>
+            </div>
+          </div>
+        ) : (
+          <ul className="tasks-drawer-feed mt-3">
+            {activity.map((entry) => (
+              <li key={entry.id} className="tasks-drawer-feed-item">
+                <strong>{entry.actor_id ? memberName(entry.actor_id) : 'Someone'}</strong>{' '}
+                {describeTaskEvent(entry, {
+                  member: memberName,
+                  iteration: iterationName,
+                  stage: (key) => choiceLabel(settings.stages, key),
+                  priority: (key) => choiceLabel(settings.priorities, key),
+                })}
+                <span className="tasks-drawer-feed-meta">{formatTimestamp(entry.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Dialog>
   );
 }

@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/input';
 import { useMapsStore } from '@/stores/maps';
 import {
@@ -95,7 +95,6 @@ export function MapsNewBasemapModal({
   basemap?: WorkspaceBasemap | null;
   onCreated?: (basemapId: string) => void;
 }) {
-  const titleId = useId();
   const loadLayouts = useMapsStore((s) => s.loadLayouts);
   const editing = basemap !== null;
   const [title, setTitle] = useState('');
@@ -130,15 +129,6 @@ export function MapsNewBasemapModal({
     setError(null);
     setBusy(false);
   }, [open, basemap]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
 
   const basemapId = useMemo(() => {
     if (basemap) return basemap.id;
@@ -222,123 +212,112 @@ export function MapsNewBasemapModal({
   );
 
   return (
-    <div
-      className="maps-geojson-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
+    <Dialog
+      size="xl"
+      title={editing ? 'Edit basemap' : 'New basemap'}
+      description={
+        <>
+          Saved for every member of this workspace. Id: <code>{basemapId}</code>
+        </>
+      }
+      onClose={onClose}
+      onSubmit={busy ? undefined : () => void onSubmit()}
       data-testid="maps-new-basemap-modal"
-    >
-      <button type="button" className="maps-geojson-modal__backdrop" aria-label="Close" onClick={onClose} />
-      <div className="maps-geojson-modal__card maps-geojson-modal__card--form">
-        <header className="maps-geojson-modal__header">
-          <div>
-            <h2 id={titleId} className="maps-geojson-modal__title">
-              {editing ? `Edit basemap` : 'New basemap'}
-            </h2>
-            <p className="maps-geojson-modal__hint">
-              Saved for every member of this workspace. Id: <code>{basemapId}</code>
-            </p>
-          </div>
-          <button type="button" className="maps-geojson-modal__close" aria-label="Close" onClick={onClose}>
-            <X size={16} />
-          </button>
-        </header>
-        <div className="maps-geojson-modal__body maps-geojson-modal__body--stack">
-          <label className="maps-form-field">
-            <span className="maps-form-field__label">Name</span>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="EMEA footprint" />
-          </label>
-          <div className="flex gap-3">
-            <label className="maps-form-field flex-1">
-              <span className="maps-form-field__label">Picker column</span>
-              <Select value={category} onChange={(e) => setCategory(e.target.value as BasemapCategory)}>
-                {CATEGORY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="maps-form-field w-24">
-              <span className="maps-form-field__label">Order</span>
-              <Input
-                type="number"
-                value={order}
-                onChange={(e) => setOrder(Number.parseInt(e.target.value, 10) || 0)}
-              />
-            </label>
-          </div>
-          <label className="maps-form-field">
-            <span className="maps-form-field__label">Style</span>
-            <Select value={template} onChange={(e) => setTemplate(e.target.value as Template)}>
-              {TEMPLATE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-            <span className="maps-form-field__hint">
-              {TEMPLATE_OPTIONS.find((option) => option.value === template)?.hint}
-            </span>
-          </label>
-          {template === 'palette' || template === 'geojson' ? (
-            <div className="flex flex-wrap gap-4">
-              {paletteField('fill', 'Land')}
-              {paletteField('stroke', 'Borders')}
-              {paletteField('background', 'Ocean')}
-            </div>
-          ) : null}
-          {template === 'geojson' ? (
-            <label className="maps-form-field">
-              <span className="maps-form-field__label">GeoJSON</span>
-              <textarea
-                className="maps-geojson-textarea"
-                rows={8}
-                value={geoJsonRaw}
-                onChange={(e) => setGeoJsonRaw(e.target.value)}
-                placeholder='{ "type": "FeatureCollection", "features": [ … ] }'
-              />
-            </label>
-          ) : null}
-          {template === 'tile' ? (
-            <>
-              <label className="maps-form-field">
-                <span className="maps-form-field__label">Tile URL</span>
-                <Input
-                  value={tileUrl}
-                  onChange={(e) => setTileUrl(e.target.value)}
-                  placeholder="https://tiles.example.com/{z}/{x}/{y}.png"
-                />
-              </label>
-              <label className="maps-form-field">
-                <span className="maps-form-field__label">Attribution</span>
-                <Input value={attribution} onChange={(e) => setAttribution(e.target.value)} />
-              </label>
-            </>
-          ) : null}
-          <label className="maps-form-field">
-            <span className="maps-form-field__label">
-              Preview image {editing && basemap?.preview_content_type ? '(replace)' : ''}
-            </span>
-            <input
-              type="file"
-              accept={BASEMAP_PREVIEW_TYPES.join(',')}
-              onChange={(e) => onPickPreview(e.target.files?.[0] ?? null)}
-            />
-            <span className="maps-form-field__hint">PNG, JPEG, WebP or SVG, square, up to 512 KB.</span>
-          </label>
-          {error ? <p className="maps-form-field__error whitespace-pre-line">{error}</p> : null}
-        </div>
-        <footer className="maps-geojson-modal__footer">
-          <Button type="button" variant="ghost" onClick={onClose}>
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" onClick={() => void onSubmit()} disabled={busy}>
+          <Button onClick={() => void onSubmit()} disabled={busy}>
             {editing ? 'Save changes' : 'Save basemap'}
           </Button>
-        </footer>
+        </>
+      }
+    >
+      <label className="maps-form-field">
+        <span className="maps-form-field__label">Name</span>
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="EMEA footprint" />
+      </label>
+      <div className="flex gap-3">
+        <label className="maps-form-field flex-1">
+          <span className="maps-form-field__label">Picker column</span>
+          <Select value={category} onChange={(e) => setCategory(e.target.value as BasemapCategory)}>
+            {CATEGORY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="maps-form-field w-24">
+          <span className="maps-form-field__label">Order</span>
+          <Input
+            type="number"
+            value={order}
+            onChange={(e) => setOrder(Number.parseInt(e.target.value, 10) || 0)}
+          />
+        </label>
       </div>
-    </div>
+      <label className="maps-form-field">
+        <span className="maps-form-field__label">Style</span>
+        <Select value={template} onChange={(e) => setTemplate(e.target.value as Template)}>
+          {TEMPLATE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+        <span className="maps-form-field__hint">
+          {TEMPLATE_OPTIONS.find((option) => option.value === template)?.hint}
+        </span>
+      </label>
+      {template === 'palette' || template === 'geojson' ? (
+        <div className="flex flex-wrap gap-4">
+          {paletteField('fill', 'Land')}
+          {paletteField('stroke', 'Borders')}
+          {paletteField('background', 'Ocean')}
+        </div>
+      ) : null}
+      {template === 'geojson' ? (
+        <label className="maps-form-field">
+          <span className="maps-form-field__label">GeoJSON</span>
+          <textarea
+            className="maps-geojson-textarea"
+            rows={8}
+            value={geoJsonRaw}
+            onChange={(e) => setGeoJsonRaw(e.target.value)}
+            placeholder='{ "type": "FeatureCollection", "features": [ … ] }'
+          />
+        </label>
+      ) : null}
+      {template === 'tile' ? (
+        <>
+          <label className="maps-form-field">
+            <span className="maps-form-field__label">Tile URL</span>
+            <Input
+              value={tileUrl}
+              onChange={(e) => setTileUrl(e.target.value)}
+              placeholder="https://tiles.example.com/{z}/{x}/{y}.png"
+            />
+          </label>
+          <label className="maps-form-field">
+            <span className="maps-form-field__label">Attribution</span>
+            <Input value={attribution} onChange={(e) => setAttribution(e.target.value)} />
+          </label>
+        </>
+      ) : null}
+      <label className="maps-form-field">
+        <span className="maps-form-field__label">
+          Preview image {editing && basemap?.preview_content_type ? '(replace)' : ''}
+        </span>
+        <input
+          type="file"
+          accept={BASEMAP_PREVIEW_TYPES.join(',')}
+          onChange={(e) => onPickPreview(e.target.files?.[0] ?? null)}
+        />
+        <span className="maps-form-field__hint">PNG, JPEG, WebP or SVG, square, up to 512 KB.</span>
+      </label>
+      {error ? <p className="maps-form-field__error whitespace-pre-line">{error}</p> : null}
+    </Dialog>
   );
 }

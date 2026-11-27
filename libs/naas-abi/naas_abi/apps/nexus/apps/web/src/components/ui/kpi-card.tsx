@@ -1,12 +1,14 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
 interface KpiCardProps {
   label: string;
   value: string | number;
-  hint?: string;
+  /** A line under the value; may hold a link. */
+  hint?: ReactNode;
   icon?: LucideIcon;
   trend?: { value: number; label?: string };
   className?: string;

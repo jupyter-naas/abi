@@ -118,7 +118,7 @@ describe('TracesTab search', () => {
     api.search = vi.fn(() => fail(503, 'Tracing is off (telemetry.query_url).', 'tracing'));
     await open(api);
 
-    expect(q('.data-notice')?.textContent).toContain('Tracing is off');
+    expect(q('[role="status"]')?.textContent).toContain('Tracing is off');
     expect(text()).not.toContain('No traces match');
   });
 

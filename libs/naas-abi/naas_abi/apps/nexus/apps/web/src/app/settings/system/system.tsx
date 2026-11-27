@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { Loading } from '@/components/ui/spinner';
 import type { Loaded } from './system-api';
 import { useSharedJobFailures } from './jobs/failures';
 import { SystemFrame, SystemRefresh } from './system-frame';
@@ -22,19 +23,15 @@ import { plural } from './data/data-model';
 
 const POLL_MS = 10_000;
 
-function Loading() {
-  return <p className="system-empty">Loading…</p>;
-}
-
 // The heavier views load on first open: importing them all up front made the
 // route thousands of modules, slow to compile in dev and to load and leave.
-const JobsTab = dynamic(() => import('./jobs/jobs').then((m) => m.JobsTab), { ssr: false, loading: Loading });
-const AgentsTab = dynamic(() => import('./agents/agents').then((m) => m.AgentsTab), { ssr: false, loading: Loading });
-const TracesTab = dynamic(() => import('./traces/traces').then((m) => m.TracesTab), { ssr: false, loading: Loading });
-const SystemModules = dynamic(() => import('./system-modules').then((m) => m.SystemModules), { ssr: false, loading: Loading });
-const SystemNats = dynamic(() => import('./system-nats').then((m) => m.SystemNats), { ssr: false, loading: Loading });
-const SystemTraffic = dynamic(() => import('./system-traffic').then((m) => m.SystemTraffic), { ssr: false, loading: Loading });
-const EventsView = dynamic(() => import('./events/events-view').then((m) => m.EventsView), { ssr: false, loading: Loading });
+const JobsTab = dynamic(() => import('./jobs/jobs').then((m) => m.JobsTab), { ssr: false, loading: () => <Loading /> });
+const AgentsTab = dynamic(() => import('./agents/agents').then((m) => m.AgentsTab), { ssr: false, loading: () => <Loading /> });
+const TracesTab = dynamic(() => import('./traces/traces').then((m) => m.TracesTab), { ssr: false, loading: () => <Loading /> });
+const SystemModules = dynamic(() => import('./system-modules').then((m) => m.SystemModules), { ssr: false, loading: () => <Loading /> });
+const SystemNats = dynamic(() => import('./system-nats').then((m) => m.SystemNats), { ssr: false, loading: () => <Loading /> });
+const SystemTraffic = dynamic(() => import('./system-traffic').then((m) => m.SystemTraffic), { ssr: false, loading: () => <Loading /> });
+const EventsView = dynamic(() => import('./events/events-view').then((m) => m.EventsView), { ssr: false, loading: () => <Loading /> });
 
 // Views that lay out their own panes edge to edge (no padding, no page scroll).
 const OWN_REFRESH: SystemView[] = ['events', 'traffic', 'jobs', 'agents', 'traces'];

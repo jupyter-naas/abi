@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
-import { SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
 import {
   addable,
   createMemberRolesApi,
@@ -22,6 +21,8 @@ import {
   type RoleSelection,
 } from '@/lib/member-roles';
 import { RolePickerDialog, roleHint } from './role-picker-dialog';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 
 const NOTHING: HeldRoles = { groups: [], policies: [], names: {} };
 
@@ -295,22 +296,22 @@ export function MemberRoleSection({
   return (
     <div className="space-y-4" data-member-role="">
       {error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {error}
-        </SettingsNotice>
+        </Notice>
       )}
-      {notice && <SettingsNotice tone="info">{notice}</SettingsNotice>}
+      {notice && <Notice tone="info">{notice}</Notice>}
       {split && (
-        <SettingsSection title="Workspaces" description={WORKSPACES_HELP} actions={addButton('workspaces', moreWorkspaces)}>
+        <Card title="Workspaces" description={WORKSPACES_HELP} actions={addButton('workspaces', moreWorkspaces)}>
           <div data-role-list="workspaces">{person === undefined ? loading : list(heldWorkspaces, 'In none of its workspaces.')}</div>
-        </SettingsSection>
+        </Card>
       )}
-      <SettingsSection title="Groups" description={GROUPS_HELP[scope.kind]} actions={addButton('groups', moreGroups)}>
+      <Card title="Groups" description={GROUPS_HELP[scope.kind]} actions={addButton('groups', moreGroups)}>
         <div data-role-list="groups">{person === undefined ? loading : list(heldGroups, 'In no group here.')}</div>
-      </SettingsSection>
-      <SettingsSection title="Policies" description={POLICIES_HELP[scope.kind]} actions={addButton('policies', morePolicies)}>
+      </Card>
+      <Card title="Policies" description={POLICIES_HELP[scope.kind]} actions={addButton('policies', morePolicies)}>
         <div data-role-list="policies">{person === undefined ? loading : list(items.policies, 'No policy attached to them here.')}</div>
-      </SettingsSection>
+      </Card>
       {picker && (
         <RolePickerDialog
           open

@@ -7,7 +7,7 @@
  */
 import { Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { SettingsLoading } from '@/components/settings/settings-ui';
+import { Loading } from '@/components/ui/spinner';
 import { policyOfSearch } from '@/components/settings/settings-policy';
 import { DatasetsOffer } from './datasets';
 // The notes of a row.
@@ -23,7 +23,7 @@ function Datasets() {
 
 export default function DatasetsSettingsPage() {
   return (
-    <Suspense fallback={<SettingsLoading label="Loading datasets…" />}>
+    <Suspense fallback={<Loading label="Loading datasets…" />}>
       <Datasets />
     </Suspense>
   );

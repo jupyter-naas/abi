@@ -5,13 +5,10 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { AlertCircle } from 'lucide-react';
 import { ownerHref } from '@/components/access/policies/policy-owners';
 import { Button } from '@/components/ui/button';
-import {
-  SettingsEmpty,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
 import {
   SettingsTableClear,
   SettingsTableHead,
@@ -316,9 +313,9 @@ export function FeatureAccess({
       ) : null}
 
       {error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {error}
-        </SettingsNotice>
+        </Notice>
       )}
       {/* As General: the unsaved changes said in a bar, with Discard changes. */}
       {unsavedCount > 0 || Object.keys(rowErrors).length > 0 ? (
@@ -338,15 +335,15 @@ export function FeatureAccess({
         </div>
       ) : null}
       {levelsFailed && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           Could not read the access levels: the features cannot be changed. Reload to try again.
-        </SettingsNotice>
+        </Notice>
       )}
 
       {!state ? (
-        !error && <SettingsLoading label="Loading features…" />
+        !error && <Loading label="Loading features…" />
       ) : rows.length === 0 ? (
-        <SettingsEmpty title="No features." />
+        <EmptyState framed title="No features." />
       ) : (
         <div className="space-y-4">
           <SettingsTableToolbar

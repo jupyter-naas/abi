@@ -25,7 +25,6 @@ import { authFetch } from '@/stores/auth';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 import { matchesSearch } from '../lib/search';
 import { fetchTableSchema, SchemaTable, type SchemaState } from '../components/schema-table';
-import { SearchBox } from '@/components/settings/search-box';
 import {
   buildJsonExport,
   buildWorkbookSheets,
@@ -36,6 +35,7 @@ import { platformTablePath, type PlatformTableSummary } from '../lib/tables';
 import { useTablesView, type TablesColumnId as ColumnId } from '../lib/tables-view';
 import '@/app/organizations/[orgId]/settings/users/users.css';
 import { countFacets, readApiError } from '../lib/page-helpers';
+import { SearchBox } from '@/components/ui/search-box';
 
 function formatCount(value: number | null): string {
   return value === null ? '—' : value.toLocaleString();

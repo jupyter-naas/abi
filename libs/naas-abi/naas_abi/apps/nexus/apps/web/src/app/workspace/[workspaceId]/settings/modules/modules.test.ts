@@ -177,7 +177,8 @@ describe('Settings › Access › Modules', () => {
     });
     await mounted.flush();
     expect(rowKeys(mounted)).toEqual(['acme.sales']);
-    expect((mounted.host.querySelector('input[type="text"]') as HTMLInputElement).value).toBe('acme.sales');
+    // The kit's search box (a search input) holds the module searched.
+    expect((mounted.host.querySelector('input[type="search"]') as HTMLInputElement).value).toBe('acme.sales');
   });
 
   it("in a workspace's Settings, edits the policy picked in the column, with no dropdown of its own", async () => {

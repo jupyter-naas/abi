@@ -20,7 +20,9 @@ import { PersonBack } from '@/components/access/people/person-info';
 import { InstanceHeader } from '@/components/access/instance-header';
 import { getApiUrl } from '@/lib/config';
 import { MemberRoleSection, type PersonRef } from '@/components/people/member-role-section';
-import { SettingsNotice, SettingsPageHeader, SettingsSection } from '@/components/settings/settings-ui';
+import { SettingsPageHeader } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import { useConfirm } from '@/components/ui/dialogs';
 // The header's Remove button, as on an organization's person page.
 import '@/app/organizations/[orgId]/settings/users/users.css';
@@ -277,13 +279,13 @@ export function WorkspacePerson() {
         }
       />
       {removeError && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {removeError}
-        </SettingsNotice>
+        </Notice>
       )}
       {/* Who they are, read-only: their account, then their profile in the organization (as its
           person page shows it, where its admins change it). */}
-      <SettingsSection bodyClassName="space-y-6 p-4">
+      <Card bodyClassName="space-y-6 p-4">
         <div className="account-profile-form-grid" data-person-info={personId} data-section="profile">
           {readOnly('name', 'Name', profile?.name || person?.name || '')}
           {readOnly('email', 'Email', profile?.email || person?.email || '')}
@@ -305,7 +307,7 @@ export function WorkspacePerson() {
             />
           </div>
         )}
-      </SettingsSection>
+      </Card>
       {/* Removing them is the header's button: the section lists what they hold. */}
       <MemberRoleSection
         scope={{ kind: 'workspace', id: workspaceId }}

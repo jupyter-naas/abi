@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { Lock, Users, X } from 'lucide-react';
+import { Lock, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog } from '@/components/ui/dialog';
 import { useMapsStore } from '@/stores/maps';
 import { LayoutApiError } from '../lib/layouts-api';
 import {
@@ -133,14 +134,6 @@ function MapsAccessModal({
   // Workspaces already in the list that this user does not administer stay as they are.
   const others = item.workspace_ids.filter((id) => !data.workspaces.some((w) => w.id === id));
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
-
   const toggle = (id: string, on: boolean) =>
     setSelected((current) => {
       const next = new Set(current);
@@ -168,100 +161,94 @@ function MapsAccessModal({
   };
 
   return (
-    <div className="maps-geojson-modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-      <button type="button" className="maps-geojson-modal__backdrop" aria-label="Close" onClick={onClose} />
-      <div className="maps-geojson-modal__card maps-geojson-modal__card--form">
-        <header className="maps-geojson-modal__header">
-          <div>
-            <h2 id={titleId} className="maps-geojson-modal__title">
-              Access: {item.title}
-            </h2>
-            <p className="maps-geojson-modal__hint">
-              {deployment
-                ? 'Deployment item. Choose every workspace, or only some of them.'
-                : 'Owned by this workspace. Share it read-only with other workspaces you administer.'}{' '}
-              Members can still hide it in their own workspace.
-            </p>
-          </div>
-          <button type="button" className="maps-geojson-modal__close" aria-label="Close" onClick={onClose}>
-            <X size={16} />
-          </button>
-        </header>
-        <div className="maps-geojson-modal__body maps-geojson-modal__body--stack">
-          <fieldset className="space-y-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name={`${titleId}-scope`}
-                checked={all}
-                disabled={!data.superadmin}
-                onChange={() => setScope('all')}
-              />
-              All workspaces{!data.superadmin ? ' (platform admins only)' : ''}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name={`${titleId}-scope`}
-                checked={scope === 'some'}
-                onChange={() => setScope('some')}
-              />
-              {deployment ? 'Only these workspaces' : 'This workspace, plus'}
-            </label>
-            {deployment ? (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name={`${titleId}-scope`}
-                  checked={scope === 'none'}
-                  onChange={() => setScope('none')}
-                />
-                No workspace
-                <span className="text-xs text-muted-foreground">(kept, but not available anywhere)</span>
-              </label>
-            ) : null}
-          </fieldset>
-          {scope === 'some' ? (
-            <div className="max-h-64 space-y-1 overflow-y-auto border border-border p-2">
-              {data.workspaces.length === 0 ? (
-                <p className="text-sm text-muted-foreground">You do not administer other workspaces.</p>
-              ) : null}
-              {data.workspaces.map((w) => {
-                const owner = w.id === item.owner;
-                return (
-                  <label key={w.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={owner || selected.has(w.id)}
-                      disabled={owner}
-                      onCheckedChange={(checked) => toggle(w.id, checked === true)}
-                      aria-label={w.name}
-                    />
-                    <span className="truncate">{w.name}</span>
-                    {owner ? <span className="text-xs text-muted-foreground">(owner)</span> : null}
-                    {w.id === workspaceId && !owner ? (
-                      <span className="text-xs text-muted-foreground">(this workspace)</span>
-                    ) : null}
-                  </label>
-                );
-              })}
-              {others.length > 0 ? (
-                <p className="pt-1 text-xs text-muted-foreground">
-                  Also kept: {others.length} workspace{others.length === 1 ? '' : 's'} you do not administer.
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-          {error ? <p className="maps-form-field__error whitespace-pre-line">{error}</p> : null}
-        </div>
-        <footer className="maps-geojson-modal__footer">
-          <Button type="button" variant="ghost" onClick={onClose}>
+    <Dialog
+      size="xl"
+      title={`Access: ${item.title}`}
+      description={
+        <>
+          {deployment
+            ? 'Deployment item. Choose every workspace, or only some of them.'
+            : 'Owned by this workspace. Share it read-only with other workspaces you administer.'}{' '}
+          Members can still hide it in their own workspace.
+        </>
+      }
+      onClose={onClose}
+      onSubmit={busy ? undefined : () => void save()}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" onClick={() => void save()} disabled={busy}>
+          <Button onClick={() => void save()} disabled={busy}>
             Save access
           </Button>
-        </footer>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <fieldset className="space-y-2">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="radio"
+            name={`${titleId}-scope`}
+            checked={all}
+            disabled={!data.superadmin}
+            onChange={() => setScope('all')}
+          />
+          All workspaces{!data.superadmin ? ' (platform admins only)' : ''}
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="radio"
+            name={`${titleId}-scope`}
+            checked={scope === 'some'}
+            onChange={() => setScope('some')}
+          />
+          {deployment ? 'Only these workspaces' : 'This workspace, plus'}
+        </label>
+        {deployment ? (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name={`${titleId}-scope`}
+              checked={scope === 'none'}
+              onChange={() => setScope('none')}
+            />
+            No workspace
+            <span className="text-xs text-muted-foreground">(kept, but not available anywhere)</span>
+          </label>
+        ) : null}
+      </fieldset>
+      {scope === 'some' ? (
+        <div className="max-h-64 space-y-1 overflow-y-auto border border-border p-2">
+          {data.workspaces.length === 0 ? (
+            <p className="text-sm text-muted-foreground">You do not administer other workspaces.</p>
+          ) : null}
+          {data.workspaces.map((w) => {
+            const owner = w.id === item.owner;
+            return (
+              <label key={w.id} className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={owner || selected.has(w.id)}
+                  disabled={owner}
+                  onCheckedChange={(checked) => toggle(w.id, checked === true)}
+                  aria-label={w.name}
+                />
+                <span className="truncate">{w.name}</span>
+                {owner ? <span className="text-xs text-muted-foreground">(owner)</span> : null}
+                {w.id === workspaceId && !owner ? (
+                  <span className="text-xs text-muted-foreground">(this workspace)</span>
+                ) : null}
+              </label>
+            );
+          })}
+          {others.length > 0 ? (
+            <p className="pt-1 text-xs text-muted-foreground">
+              Also kept: {others.length} workspace{others.length === 1 ? '' : 's'} you do not administer.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {error ? <p className="maps-form-field__error whitespace-pre-line">{error}</p> : null}
+    </Dialog>
   );
 }

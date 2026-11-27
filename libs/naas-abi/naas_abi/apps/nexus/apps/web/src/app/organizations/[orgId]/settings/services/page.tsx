@@ -6,15 +6,9 @@ import { useParams, useRouter } from 'next/navigation';
 import { ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import {
-  SettingsFilterSelect,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-  countLabel,
-  settingsTable,
-} from '@/components/settings/settings-ui';
+import { SettingsFilterSelect, SettingsPageHeader, SettingsTableToolbar, countLabel, settingsTable } from '@/components/settings/settings-ui';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
 import { TablePager, usePagedRows } from '@/components/settings/users-table/table-pager';
 import { buildServiceUrl, resolveServiceHost } from '@/lib/docker-services';
 import { describePlatformServices, type ConfiguredService } from '@/lib/platform-services';
@@ -91,7 +85,7 @@ export default function ServicesSettingsPage() {
   // the first page.
   const paged = usePagedRows(filteredServices, JSON.stringify([searchQuery, providerFilter, webUiFilter]));
 
-  if (state.status === 'loading') return <SettingsLoading />;
+  if (state.status === 'loading') return <Loading />;
   if (state.status === 'forbidden') return <ServicesForbidden />;
 
   const servicePath = (webUiId: string) => `${orgSettingsSectionPath(orgId, 'services')}/${webUiId}`;
@@ -104,7 +98,7 @@ export default function ServicesSettingsPage() {
         description="Platform services with a web UI, opened inside Nexus"
       />
 
-      {state.status === 'error' && <SettingsNotice tone="error">{state.message}</SettingsNotice>}
+      {state.status === 'error' && <Notice tone="error">{state.message}</Notice>}
 
       <div className="space-y-4">
         <SettingsTableToolbar

@@ -8,6 +8,8 @@ import { loadedServiceView } from './services/registry';
 
 const replace = vi.fn();
 const push = vi.fn();
+const toast = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }));
+vi.mock('@/components/ui/toast', () => ({ toast }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace, push }),
   usePathname: () => '/settings/data/object-storage',
@@ -237,7 +239,7 @@ describe('DataExplorer', () => {
     expect(api.remove).toHaveBeenCalledWith('object_storage', 'top.txt', 'top.txt');
     expect('top.txt' in data.object_storage).toBe(false);
     expect(rows()).not.toContain('top.txt');
-    expect(q('.data-toasts')?.textContent).toContain('Deleted top.txt');
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Deleted top.txt' }));
   });
 
   it('creates a secret, and asks for the id before replacing an existing one', async () => {

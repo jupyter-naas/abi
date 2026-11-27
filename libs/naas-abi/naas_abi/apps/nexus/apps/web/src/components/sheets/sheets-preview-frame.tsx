@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { resolveSheetsPreviewAssets } from './sheets-assets';
+import { resolveSheetsPreviewAssets } from '@/components/office/office-assets';
 import {
   computeSheetsPreviewScale,
   countSlideSections,

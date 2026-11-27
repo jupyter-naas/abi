@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Brush, Camera, Check, Palette, Save, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
+import { Field } from '@/components/ui/field';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import { authFetch } from '@/stores/auth';
 import { readOrganization } from '@/lib/organization-resource';
 import { DEFAULT_THEME, PRESET_COLORS } from '@/stores/workspace';
@@ -258,7 +260,7 @@ export default function OrgCreateWorkspacePage() {
         }
       />
 
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+      {error && <Notice tone="error">{error}</Notice>}
 
       <div className="account-profile-avatar-section">
         <div className="account-profile-avatar-wrapper">
@@ -418,7 +420,7 @@ export default function OrgCreateWorkspacePage() {
         disabled={creating}
       />
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <Palette size={16} className="text-muted-foreground" />
@@ -427,7 +429,7 @@ export default function OrgCreateWorkspacePage() {
         }
       >
         <div className="space-y-6">
-          <SettingsField label="Primary Color" hint={`Current: ${primaryColor}`}>
+          <Field label="Primary Color" hint={`Current: ${primaryColor}`}>
             <div className="flex flex-wrap gap-3">
               {PRESET_COLORS.map((color) => (
                 <button
@@ -468,9 +470,9 @@ export default function OrgCreateWorkspacePage() {
                 </div>
               </div>
             </div>
-          </SettingsField>
+          </Field>
 
-          <SettingsField label="Accent Color" hint={`Current: ${accentColor || 'Not set'}`}>
+          <Field label="Accent Color" hint={`Current: ${accentColor || 'Not set'}`}>
             <div className="flex flex-wrap gap-3">
               {PRESET_COLORS.map((color) => (
                 <button
@@ -488,9 +490,9 @@ export default function OrgCreateWorkspacePage() {
                 </button>
               ))}
             </div>
-          </SettingsField>
+          </Field>
         </div>
-      </SettingsSection>
+      </Card>
     </div>
   );
 }

@@ -6,13 +6,10 @@ import { AlertCircle } from 'lucide-react';
 import { ownerHref } from '@/components/access/policies/policy-owners';
 import { Checkbox } from '@/components/ui/checkbox';
 import { BulkBar, SelectAllCell, SelectRowCell, onOffActions, useRowSelection } from '@/components/settings/bulk-access';
-import {
-  SettingsEmpty,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
 import {
   SettingsTableClear,
   SettingsTableHead,
@@ -163,9 +160,9 @@ export function DatasetsOffer({
       />
 
       {error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {error}
-        </SettingsNotice>
+        </Notice>
       )}
       {notice && (
         <p className="text-xs text-muted-foreground" role="status" data-datasets-notice="">
@@ -173,15 +170,15 @@ export function DatasetsOffer({
         </p>
       )}
       {state?.error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {state.error}
-        </SettingsNotice>
+        </Notice>
       )}
 
       {!state ? (
-        !error && <SettingsLoading label="Loading datasets…" />
+        !error && <Loading label="Loading datasets…" />
       ) : rows.length === 0 ? (
-        <SettingsEmpty title="No dataset namespace." />
+        <EmptyState framed title="No dataset namespace." />
       ) : (
         <div className="space-y-4">
           <SettingsTableToolbar

@@ -13,12 +13,9 @@ import { useConfirm } from '@/components/ui/dialogs';
 import { useSettingsReloadGeneration } from '@/components/settings/settings-reload';
 import { ModuleLink } from '@/components/settings/module-link';
 import { usePageState } from '@/hooks/use-page-state';
-import {
-  SettingsEmpty,
-  SettingsLoading,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
 import {
   SettingsTableClear,
   SettingsTableHead,
@@ -151,7 +148,7 @@ export default function AgentsPage() {
   };
 
   if (!mounted) {
-    return <SettingsLoading label="Loading agents…" />;
+    return <Loading label="Loading agents…" />;
   }
 
   return (
@@ -173,7 +170,7 @@ export default function AgentsPage() {
       />
 
       {rows.length === 0 ? (
-        <SettingsEmpty
+        <EmptyState framed
           icon={<Bot size={40} className="opacity-40" />}
           title="No agents configured"
           description="Use Create agent at the top right to create your first agent."

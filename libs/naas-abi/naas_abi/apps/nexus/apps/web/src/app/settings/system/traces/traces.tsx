@@ -14,7 +14,14 @@ import * as Tooltip from '@radix-ui/react-tooltip';
 import { AlertTriangle, ChevronRight, RefreshCw, Search } from 'lucide-react';
 import type { Failure } from '../data/data-api';
 import { absoluteTime } from '../data/data-model';
-import { Badge, EmptyState, Hint, Notice, RelativeTime, SkeletonRows } from '../data/data-ui';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input, Select } from '@/components/ui/input';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Notice } from '@/components/ui/notice';
+import { Loading } from '@/components/ui/spinner';
+import { Hint, RelativeTime } from '../data/data-ui';
 import { Scatter } from './scatter';
 import { TraceView } from './trace-view';
 import { createTracesApi, type TracesApi } from './traces-api';
@@ -65,7 +72,7 @@ function ResultRow({ trace, longest, onOpen }: { trace: TraceSummary; longest: n
           <span className="trace-result-service">{trace.root.service}</span>
           <span className="trace-result-name">{trace.root.name}</span>
           {trace.errors > 0 && (
-            <Badge tone="danger">
+            <Badge variant="destructive">
               {trace.errors} error{trace.errors === 1 ? '' : 's'}
             </Badge>
           )}
@@ -187,8 +194,8 @@ export function TracesTab({ api: injected, nonce = 0 }: { api?: TracesApi; nonce
                   }
                 }}
               >
-                <input
-                  className="data-input data-input-sm"
+                <Input
+                  className="h-8 text-xs"
                   placeholder="Go to trace id"
                   aria-label="Go to trace id"
                   value={jump}
@@ -198,14 +205,9 @@ export function TracesTab({ api: injected, nonce = 0 }: { api?: TracesApi; nonce
               </form>
               {!location.trace && (
                 <Hint label="Search again">
-                  <button
-                    type="button"
-                    className="data-icon-button data-icon-button-bordered"
-                    aria-label="Search again"
-                    onClick={() => setReloads((n) => n + 1)}
-                  >
+                  <Button variant="secondary" size="icon" aria-label="Search again" onClick={() => setReloads((n) => n + 1)}>
                     <RefreshCw size={14} aria-hidden="true" />
-                  </button>
+                  </Button>
                 </Hint>
               )}
             </div>
@@ -230,8 +232,8 @@ export function TracesTab({ api: injected, nonce = 0 }: { api?: TracesApi; nonce
             </nav>
             {!location.trace && (
               <div className="trace-filters">
-                <select
-                  className="data-input data-input-sm"
+                <Select
+                  className="h-8 w-auto max-w-[220px] text-xs"
                   aria-label="Service"
                   value={location.service}
                   onChange={(e) => go({ service: e.target.value, operation: '' })}
@@ -242,9 +244,9 @@ export function TracesTab({ api: injected, nonce = 0 }: { api?: TracesApi; nonce
                       {s}
                     </option>
                   ))}
-                </select>
-                <select
-                  className="data-input data-input-sm"
+                </Select>
+                <Select
+                  className="h-8 w-auto max-w-[220px] text-xs"
                   aria-label="Operation"
                   value={location.operation}
                   disabled={!location.service}
@@ -256,9 +258,9 @@ export function TracesTab({ api: injected, nonce = 0 }: { api?: TracesApi; nonce
                       {o}
                     </option>
                   ))}
-                </select>
-                <select
-                  className="data-input data-input-sm"
+                </Select>
+                <Select
+                  className="h-8 w-auto max-w-[220px] text-xs"
                   aria-label="Time window"
                   value={location.lookback}
                   onChange={(e) => go({ lookback: e.target.value })}
@@ -268,9 +270,9 @@ export function TracesTab({ api: injected, nonce = 0 }: { api?: TracesApi; nonce
                       {l.label}
                     </option>
                   ))}
-                </select>
-                <input
-                  className="data-input data-input-sm trace-min"
+                </Select>
+                <Input
+                  className="trace-min h-8 text-xs"
                   type="number"
                   min={0}
                   placeholder="Min ms"
@@ -278,17 +280,23 @@ export function TracesTab({ api: injected, nonce = 0 }: { api?: TracesApi; nonce
                   value={location.minMs}
                   onChange={(e) => go({ minMs: e.target.value })}
                 />
-                <label className="trace-errors-toggle">
-                  <input type="checkbox" checked={location.errors} onChange={(e) => go({ errors: e.target.checked })} />
-                  Errors only
-                </label>
+                <Checkbox
+                  className="trace-errors-toggle"
+                  label="Errors only"
+                  checked={location.errors}
+                  onCheckedChange={(errors) => go({ errors })}
+                />
               </div>
             )}
           </div>
           <div className={location.trace ? 'traces-body traces-body-trace' : 'data-browser traces-body'}>
             {failure && (
-              <Notice tone={failure.source === 'tracing' ? 'warn' : 'danger'}>
-                <AlertTriangle size={14} aria-hidden="true" /> {failure.reason}
+              <Notice
+                tone={failure.source === 'tracing' ? 'warning' : 'error'}
+                icon={<AlertTriangle size={14} aria-hidden="true" />}
+                className="mx-6 mt-3"
+              >
+                {failure.reason}
               </Notice>
             )}
             {location.trace ? (
@@ -301,12 +309,14 @@ export function TracesTab({ api: injected, nonce = 0 }: { api?: TracesApi; nonce
                 onOpenTrace={open}
               />
             ) : results === null ? (
-              <SkeletonRows rows={6} />
+              <Loading />
             ) : results.length === 0 ? (
               !failure && (
-                <EmptyState icon={Search} title="No traces match">
-                  Widen the time window, pick another service, or clear the duration and error filters.
-                </EmptyState>
+                <EmptyState
+                  icon={<Search size={22} strokeWidth={1.5} />}
+                  title="No traces match"
+                  description="Widen the time window, pick another service, or clear the duration and error filters."
+                />
               )
             ) : (
               <>

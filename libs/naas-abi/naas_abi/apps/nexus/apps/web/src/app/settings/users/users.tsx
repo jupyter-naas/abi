@@ -23,7 +23,6 @@ import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopo
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
 import type { FacetBucket } from '@/lib/graph-query/types';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
-import { SearchBox } from '@/components/settings/search-box';
 import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-table-filter';
 import {
   downloadTableExport,
@@ -75,6 +74,7 @@ import { PlatformHolders } from './platform-holders';
 import { RoleChips } from '@/components/people/role-chips';
 import { useConfirm } from '@/components/ui/dialogs';
 import './users.css';
+import { SearchBox } from '@/components/ui/search-box';
 
 type Can = (action: string) => boolean;
 

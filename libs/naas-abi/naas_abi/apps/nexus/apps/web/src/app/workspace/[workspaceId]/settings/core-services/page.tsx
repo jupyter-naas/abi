@@ -6,7 +6,7 @@
  */
 import { Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { SettingsLoading } from '@/components/settings/settings-ui';
+import { Loading } from '@/components/ui/spinner';
 import { CoreServices } from './core-services';
 // The level choices (General's CSS).
 import '../general/general.css';
@@ -27,7 +27,7 @@ function Services() {
 
 export default function CoreServicesSettingsPage() {
   return (
-    <Suspense fallback={<SettingsLoading label="Loading services…" />}>
+    <Suspense fallback={<Loading label="Loading services…" />}>
       <Services />
     </Suspense>
   );

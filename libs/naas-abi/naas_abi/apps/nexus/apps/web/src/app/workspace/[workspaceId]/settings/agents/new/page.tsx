@@ -15,7 +15,9 @@ import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/input';
 import { InstanceHeader } from '@/components/access/instance-header';
 import { FormSaveButton, InstanceBack, UnsavedBar } from '@/components/settings/instance-form';
-import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
+import { Field } from '@/components/ui/field';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import { AGENT_ICONS, AGENT_ICON_OPTIONS } from '../agent-icons';
 import { usePolicyHref } from '@/components/settings/use-policy-href';
 
@@ -83,13 +85,13 @@ export default function NewAgentPage() {
           />
         }
       />
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+      {error && <Notice tone="error">{error}</Notice>}
       <UnsavedBar show={draft.dirty.length > 0} onDiscard={draft.discard} disabled={creating} />
 
-      <SettingsSection>
+      <Card>
         <div className="grid gap-4">
           <div className="grid grid-cols-2 gap-4">
-            <SettingsField label="Name *">
+            <Field label="Name *">
               <Input
                 type="text"
                 aria-label="Name"
@@ -98,8 +100,8 @@ export default function NewAgentPage() {
                 placeholder="Agent name"
                 autoFocus
               />
-            </SettingsField>
-            <SettingsField label="Icon">
+            </Field>
+            <Field label="Icon">
               <div className="flex gap-2">
                 {AGENT_ICON_OPTIONS.map((icon) => {
                   const IconComp = AGENT_ICONS[icon];
@@ -120,9 +122,9 @@ export default function NewAgentPage() {
                   );
                 })}
               </div>
-            </SettingsField>
+            </Field>
           </div>
-          <SettingsField label="Description">
+          <Field label="Description">
             <Input
               type="text"
               aria-label="Description"
@@ -130,8 +132,8 @@ export default function NewAgentPage() {
               onChange={(e) => draft.set({ description: e.target.value })}
               placeholder="Brief description"
             />
-          </SettingsField>
-          <SettingsField label="System Prompt">
+          </Field>
+          <Field label="System Prompt">
             <Textarea
               aria-label="System Prompt"
               value={values.systemPrompt}
@@ -140,9 +142,9 @@ export default function NewAgentPage() {
               rows={6}
               className="resize-y"
             />
-          </SettingsField>
+          </Field>
         </div>
-      </SettingsSection>
+      </Card>
     </div>
   );
 }

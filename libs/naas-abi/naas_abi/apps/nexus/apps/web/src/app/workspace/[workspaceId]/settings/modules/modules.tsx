@@ -6,13 +6,10 @@ import { AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { draftKey, isOffered, itemName, itemsWithOffered, offerChanges } from '@/components/access/offer/offer-model';
 import '@/components/access/offer/offer.css';
-import {
-  SettingsEmpty,
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
 import {
   SettingsTableClear,
   SettingsTableHead,
@@ -286,9 +283,9 @@ export function WorkspaceModules({
       ) : null}
 
       {error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           {error}
-        </SettingsNotice>
+        </Notice>
       )}
       {notice && (
         <p className="text-xs text-muted-foreground" role="status" data-modules-notice="">
@@ -296,17 +293,17 @@ export function WorkspaceModules({
         </p>
       )}
       {offer && !editable && (
-        <SettingsNotice tone="info">
+        <Notice tone="info">
           {edited
             ? `Read-only: IAM does not let you change ${edited.name}.`
             : 'This workspace has no access policy yet.'}
-        </SettingsNotice>
+        </Notice>
       )}
 
       {!offer ? (
-        !error && <SettingsLoading label="Loading modules…" />
+        !error && <Loading label="Loading modules…" />
       ) : rows.length === 0 ? (
-        <SettingsEmpty title="No module you may offer here." />
+        <EmptyState framed title="No module you may offer here." />
       ) : (
         <div className="space-y-4">
           <SettingsTableToolbar

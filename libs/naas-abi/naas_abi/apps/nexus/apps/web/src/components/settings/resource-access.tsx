@@ -9,13 +9,10 @@ import { getApiUrl } from '@/lib/config';
 import { invalidateGraphExplorer } from '@/stores/graph-explorer';
 import { useOntologyStore } from '@/stores/ontology';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  SettingsLoading,
-  SettingsNotice,
-  SettingsPageHeader,
-  SettingsTableToolbar,
-  SettingsSection,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import {
   SettingsTableClear,
   SettingsTableHead,
@@ -70,7 +67,7 @@ type Snapshot = {
 
 export function ResourceAccessPage({ kind }: { kind: Kind }) {
   return (
-    <Suspense fallback={<SettingsLoading />}>
+    <Suspense fallback={<Loading />}>
       <ResourceAccessRoute kind={kind} />
     </Suspense>
   );
@@ -266,17 +263,17 @@ export function ResourceAccessEditor({
         actions={<UsersExportMenu onExport={exportShown} disabled={shown.length === 0} />}
       />
       {policyPicked && (
-        <SettingsNotice tone="info">
+        <Notice tone="info">
           <span data-policy-note="">
             {title} are given to the workspace as a whole: this page sets them for everyone in it, whatever policy
             is picked in the column.
           </span>
-        </SettingsNotice>
+        </Notice>
       )}
       {error && (
-        <SettingsNotice tone="error">
+        <Notice tone="error">
           <span role="alert">{error}</span>
-        </SettingsNotice>
+        </Notice>
       )}
       {notice && (
         <p className="text-xs text-muted-foreground" role="status" data-resource-notice="">
@@ -284,12 +281,12 @@ export function ResourceAccessEditor({
         </p>
       )}
       {loading ? (
-        <SettingsLoading label={`Loading ${title.toLowerCase()}…`} />
+        <Loading label={`Loading ${title.toLowerCase()}…`} />
       ) : (
         snapshot && (
           <>
             {kind === 'graphs' && (
-              <SettingsSection title="Options">
+              <Card title="Options">
                 <fieldset className="flex flex-col gap-2.5" disabled={saving}>
                   <Checkbox
                     checked={!!policy.read_all}
@@ -317,7 +314,7 @@ export function ResourceAccessEditor({
                     label="Allow members to create graphs"
                   />
                 </fieldset>
-              </SettingsSection>
+              </Card>
             )}
             <SettingsTableToolbar
               search={table.search}

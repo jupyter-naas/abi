@@ -5,7 +5,6 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input, Select } from '@/components/ui/input';
-import { SettingsNotice } from '@/components/settings/settings-ui';
 import { cn } from '@/lib/utils';
 import { getAuthHeader } from '@/stores/auth';
 import { mapsCustomFeedUrl } from '../lib/datasets';
@@ -26,6 +25,7 @@ import { useMapsStore, workspaceLayoutsOf } from '@/stores/maps';
 import { fetchMapsFeedPins } from '../lib/maps-feed';
 import { collectClassLabels } from '../lib/maps-layer-class-styles';
 import { MapsIconGallery } from './maps-icon-gallery';
+import { Notice } from '@/components/ui/notice';
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
 
@@ -171,15 +171,15 @@ export function MapsFeedLayerForm({
   };
 
   if (isNew && feeds.length === 0) {
-    return <SettingsNotice>Create a feed first: a layer draws from a feed.</SettingsNotice>;
+    return <Notice>Create a feed first: a layer draws from a feed.</Notice>;
   }
 
   return (
     <div className="maps-new-layer-form space-y-4">
       {error ? (
-        <SettingsNotice tone="error">
+        <Notice tone="error">
           <span role="alert" className="whitespace-pre-line">{error}</span>
-        </SettingsNotice>
+        </Notice>
       ) : null}
       <div className="grid gap-4 md:grid-cols-2">
         <label className="maps-new-layer-form__field">

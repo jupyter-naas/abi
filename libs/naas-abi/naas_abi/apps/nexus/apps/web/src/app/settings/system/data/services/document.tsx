@@ -5,7 +5,9 @@ import './document.css';
 import { Braces, ChevronRight, FileJson, FolderTree, History, Package, PenLine } from 'lucide-react';
 import { formatCount } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
-import { Badge, Notice, RelativeTime } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { Notice } from '@/components/ui/notice';
+import { RelativeTime } from '../data-ui';
 import { JsonTree } from '../viewers/json-tree';
 import {
   DOCUMENT_TEMPLATE,
@@ -52,7 +54,7 @@ function Count({ value }: { value: string | undefined }) {
 
 function FieldCell({ value }: { value: FieldValue | undefined }) {
   if (value === undefined || value === null || value === '') return <span className="data-document-null">—</span>;
-  if (typeof value === 'boolean') return <Badge tone={value ? 'success' : 'neutral'}>{String(value)}</Badge>;
+  if (typeof value === 'boolean') return <Badge variant={value ? 'success' : 'neutral'}>{String(value)}</Badge>;
   if (typeof value === 'number') return <span className="data-num">{formatCount(value)}</span>;
   return (
     <span className="data-document-cell" title={value}>
@@ -232,7 +234,7 @@ function DocumentPreview({ detail }: { detail: ResourceDetail }) {
         <ChevronRight size={12} aria-hidden="true" />
         <FolderTree size={13} aria-hidden="true" />
         <span>{collection}</span>
-        {collectionPurpose(collection) && <Badge tone="info">{collectionPurpose(collection)}</Badge>}
+        {collectionPurpose(collection) && <Badge variant="info">{collectionPurpose(collection)}</Badge>}
       </div>
       <dl className="data-document-meta">
         <div>
@@ -300,7 +302,7 @@ export const documentView: ServiceView = {
   badges: (e) => {
     if (documentLevel(e.id) === 'namespace') return <Badge>{namespaceKind(e.name)}</Badge>;
     const purpose = documentLevel(e.id) === 'collection' ? collectionPurpose(e.name) : null;
-    return purpose ? <Badge tone="info">{purpose}</Badge> : null;
+    return purpose ? <Badge variant="info">{purpose}</Badge> : null;
   },
   facts: (detail) =>
     detail.view?.type === 'checkpoint'

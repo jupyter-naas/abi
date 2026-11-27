@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
-import { SettingsNotice, SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
 import {
   SettingsTableClear,
   SettingsTableHead,
@@ -146,9 +147,9 @@ export default function SkillsSettingsPage() {
       />
 
       {actionError && (
-        <SettingsNotice tone="error" icon={<XCircle size={14} />}>
+        <Notice tone="error" icon={<XCircle size={14} />}>
           {actionError}
-        </SettingsNotice>
+        </Notice>
       )}
       {notice && (
         <p className="text-xs text-muted-foreground" role="status" data-skills-notice="">

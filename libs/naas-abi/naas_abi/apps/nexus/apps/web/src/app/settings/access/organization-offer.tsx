@@ -8,7 +8,8 @@
  */
 import { Suspense, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { SettingsEmpty, SettingsLoading } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
 import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { orgTarget } from '@/lib/access-model/target';
 import { PICKER_LABEL_CLASS, PICKER_SELECT_CLASS } from '@/components/settings/policy-picker';
@@ -30,8 +31,8 @@ function Picked({ render }: { render: OrganizationPage }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const { status, orgs } = useOpenableOrganizations();
-  if (status !== 'ready') return <SettingsLoading label="Loading organizations…" />;
-  if (orgs.length === 0) return <SettingsEmpty title="No organization to open." />;
+  if (status !== 'ready') return <Loading label="Loading organizations…" />;
+  if (orgs.length === 0) return <EmptyState framed title="No organization to open." />;
   const asked = params.get('org');
   const orgId = orgs.some((o) => o.id === asked) ? (asked as string) : orgs[0].id;
   const policy = params.get('policy');
@@ -71,7 +72,7 @@ function Picked({ render }: { render: OrganizationPage }) {
 
 export function OrganizationOffer({ render }: { render: OrganizationPage }) {
   return (
-    <Suspense fallback={<SettingsLoading label="Loading…" />}>
+    <Suspense fallback={<Loading label="Loading…" />}>
       <Picked render={render} />
     </Suspense>
   );

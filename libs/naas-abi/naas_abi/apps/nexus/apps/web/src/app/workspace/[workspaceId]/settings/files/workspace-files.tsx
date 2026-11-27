@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Save } from 'lucide-react';
 import { usePageDraft } from '@/hooks/use-page-state';
-import { SettingsNotice, SettingsPageHeader, SettingsSection } from '@/components/settings/settings-ui';
+import { SettingsPageHeader } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import {
   createOfferApi,
   type FileMode,
@@ -163,7 +165,7 @@ export function WorkspaceFiles({
         </button>
       }
     />
-    {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+    {error && <Notice tone="error">{error}</Notice>}
     {dirty ? (
       <div className="org-settings-general-draft" role="status">
         <p className="org-settings-general-draft-text">
@@ -182,7 +184,7 @@ export function WorkspaceFiles({
         </button>
       </div>
     ) : null}
-    <SettingsSection>
+    <Card>
       {!offer ? (
         !error && <p className="text-sm text-muted-foreground">Loading files...</p>
       ) : (
@@ -267,7 +269,7 @@ export function WorkspaceFiles({
           </table>
         </div>
       )}
-    </SettingsSection>
+    </Card>
     </>
   );
 }

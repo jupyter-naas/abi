@@ -276,3 +276,46 @@ export function explorerDriveMatchesQuery(
   if (!q) return true;
   return explorerLoadedSubtreeMatches(source, '', query, folderCache);
 }
+
+/**
+ * Where a row's ⋯ menu opens: below the trigger, or above when the status footer
+ * (`h-7`, 28px) leaves no room, kept inside the viewport. The panel is portaled
+ * and fixed so the sidebar's overflow never clips it.
+ */
+export const EXPLORER_MENU_SIZE = { width: 160, height: 68 };
+const EXPLORER_MENU_GAP_PX = 4;
+export const EXPLORER_MENU_FOOTER_PX = 28;
+
+export type ExplorerMenuPlacement = {
+  top: number;
+  left: number;
+  placement: 'above' | 'below';
+};
+
+export function placeExplorerMenu(
+  trigger: { top: number; right: number; bottom: number },
+  viewport: { width: number; height: number },
+  menu: { width: number; height: number } = EXPLORER_MENU_SIZE,
+): ExplorerMenuPlacement {
+  const gap = EXPLORER_MENU_GAP_PX;
+  const usableBottom = viewport.height - EXPLORER_MENU_FOOTER_PX;
+  const spaceBelow = usableBottom - trigger.bottom - gap;
+  const spaceAbove = trigger.top - gap;
+  const placement =
+    spaceBelow >= menu.height || spaceBelow >= spaceAbove ? 'below' : 'above';
+
+  let top =
+    placement === 'above'
+      ? trigger.top - gap - menu.height
+      : trigger.bottom + gap;
+  const maxTop = usableBottom - menu.height;
+  top = Math.min(Math.max(0, top), Math.max(0, maxTop));
+
+  let left = trigger.right - menu.width;
+  left = Math.min(
+    Math.max(8, left),
+    Math.max(8, viewport.width - menu.width - 8),
+  );
+
+  return { top, left, placement };
+}

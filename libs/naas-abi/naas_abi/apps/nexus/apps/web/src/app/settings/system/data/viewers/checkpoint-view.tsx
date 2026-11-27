@@ -20,7 +20,10 @@ import {
 } from 'lucide-react';
 import { absoluteTime, formatCount } from '../data-model';
 import type { CheckpointMessage, CheckpointView as Checkpoint, CheckpointWrite } from '../data-types';
-import { Badge, CopyButton, EmptyState, RelativeTime, type Tone } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Tabs } from '@/components/ui/tabs';
+import { CopyButton, RelativeTime, type Tone } from '../data-ui';
 import { JsonTree } from './json-tree';
 
 const ROLES: Record<string, { label: string; icon: LucideIcon }> = {
@@ -33,8 +36,8 @@ const ROLES: Record<string, { label: string; icon: LucideIcon }> = {
 const SOURCES: Record<string, { tone: Tone; hint: string }> = {
   input: { tone: 'info', hint: 'Saved when the input arrived, before any step ran' },
   loop: { tone: 'neutral', hint: 'Saved after a step of the graph' },
-  update: { tone: 'warn', hint: 'Saved by a manual state update' },
-  fork: { tone: 'warn', hint: 'Copied from another checkpoint' },
+  update: { tone: 'warning', hint: 'Saved by a manual state update' },
+  fork: { tone: 'warning', hint: 'Copied from another checkpoint' },
 };
 
 // Characters shown before "Show all"; system prompts are folded shorter.
@@ -94,7 +97,7 @@ function Message({ message }: { message: CheckpointMessage }) {
           {message.role === 'tool' && message.name ? `Tool · ${message.name}` : role.label}
         </span>
         {message.model && <Badge mono>{message.model}</Badge>}
-        {message.status === 'error' && <Badge tone="danger">error</Badge>}
+        {message.status === 'error' && <Badge variant="destructive">error</Badge>}
         <span className="data-spacer" />
         {usage && (usage.input_tokens !== undefined || usage.output_tokens !== undefined) && (
           <span className="ckpt-usage" title="Tokens in → out">
@@ -164,7 +167,7 @@ export function CheckpointView({ view, onOpen }: { view: Checkpoint; onOpen?: (i
           <dd>
             {view.step ?? '—'}
             {view.source && (
-              <Badge tone={source?.tone ?? 'neutral'} title={source?.hint}>
+              <Badge variant={source?.tone ?? 'neutral'} title={source?.hint}>
                 {view.source}
               </Badge>
             )}
@@ -233,21 +236,14 @@ export function CheckpointView({ view, onOpen }: { view: Checkpoint; onOpen?: (i
           </dd>
         </div>
       </dl>
-      <div className="data-segmented ckpt-tabs" role="tablist" aria-label="Checkpoint views">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            className={tab === t.id ? 'data-segment data-segment-active' : 'data-segment'}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-            {t.count ? <span className="ckpt-tab-count">{t.count}</span> : null}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        variant="segmented"
+        label="Checkpoint views"
+        className="ckpt-tabs w-fit"
+        value={tab}
+        onChange={setTab}
+        items={tabs.map((t) => ({ id: t.id, label: t.label, count: t.count || undefined }))}
+      />
       {tab === 'conversation' &&
         (messages.length ? (
           <ol className="ckpt-messages">
@@ -256,17 +252,13 @@ export function CheckpointView({ view, onOpen }: { view: Checkpoint; onOpen?: (i
             ))}
           </ol>
         ) : (
-          <EmptyState icon={MessageSquare} title="No messages at this step">
-            The state has no message list yet; the Input step of a thread is often empty.
-          </EmptyState>
+          <EmptyState icon={<MessageSquare size={22} strokeWidth={1.5} />} title="No messages at this step" description="The state has no message list yet; the Input step of a thread is often empty." />
         ))}
       {tab === 'state' &&
         (Object.keys(channels).length ? (
           <JsonTree value={channels} depth={2} />
         ) : (
-          <EmptyState icon={Inbox} title="No other state">
-            Everything this agent keeps is in the conversation.
-          </EmptyState>
+          <EmptyState icon={<Inbox size={22} strokeWidth={1.5} />} title="No other state" description="Everything this agent keeps is in the conversation." />
         ))}
       {tab === 'writes' &&
         (writes.length ? (
@@ -276,9 +268,7 @@ export function CheckpointView({ view, onOpen }: { view: Checkpoint; onOpen?: (i
             ))}
           </ol>
         ) : (
-          <EmptyState icon={Inbox} title="No pending writes">
-            Writes are what the next step produced before LangGraph saved the following checkpoint.
-          </EmptyState>
+          <EmptyState icon={<Inbox size={22} strokeWidth={1.5} />} title="No pending writes" description="Writes are what the next step produced before LangGraph saved the following checkpoint." />
         ))}
       {tab === 'metadata' && <JsonTree value={view.metadata ?? {}} depth={2} />}
     </div>

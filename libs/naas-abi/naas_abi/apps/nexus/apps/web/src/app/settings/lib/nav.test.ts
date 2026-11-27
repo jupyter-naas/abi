@@ -57,6 +57,7 @@ describe('platformSettingsGroups', () => {
     expect(platformSettingsGroups.map((group) => group.label)).toEqual(GROUPS);
     expect(items(null)).toEqual([
       ['General', '/settings/general'],
+      ['Theme', '/settings/theme'],
       ['Organizations', '/settings/organizations'],
       ['Users', '/settings/users'],
       ['Groups', '/settings/access/groups'],
@@ -153,7 +154,7 @@ describe('platformSettingsGroups', () => {
 
 describe('what the caller sees', () => {
   it('shows a platform admin everything, General first', () => {
-    expect(ids(platformAdmin)).toHaveLength(42);
+    expect(ids(platformAdmin)).toHaveLength(43);
     expect(ids(platformAdmin)).toContain('users');
     expect(ids(platformAdmin)).toContain('drives');
     expect(visiblePlatformSettingsGroups(platformAdmin).map((group) => group.label)).toEqual(GROUPS);
@@ -187,7 +188,7 @@ describe('what the caller sees', () => {
     expect(ids(systemReader)).toEqual(expect.arrayContaining(['system-layers', 'system-diagrams']));
     const groups = visiblePlatformSettingsGroups(systemReader);
     expect(groups.map((group) => group.label)).toEqual(GROUPS);
-    expect(groups[0].items.map((item) => item.label)).toEqual(['General', 'Organizations']);
+    expect(groups[0].items.map((item) => item.label)).toEqual(['General', 'Theme', 'Organizations']);
     expect(groups[1].items.map((item) => item.label)).toEqual(['Features', 'Core Services', 'Modules', 'Audit']);
   });
 

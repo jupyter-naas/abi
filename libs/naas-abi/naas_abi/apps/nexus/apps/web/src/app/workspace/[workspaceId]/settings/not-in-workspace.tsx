@@ -1,7 +1,7 @@
 'use client';
 
 import { Blocks } from 'lucide-react';
-import { SettingsEmpty } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
 
 /**
  * A settings page of something the caller may not use in the workspace (a feature they do not
@@ -9,7 +9,7 @@ import { SettingsEmpty } from '@/components/settings/settings-ui';
  */
 export function NotInWorkspace({ label }: { label: string }) {
   return (
-    <SettingsEmpty
+    <EmptyState framed
       icon={<Blocks size={40} className="opacity-40" />}
       title={`${label} is not available to you in this workspace`}
       description="Policies decide what you may use here, in Access › Policies."

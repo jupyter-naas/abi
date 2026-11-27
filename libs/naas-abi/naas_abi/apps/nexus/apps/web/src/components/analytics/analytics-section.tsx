@@ -4,7 +4,6 @@ import { useCallback, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { SettingsEmpty } from '@/components/settings/settings-ui';
 import { useAnalyticsAccess } from '@/hooks/use-analytics-access';
 import { UserFilter, WorkspaceFilter } from './filters';
 import { PeriodControl } from './period-control';
@@ -28,6 +27,7 @@ import { UsersTab } from './tabs/users-tab';
 import { WorkspacesTab } from './tabs/workspaces-tab';
 import { useAnalytics } from './use-analytics';
 import type { UsersResponse, WorkspacesResponse } from './types';
+import { EmptyState } from '@/components/ui/empty-state';
 
 // Chats (the conversations table, a conversation, its export) and one user's detail load on
 // first open (#1609). The other tabs are under 1 kB each once compressed: a chunk of their
@@ -82,7 +82,7 @@ export function AnalyticsSection({ scope }: { scope: AnalyticsScope }) {
   if (accessStatus === 'error' && !access) return <ErrorBlock message="The analytics access could not be read." />;
   if (refused) {
     return (
-      <SettingsEmpty
+      <EmptyState framed
         icon={<BarChart3 size={40} className="opacity-40" />}
         title="You cannot read these analytics"
         description={`Your role and policies do not let you read this ${

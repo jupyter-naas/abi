@@ -6,7 +6,8 @@ import { useCallback, useState } from 'react';
 import { AlertCircle, Mail, MapPin, Plus } from 'lucide-react';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '@/app/organizations/[orgId]/settings/components/org-settings-section-card';
-import { SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import {
   ADDRESS_FIELDS,
   CONTACT_FIELDS,
@@ -118,9 +119,9 @@ export function NewOrganization({
       />
 
       {error && (
-        <SettingsNotice tone="error" icon={<AlertCircle size={14} />}>
+        <Notice tone="error" icon={<AlertCircle size={14} />}>
           <span role="alert">{error}</span>
-        </SettingsNotice>
+        </Notice>
       )}
 
       {/* As Organization › General: its first block has no heading; Name and Slug side by side
@@ -158,7 +159,7 @@ export function NewOrganization({
         </div>
       </OrgSettingsSectionCard>
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <Mail size={16} className="text-muted-foreground" />
@@ -167,9 +168,9 @@ export function NewOrganization({
         }
       >
         <div className="org-settings-general-grid">{CONTACT_FIELDS.map(renderField)}</div>
-      </SettingsSection>
+      </Card>
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <MapPin size={16} className="text-muted-foreground" />
@@ -183,7 +184,7 @@ export function NewOrganization({
             {ADDRESS_FIELDS.slice(2).map(renderField)}
           </div>
         </div>
-      </SettingsSection>
+      </Card>
     </form>
   );
 }

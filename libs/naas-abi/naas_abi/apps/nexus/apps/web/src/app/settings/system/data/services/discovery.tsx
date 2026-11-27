@@ -5,7 +5,8 @@ import './discovery.css';
 import { Boxes, Hourglass, Radar, Server } from 'lucide-react';
 import { formatDuration, parseJson } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
-import { Badge, StatusPill, useNow, type Tone } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { StatusPill, useNow, type Tone } from '../data-ui';
 import { JsonTree } from '../viewers/json-tree';
 import { StatusView, phaseTone } from '../viewers/status-view';
 import type { ServiceView } from './types';
@@ -21,8 +22,8 @@ export function secondsLeft(iso: string | undefined, now: number): number | null
 
 export function leaseTone(seconds: number | null): Tone {
   if (seconds === null) return 'neutral';
-  if (seconds <= 0) return 'danger';
-  if (seconds <= WARN_SECONDS) return 'warn';
+  if (seconds <= 0) return 'destructive';
+  if (seconds <= WARN_SECONDS) return 'warning';
   return 'success';
 }
 
@@ -68,7 +69,7 @@ function Chips({ values, tone = 'neutral', max = 6 }: { values: string[]; tone?:
   return (
     <span className="data-discovery-chips">
       {values.slice(0, max).map((v) => (
-        <Badge key={v} tone={tone}>
+        <Badge key={v} variant={tone}>
           {v}
         </Badge>
       ))}

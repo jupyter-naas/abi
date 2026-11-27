@@ -5,7 +5,8 @@ import './model-registry.css';
 import { Cpu, Layers, Sparkles, Star } from 'lucide-react';
 import { formatCount, parseJson } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
-import { Badge, CopyButton } from '../data-ui';
+import { Badge } from '@/components/ui/badge';
+import { CopyButton } from '../data-ui';
 import { JsonTree } from '../viewers/json-tree';
 import type { ServiceView } from './types';
 
@@ -40,7 +41,7 @@ function KindBadge({ kind }: { kind: string | undefined }) {
       {kind.split(',').map((k) => {
         const name = k.trim();
         return (
-          <Badge key={name} tone={name === 'embedding' ? 'accent' : 'info'}>
+          <Badge key={name} variant={name === 'embedding' ? 'primary' : 'info'}>
             {name === 'embedding' ? <Layers size={11} aria-hidden="true" /> : <Sparkles size={11} aria-hidden="true" />}
             {name}
           </Badge>
@@ -55,7 +56,7 @@ function DefaultBadges({ value }: { value: string | undefined }) {
   return (
     <>
       {value.split(',').map((d) => (
-        <Badge key={d} tone="warn" title={`The engine's default ${d.trim()} model`}>
+        <Badge key={d} variant="warning" title={`The engine's default ${d.trim()} model`}>
           <Star size={11} aria-hidden="true" /> default {d.trim()}
         </Badge>
       ))}

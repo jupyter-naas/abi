@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ModalBackdrop } from '@/components/ui/dialogs';
+import { Dialog } from '@/components/ui/dialog';
 import { LEVEL_LABELS, type AccessLevel } from '@/lib/access-model/access-levels';
 import '@/app/organizations/[orgId]/settings/users/users.css';
 import '@/app/organizations/[orgId]/settings/components/org-settings-components.css';
@@ -208,14 +208,15 @@ export function BulkBar({
           Clear selection
         </button>
       </div>
-      <ModalBackdrop open={asked !== null} onClose={() => setAsked(null)}>
-        <div className="border border-border bg-background p-6 shadow-2xl" role="dialog" aria-modal="true" data-bulk-confirm="">
-          <h3 className="text-base font-semibold text-foreground">{asked?.question(count, plural)}</h3>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {asked?.detail?.(count) ?? 'The change is made in one save.'}
-            {skipped ? ` ${skipped}` : ''}
-          </p>
-          <div className="mt-6 flex justify-end gap-2">
+      <Dialog
+        open={asked !== null}
+        onClose={() => setAsked(null)}
+        size="sm"
+        title={asked?.question(count, plural) ?? ''}
+        description={`${asked?.detail?.(count) ?? 'The change is made in one save.'}${skipped ? ` ${skipped}` : ''}`}
+        data-bulk-confirm=""
+        footer={
+          <>
             <button type="button" className="org-settings-users-secondary-button" onClick={() => setAsked(null)}>
               Cancel
             </button>
@@ -231,9 +232,9 @@ export function BulkBar({
             >
               {asked?.confirm}
             </button>
-          </div>
-        </div>
-      </ModalBackdrop>
+          </>
+        }
+      />
     </div>
   );
 }

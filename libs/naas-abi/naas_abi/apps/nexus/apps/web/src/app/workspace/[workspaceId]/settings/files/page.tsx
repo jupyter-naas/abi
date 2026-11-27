@@ -6,7 +6,7 @@ import { Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { WORKSPACE_PAGE_DESCRIPTIONS } from '@/components/settings/settings-page-descriptions';
 import { policyOfSearch } from '@/components/settings/settings-policy';
-import { SettingsLoading } from '@/components/settings/settings-ui';
+import { Loading } from '@/components/ui/spinner';
 import { WorkspaceFiles } from './workspace-files';
 import '../general/general.css';
 
@@ -28,7 +28,7 @@ function Files() {
 
 export default function FilesSettingsPage() {
   return (
-    <Suspense fallback={<SettingsLoading label="Loading files…" />}>
+    <Suspense fallback={<Loading label="Loading files…" />}>
       <Files />
     </Suspense>
   );

@@ -7,8 +7,8 @@ export function phaseTone(phase: string | undefined): Tone {
   const p = (phase ?? '').toLowerCase();
   if (/(running|ready|ok|healthy|active|serving|succeeded)/.test(p)) return 'success';
   if (/(start|pending|provision|creating|queued|deploy|registering)/.test(p)) return 'info';
-  if (/(fail|error|unhealthy|crash|expired)/.test(p)) return 'danger';
-  if (/(stop|paused|deleting|draining|degraded)/.test(p)) return 'warn';
+  if (/(fail|error|unhealthy|crash|expired)/.test(p)) return 'destructive';
+  if (/(stop|paused|deleting|draining|degraded)/.test(p)) return 'warning';
   return 'neutral';
 }
 

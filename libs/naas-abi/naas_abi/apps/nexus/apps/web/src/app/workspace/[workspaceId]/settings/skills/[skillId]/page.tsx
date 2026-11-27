@@ -7,7 +7,10 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { usePageDraft } from '@/hooks/use-page-state';
 import { InstanceHeader } from '@/components/access/instance-header';
 import { FormSaveButton, InstanceBack, UnsavedBar } from '@/components/settings/instance-form';
-import { SettingsField, SettingsLoading, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
+import { Field } from '@/components/ui/field';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
+import { Card } from '@/components/ui/card';
 import { useSkillsStore, type SkillScope } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
 import { SCOPE_LABELS } from '../skills-model';
@@ -100,7 +103,7 @@ export default function SkillEditorPage() {
   };
 
   if (!skill || !values) {
-    return <SettingsLoading label="Loading skill…" />;
+    return <Loading label="Loading skill…" />;
   }
 
   return (
@@ -116,8 +119,8 @@ export default function SkillEditorPage() {
         }
       />
 
-      {!canModify && <SettingsNotice>Only the creator can modify this private skill.</SettingsNotice>}
-      {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
+      {!canModify && <Notice>Only the creator can modify this private skill.</Notice>}
+      {error && <Notice tone="error">{error}</Notice>}
       <UnsavedBar
         show={dirty}
         conflicts={draft.conflicts.map((field) => FIELD_LABELS[field] ?? field)}
@@ -125,10 +128,10 @@ export default function SkillEditorPage() {
         disabled={saving}
       />
 
-      <SettingsSection>
+      <Card>
         <div className="grid gap-4">
           <div className="grid grid-cols-2 gap-4">
-            <SettingsField label="Name">
+            <Field label="Name">
               <Input
                 type="text"
                 aria-label="Name"
@@ -136,8 +139,8 @@ export default function SkillEditorPage() {
                 onChange={(e) => set({ name: e.target.value })}
                 disabled={!canModify}
               />
-            </SettingsField>
-            <SettingsField label="Slug">
+            </Field>
+            <Field label="Slug">
               <Input
                 type="text"
                 aria-label="Slug"
@@ -146,9 +149,9 @@ export default function SkillEditorPage() {
                 disabled={!canModify}
                 className="font-mono"
               />
-            </SettingsField>
+            </Field>
           </div>
-          <SettingsField label="Description">
+          <Field label="Description">
             <Input
               type="text"
               aria-label="Description"
@@ -156,8 +159,8 @@ export default function SkillEditorPage() {
               onChange={(e) => set({ description: e.target.value })}
               disabled={!canModify}
             />
-          </SettingsField>
-          <SettingsField label="Prompt">
+          </Field>
+          <Field label="Prompt">
             <Textarea
               aria-label="Prompt"
               value={values.prompt}
@@ -165,9 +168,9 @@ export default function SkillEditorPage() {
               disabled={!canModify}
               rows={12}
             />
-          </SettingsField>
+          </Field>
           <div className="flex items-end gap-6">
-            <SettingsField label="Visibility">
+            <Field label="Visibility">
               <Select
                 aria-label="Visibility"
                 value={values.scope}
@@ -179,7 +182,7 @@ export default function SkillEditorPage() {
                 <option value="workspace">Workspace</option>
                 <option value="organization">Organization</option>
               </Select>
-            </SettingsField>
+            </Field>
             <Checkbox
               checked={values.enabled}
               onCheckedChange={(checked) => set({ enabled: checked })}
@@ -189,7 +192,7 @@ export default function SkillEditorPage() {
             />
           </div>
         </div>
-      </SettingsSection>
+      </Card>
     </div>
   );
 }

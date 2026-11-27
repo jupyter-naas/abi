@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { BadgeCheck, Check, Clock, Copy, Mail, MapPin, Save } from 'lucide-react';
-import { SettingsSection } from '@/components/settings/settings-ui';
+import { Card } from '@/components/ui/card';
 import { getApiUrl } from '@/lib/config';
 import { selectSession, useAuthStore } from '@/stores/auth';
 import { readOrganization, readOrganizationDomains } from '@/lib/organization-resource';
@@ -348,7 +348,7 @@ export default function OrganizationGeneralPage() {
         </div>
       </OrgSettingsSectionCard>
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <Mail size={16} className="text-muted-foreground" />
@@ -357,9 +357,9 @@ export default function OrganizationGeneralPage() {
         }
       >
         <div className="org-settings-general-grid">{CONTACT_FIELDS.map(renderField)}</div>
-      </SettingsSection>
+      </Card>
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <MapPin size={16} className="text-muted-foreground" />
@@ -373,9 +373,9 @@ export default function OrganizationGeneralPage() {
             {ADDRESS_FIELDS.slice(2).map(renderField)}
           </div>
         </div>
-      </SettingsSection>
+      </Card>
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <Clock size={16} className="text-muted-foreground" />
@@ -404,9 +404,9 @@ export default function OrganizationGeneralPage() {
             for the organization and each of its workspaces.
           </p>
         </div>
-      </SettingsSection>
+      </Card>
 
-      <SettingsSection
+      <Card
         title={
           <span className="flex items-center gap-2">
             <BadgeCheck size={16} className="text-muted-foreground" />
@@ -444,7 +444,7 @@ export default function OrganizationGeneralPage() {
             </p>
           ) : null}
         </div>
-      </SettingsSection>
+      </Card>
     </div>
   );
 }

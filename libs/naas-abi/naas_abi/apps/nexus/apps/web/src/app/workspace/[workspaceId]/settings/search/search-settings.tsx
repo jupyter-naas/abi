@@ -23,9 +23,10 @@ import { fieldClass } from '@/components/ui/input';
 import { InstanceHeader } from '@/components/access/instance-header';
 import { FormSaveButton, InstanceBack, UnsavedBar } from '@/components/settings/instance-form';
 import { usePageDraft, usePageState } from '@/hooks/use-page-state';
-import {
-  SettingsEmpty, SettingsLoading, SettingsNotice, SettingsPageHeader, SettingsTableToolbar,
-} from '@/components/settings/settings-ui';
+import { SettingsPageHeader, SettingsTableToolbar } from '@/components/settings/settings-ui';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Loading } from '@/components/ui/spinner';
+import { Notice } from '@/components/ui/notice';
 import {
   SettingsTableClear, SettingsTableHead, SettingsTableNoMatch, useSettingsTable,
 } from '@/components/settings/users-table/settings-table';
@@ -206,9 +207,9 @@ function SearchSettings({ selectedId }: { selectedId: string | null }) {
       <div className="space-y-6">
         <InstanceBack href={base} label="Search" />
         {loading && !selected ? (
-          <SettingsLoading />
+          <Loading />
         ) : !selected ? (
-          <SettingsEmpty title={<>There is no topic “{selectedId}” in this workspace.</>} />
+          <EmptyState framed title={<>There is no topic “{selectedId}” in this workspace.</>} />
         ) : (
           <TopicEditor
             key={`${selected.id}:${selected.source}`}
@@ -249,9 +250,9 @@ function SearchSettings({ selectedId }: { selectedId: string | null }) {
         }
       />
 
-      {error && <SettingsNotice tone="error"><span role="alert">{error}</span></SettingsNotice>}
-      {tableError && <SettingsNotice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></SettingsNotice>}
-      {!canEdit && !loading && <SettingsNotice>Only workspace owners and admins can change search topics.</SettingsNotice>}
+      {error && <Notice tone="error"><span role="alert">{error}</span></Notice>}
+      {tableError && <Notice tone="error"><span role="alert" className="whitespace-pre-line">{tableError}</span></Notice>}
+      {!canEdit && !loading && <Notice>Only workspace owners and admins can change search topics.</Notice>}
       {notice && <p className="text-xs text-muted-foreground" role="status" data-search-notice="">{notice}</p>}
 
       <SettingsTableToolbar
@@ -553,11 +554,11 @@ function TopicEditor({ workspaceId, topic, topics, graphs, contract, canEdit, is
       />
       <UnsavedBar show={canEdit && dirty} onDiscard={page.discard} disabled={saving} />
       {errors.length > 0 && (
-        <SettingsNotice tone="error">
+        <Notice tone="error">
           <ul role="alert" className="list-disc space-y-0.5 pl-4">
             {errors.map((e, i) => <li key={i}>{e}</li>)}
           </ul>
-        </SettingsNotice>
+        </Notice>
       )}
 
       <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-2">
