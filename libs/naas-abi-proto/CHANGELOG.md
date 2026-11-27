@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.6.1 (2026-11-27)
+
+### Bug Fixes
+
+- **iam**: An organization's people see it, and nothing it holds
+  ([`a4b93eb`](https://github.com/jupyter-naas/abi/commit/a4b93eba8d7553aadb4a5955136991bc658a2d35))
+
+
 ## v0.6.0 (2026-11-25)
 
 ### Features
