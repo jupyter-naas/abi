@@ -221,7 +221,6 @@ export function FeatureAccess({
   const offerHref = access ? ownerHref(access.owner_scope, access.id) : null;
   const edited = state?.policy ?? null;
   const editedHref = edited ? ownerHref(edited.owner_scope, edited.id) : null;
-  const offeredCount = rows.filter((row) => row.choice === 'everyone').length;
   const pick = (id: string) => {
     const next = access && id === access.id ? null : id;
     setAccessDrafts({});
@@ -234,13 +233,8 @@ export function FeatureAccess({
     <div className="space-y-6">
       <SettingsPageHeader
         title="Features"
-        badge={
-          state
-            ? offer
-              ? `${offeredCount} offered · ${rows.length - offeredCount} not offered`
-              : `${offeredCount} granted · ${rows.length - offeredCount} not granted`
-            : undefined
-        }
+        // One value, as Core Services and Modules: how many features.
+        badge={state ? `${rows.length} feature${rows.length === 1 ? '' : 's'}` : undefined}
         description={
           !offer && edited ? (
             <>

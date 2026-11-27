@@ -251,7 +251,7 @@ describe('FeatureAccess', () => {
     const m = await render(fakeApi());
     const keys = () => [...m.host.querySelectorAll('tr[data-feature]')].map((tr) => tr.getAttribute('data-feature'));
 
-    expect(m.host.textContent).toContain('2 offered · 3 not offered');
+    expect(m.host.textContent).toContain('5 features');
     expect(keys()).toHaveLength(5);
     await m.click(m.host.querySelector('[data-sort="access"]'));
     expect(keys()).toEqual(['chat', 'search', 'files', 'maps', 'marketplace']);
