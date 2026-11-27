@@ -232,7 +232,14 @@ export function MemberRoleSection({
                   Remove from workspace
                 </Button>
               ) : option.kind === 'own' ? (
-                <span className="shrink-0 text-xs text-muted-foreground" title="Remove them from Users to take them out">
+                <span
+                  className="shrink-0 text-xs text-muted-foreground"
+                  title={
+                    scope.kind === 'workspace'
+                      ? 'Remove from workspace, at the top right, takes them out'
+                      : 'Remove them from Users to take them out'
+                  }
+                >
                   Kept while they are here
                 </span>
               ) : (

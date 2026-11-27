@@ -9,7 +9,6 @@ import { principalLabel } from '@/components/access/attachments/attachments-mode
 import { ViewAsControl } from '@/components/access/people/view-as-control';
 import { MemberRoleSection } from '@/components/people/member-role-section';
 import { PersonBack, PersonInfoSection } from '@/components/access/people/person-info';
-import { UsersReloadButton } from '@/components/settings/users-table/users-table-actions';
 import '@/app/organizations/[orgId]/settings/users/users.css';
 import { createIamAdminApi } from '@/lib/iam-admin/api';
 import { PLATFORM_USERS_PATH } from './users-model';
@@ -24,7 +23,6 @@ import { PlatformOrganizations } from './platform-organizations';
 export default function PlatformPersonPage() {
   const router = useRouter();
   const personId = pageFocus(usePathname(), PLATFORM_USERS_PATH);
-  const [nonce, setNonce] = useState(0);
   const iam = useMemo(() => createIamAdminApi(), []);
   const [person, setPerson] = useState<{ name: string; email: string | null } | null>(null);
 
@@ -39,7 +37,7 @@ export default function PlatformPersonPage() {
     return () => {
       live = false;
     };
-  }, [iam, personId, nonce]);
+  }, [iam, personId]);
 
   if (!personId) return null;
   // The page alone: back to Users, then who it is about (Info) and what they hold.
@@ -52,13 +50,12 @@ export default function PlatformPersonPage() {
         email={person?.email ?? null}
         actions={
           <>
-            <UsersReloadButton onReload={() => setNonce((n) => n + 1)} />
             {person && <ViewAsControl personId={personId} name={person.name} workspaceId={null} />}
           </>
         }
       />
-      <PlatformOrganizations personId={personId} nonce={nonce} />
-      <MemberRoleSection scope={{ kind: 'platform' }} userId={personId} nonce={nonce} />
+      <PlatformOrganizations personId={personId} />
+      <MemberRoleSection scope={{ kind: 'platform' }} userId={personId} />
     </div>
   );
 }
