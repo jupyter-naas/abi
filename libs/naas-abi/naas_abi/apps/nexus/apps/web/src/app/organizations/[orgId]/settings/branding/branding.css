@@ -1,4 +1,4 @@
-/* organizations settings / branding — page chrome; form body still uses Tailwind in TSX */
+/* Organization settings › Branding: sections as the other settings pages (SettingsSection). */
 
 .org-settings-branding-page {
   display: flex;
@@ -35,4 +35,27 @@
 .org-settings-preview-link:hover {
   background-color: var(--muted-bg-hex);
   opacity: 0.9;
+}
+
+/* The two logos side by side, each its own section (one column on a narrow screen). */
+.org-settings-branding-logos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-6);
+}
+
+@media (max-width: 900px) {
+  .org-settings-branding-logos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.org-settings-branding-preview {
+  display: flex;
+  min-height: 96px;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  border: 1px dashed var(--border-hex);
+  background-color: var(--muted-bg-hex);
 }

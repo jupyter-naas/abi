@@ -8,20 +8,67 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Check, Monitor, Moon, Sun } from 'lucide-react';
+import {
+  Check,
+  Image as ImageIcon,
+  LogIn,
+  Monitor,
+  Moon,
+  Palette,
+  PanelBottom,
+  RectangleHorizontal,
+  Square,
+  Sun,
+  SunMoon,
+  Upload,
+  Wallpaper,
+} from 'lucide-react';
+import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { useOrganizationStore, type Organization } from '@/stores/organization';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 import { Checkbox } from '@/components/ui/checkbox';
 import { buttonVariants } from '@/components/ui/button';
-import { SettingsNotice } from '@/components/settings/settings-ui';
+import { SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
 import '../components/org-settings-components.css';
 import './branding.css';
 
-const inputClass =
-  'h-9 w-full border border-input bg-background px-3 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/30';
-const labelClass = 'mb-2 block text-sm font-medium text-foreground';
+// The fields of the other settings pages (Organization › General).
+const inputClass = 'org-settings-input';
+const labelClass = 'org-settings-field-label';
+const hintClass = 'org-settings-field-hint';
+
+/** A section titled as the other settings pages: a 16px icon and a sentence-case title. */
+function Section({
+  icon: Icon,
+  title,
+  description,
+  children,
+}: {
+  icon: typeof Check;
+  title: string;
+  description?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <SettingsSection
+      title={
+        <span className="flex items-center gap-2">
+          <Icon size={16} className="text-muted-foreground" />
+          {title}
+        </span>
+      }
+      description={description}
+      bodyClassName="space-y-6 p-4"
+    >
+      {children}
+    </SettingsSection>
+  );
+}
+
+const LOGO_TYPES = 'image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml';
+const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 
 export type OrgBrandingSettingsHandle = {
   save: () => Promise<boolean>;
@@ -105,7 +152,7 @@ function ColorInput({
           className={cn(inputClass, 'flex-1')}
         />
       </div>
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {hint && <p className={hintClass}>{hint}</p>}
     </div>
   );
 }
@@ -300,200 +347,157 @@ export const OrgBrandingSettings = forwardRef<
     return <div className="org-settings-loading">Loading branding...</div>;
   }
 
+  /** Upload a square or a wide logo: the API stores it and answers its URL. */
+  const uploadLogo = async (kind: 'square' | 'rectangle', input: HTMLInputElement) => {
+    const file = input.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+    if (file.size > LOGO_MAX_BYTES) {
+      setUploadError('File too large (max 5MB)');
+      input.value = '';
+      return;
+    }
+    const setUploading = kind === 'square' ? setUploadingSquare : setUploadingRect;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await authFetch(`/api/organizations/${orgId}/upload-logo-${kind}`, {
+        method: 'POST',
+        body: fd,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Upload failed');
+      }
+      const data = await res.json();
+      const url: string | undefined = kind === 'square' ? data.logo_url : data.logo_rectangle_url;
+      const full = url?.startsWith('/') ? `${API_BASE}${url}` : url;
+      if (full) (kind === 'square' ? setLogoUrl : setLogoRectangleUrl)(full);
+      await fetchOrganizations();
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      input.value = '';
+    }
+  };
+
   return (
     <div className="org-settings-branding-form">
       {uploadError && <SettingsNotice tone="error">{uploadError}</SettingsNotice>}
 
-      <div className="space-y-6 border bg-card p-6">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Logo
-        </h3>
-        {logoUrl || logoRectangleUrl ? (
-          <div className="flex flex-wrap items-center gap-6 border border-dashed border-muted-foreground/30 bg-muted/20 p-6">
-            {logoRectangleUrl && (
-              <div>
-                <p className="mb-2 text-xs text-muted-foreground">Rectangle</p>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={logoRectangleUrl}
-                  alt="Rectangle logo"
-                  className="h-20 md:h-24 max-w-[360px] object-contain"
-                />
-              </div>
-            )}
-            {logoUrl && (
-              <div>
-                <p className="mb-2 text-xs text-muted-foreground">Square</p>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={logoUrl} alt="Square logo" className="h-16 w-16 object-contain" />
+      <div className="org-settings-branding-logos">
+        <Section icon={Square} title="Square logo">
+          <div className="org-settings-branding-preview" data-logo-preview="square">
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt="Square logo" className="h-16 w-16 object-contain" />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center bg-muted text-2xl" data-logo-fallback="">
+                {logoEmoji || orgDisplayName.charAt(0) || '🏢'}
               </div>
             )}
           </div>
-        ) : (
-          <div className="flex items-center gap-4 border border-dashed border-muted-foreground/30 bg-muted/10 p-6">
-            <div className="flex h-16 w-16 items-center justify-center bg-muted text-2xl">
-              {logoEmoji || orgDisplayName.charAt(0) || '🏢'}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Add a square or rectangle logo URL below to see a live preview.
-            </p>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-3">
           <input
             ref={fileSquareRef}
             type="file"
-            accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              setUploadError(null);
-              if (file.size > 5 * 1024 * 1024) {
-                setUploadError('File too large (max 5MB)');
-                e.currentTarget.value = '';
-                return;
-              }
-              setUploadingSquare(true);
-              try {
-                const fd = new FormData();
-                fd.append('file', file);
-                const res = await authFetch(
-                  `/api/organizations/${orgId}/upload-logo-square`,
-                  { method: 'POST', body: fd }
-                );
-                if (!res.ok) {
-                  const err = await res.json().catch(() => ({}));
-                  throw new Error(err.detail || 'Upload failed');
-                }
-                const data = await res.json();
-                const full = data.logo_url?.startsWith('/')
-                  ? `${API_BASE}${data.logo_url}`
-                  : data.logo_url;
-                if (full) setLogoUrl(full);
-                await fetchOrganizations();
-              } catch (err: unknown) {
-                setUploadError(err instanceof Error ? err.message : 'Upload failed');
-              } finally {
-                setUploadingSquare(false);
-                e.currentTarget.value = '';
-              }
-            }}
+            accept={LOGO_TYPES}
+            onChange={(e) => void uploadLogo('square', e.currentTarget)}
             className="hidden"
           />
-          <input
-            ref={fileRectRef}
-            type="file"
-            accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              setUploadError(null);
-              if (file.size > 5 * 1024 * 1024) {
-                setUploadError('File too large (max 5MB)');
-                e.currentTarget.value = '';
-                return;
-              }
-              setUploadingRect(true);
-              try {
-                const fd = new FormData();
-                fd.append('file', file);
-                const res = await authFetch(
-                  `/api/organizations/${orgId}/upload-logo-rectangle`,
-                  { method: 'POST', body: fd }
-                );
-                if (!res.ok) {
-                  const err = await res.json().catch(() => ({}));
-                  throw new Error(err.detail || 'Upload failed');
-                }
-                const data = await res.json();
-                const full = data.logo_rectangle_url?.startsWith('/')
-                  ? `${API_BASE}${data.logo_rectangle_url}`
-                  : data.logo_rectangle_url;
-                if (full) setLogoRectangleUrl(full);
-                await fetchOrganizations();
-              } catch (err: unknown) {
-                setUploadError(err instanceof Error ? err.message : 'Upload failed');
-              } finally {
-                setUploadingRect(false);
-                e.currentTarget.value = '';
-              }
-            }}
-            className="hidden"
-          />
-
           <button
             type="button"
             onClick={() => fileSquareRef.current?.click()}
             disabled={uploadingSquare}
             className={buttonVariants({ variant: 'secondary', size: 'sm' })}
-            title="Upload square logo"
           >
-            {uploadingSquare ? 'Uploading square…' : 'Upload square logo'}
+            <Upload size={14} />
+            {uploadingSquare ? 'Uploading…' : 'Upload square logo'}
           </button>
-          <button
-            type="button"
-            onClick={() => fileRectRef.current?.click()}
-            disabled={uploadingRect}
-            className={buttonVariants({ variant: 'secondary', size: 'sm' })}
-            title="Upload rectangle logo"
-          >
-            {uploadingRect ? 'Uploading rectangle…' : 'Upload rectangle logo'}
-          </button>
-        </div>
-
-        <div className="grid gap-6 sm:grid-cols-2">
           <div className="space-y-2">
-            <label className={labelClass}>Logo (square)</label>
+            <label className={labelClass} htmlFor="org-logo-square">
+              URL
+            </label>
             <input
+              id="org-logo-square"
               type="text"
               value={logoUrl}
               onChange={(e) => setLogoUrl(e.target.value)}
               placeholder="https://... or /organizations/Acme.png"
               className={inputClass}
             />
-            <p className="text-xs text-muted-foreground">Icon / compact logo URL</p>
+            <p className={hintClass}>The icon: the sidebar, the workspace lists, the settings.</p>
           </div>
           <div className="space-y-2">
-            <label className={labelClass}>Logo (rectangle / full)</label>
+            <label className={labelClass} htmlFor="org-logo-emoji">
+              Emoji fallback
+            </label>
             <input
+              id="org-logo-emoji"
+              type="text"
+              value={logoEmoji}
+              onChange={(e) => setLogoEmoji(e.target.value)}
+              placeholder="e.g. 🏢"
+              className={inputClass}
+            />
+            <p className={hintClass}>Shown when there is no square logo.</p>
+          </div>
+        </Section>
+
+        <Section icon={RectangleHorizontal} title="Wide logo">
+          <div className="org-settings-branding-preview" data-logo-preview="rectangle">
+            {logoRectangleUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoRectangleUrl} alt="Wide logo" className="h-16 max-w-full object-contain" />
+            ) : (
+              <p className={hintClass}>No wide logo: the login page shows the square one.</p>
+            )}
+          </div>
+          <input
+            ref={fileRectRef}
+            type="file"
+            accept={LOGO_TYPES}
+            onChange={(e) => void uploadLogo('rectangle', e.currentTarget)}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileRectRef.current?.click()}
+            disabled={uploadingRect}
+            className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+          >
+            <Upload size={14} />
+            {uploadingRect ? 'Uploading…' : 'Upload wide logo'}
+          </button>
+          <div className="space-y-2">
+            <label className={labelClass} htmlFor="org-logo-rectangle">
+              URL
+            </label>
+            <input
+              id="org-logo-rectangle"
               type="text"
               value={logoRectangleUrl}
               onChange={(e) => setLogoRectangleUrl(e.target.value)}
               placeholder="https://... or /organizations/AcmeWide.png"
               className={inputClass}
             />
-            <p className="text-xs text-muted-foreground">Wide logo for login header</p>
+            <p className={hintClass}>The full logo: the login page header.</p>
           </div>
-        </div>
-
-        <div className="max-w-xs space-y-2">
-          <label className={labelClass}>Logo emoji fallback</label>
-          <input
-            type="text"
-            value={logoEmoji}
-            onChange={(e) => setLogoEmoji(e.target.value)}
-            placeholder="e.g. 🏢"
-            className={inputClass}
-          />
-          <p className="text-xs text-muted-foreground">Used when no logo image is set</p>
-        </div>
+        </Section>
       </div>
 
-      <div className="space-y-6 border bg-card p-6">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Brand colours
-        </h3>
+      <Section icon={Palette} title="Brand colors">
         <div className="grid gap-6 sm:grid-cols-2">
           <ColorInput
-            label="Primary colour"
+            label="Primary color"
             value={primaryColor}
             onChange={setPrimaryColor}
             placeholder="#171C8F"
             hint="Buttons, links, focus border. e.g. #171C8F"
           />
           <ColorInput
-            label="Accent colour"
+            label="Accent color"
             value={accentColor}
             onChange={setAccentColor}
             placeholder="#0072CE"
@@ -510,9 +514,7 @@ export const OrgBrandingSettings = forwardRef<
               placeholder="halyard-text, Arial, sans-serif"
               className={inputClass}
             />
-            <p className="text-xs text-muted-foreground">
-              CSS font-family (e.g. from reference login)
-            </p>
+            <p className={hintClass}>CSS font-family (e.g. from reference login)</p>
           </div>
           <div className="space-y-2">
             <label className={labelClass}>Font URL</label>
@@ -523,20 +525,15 @@ export const OrgBrandingSettings = forwardRef<
               placeholder="https://p.typekit.net/... or Google Fonts CSS URL"
               className={inputClass}
             />
-            <p className="text-xs text-muted-foreground">
-              Optional: stylesheet URL to load the font (Typekit, Google Fonts)
-            </p>
+            <p className={hintClass}>Optional: stylesheet URL to load the font (Typekit, Google Fonts)</p>
           </div>
         </div>
-      </div>
+      </Section>
 
-      <div className="space-y-6 border bg-card p-6">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Login page — background
-        </h3>
+      <Section icon={Wallpaper} title="Login page background">
         <div className="grid gap-6 sm:grid-cols-2">
           <ColorInput
-            label="Page background colour"
+            label="Page background color"
             value={backgroundColor}
             onChange={setBackgroundColor}
             placeholder="#f0f4f8"
@@ -551,22 +548,18 @@ export const OrgBrandingSettings = forwardRef<
               placeholder="https://..."
               className={inputClass}
             />
-            <p className="text-xs text-muted-foreground">Full-page cover image</p>
+            <p className={hintClass}>Full-page cover image</p>
           </div>
         </div>
         {loginBgImageUrl && (
-          <div className=" border border-dashed border-muted-foreground/30 p-2">
-            <p className="mb-1 text-xs text-muted-foreground">Preview</p>
+          <div className="org-settings-branding-preview">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={loginBgImageUrl} alt="Background" className="h-24 w-full object-cover" />
           </div>
         )}
-      </div>
+      </Section>
 
-      <div className="space-y-6 border bg-card p-6">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Login page — card and inputs
-        </h3>
+      <Section icon={LogIn} title="Login card and inputs">
         <div className="grid gap-6 sm:grid-cols-3">
           <ColorInput
             label="Card background"
@@ -576,7 +569,7 @@ export const OrgBrandingSettings = forwardRef<
             hint="e.g. #FFFFFF (white)"
           />
           <ColorInput
-            label="Card text colour"
+            label="Card text color"
             value={loginTextColor}
             onChange={setLoginTextColor}
             placeholder="#25282A"
@@ -600,7 +593,7 @@ export const OrgBrandingSettings = forwardRef<
               placeholder="440px"
               className={inputClass}
             />
-            <p className="text-xs text-muted-foreground">Width of the login block (e.g. 440px)</p>
+            <p className={hintClass}>Width of the login block (e.g. 440px)</p>
           </div>
           <div className="space-y-2">
             <label className={labelClass}>Card padding</label>
@@ -611,7 +604,7 @@ export const OrgBrandingSettings = forwardRef<
               placeholder="2.5rem 3rem 3rem"
               className={inputClass}
             />
-            <p className="text-xs text-muted-foreground">CSS padding (top right bottom left)</p>
+            <p className={hintClass}>CSS padding (top right bottom left)</p>
           </div>
         </div>
         <div className="space-y-2">
@@ -630,23 +623,19 @@ export const OrgBrandingSettings = forwardRef<
               value={loginBorderRadius}
               onChange={(e) => setLoginBorderRadius(e.target.value)}
               placeholder="0"
-              className="w-20 border border-input bg-muted/30 px-3 py-2.5 text-center text-sm outline-none focus:ring-2 focus:ring-primary/20"
+              className={cn(inputClass, 'w-20 text-center')}
             />
             <span className="text-sm text-muted-foreground">px</span>
           </div>
-          <p className="text-xs text-muted-foreground">0 = sharp corners, 16 = corners</p>
+          <p className={hintClass}>0 = sharp corners, 16 = corners</p>
         </div>
-      </div>
+      </Section>
 
-      <div className="space-y-6 border bg-card p-6">
-        <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Default Workspace Theme
-          </h3>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Force a specific theme for all workspaces in this organization.
-          </p>
-        </div>
+      <Section
+        icon={SunMoon}
+        title="Default workspace theme"
+        description="Force a theme for every workspace of this organization. Saved at once."
+      >
         <div className="grid grid-cols-3 gap-3">
           {[
             { id: 'light', label: 'Light', desc: 'Always light mode', icon: Sun },
@@ -696,18 +685,10 @@ export const OrgBrandingSettings = forwardRef<
             );
           })}
         </div>
-        <div className=" border border-border bg-muted/30 p-4">
-          <p className="text-sm text-muted-foreground">
-            Theme changes are saved automatically. Navigate to a workspace in this organization to
-            see the theme applied.
-          </p>
-        </div>
-      </div>
+        <p className={hintClass}>Open a workspace of this organization to see the theme applied.</p>
+      </Section>
 
-      <div className="space-y-6 border bg-card p-6">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Footer
-        </h3>
+      <Section icon={PanelBottom} title="Login page footer">
         <div className="space-y-2">
           <label className={labelClass}>Custom footer text</label>
           <input
@@ -717,9 +698,7 @@ export const OrgBrandingSettings = forwardRef<
             placeholder="e.g. © 2026 Acme Corp - Confidential"
             className={inputClass}
           />
-          <p className="text-xs text-muted-foreground">
-            Optional line below the login card (e.g. copyright, disclaimer)
-          </p>
+          <p className={hintClass}>Optional line below the login card (e.g. copyright, disclaimer)</p>
         </div>
         <div className="space-y-4">
           <label className="flex cursor-pointer items-center gap-3">
@@ -739,7 +718,7 @@ export const OrgBrandingSettings = forwardRef<
             </div>
           </label>
         </div>
-      </div>
+      </Section>
     </div>
   );
 });
