@@ -35,6 +35,8 @@ import { resolveDeskImageUrl } from '../../home/home-desk';
 import { WorkspaceConfiguration } from './workspace-configuration';
 import { WorkspaceGroupSelect } from '@/app/organizations/[orgId]/settings/workspaces/workspace-group-select';
 import '@/app/account/profile/profile.css';
+// The unsaved-changes bar, as Organization › General shows it.
+import '@/app/organizations/[orgId]/settings/general/general.css';
 import './general.css';
 
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
@@ -157,10 +159,18 @@ export default function GeneralSettingsPage() {
     trimmedDescription !== (workspace.description ?? '') ||
     trimmedGroup !== (workspace.group ?? '');
 
+  /** Discard changes: back to the name, group and description the workspace holds. */
+  const discardDetails = () => {
+    setName(workspace.name);
+    setDescription(workspace.description ?? '');
+    setGroup(workspace.group ?? '');
+    setDetailsError(null);
+  };
+
   /** Save changes (top right): the workspace name, group and description. */
   const handleSaveDetails = async () => {
     if (!trimmedName) {
-      setDetailsError('The workspace name cannot be empty.');
+      setDetailsError('The name cannot be empty.');
       return;
     }
     setDetailsError(null);
@@ -271,6 +281,14 @@ export default function GeneralSettingsPage() {
       {(detailsError || logoError) && (
         <SettingsNotice tone="error">{detailsError || logoError}</SettingsNotice>
       )}
+      {canEdit && dirty ? (
+        <div className="org-settings-general-draft" role="status">
+          <p className="org-settings-general-draft-text">Unsaved changes.</p>
+          <button type="button" onClick={discardDetails} className="org-settings-general-draft-discard">
+            Discard changes
+          </button>
+        </div>
+      ) : null}
 
       <div className="account-profile-avatar-section">
         <div className="account-profile-avatar-wrapper">
@@ -341,7 +359,7 @@ export default function GeneralSettingsPage() {
         <div className="account-profile-form-grid">
           <div className="account-profile-field">
             <label className="account-profile-field-label" htmlFor="workspace-name">
-              Workspace name
+              Name
             </label>
             <input
               id="workspace-name"
@@ -351,18 +369,6 @@ export default function GeneralSettingsPage() {
               maxLength={200}
               disabled={!canEdit || saving}
               className="account-profile-field-input"
-            />
-          </div>
-          <div className="account-profile-field">
-            <label className="account-profile-field-label" htmlFor="workspace-group">
-              Group
-            </label>
-            <WorkspaceGroupSelect
-              id="workspace-group"
-              value={group}
-              onChange={setGroup}
-              existingGroups={existingGroups}
-              disabled={!canEdit || saving}
             />
           </div>
           <div className="account-profile-field">
@@ -376,6 +382,18 @@ export default function GeneralSettingsPage() {
               readOnly
               disabled
               className="account-profile-field-input"
+            />
+          </div>
+          <div className="account-profile-field">
+            <label className="account-profile-field-label" htmlFor="workspace-group">
+              Workspace Group
+            </label>
+            <WorkspaceGroupSelect
+              id="workspace-group"
+              value={group}
+              onChange={setGroup}
+              existingGroups={existingGroups}
+              disabled={!canEdit || saving}
             />
           </div>
           {/* No Owner here: nothing assigns it any more (ADR access levels and groups). Who
