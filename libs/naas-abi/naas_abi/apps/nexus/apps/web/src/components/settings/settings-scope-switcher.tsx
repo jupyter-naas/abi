@@ -17,8 +17,8 @@ type Option = { id: string; label: string };
 
 const NONE: Workspace[] = [];
 
-/** A level picked as Files picks a drive (its single-choice picker, with a search box), under
- *  its kind. */
+/** A level picked as Files picks a drive (its single-choice picker, with a search box), in the
+ *  pages' text size; no heading: the column's levels say which is which. */
 function ScopeDropdown({
   kind,
   value,
@@ -34,11 +34,9 @@ function ScopeDropdown({
   const current = options.find((o) => o.id === value)?.label ?? value;
   return (
     <div className="settings-scope-switcher" data-scope-switcher={noun}>
-      <span className="settings-scope-kind" aria-hidden="true">
-        {kind}
-      </span>
       <SearchPicker
         single
+        size="sm"
         ariaLabel={`Switch ${noun}`}
         items={options.map((o) => ({ value: o.id, label: o.label }))}
         value={[value]}

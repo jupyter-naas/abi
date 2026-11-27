@@ -1,12 +1,8 @@
 import {
-  AppWindow,
   BarChart3,
   Bot,
   BrainCircuit,
-  Network,
-  Table2,
   Globe,
-  HardDrive,
   SlidersHorizontal,
   Cpu,
   KeyRound,
@@ -16,6 +12,9 @@ import {
   Zap,
   Search,
   Map,
+  LayoutGrid,
+  Files,
+  Waypoints,
   type LucideIcon,
   Package,
   Database,
@@ -53,6 +52,7 @@ export type SettingsNavGroup = {
  * they do not hold, or whose module resources they may use none of, is hidden
  * (`visibleSettingsGroups`), and its page says so.
  */
+// The Features group wears the sidebar's icons (`sidebar/index.tsx`) where the sidebar has the page.
 export const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
     label: 'General',
@@ -81,12 +81,12 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     items: [
       // Agents the workspace builds itself (a model and a prompt) need no module.
       { href: '/settings/agents', label: 'Agents', icon: Bot, feature: 'agents' },
-      { href: '/settings/apps', label: 'Apps', icon: AppWindow, feature: 'apps', kinds: ['apps'] },
+      { href: '/settings/apps', label: 'Apps', icon: LayoutGrid, feature: 'apps', kinds: ['apps'] },
       // The dataset namespaces the workspace uses (its offer closes the others).
-      { href: '/settings/datasets', label: 'Datasets', icon: Table2, feature: 'datasets' },
+      { href: '/settings/datasets', label: 'Datasets', icon: Database, feature: 'datasets' },
       // Every kind of files: shown even when Workspace Files is off, which is turned on here.
-      { href: '/settings/files', label: 'Files', icon: HardDrive },
-      { href: '/settings/graphs', label: 'Graphs', icon: Network, feature: 'graph' },
+      { href: '/settings/files', label: 'Files', icon: Files },
+      { href: '/settings/graphs', label: 'Graphs', icon: Waypoints, feature: 'graph' },
       { href: '/settings/maps', label: 'Maps', icon: Map, feature: 'maps' },
       { href: '/settings/models', label: 'Models', icon: Cpu },
       { href: '/settings/ontologies', label: 'Ontologies', icon: BrainCircuit, feature: 'ontology' },
