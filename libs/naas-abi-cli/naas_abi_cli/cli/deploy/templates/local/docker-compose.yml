@@ -590,11 +590,13 @@ services:
   # service key (the account module/<project>/idp). Nexus serves it at /idp on
   # the API host and the engine reads it through NATS; its users, keys and
   # codes are in its own Document Service namespace and secrets, which not even
-  # the `abi` service can read. It waits for its key: once the stack is up,
+  # the `abi` service can read. It waits for its key, which `abi stack start`
+  # creates once the stack is up (into .env as IDP_SERVICE_KEY) before it
+  # approves the idp's permissions. By hand, the same steps:
   #   abi iam service-account create module/{{ DISCOVERY_PROJECT }}/idp --key
-  # put the key in .env as IDP_SERVICE_KEY, approve its permissions
+  # put the key in .env as IDP_SERVICE_KEY, start it (docker compose up -d idp)
+  # and approve its permissions:
   #   abi iam module approve module/{{ DISCOVERY_PROJECT }}/idp
-  # and start it: docker compose up -d idp
   idp:
     build:
       context: ./.abi/libs/naas-abi-idp
@@ -607,7 +609,7 @@ services:
       - sh
       - -c
       - |
-        [ -n "$$ABI_SERVICE_KEY" ] || { echo "IDP_SERVICE_KEY is empty: create the key of module/{{ DISCOVERY_PROJECT }}/idp (see docker-compose.yml)" >&2; sleep 30; exit 1; }
+        [ -n "$$ABI_SERVICE_KEY" ] || { echo "IDP_SERVICE_KEY is empty: run abi stack start, or create the key of module/{{ DISCOVERY_PROJECT }}/idp (see docker-compose.yml)" >&2; sleep 30; exit 1; }
         exec python -m naas_abi_idp
     environment:
       # No login in the URL: the provider logs in with its own key.

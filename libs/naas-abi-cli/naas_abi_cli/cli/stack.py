@@ -19,6 +19,7 @@ from .admin_credentials import (
     ensure_rabbitmq_credentials,
 )
 from .deploy.local import project_uses_nats
+from .stack_idp import bootstrap_idp
 from .stack_runtime import (
     ComposeServiceState,
     compose_logs_follow,
@@ -242,6 +243,9 @@ def _start_stack(legacy: bool = False) -> None:
             )
             continue
 
+        # The built-in IdP's key and permissions, before the error check: until
+        # it has its key, the idp container exits and restarts.
+        bootstrap_idp(project, compose=run_compose)
         error_services = _get_error_services()
         if error_services:
             if attempt == max_retries:
